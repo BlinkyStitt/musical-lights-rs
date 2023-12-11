@@ -1,0 +1,8 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+    "musical-lights-core",
+    "musical-lights-mac",
+]
