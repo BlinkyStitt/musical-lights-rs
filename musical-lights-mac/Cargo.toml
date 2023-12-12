@@ -9,3 +9,4 @@ edition = "2021"
 anyhow = "1.0.75"
 cpal = "0.15.2"
 musical-lights-core = { path = "../musical-lights-core" }
+microfft = { version = "0.5.1", features = ["std"] }

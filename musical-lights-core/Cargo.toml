@@ -11,4 +11,5 @@ cichlid = { version = "0.2.1", features = ["no-std"] }
 thiserror = { version = "1.0.50", default-features = false }
 micromath = "2.1.0"
 serde = { version = "1.0.193", default-features = false, features = ["derive"] }
+microfft = { version = "0.5.1" }
 toml = "0.8.8"
