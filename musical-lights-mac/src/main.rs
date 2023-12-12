@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use microfft::real::rfft_512;
+use musical_lights_core::microphone::AudioProcessing;
 
 fn record_microphone(x: Duration) -> anyhow::Result<()> {
     let host = cpal::default_host();
@@ -19,28 +19,30 @@ fn record_microphone(x: Duration) -> anyhow::Result<()> {
         eprintln!("an error occurred on stream: {}", err);
     };
 
+    let audio_processing = AudioProcessing::<512, 256>::new();
+
     let stream = match config.sample_format() {
         // cpal::SampleFormat::I8 => device.build_input_stream(
         //     &config.into(),
-        //     move |data, _: &_| write_input_data::<i8>(data, &fft),
+        //     move |data, _: &_| write_input_data::<i8>(data, &audio_processing),
         //     err_fn,
         //     None,
         // )?,
         // cpal::SampleFormat::I16 => device.build_input_stream(
         //     &config.into(),
-        //     move |data, _: &_| write_input_data::<i16>(data, &fft),
+        //     move |data, _: &_| write_input_data::<i16>(data, &audio_processing),
         //     err_fn,
         //     None,
         // )?,
         // cpal::SampleFormat::I32 => device.build_input_stream(
         //     &config.into(),
-        //     move |data, _: &_| write_input_data::<i32>(data, &fft),
+        //     move |data, _: &_| write_input_data::<i32>(data, &audio_processing),
         //     err_fn,
         //     None,
         // )?,
         cpal::SampleFormat::F32 => device.build_input_stream(
             &config.into(),
-            |data, _: &_| write_input_data(data),
+            move |data, _: &_| write_input_data(data, &audio_processing),
             err_fn,
             None,
         )?,
@@ -69,22 +71,24 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn write_input_data(input: &[f32]) {
-    println!("heard {} samples", input.len());
+fn write_input_data(samples: &[f32], audio_processing: &AudioProcessing<512, 256>) {
+    println!("heard {} samples", samples.len());
 
-    assert_eq!(input.len(), 512);
+    assert_eq!(samples.len(), 512);
 
-    let mut input: [f32; 512] = input[..512].try_into().unwrap();
+    let samples: [f32; 512] = samples[..512].try_into().unwrap();
 
-    let spectrum = rfft_512(&mut input);
+    let amplitudes = audio_processing.process_samples(samples);
 
-    // since the real-valued coefficient at the Nyquist frequency is packed into the
-    // imaginary part of the DC bin, it must be cleared before computing the amplitudes
-    spectrum[0].im = 0.0;
+    let positive_amplitudes = amplitudes
+        .0
+        .into_iter()
+        .map(|x| if x < 0.0 { 0.0 } else { x })
+        .collect::<Vec<_>>();
 
-    let amplitudes: Vec<_> = spectrum.iter().map(|c| c.norm() as u32).collect();
+    let sum_amplitudes = positive_amplitudes.iter().sum::<f32>();
 
-    println!("sum amplitudes: {:?}", amplitudes);
+    println!("amplitudes = {}: {:?}", sum_amplitudes, positive_amplitudes)
 
     // TODO: what should we do with the amplitudes? send them through a channel?
 }
