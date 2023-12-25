@@ -86,9 +86,12 @@ fn write_input_data(samples: &[f32], audio_processing: &AudioProcessing<512, 256
         .map(|x| if x < 0.0 { 0.0 } else { x })
         .collect::<Vec<_>>();
 
+    // TODO: i'm not sure what these are
     let sum_amplitudes = positive_amplitudes.iter().sum::<f32>();
 
-    println!("amplitudes = {}: {:?}", sum_amplitudes, positive_amplitudes)
+    if sum_amplitudes > 0.0 {
+        println!("amplitudes = {}: {:?}", sum_amplitudes, positive_amplitudes)
+    }
 
     // TODO: what should we do with the amplitudes? send them through a channel?
 }
