@@ -51,6 +51,7 @@ impl<const S: usize, const B: usize> From<WindowedSamples<S>> for Amplitudes<B> 
         let mut amplitudes: [f32; B] = [0.0; B];
 
         for (i, &spectrum) in spectrum.iter().enumerate().take(B) {
+            // TODO: this requires std or libm!
             amplitudes[i] = spectrum.norm();
         }
 
@@ -84,13 +85,19 @@ impl<const B: usize> EqualLoudness<B> {
     }
 }
 
-pub struct AudioProcessing<const S: usize, const B: usize> {
+/// TODO: I don't think Bins is the right term. we get twice as many terms as bins?
+pub struct AudioProcessing<const S: usize, const BINS: usize, const BUF: usize> {
     window_multipliers: [f32; S],
-    equal_loudness_curve: [f32; B],
+    equal_loudness_curve: [f32; BINS],
 }
 
-impl<const S: usize, const B: usize> AudioProcessing<S, B> {
+impl<const S: usize, const BINS: usize, const BUF: usize> AudioProcessing<S, BINS, BUF> {
     pub fn new() -> Self {
+        // TODO: it currently only works with one size
+        assert_eq!(S, 512);
+        assert_eq!(S, BINS * 2);
+        assert_eq!(BUF, S * 3 / 2);
+
         // TODO: allow different windows instead of hanning
         let mut window_multipliers = [0.0; S];
         for (x, multiplier) in window_multipliers.iter_mut().zip(hanning_iter(S)) {
@@ -98,8 +105,7 @@ impl<const S: usize, const B: usize> AudioProcessing<S, B> {
         }
 
         // TODO: actual equal loudness curve. maybe use bark scale?
-        // TODO: i think we want B to be something between 8 and 24
-        let equal_loudness_curve = [1.0; B];
+        let equal_loudness_curve = [1.0; BINS];
 
         Self {
             window_multipliers,
@@ -107,20 +113,29 @@ impl<const S: usize, const B: usize> AudioProcessing<S, B> {
         }
     }
 
-    pub fn process_samples(&self, samples: [f32; S]) -> EqualLoudness<B> {
+    pub fn process_samples(&self, samples: [f32; S]) -> EqualLoudness<BINS> {
         let samples = Samples(samples);
+
+        // TODO: add the samples to a ring buffer? that way we can do a moving window. but then this needs to be mutable... i guess we need channels?
 
         let windowed_samples = WindowedSamples::from_samples(samples, &self.window_multipliers);
 
         let amplitudes = Amplitudes::from(windowed_samples);
 
+        // TODO: ignore a bunch of the bins?
+
+        // println!("amplitudes = {:?}", amplitudes.0);
+
         let decibels = Decibels::from(amplitudes);
 
+        // use bark scale which has 24 levels?
         EqualLoudness::from_decibels(decibels, self.equal_loudness_curve)
     }
 }
 
-impl<const S: usize, const B: usize> Default for AudioProcessing<S, B> {
+impl<const S: usize, const BINS: usize, const BUF: usize> Default
+    for AudioProcessing<S, BINS, BUF>
+{
     fn default() -> Self {
         Self::new()
     }

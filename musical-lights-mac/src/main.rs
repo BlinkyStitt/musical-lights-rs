@@ -19,7 +19,14 @@ fn record_microphone(x: Duration) -> anyhow::Result<()> {
         eprintln!("an error occurred on stream: {}", err);
     };
 
-    let audio_processing = AudioProcessing::<512, 256>::new();
+    // samples per second
+    let sample_rate = config.sample_rate();
+    println!("sample rate = {}", sample_rate.0);
+
+    let buffer_size = config.buffer_size();
+    println!("buffer size = {:?}", buffer_size);
+
+    let audio_processing = AudioProcessing::<512, 256, 768>::new();
 
     let stream = match config.sample_format() {
         // cpal::SampleFormat::I8 => device.build_input_stream(
@@ -71,27 +78,34 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn write_input_data(samples: &[f32], audio_processing: &AudioProcessing<512, 256>) {
+fn write_input_data<const S: usize, const BINS: usize, const BUF: usize>(
+    samples: &[f32],
+    audio_processing: &AudioProcessing<S, BINS, BUF>,
+) {
     println!("heard {} samples", samples.len());
 
-    assert_eq!(samples.len(), 512);
+    assert_eq!(samples.len(), S);
 
-    let samples: [f32; 512] = samples[..512].try_into().unwrap();
+    let samples: [f32; S] = samples[..S].try_into().unwrap();
 
-    let amplitudes = audio_processing.process_samples(samples);
+    // TODO: only write half the samples? then sleep for a short time based on num samples and sample rate? then write the second half?
+    let loudness = audio_processing.process_samples(samples);
 
-    let positive_amplitudes = amplitudes
-        .0
-        .into_iter()
-        .map(|x| if x < 0.0 { 0.0 } else { x })
-        .collect::<Vec<_>>();
+    // // TODO: pretty graph instead of a big list of numbers
+    // let positive_amplitudes = amplitudes
+    //     .0
+    //     .into_iter()
+    //     .map(|x| if x < 0.0 { 0.0 } else { x })
+    //     .collect::<Vec<_>>();
+    //
+    // let sum_amplitudes = amplitudes.0.iter().sum::<f32>();
+    //
+    // if sum_amplitudes > 0.0 {
+    //     println!("amplitudes = {}: {:?}", sum_amplitudes, positive_amplitudes);
+    // }
 
-    // TODO: i'm not sure what these are
-    let sum_amplitudes = positive_amplitudes.iter().sum::<f32>();
-
-    if sum_amplitudes > 0.0 {
-        println!("amplitudes = {}: {:?}", sum_amplitudes, positive_amplitudes)
-    }
+    println!("loudness = {:?}", loudness.0);
 
     // TODO: what should we do with the amplitudes? send them through a channel?
+    // TODO: actually, i think we should just send the samples to a channel
 }

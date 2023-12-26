@@ -151,6 +151,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e08e0ab3e9609bd1d15a7be7cc6e0a31681eee4a1021513494a0fb9c0e1bda34"
 
 [[package]]
+name = "circular-buffer"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8da9d36ad01a07a2c380bdece16e418820ffa8eda01d3debed9bff3f296a84f"
+
+[[package]]
 name = "clang-sys"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -428,6 +434,7 @@ dependencies = [
  "apodize",
  "blake2",
  "cichlid",
+ "circular-buffer",
  "microfft",
  "micromath",
  "serde",

@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![feature(type_alias_impl_trait)]
