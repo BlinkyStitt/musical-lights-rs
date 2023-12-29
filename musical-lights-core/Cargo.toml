@@ -13,5 +13,5 @@ circular-buffer = { version = "0.1.6", default-features = false }
 microfft = { version = "0.5.1" }
 micromath = "2.1.0"
 serde = { version = "1.0.193", default-features = false, features = ["derive"] }
-thiserror = { version = "1.0.51", default-features = false }
+thiserror = { version = "1.0.52", default-features = false }
 toml = "0.8.8"
