@@ -26,7 +26,7 @@ fn record_microphone(x: Duration) -> anyhow::Result<()> {
     let buffer_size = config.buffer_size();
     println!("buffer size = {:?}", buffer_size);
 
-    let audio_processing = AudioProcessing::<512, 256, 768>::new();
+    let audio_processing = AudioProcessing::<512, 768, 256, 24>::new(sample_rate.0);
 
     let stream = match config.sample_format() {
         // cpal::SampleFormat::I8 => device.build_input_stream(
@@ -78,9 +78,9 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn write_input_data<const S: usize, const BINS: usize, const BUF: usize>(
+fn write_input_data<const S: usize, const BINS: usize, const BUF: usize, const FREQ: usize>(
     samples: &[f32],
-    audio_processing: &AudioProcessing<S, BINS, BUF>,
+    audio_processing: &AudioProcessing<S, BINS, BUF, FREQ>,
 ) {
     println!("heard {} samples", samples.len());
 
