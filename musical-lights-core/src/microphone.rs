@@ -2,27 +2,33 @@
 
 use apodize::hanning_iter;
 use flume::{Receiver, Sender};
-use log::info;
+use log::{debug, info, trace};
 use microfft::real::rfft_512;
 
 /// S = number of microphone samples
+#[derive(Debug)]
 pub struct Samples<const S: usize>(pub [f32; S]);
 
 // TODO: add a buffer between Samples and WindowsSamples so that we can do rolling windows. re-use 50% of the samples from the previous window
 
+#[derive(Debug)]
 pub struct WindowedSamples<const S: usize>(pub [f32; S]);
 
 /// N = number of amplitudes
 /// IF N > S/2, there is an error
 /// If N == S/2, there is no aggregation
 /// If N < S/2,  there is aggregation
+#[derive(Debug)]
 pub struct Amplitudes<const N: usize>(pub [f32; N]);
 
 ///  bin amounts scale exponentially
+#[derive(Debug)]
 pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
 
+#[derive(Debug)]
 pub struct Decibels<const N: usize>(pub [f32; N]);
 
+#[derive(Debug)]
 pub struct EqualLoudness<const N: usize>(pub [f32; N]);
 
 impl<const S: usize> WindowedSamples<S> {
@@ -159,7 +165,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
             // TODO: zero everything over 20khz
             let b = bark(f);
 
-            // println!("{} {} = {}", i, f, b);
+            trace!("{} {} = {:?}", i, f, b);
 
             *x = b;
         }
@@ -196,18 +202,30 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
 
         let samples = Samples(samples);
 
+        trace!("{:?}", samples);
+
         let windowed_samples = WindowedSamples::from_samples(samples, &self.window_multipliers);
 
+        trace!("{:?}", windowed_samples);
+
         let amplitudes = Amplitudes::from_windows_samples(windowed_samples);
+
+        trace!("{:?}", amplitudes);
 
         let aggregated_amplitudes =
             AggregatedAmplitudes::from_amplitudes(amplitudes, &self.amplitude_aggregation_map);
 
-        // println!("amplitudes = {:?}", amplitudes.0);
+        trace!("{:?}", aggregated_amplitudes);
 
         let decibels = Decibels::from_aggregated_amplitudes(aggregated_amplitudes);
 
-        EqualLoudness::from_decibels(decibels, self.equal_loudness_curve)
+        trace!("{:?}", decibels);
+
+        let loudness = EqualLoudness::from_decibels(decibels, self.equal_loudness_curve);
+
+        info!("{:?}", loudness);
+
+        loudness
     }
 }
 

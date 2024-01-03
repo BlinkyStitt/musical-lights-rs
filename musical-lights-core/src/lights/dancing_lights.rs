@@ -1,8 +1,8 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
 
 use crate::microphone::EqualLoudness;
-use log::info;
 
+/// TODO: i think this should be a trait. the mac impl needs to draw a window, the hats need to control leds, etc.
 pub struct DancingLights<const N: usize> {
     pub lights: [u8; N],
 }
@@ -14,8 +14,7 @@ impl<const N: usize> DancingLights<N> {
 
     // TODO: need to think more about &mut on this
     pub fn update(&mut self, loudness: EqualLoudness<N>) {
-        info!("loudness = {:?}", loudness.0);
-        // todo!("actually do something with the loudness");
+        // todo!("do something with the loudness to turn it into lights")
     }
 }
 

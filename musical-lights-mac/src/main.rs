@@ -2,8 +2,7 @@
 
 mod audio;
 
-// TODO: use channels from embassy
-use std::thread;
+use std::env;
 
 use embassy_executor::Spawner;
 use embassy_time::Timer;
@@ -48,7 +47,6 @@ async fn audio_task(tx_loudness: Sender<EqualLoudness<NUM_CHANNELS>>) {
             error!("audio task failed: {:?}", err);
         }
     }
-
 }
 
 #[embassy_executor::task]
@@ -65,9 +63,14 @@ async fn lights_task(rx_loudness: Receiver<EqualLoudness<NUM_CHANNELS>>) {
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    env::set_var(
+        "RUST_LOG",
+        env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
+    );
+
     env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
         .format_timestamp_nanos()
+        .parse_default_env()
         .init();
 
     info!("hello, world!");
