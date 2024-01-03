@@ -64,16 +64,22 @@ impl<const B: usize> Amplitudes<B> {
 }
 
 impl<const AA: usize> AggregatedAmplitudes<AA> {
-    pub fn from_amplitudes<const A: usize>(x: Amplitudes<A>, amplitude_map: &[usize; A]) -> Self {
+    pub fn from_amplitudes<const A: usize>(
+        x: Amplitudes<A>,
+        amplitude_map: &[Option<usize>; A],
+    ) -> Self {
         let mut inner = [0.0; AA];
 
         for (x, &i) in x.0.iter().zip(amplitude_map.iter()) {
-            if i >= AA {
-                // skip very high frequencies
-                break;
-            }
+            if let Some(i) = i {
+                if i >= AA {
+                    // skip very high frequencies
+                    // TODO: think about this more. the None check might be enough
+                    break;
+                }
 
-            inner[i] += x;
+                inner[i] += x;
+            }
         }
 
         Self(inner)
@@ -115,8 +121,8 @@ impl<const B: usize> EqualLoudness<B> {
 /// TODO: I don't like the names for any of these constants
 pub struct AudioProcessing<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize> {
     window_multipliers: [f32; S],
-    amplitude_aggregation_map: [usize; BINS],
-    equal_loudness_curve: [f32; BINS],
+    amplitude_aggregation_map: [Option<usize>; BINS],
+    equal_loudness_curve: [f32; FREQ],
 }
 
 impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
@@ -137,13 +143,13 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         }
 
         // TODO: map using the bark scale or something else?
-        let mut amplitude_aggregation_map = [0; BINS];
+        let mut amplitude_aggregation_map = [Some(0); BINS];
         for (i, x) in amplitude_aggregation_map.iter_mut().enumerate() {
             let f = bin_to_frequency(i, sample_rate_hz, BINS);
 
-            // TODO: i don't think this is what we want
+            // TODO: i don't think bark is what we want, but lets try it for now
             // TODO: zero everything over 20khz
-            let b = bark(f).saturating_sub(1);
+            let b = bark(f);
 
             // println!("{} {} = {}", i, f, b);
 
@@ -151,7 +157,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         }
 
         // TODO: actual equal loudness curve
-        let equal_loudness_curve = [1.0; BINS];
+        let equal_loudness_curve = [1.0; FREQ];
 
         Self {
             window_multipliers,
@@ -160,7 +166,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         }
     }
 
-    pub fn process_samples(&self, samples: [f32; S]) -> Decibels<FREQ> {
+    pub fn process_samples(&self, samples: [f32; S]) -> EqualLoudness<FREQ> {
         let samples = Samples(samples);
 
         // TODO: add the samples to a ring buffer? that way we can do a moving window. but then this needs to be mutable... i guess we need channels?
@@ -172,15 +178,11 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         let aggregated_amplitudes =
             AggregatedAmplitudes::from_amplitudes(amplitudes, &self.amplitude_aggregation_map);
 
-        // TODO: ignore a bunch of the bins?
-
         // println!("amplitudes = {:?}", amplitudes.0);
 
         let decibels = Decibels::from_aggregated_amplitudes(aggregated_amplitudes);
 
-        // EqualLoudness::from_decibels(decibels, self.equal_loudness_curve)
-
-        decibels
+        EqualLoudness::from_decibels(decibels, self.equal_loudness_curve)
     }
 }
 
@@ -188,7 +190,8 @@ pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: u32, bins: usize) -> f
     (bin_index as f32) * (sample_rate_hz as f32) / ((bins * 2) as f32)
 }
 
-pub fn bark(f: f32) -> usize {
+// TODO: these formulas don't match the table on the wiki page. just do a simple match statement for now? return None for some of the bins, too
+pub fn bark(f: f32) -> Option<usize> {
     // let x = 13.0 * (0.00076 * f).atan() + 3.5 * ((f / 7500.0) * (f / 7500.0)).atan();
 
     // Traunmuller, 1990
@@ -197,7 +200,9 @@ pub fn bark(f: f32) -> usize {
     // Wang, Sekey & Gersho, 1992
     // let x = 6.0 * (f / 600.0).asinh();
 
-    x.round() as usize
+    let x = x.round() as usize;
+
+    Some(x)
 }
 
 #[cfg(test)]
@@ -206,23 +211,25 @@ mod tests {
 
     #[test]
     fn test_bark() {
-        assert_eq!(bark(0.0), 0);
-        assert_eq!(bark(20.0), 1);
-        assert_eq!(bark(50.0), 1);
-        assert_eq!(bark(100.0), 1);
-        assert_eq!(bark(150.0), 2);
-        assert_eq!(bark(200.0), 2);
-        assert_eq!(bark(250.0), 3);
-        assert_eq!(bark(300.0), 3);
-        assert_eq!(bark(350.0), 4);
-        assert_eq!(bark(400.0), 4);
-        assert_eq!(bark(450.0), 5);
-        assert_eq!(bark(510.0), 5);
-        assert_eq!(bark(570.0), 6);
-        assert_eq!(bark(630.0), 6);
-        assert_eq!(bark(700.0), 7);
-        assert_eq!(bark(770.0), 7);
-        assert_eq!(bark(840.0), 8);
-        assert_eq!(bark(920.0), 8);
+        assert_eq!(bark(-1.0), None);
+        assert_eq!(bark(0.0), None);
+        assert_eq!(bark(20.0), Some(1));
+        assert_eq!(bark(50.0), Some(1));
+        assert_eq!(bark(100.0), Some(1));
+        assert_eq!(bark(150.0), Some(2));
+        assert_eq!(bark(200.0), Some(2));
+        assert_eq!(bark(250.0), Some(3));
+        assert_eq!(bark(300.0), Some(3));
+        assert_eq!(bark(350.0), Some(4));
+        assert_eq!(bark(400.0), Some(4));
+        assert_eq!(bark(450.0), Some(5));
+        assert_eq!(bark(510.0), Some(5));
+        assert_eq!(bark(570.0), Some(6));
+        assert_eq!(bark(630.0), Some(6));
+        assert_eq!(bark(700.0), Some(7));
+        assert_eq!(bark(770.0), Some(7));
+        assert_eq!(bark(840.0), Some(8));
+        assert_eq!(bark(920.0), Some(8));
+        assert_eq!(bark(f32::MAX), None);
     }
 }

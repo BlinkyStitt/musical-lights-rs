@@ -7,7 +7,16 @@ pub struct DancingLights<const N: usize> {
 }
 
 impl<const N: usize> DancingLights<N> {
-    fn update(&mut self, sound: EqualLoudness<N>) {
-        todo!();
+    pub fn new() -> Self {
+        Self { lights: [0; N] }
+    }
+
+    // TODO: need to think more about &mut on this
+    pub fn update(&mut self, loudness: EqualLoudness<N>) {}
+}
+
+impl<const N: usize> Default for DancingLights<N> {
+    fn default() -> Self {
+        Self::new()
     }
 }

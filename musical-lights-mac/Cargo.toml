@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.77"
+anyhow = "1.0.79"
 cpal = "0.15.2"
 musical-lights-core = { path = "../musical-lights-core" }
 microfft = { version = "0.5.1", features = ["std"] }
