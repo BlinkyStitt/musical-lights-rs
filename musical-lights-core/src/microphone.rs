@@ -1,6 +1,8 @@
 //! TODO: bark scale?
 
 use apodize::hanning_iter;
+use flume::{Receiver, Sender};
+use log::info;
 use microfft::real::rfft_512;
 
 /// S = number of microphone samples
@@ -119,20 +121,26 @@ impl<const B: usize> EqualLoudness<B> {
 }
 
 /// TODO: I don't like the names for any of these constants
-pub struct AudioProcessing<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize> {
+/// TODO: use BUF
+pub struct AudioProcessing<
+    const S: usize,
+    const BUF: usize,
+    const BINS: usize,
+    const CHANNELS: usize,
+> {
     window_multipliers: [f32; S],
     amplitude_aggregation_map: [Option<usize>; BINS],
-    equal_loudness_curve: [f32; FREQ],
+    equal_loudness_curve: [f32; CHANNELS],
 }
 
 impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
     AudioProcessing<S, BUF, BINS, FREQ>
 {
     pub fn new(sample_rate_hz: u32) -> Self {
-        // TODO: it currently only works with one size
+        // TODO: it currently only works with one size S and a matching BUF. support buffering now that i figured out where to put a &mut
         // TODO: compile time assert
         assert_eq!(S, 512);
-        assert_eq!(BUF, S * 3 / 2);
+        assert_eq!(BUF, S);
         assert_eq!(BINS * 2, S);
         assert!(FREQ <= BINS);
 
@@ -166,10 +174,27 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         }
     }
 
-    pub fn process_samples(&self, samples: [f32; S]) -> EqualLoudness<FREQ> {
-        let samples = Samples(samples);
+    /// TODO: i think if we put channels here, we are going to have troubles with no_std! think more about this
+    pub async fn process_stream(
+        &mut self,
+        rx_samples: Receiver<[f32; S]>,
+        tx_loudness: Sender<EqualLoudness<FREQ>>,
+    ) {
+        info!("processing stream");
 
-        // TODO: add the samples to a ring buffer? that way we can do a moving window. but then this needs to be mutable... i guess we need channels?
+        while let Ok(samples) = rx_samples.recv_async().await {
+            let loudness = self.process_samples(samples);
+
+            tx_loudness.send_async(loudness).await.unwrap();
+        }
+
+        info!("done processing stream");
+    }
+
+    pub fn process_samples(&mut self, samples: [f32; S]) -> EqualLoudness<FREQ> {
+        // TODO: add the samples to a ring buffer
+
+        let samples = Samples(samples);
 
         let windowed_samples = WindowedSamples::from_samples(samples, &self.window_multipliers);
 
