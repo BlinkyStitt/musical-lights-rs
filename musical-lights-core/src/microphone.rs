@@ -1,6 +1,7 @@
 //! TODO: bark scale?
 
 use apodize::hanning_iter;
+use circular_buffer::CircularBuffer;
 use flume::{Receiver, Sender};
 use log::{debug, info, trace};
 use microfft::real::rfft_512;
@@ -134,7 +135,8 @@ pub struct AudioProcessing<
     const BINS: usize,
     const CHANNELS: usize,
 > {
-    window_multipliers: [f32; S],
+    samples: CircularBuffer<BUF, f32>,
+    window_multipliers: [f32; BUF],
     amplitude_aggregation_map: [Option<usize>; BINS],
     equal_loudness_curve: [f32; CHANNELS],
 }
@@ -143,16 +145,15 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
     AudioProcessing<S, BUF, BINS, FREQ>
 {
     pub fn new(sample_rate_hz: u32) -> Self {
-        // TODO: it currently only works with one size S and a matching BUF. support buffering now that i figured out where to put a &mut
         // TODO: compile time assert
         assert_eq!(S, 512);
-        assert_eq!(BUF, S);
-        assert_eq!(BINS * 2, S);
+        assert!(BUF >= S);
+        assert_eq!(BINS * 2, BUF);
         assert!(FREQ <= BINS);
 
         // TODO: allow different windows instead of hanning
-        let mut window_multipliers = [1.0; S];
-        for (x, multiplier) in window_multipliers.iter_mut().zip(hanning_iter(S)) {
+        let mut window_multipliers = [1.0; BUF];
+        for (x, multiplier) in window_multipliers.iter_mut().zip(hanning_iter(BUF)) {
             *x = multiplier as f32;
         }
 
@@ -173,7 +174,11 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         // TODO: actual equal loudness curve
         let equal_loudness_curve = [1.0; FREQ];
 
+        // start with a buffer full of zeroes, NOT an empty buffer
+        let samples = CircularBuffer::from([0.0; BUF]);
+
         Self {
+            samples,
             window_multipliers,
             amplitude_aggregation_map,
             equal_loudness_curve,
@@ -189,7 +194,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         debug!("processing stream");
 
         while let Ok(samples) = rx_samples.recv_async().await {
-            let loudness = self.process_samples(samples);
+            let loudness = self.process_samples(&samples);
 
             tx_loudness.send_async(loudness).await.unwrap();
         }
@@ -197,14 +202,30 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         info!("done processing stream");
     }
 
-    pub fn process_samples(&mut self, samples: [f32; S]) -> EqualLoudness<FREQ> {
-        // TODO: add the samples to a ring buffer
+    pub fn get_buffered_samples(&self) -> Samples<BUF> {
+        let mut samples = [0.0; BUF];
 
-        let samples = Samples(samples);
+        let (a, b) = self.samples.as_slices();
 
-        trace!("{:?}", samples);
+        samples[..a.len()].copy_from_slice(a);
+        samples[a.len()..].copy_from_slice(b);
 
-        let windowed_samples = WindowedSamples::from_samples(samples, &self.window_multipliers);
+        Samples(samples)
+    }
+
+    pub fn process_samples(&mut self, samples: &[f32]) -> EqualLoudness<FREQ> {
+        trace!("new samples: {:?}", samples);
+
+        self.samples.extend_from_slice(samples);
+
+        // TODO: this could probably be more efficient. benchmark
+
+        let buffered_samples = self.get_buffered_samples();
+
+        trace!("buffered {:?}", buffered_samples);
+
+        let windowed_samples =
+            WindowedSamples::from_samples(buffered_samples, &self.window_multipliers);
 
         trace!("{:?}", windowed_samples);
 
@@ -217,6 +238,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
 
         trace!("{:?}", aggregated_amplitudes);
 
+        // TODO: i'm not sure if we want to convert to decibels. i think tracking a peak amplitude and then scaling logarithmically on that might be better
         let decibels = Decibels::from_aggregated_amplitudes(aggregated_amplitudes);
 
         trace!("{:?}", decibels);

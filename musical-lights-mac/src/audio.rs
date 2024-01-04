@@ -1,15 +1,11 @@
 //! TODO: refactor this to use the types in microphone.rs
 
-use std::{marker::PhantomData, thread};
-
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleRate, Stream,
 };
-use embassy_time::Duration;
 use flume::Sender;
-use log::{debug, error, info, trace};
-use musical_lights_core::microphone::{AudioProcessing, EqualLoudness};
+use log::{error, info, trace};
 
 /// TODO: i think this should be a trait
 pub struct MicrophoneStream<const S: usize> {

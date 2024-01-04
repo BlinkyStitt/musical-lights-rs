@@ -7,11 +7,13 @@ use micromath::F32Ext;
 // const DEG2RAD: f32 = 0.017453292;
 // const RAD2DEG: f32 = 1.0 / DEG2RAD;
 // in meters
-const EARTH_RADIUS: f32 = 6371000.0;
+pub const EARTH_RADIUS: f32 = 6371000.0;
+
+/// we don't have std, so we don't have PI
 #[allow(clippy::approx_constant)]
 const PI: f32 = 3.141_592_7;
 
-struct Course {
+pub struct Course {
     /// in meters
     pub distance: f32,
     /// Positive angles measured counter-clockwise
@@ -21,7 +23,7 @@ struct Course {
 }
 
 // TODO: should these be
-struct Coordinate {
+pub struct Coordinate {
     /// latitude
     pub lat: f32,
     /// longitude
