@@ -10,8 +10,6 @@ use microfft::real::{rfft_2048, rfft_512};
 #[derive(Debug)]
 pub struct Samples<const S: usize>(pub [f32; S]);
 
-// TODO: add a buffer between Samples and WindowsSamples so that we can do rolling windows. re-use 50% of the samples from the previous window
-
 #[derive(Debug)]
 pub struct WindowedSamples<const S: usize>(pub [f32; S]);
 
