@@ -180,7 +180,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
 
             // TODO: i don't think bark is what we want, but lets try it for now
             // TODO: zero everything over 20khz
-            let b = bark(f);
+            let b = bark(f).map(|x| x - 1);
 
             trace!("{} {} = {:?}", i, f, b);
 
