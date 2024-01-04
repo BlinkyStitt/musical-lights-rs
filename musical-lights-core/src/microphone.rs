@@ -272,7 +272,7 @@ pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: u32, bins: usize) -> f
 }
 
 // TODO: these formulas don't match the table on the wiki page. just do a simple match statement for now? return None for some of the bins, too
-pub fn bark(f: f32) -> Option<usize> {
+pub fn bark_f(f: f32) -> Option<usize> {
     // let x = 13.0 * (0.00076 * f).atan() + 3.5 * ((f / 7500.0) * (f / 7500.0)).atan();
 
     // Traunmuller, 1990
@@ -284,6 +284,37 @@ pub fn bark(f: f32) -> Option<usize> {
     let x = x.round() as usize;
 
     Some(x)
+}
+
+pub fn bark(f: f32) -> Option<usize> {
+    match f {
+        f if f < 20.0 => None,
+        f if f <= 100.0 => Some(1),
+        f if f <= 200.0 => Some(2),
+        f if f <= 300.0 => Some(3),
+        f if f <= 400.0 => Some(4),
+        f if f <= 510.0 => Some(5),
+        f if f <= 630.0 => Some(6),
+        f if f <= 770.0 => Some(7),
+        f if f <= 920.0 => Some(8),
+        f if f <= 1080.0 => Some(9),
+        f if f <= 1270.0 => Some(10),
+        f if f <= 1480.0 => Some(11),
+        f if f <= 1720.0 => Some(12),
+        f if f <= 2000.0 => Some(13),
+        f if f <= 2320.0 => Some(14),
+        f if f <= 2700.0 => Some(15),
+        f if f <= 3150.0 => Some(16),
+        f if f <= 3700.0 => Some(17),
+        f if f <= 4400.0 => Some(18),
+        f if f <= 5300.0 => Some(19),
+        f if f <= 6400.0 => Some(20),
+        f if f <= 7700.0 => Some(21),
+        f if f <= 9500.0 => Some(22),
+        f if f <= 12000.0 => Some(23),
+        f if f <= 15500.0 => Some(24),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
