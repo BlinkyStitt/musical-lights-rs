@@ -271,22 +271,16 @@ pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: u32, bins: usize) -> f
     (bin_index as f32) * (sample_rate_hz as f32) / ((bins * 2) as f32)
 }
 
-// TODO: these formulas don't match the table on the wiki page. just do a simple match statement for now? return None for some of the bins, too
-pub fn bark_f(f: f32) -> Option<usize> {
+pub fn bark(f: f32) -> Option<usize> {
+    // TODO: these formulas don't match the table on the wiki page. i guess a match is fine
     // let x = 13.0 * (0.00076 * f).atan() + 3.5 * ((f / 7500.0) * (f / 7500.0)).atan();
 
     // Traunmuller, 1990
-    let x = ((26.81 * f) / (1960.0 + f)) - 0.53;
+    // let x = ((26.81 * f) / (1960.0 + f)) - 0.53;
 
     // Wang, Sekey & Gersho, 1992
     // let x = 6.0 * (f / 600.0).asinh();
 
-    let x = x.round() as usize;
-
-    Some(x)
-}
-
-pub fn bark(f: f32) -> Option<usize> {
     match f {
         f if f < 20.0 => None,
         f if f <= 100.0 => Some(1),
@@ -342,6 +336,40 @@ mod tests {
         assert_eq!(bark(770.0), Some(7));
         assert_eq!(bark(840.0), Some(8));
         assert_eq!(bark(920.0), Some(8));
+        assert_eq!(bark(1000.0), Some(9));
+        assert_eq!(bark(1080.0), Some(9));
+        assert_eq!(bark(1170.0), Some(10));
+        assert_eq!(bark(1270.0), Some(10));
+        assert_eq!(bark(1370.0), Some(11));
+        assert_eq!(bark(1480.0), Some(11));
+        assert_eq!(bark(1600.0), Some(12));
+        assert_eq!(bark(1720.0), Some(12));
+        assert_eq!(bark(1850.0), Some(13));
+        assert_eq!(bark(2000.0), Some(13));
+        assert_eq!(bark(2150.0), Some(14));
+        assert_eq!(bark(2320.0), Some(14));
+        assert_eq!(bark(2500.0), Some(15));
+        assert_eq!(bark(2700.0), Some(15));
+        assert_eq!(bark(2900.0), Some(16));
+        assert_eq!(bark(3150.0), Some(16));
+        assert_eq!(bark(3400.0), Some(17));
+        assert_eq!(bark(3700.0), Some(17));
+        assert_eq!(bark(4000.0), Some(18));
+        assert_eq!(bark(4400.0), Some(18));
+        assert_eq!(bark(4800.0), Some(19));
+        assert_eq!(bark(5300.0), Some(19));
+        assert_eq!(bark(5800.0), Some(20));
+        assert_eq!(bark(6400.0), Some(20));
+        assert_eq!(bark(7000.0), Some(21));
+        assert_eq!(bark(7700.0), Some(21));
+        assert_eq!(bark(8500.0), Some(22));
+        assert_eq!(bark(9500.0), Some(22));
+        assert_eq!(bark(10500.0), Some(23));
+        assert_eq!(bark(12000.0), Some(23));
+        assert_eq!(bark(13500.0), Some(24));
+        assert_eq!(bark(15500.0), Some(24));
+        assert_eq!(bark(16000.0), None); // Beyond the Bark scale
+                                         // TODO: i might actually want to go higher than this to get to 18 or 20kHz
         assert_eq!(bark(f32::MAX), None);
     }
 }
