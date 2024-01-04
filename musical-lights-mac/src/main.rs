@@ -83,5 +83,5 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(audio_task(tx_loudness));
     spawner.must_spawn(lights_task(rx_loudness));
 
-    info!("good bye, world!");
+    debug!("all tasks spawned");
 }

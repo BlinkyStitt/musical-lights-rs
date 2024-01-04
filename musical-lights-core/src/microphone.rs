@@ -186,7 +186,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         rx_samples: Receiver<[f32; S]>,
         tx_loudness: Sender<EqualLoudness<FREQ>>,
     ) {
-        info!("processing stream");
+        debug!("processing stream");
 
         while let Ok(samples) = rx_samples.recv_async().await {
             let loudness = self.process_samples(samples);
