@@ -4,7 +4,7 @@ use apodize::hanning_iter;
 use circular_buffer::CircularBuffer;
 use flume::{Receiver, Sender};
 use log::{debug, info, trace};
-use microfft::real::rfft_512;
+use microfft::real::{rfft_2048, rfft_512};
 
 /// S = number of microphone samples
 #[derive(Debug)]
@@ -45,28 +45,42 @@ impl<const S: usize> WindowedSamples<S> {
     }
 }
 
+// TODO: i feel like i need a macro or something for this
 impl<const B: usize> Amplitudes<B> {
+    /// TODO: this does not seem efficient. match and generics feel wrong. but i don't control the types on rfft_*. they require 256, 1024, etc. but we have B and S
     pub fn from_windows_samples<const S: usize>(x: WindowedSamples<S>) -> Self {
-        assert_eq!(S, 512);
-        assert_eq!(S, B * 2);
+        debug_assert_eq!(B * 2, S);
 
-        // TODO: make this work with different values of S. the mac microphone always gives 512 samples so it works for now. buffering will change this
-        let mut input: [f32; 512] = x.0[..S].try_into().unwrap();
-
-        let spectrum = rfft_512(&mut input);
-
-        // // TODO: wtf does this cargo-culted comment from the microfft example mean? why does this only happen on the first entry?
-        // since the real-valued coefficient at the Nyquist frequency is packed into the
-        // imaginary part of the DC bin, it must be cleared before computing the amplitudes
-        spectrum[0].im = 0.0;
-
-        // TODO: convert to u32? example code does
         let mut amplitudes: [f32; B] = [0.0; B];
 
-        for (i, &spectrum) in spectrum.iter().enumerate() {
-            // TODO: `norm` requires std or libm!
-            amplitudes[i] = spectrum.norm();
-        }
+        match S {
+            512 => {
+                // TODO: this copy_from_slice feels unnecessary. is there some unsafe or something i can do here to force it to work?
+                let mut fft_input = [0.0; 512];
+                fft_input.copy_from_slice(&x.0);
+
+                let fft_output = rfft_512(&mut fft_input);
+
+                fft_output[0].im = 0.0;
+
+                for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
+                    *x = spectrum.norm();
+                }
+            }
+            2048 => {
+                let mut fft_input = [0.0; 2048];
+                fft_input.copy_from_slice(&x.0);
+
+                let fft_output = rfft_2048(&mut fft_input);
+
+                fft_output[0].im = 0.0;
+
+                for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
+                    *x = spectrum.norm();
+                }
+            }
+            _ => panic!("Unsupported FFT size"),
+        };
 
         Self(amplitudes)
     }

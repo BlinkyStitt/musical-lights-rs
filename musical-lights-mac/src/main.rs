@@ -18,7 +18,7 @@ const NUM_CHANNELS: usize = 24;
 
 /// TODO: make sure SAMPLE_BUFFER >= MIC_SAMPLES
 /// TODO: support SAMPLE_BUFFER > MIC_SAMPLES
-const SAMPLE_BUFFER: usize = 512;
+const SAMPLE_BUFFER: usize = 2048;
 const FFT_BINS: usize = SAMPLE_BUFFER / 2;
 
 #[embassy_executor::task]
