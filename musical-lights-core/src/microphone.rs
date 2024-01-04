@@ -49,10 +49,12 @@ impl<const S: usize> WindowedSamples<S> {
 impl<const B: usize> Amplitudes<B> {
     /// TODO: this does not seem efficient. match and generics feel wrong. but i don't control the types on rfft_*. they require 256, 1024, etc. but we have B and S
     pub fn from_windows_samples<const S: usize>(x: WindowedSamples<S>) -> Self {
+        // TODO: compile time assert
         debug_assert_eq!(B * 2, S);
 
         let mut amplitudes: [f32; B] = [0.0; B];
 
+        // TODO: figure out how to handle the lifetime on the input to keep this DRY
         match S {
             512 => {
                 // TODO: this copy_from_slice feels unnecessary. is there some unsafe or something i can do here to force it to work?
