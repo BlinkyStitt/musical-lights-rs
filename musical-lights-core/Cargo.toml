@@ -5,8 +5,9 @@ edition = "2021"
 
 [dependencies]
 circular-buffer = { version = "0.1.6", default-features = false }
+defmt = { version = "0.3.5", default-features = false }
 embassy-sync = { version = "0.5.0" }
-log = "0.4.20"
+log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"
 num-complex = { version = "0.4.4", default-features = false }
@@ -16,12 +17,7 @@ num-complex = { version = "0.4.4", default-features = false }
 
 [features]
 default = []
-std = ["microfft/std", "num-complex/std"]
+std = ["embassy-sync/std", "microfft/std", "num-complex/std", "log/std"]
 
 [patch.crates-io]
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
-embassy-usb = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }

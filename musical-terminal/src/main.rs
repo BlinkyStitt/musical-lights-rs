@@ -5,14 +5,10 @@ mod audio;
 use std::env;
 
 use embassy_executor::Spawner;
-use embassy_sync::{
-    blocking_mutex::raw::ThreadModeRawMutex,
-    channel::{Channel, Receiver, Sender},
-};
 use embassy_time::Timer;
-use log::*;
 use musical_lights_core::{
     lights::DancingLights,
+    logging::{debug, error, info},
     microphone::{AudioProcessing, EqualLoudness},
 };
 

@@ -4,11 +4,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleRate, Stream,
 };
-use embassy_sync::{
-    blocking_mutex::raw::ThreadModeRawMutex,
-    channel::{Channel, Sender},
-};
-use log::{error, info, trace};
+use musical_lights_core::logging::{error, info, trace};
 use musical_lights_core::microphone::Samples;
 
 // i wanted this to be generic, but that's making things complicated
@@ -35,7 +31,7 @@ impl MicrophoneStream {
         let config = device.default_input_config().unwrap();
 
         let err_fn = move |err| {
-            error!("an error occurred on stream: {}", err);
+            error!("an error occurred on stream: {:?}", err);
         };
 
         // samples per second

@@ -8,6 +8,7 @@ pub mod config;
 pub mod gps;
 pub mod hanning;
 pub mod lights;
+pub mod logging;
 pub mod microphone;
 pub mod orientation;
 pub mod radio;

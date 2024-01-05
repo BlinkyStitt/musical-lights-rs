@@ -2,38 +2,38 @@
 
 // use apodize::hanning_iter;
 
+use crate::hanning::hanning_window;
+use crate::logging::{info, trace};
 use circular_buffer::CircularBuffer;
-use log::{info, trace};
+use defmt::Format;
 use microfft::real::{rfft_2048, rfft_512};
 
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
 use micromath::F32Ext;
 
-use crate::hanning::hanning_window;
-
 /// S = number of microphone samples
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct Samples<const S: usize>(pub [f32; S]);
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct WindowedSamples<const S: usize>(pub [f32; S]);
 
 /// N = number of amplitudes
 /// IF N > S/2, there is an error
 /// If N == S/2, there is no aggregation
 /// If N < S/2,  there is aggregation
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct Amplitudes<const N: usize>(pub [f32; N]);
 
 ///  bin amounts scale exponentially
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct Decibels<const N: usize>(pub [f32; N]);
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct EqualLoudness<const N: usize>(pub [f32; N]);
 
 impl<const S: usize> WindowedSamples<S> {
