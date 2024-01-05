@@ -1,8 +1,9 @@
 //! TODO: bark scale?
 
-use apodize::hanning_iter;
+// use apodize::hanning_iter;
+
 use circular_buffer::CircularBuffer;
-use flume::{Receiver, Sender};
+use embassy_sync::{blocking_mutex::raw::RawMutex, channel::Channel};
 use log::{debug, info, trace};
 use microfft::real::{rfft_2048, rfft_512};
 
@@ -64,6 +65,7 @@ impl<const B: usize> Amplitudes<B> {
                 fft_output[0].im = 0.0;
 
                 for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
+                    // TODO: this requires std or libm. need to think
                     *x = spectrum.norm();
                 }
             }
@@ -167,8 +169,11 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
 
         // TODO: allow different windows instead of hanning
         let mut window_multipliers = [1.0; BUF];
-        for (x, multiplier) in window_multipliers.iter_mut().zip(hanning_iter(BUF)) {
-            *x = multiplier as f32;
+        for x in window_multipliers.iter_mut() {
+            // TODO: calculate hanning window without needing std
+            let multiplier = 1.0;
+
+            *x = multiplier;
         }
 
         // TODO: map using the bark scale or something else?
@@ -178,6 +183,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
 
             // TODO: i don't think bark is what we want, but lets try it for now
             // TODO: zero everything over 20khz
+            // bark is 1-24, but we want 0-23
             let b = bark(f).map(|x| x - 1);
 
             trace!("{} {} = {:?}", i, f, b);
@@ -199,23 +205,6 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         }
     }
 
-    /// TODO: i think if we put channels here, we are going to have troubles with no_std! think more about this
-    pub async fn process_stream(
-        &mut self,
-        rx_samples: Receiver<[f32; S]>,
-        tx_loudness: Sender<EqualLoudness<FREQ>>,
-    ) {
-        debug!("processing stream");
-
-        while let Ok(samples) = rx_samples.recv_async().await {
-            let loudness = self.process_samples(&samples);
-
-            tx_loudness.send_async(loudness).await.unwrap();
-        }
-
-        info!("done processing stream");
-    }
-
     pub fn get_buffered_samples(&self) -> Samples<BUF> {
         let mut samples = [0.0; BUF];
 
@@ -227,10 +216,10 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         Samples(samples)
     }
 
-    pub fn process_samples(&mut self, samples: &[f32]) -> EqualLoudness<FREQ> {
+    pub fn process_samples(&mut self, samples: Samples<S>) -> EqualLoudness<FREQ> {
         trace!("new samples: {:?}", samples);
 
-        self.samples.extend_from_slice(samples);
+        self.samples.extend_from_slice(&samples.0);
 
         // TODO: this could probably be more efficient. benchmark
 

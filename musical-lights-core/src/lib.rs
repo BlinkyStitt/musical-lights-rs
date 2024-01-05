@@ -6,6 +6,7 @@ pub mod battery;
 pub mod compass;
 pub mod config;
 pub mod gps;
+pub mod hanning;
 pub mod lights;
 pub mod microphone;
 pub mod orientation;

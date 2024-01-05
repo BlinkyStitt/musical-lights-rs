@@ -1,0 +1,36 @@
+[package]
+name = "musical-feather-m0"
+version = "0.1.0"
+authors = ["Bryan Stitt <bryan@stitthappens.com>"]
+description = "Musical Lights for the Adafruit Feather M0"
+keywords = ["no-std", "arm", "cortex-m", "embedded-hal"]
+categories = ["embedded", "hardware-support", "no-std"]
+repository = "https://github.com/WyseNynja/musical-lights-rs"
+readme = "README.md"
+edition = "2021"
+resolver = "2"
+
+# for cargo flash
+[package.metadata]
+chip = "ATSAMD21G18A"
+
+[dependencies]
+feather_m0 = "0.13.0"
+musical-lights-core = { path = "../musical-lights-core" }
+panic-halt = { version = "0.2", optional = true }
+panic-semihosting = { version = "0.6", optional = true }
+
+[features]
+default = ["dep:panic-halt"]
+use_semihosting = ["dep:panic-semihosting"]
+
+[profile.dev]
+incremental = false
+codegen-units = 1
+debug = true
+lto = false
+
+[profile.release]
+debug = true
+lto = true
+opt-level = "s"

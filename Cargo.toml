@@ -4,5 +4,10 @@ resolver = "2"
 
 members = [
     "musical-lights-core",
-    "musical-lights-mac",
+]
+
+exclude = [
+    "musical-feather-m0",
+    "musical-stm32",
+    "musical-terminal",
 ]

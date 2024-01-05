@@ -1,5 +1,5 @@
 [package]
-name = "musical-lights-mac"
+name = "terminal_mac"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1.0.79"
 cpal = "0.15.2"
 critical-section = { version = "1.1", features = ["std"] }
+embassy-sync = { version = "*", features = ["std"] }
 embassy-executor = { version = "0.4.0", features = ["arch-std", "executor-thread", "integrated-timers", "log", "nightly"] }
 embassy-time = { version = "0.2.0", features = ["log", "std"] }
 env_logger = "0.10.1"

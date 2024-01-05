@@ -4,19 +4,26 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleRate, Stream,
 };
-use flume::Sender;
+use embassy_sync::{
+    blocking_mutex::raw::ThreadModeRawMutex,
+    channel::{Channel, Sender},
+};
 use log::{error, info, trace};
+use musical_lights_core::microphone::Samples;
+
+// i wanted this to be generic, but that's making things complicated
+const SAMPLES: usize = 512;
 
 /// TODO: i think this should be a trait
-pub struct MicrophoneStream<const S: usize> {
+pub struct MicrophoneStream {
     pub sample_rate: SampleRate,
-    pub stream: flume::Receiver<[f32; S]>,
+    pub stream: flume::Receiver<Samples<SAMPLES>>,
 
     /// TODO: i think dropping this stops recording
     _stream: Stream,
 }
 
-impl<const S: usize> MicrophoneStream<S> {
+impl MicrophoneStream {
     pub fn try_new() -> anyhow::Result<Self> {
         let host = cpal::default_host();
 
@@ -44,7 +51,6 @@ impl<const S: usize> MicrophoneStream<S> {
         let stream = match config.sample_format() {
             // cpal::SampleFormat::I8 => device.build_input_stream(
             //     &config.into(),
-            //     move |data, _: &_| write_input_data::<i8>(data, &audio_processing),
             //     err_fn,
             //     None,
             // )?,
@@ -82,14 +88,14 @@ impl<const S: usize> MicrophoneStream<S> {
         })
     }
 
-    fn send_mic_data(samples: &[f32], tx: &Sender<[f32; S]>) {
+    fn send_mic_data(samples: &[f32], tx: &flume::Sender<Samples<SAMPLES>>) {
         trace!("heard {} samples", samples.len());
 
-        debug_assert_eq!(samples.len(), S);
+        debug_assert_eq!(samples.len(), SAMPLES);
 
-        let samples: [f32; S] = samples[..S].try_into().unwrap();
+        let samples: [f32; SAMPLES] = samples[..SAMPLES].try_into().unwrap();
 
-        tx.send(samples).unwrap();
+        tx.send(Samples(samples)).unwrap();
 
         trace!("sent {} samples", samples.len());
     }

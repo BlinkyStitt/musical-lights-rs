@@ -5,8 +5,11 @@ mod audio;
 use std::env;
 
 use embassy_executor::Spawner;
+use embassy_sync::{
+    blocking_mutex::raw::ThreadModeRawMutex,
+    channel::{Channel, Receiver, Sender},
+};
 use embassy_time::Timer;
-use flume::{Receiver, Sender};
 use log::*;
 use musical_lights_core::{
     lights::DancingLights,
@@ -31,15 +34,19 @@ async fn tick_task() {
 
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
 #[embassy_executor::task]
-async fn audio_task(tx_loudness: Sender<EqualLoudness<NUM_CHANNELS>>) {
-    match audio::MicrophoneStream::<MIC_SAMPLES>::try_new() {
+async fn audio_task(tx_loudness: flume::Sender<EqualLoudness<NUM_CHANNELS>>) {
+    match audio::MicrophoneStream::try_new() {
         Ok(x) => {
             let mut audio_processing =
                 AudioProcessing::<MIC_SAMPLES, SAMPLE_BUFFER, FFT_BINS, NUM_CHANNELS>::new(
                     x.sample_rate.0,
                 );
 
-            audio_processing.process_stream(x.stream, tx_loudness).await;
+            while let Ok(samples) = x.stream.recv_async().await {
+                let loudness = audio_processing.process_samples(samples);
+
+                tx_loudness.send_async(loudness).await.unwrap();
+            }
 
             info!("audio task complete");
         }
@@ -50,15 +57,13 @@ async fn audio_task(tx_loudness: Sender<EqualLoudness<NUM_CHANNELS>>) {
 }
 
 #[embassy_executor::task]
-async fn lights_task(rx_loudness: Receiver<EqualLoudness<NUM_CHANNELS>>) {
+async fn lights_task(rx_loudness: flume::Receiver<EqualLoudness<NUM_CHANNELS>>) {
     let mut dancing_lights = DancingLights::<NUM_CHANNELS>::new();
 
-    // // read loudness from the microphone on another task. this task will close when the microphone is done recording.
+    // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple channels
     while let Ok(loudness) = rx_loudness.recv_async().await {
         dancing_lights.update(loudness);
     }
-
-    info!("lights task ended");
 }
 
 #[embassy_executor::main]
@@ -75,13 +80,11 @@ async fn main(spawner: Spawner) {
 
     info!("hello, world!");
 
-    // channel to send loudness levels from the microphone processor to the light processor
-    // TODO: what size? I think we want to drop old values, so maybe this should be a watch?
-    let (tx_loudness, rx_loudness) = flume::bounded(2);
+    let (loudness_tx, loudness_rx) = flume::bounded(2);
 
     spawner.must_spawn(tick_task());
-    spawner.must_spawn(audio_task(tx_loudness));
-    spawner.must_spawn(lights_task(rx_loudness));
+    spawner.must_spawn(audio_task(loudness_tx));
+    spawner.must_spawn(lights_task(loudness_rx));
 
     debug!("all tasks spawned");
 }

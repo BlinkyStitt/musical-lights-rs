@@ -1,5 +1,5 @@
 // declination calculator for magnetic bearing
-// TODO: why does the linter think this is unused when math functions on f32 are used.
+// TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
 use micromath::F32Ext;
 

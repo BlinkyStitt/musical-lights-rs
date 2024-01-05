@@ -3,19 +3,19 @@ name = "musical-lights-core"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-apodize = "1.0.0"
-blake2 = { version = "0.10.6", default-features = false }
-cichlid = { version = "0.2.1", features = ["no-std"] }
 circular-buffer = { version = "0.1.6", default-features = false }
-critical-section = { version = "1.1", features = ["std"] }
-embassy-time = "0.2.0"
-flume = "0.11.0"
+embassy-sync = { version = "*" }
 log = "0.4.20"
-microfft = { version = "0.5.1" }
+microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"
-serde = { version = "1.0.194", default-features = false, features = ["derive"] }
-thiserror = { version = "1.0.56", default-features = false }
-toml = "0.8.8"
+num-complex = { version = "*", default-features = false }
+
+# # TODO:
+# apodize = "1.0.0"
+# flume = { version = "0.11.0", default-features = false, features = ["async"] }
+# cichlid = { version = "0.2.1", features = ["no-std"] }
+
+[features]
+default = []
+std = ["microfft/std", "num-complex/std"]
