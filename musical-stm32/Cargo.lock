@@ -565,7 +565,6 @@ version = "0.1.0"
 dependencies = [
  "circular-buffer",
  "defmt",
- "embassy-sync",
  "microfft",
  "micromath",
  "num-complex",
