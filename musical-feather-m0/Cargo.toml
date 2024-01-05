@@ -16,7 +16,7 @@ chip = "ATSAMD21G18A"
 
 [dependencies]
 feather_m0 = "0.13.0"
-musical-lights-core = { path = "../musical-lights-core", features = ["libm"] }
+musical-lights-core = { path = "../musical-lights-core" }
 panic-halt = { version = "0.2", optional = true }
 panic-semihosting = { version = "0.6", optional = true }
 
