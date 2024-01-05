@@ -9,26 +9,28 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
-embassy-stm32 = { version = "0.1.0", path = "../../embassy-stm32", features = [ "defmt", "stm32f303vc", "unstable-pac", "memory-x", "time-driver-any", "exti"]  }
-embassy-sync = { version = "0.5.0", path = "../../embassy-sync", features = ["defmt"] }
-embassy-executor = { version = "0.4.0", path = "../../embassy-executor", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
-embassy-time = { version = "0.2", path = "../../embassy-time", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
-embassy-usb = { version = "0.1.0", path = "../../embassy-usb", features = ["defmt"] }
-embassy-futures = { version = "0.1.0", path = "../../embassy-futures" }
-
+cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7.3"
 defmt = "0.3"
 defmt-rtt = "0.4"
-
-cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
-
+embassy-executor = { version = "0.4.0", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
+embassy-futures = { version = "0.1.0" }
+embassy-stm32 = { version = "0.1.0", features = [ "defmt", "stm32f303vc", "unstable-pac", "memory-x", "time-driver-any", "exti"]  }
+embassy-sync = { version = "0.5.0", features = ["defmt"] }
+embassy-time = { version = "0.2", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-usb = { version = "0.1.0", features = ["defmt"] }
+musical-lights-core = { path = "../musical-lights-core" }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 
-# TODO: enable this once a basic blinking light program will compile
-# musical-lights-core = { path = "../musical-lights-core" }
-
 [features]
-default = ["dep:panic-halt"]
-use_semihosting = ["dep:panic-semihosting"]
+
+[patch.crates-io]
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
 
 [profile.dev]
 incremental = false

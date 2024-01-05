@@ -17,3 +17,11 @@ num-complex = { version = "0.4.4", default-features = false }
 [features]
 default = []
 std = ["microfft/std", "num-complex/std"]
+
+[patch.crates-io]
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }

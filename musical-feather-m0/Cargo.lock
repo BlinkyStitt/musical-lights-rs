@@ -164,8 +164,7 @@ checksum = "7059fff8937831a9ae6f0fe4d658ffabf58f2ca96aa9dec1c889f936f705f216"
 [[package]]
 name = "embassy-sync"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd938f25c0798db4280fcd8026bf4c2f48789aebf8f77b6e5cf8a7693ba114ec"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -537,3 +536,28 @@ checksum = "de437e2a6208b014ab52972a27e59b33fa2920d3e00fe05026167a1c509d19cc"
 dependencies = [
  "vcell",
 ]
+
+[[patch.unused]]
+name = "embassy-executor"
+version = "0.4.0"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+
+[[patch.unused]]
+name = "embassy-futures"
+version = "0.1.1"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+
+[[patch.unused]]
+name = "embassy-stm32"
+version = "0.1.0"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+
+[[patch.unused]]
+name = "embassy-time"
+version = "0.2.0"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+
+[[patch.unused]]
+name = "embassy-usb"
+version = "0.1.0"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
