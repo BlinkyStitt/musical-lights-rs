@@ -3,9 +3,14 @@
 // use apodize::hanning_iter;
 
 use circular_buffer::CircularBuffer;
-use embassy_sync::{blocking_mutex::raw::RawMutex, channel::Channel};
-use log::{debug, info, trace};
+use log::{info, trace};
 use microfft::real::{rfft_2048, rfft_512};
+
+// TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
+#[allow(unused_imports)]
+use micromath::F32Ext;
+
+use crate::hanning::hanning_window;
 
 /// S = number of microphone samples
 #[derive(Debug)]
@@ -65,8 +70,15 @@ impl<const B: usize> Amplitudes<B> {
                 fft_output[0].im = 0.0;
 
                 for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
-                    // TODO: this requires std or libm. need to think
-                    *x = spectrum.norm();
+                    #[cfg(feature = "std")]
+                    {
+                        *x = spectrum.norm();
+                    }
+
+                    #[cfg(not(feature = "std"))]
+                    {
+                        *x = (spectrum.re * spectrum.re + spectrum.im * spectrum.im).sqrt();
+                    }
                 }
             }
             2048 => {
@@ -78,7 +90,15 @@ impl<const B: usize> Amplitudes<B> {
                 fft_output[0].im = 0.0;
 
                 for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
-                    *x = spectrum.norm();
+                    #[cfg(feature = "std")]
+                    {
+                        *x = spectrum.norm();
+                    }
+
+                    #[cfg(not(feature = "std"))]
+                    {
+                        *x = (spectrum.re * spectrum.re + spectrum.im * spectrum.im).sqrt();
+                    }
                 }
             }
             _ => panic!("Unsupported FFT size"),
@@ -169,9 +189,8 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
 
         // TODO: allow different windows instead of hanning
         let mut window_multipliers = [1.0; BUF];
-        for x in window_multipliers.iter_mut() {
-            // TODO: calculate hanning window without needing std
-            let multiplier = 1.0;
+        for (i, x) in window_multipliers.iter_mut().enumerate() {
+            let multiplier = hanning_window(i, BINS);
 
             *x = multiplier;
         }
