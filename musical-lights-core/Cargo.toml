@@ -17,6 +17,3 @@ num-complex = { version = "0.4.4", default-features = false }
 [features]
 default = []
 std = ["microfft/std", "num-complex/std", "log/std"]
-
-[patch.crates-io]
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }

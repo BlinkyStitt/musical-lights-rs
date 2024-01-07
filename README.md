@@ -28,7 +28,7 @@ Rust code for making lights blink to music.
 ## STM32
 
     ```bash
-    rustup target add thumbv7m-none-eabi
+    rustup target add thumbv7m-none-eabihf
     ```
 
     ```bash

@@ -39,7 +39,9 @@ async fn audio_task(tx_loudness: flume::Sender<EqualLoudness<NUM_CHANNELS>>) {
                 );
 
             while let Ok(samples) = x.stream.recv_async().await {
-                let loudness = audio_processing.process_samples(samples);
+                audio_processing.buffer_samples(samples);
+
+                let loudness = audio_processing.equal_loudness();
 
                 tx_loudness.send_async(loudness).await.unwrap();
             }

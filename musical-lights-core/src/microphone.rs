@@ -171,6 +171,7 @@ pub struct AudioProcessing<
     const BINS: usize,
     const CHANNELS: usize,
 > {
+    count: usize,
     samples: CircularBuffer<BUF, f32>,
     window_multipliers: [f32; BUF],
     amplitude_aggregation_map: [Option<usize>; BINS],
@@ -217,6 +218,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         let samples = CircularBuffer::from([0.0; BUF]);
 
         Self {
+            count: 0,
             samples,
             window_multipliers,
             amplitude_aggregation_map,
@@ -225,6 +227,7 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
     }
 
     pub fn get_buffered_samples(&self) -> Samples<BUF> {
+        // TODO: this could probably be more efficient. benchmark. i think two refs might be better than copying
         let mut samples = [0.0; BUF];
 
         let (a, b) = self.samples.as_slices();
@@ -235,13 +238,24 @@ impl<const S: usize, const BUF: usize, const BINS: usize, const FREQ: usize>
         Samples(samples)
     }
 
-    pub fn process_samples(&mut self, samples: Samples<S>) -> EqualLoudness<FREQ> {
+    pub fn buffer_sample(&mut self, sample: f32) -> bool {
+        self.count += 1;
+
+        self.samples.push_back(sample);
+
+        self.count % S == 0
+    }
+
+    pub fn buffer_samples(&mut self, samples: Samples<S>) {
         trace!("new samples: {:?}", samples);
 
+        self.count += samples.0.len();
+
         self.samples.extend_from_slice(&samples.0);
+    }
 
-        // TODO: this could probably be more efficient. benchmark
-
+    /// TODO: rename to equal_loudness to something like calc_equal_loudness
+    pub fn equal_loudness(&mut self) -> EqualLoudness<FREQ> {
         let buffered_samples = self.get_buffered_samples();
 
         trace!("buffered {:?}", buffered_samples);
