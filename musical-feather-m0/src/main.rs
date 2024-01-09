@@ -28,24 +28,6 @@ const NUM_CHANNELS: usize = 24;
 const SAMPLE_BUFFER: usize = 2048;
 const FFT_BINS: usize = SAMPLE_BUFFER / 2;
 
-#[embassy_executor::task]
-async fn read_mic_task(mic_pin: ()) {
-    let mut samples = [0.0; MIC_SAMPLES];
-
-    loop {
-        info!("tick");
-
-        for x in samples.iter_mut() {
-            *x = mic_pin.read().unwrap();
-            // TODO: need a Timer here
-        }
-
-        // TODO: yield_now().await;
-
-        // TODO: send the samples somewhere
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // TODO: configure log (or better, use defmt)
@@ -65,11 +47,11 @@ async fn main(spawner: Spawner) {
     // let mut delay = Delay::new(core.SYST, &mut clocks);
 
     // TODO: what pin?
-    let mic_pin = pin_alias!(pins.A1).into();
+    // let mic_pin = pins.A1;
 
     // TODO: channel to send samples from microphone to buffer
 
-    spawner.must_spawn(read_mic_task(mic_pin));
+    // spawner.must_spawn(read_mic_task(mic_pin));
     // spawner.must_spawn(blink_task(red_led));
 
     debug!("all tasks spawned");

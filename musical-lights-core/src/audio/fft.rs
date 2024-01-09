@@ -1,8 +1,7 @@
-use crate::audio::amplitudes::Amplitudes;
-
 use super::{amplitudes::WeightedAmplitudes, samples::WindowedSamples};
+use crate::audio::amplitudes::Amplitudes;
+use crate::logging::trace;
 
-use defmt::trace;
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
 use micromath::F32Ext;

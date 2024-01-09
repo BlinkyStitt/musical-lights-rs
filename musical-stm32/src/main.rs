@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use defmt::*;
+use defmt::{debug, info, trace};
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{self, Adc, SampleTime};
 use embassy_stm32::bind_interrupts;

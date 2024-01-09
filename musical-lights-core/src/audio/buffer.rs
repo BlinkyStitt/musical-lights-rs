@@ -1,5 +1,5 @@
+use crate::logging::trace;
 use circular_buffer::CircularBuffer;
-use defmt::trace;
 
 use crate::windows::Window;
 
