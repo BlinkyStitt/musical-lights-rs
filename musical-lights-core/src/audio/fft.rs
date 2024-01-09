@@ -34,7 +34,7 @@ macro_rules! impl_fft {
                 windowed_samples: WindowedSamples<$in_size>,
             ) -> WeightedAmplitudes<{ $in_size / 2 }> {
                 let amplitudes =
-                    Amplitudes::<{ $in_size / 2 }>::from_windowed_samples(windowed_samples);
+                    Amplitudes::<{ $in_size / 2 }>::fft_windowed_samples(windowed_samples);
 
                 trace!("{:?}", amplitudes);
 

@@ -32,7 +32,7 @@ pub trait AggregatedAmplitudesBuilder<const IN: usize> {
 
 // TODO: this should use a macro. should this use the standard From trait?
 impl Amplitudes<1024> {
-    pub fn from_windowed_samples(x: WindowedSamples<2048>) -> Self {
+    pub fn fft_windowed_samples(x: WindowedSamples<2048>) -> Self {
         let mut fft_input = x.0;
 
         let fft_output = rfft_2048(&mut fft_input);
@@ -59,7 +59,7 @@ impl Amplitudes<1024> {
 
 impl Amplitudes<256> {
     /// TODO: this does not seem efficient. match and generics feel wrong. but i don't control the types on rfft_*. they require 256, 1024, etc. but we have B and S
-    pub fn from_windowed_samples(x: WindowedSamples<512>) -> Self {
+    pub fn fft_windowed_samples(x: WindowedSamples<512>) -> Self {
         let mut fft_input = x.0;
 
         let fft_output = rfft_512(&mut fft_input);
