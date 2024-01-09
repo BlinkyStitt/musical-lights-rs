@@ -99,12 +99,17 @@ async fn mic_task(
 
 #[embassy_executor::task]
 async fn fft_task(
-    mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS>,
-    fft: FFT<FFT_INPUTS, FFT_OUTPUTS>,
-    bark_scale_builder: BarkScaleBuilder<FFT_OUTPUTS>,
     mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
     loudness_tx: Sender<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
+    // create windows and weights and everything before starting any tasks
+    let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
+
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
+        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
+
+    let bark_scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
+
     loop {
         let sample = mic_rx.receive().await;
 
@@ -167,10 +172,9 @@ async fn main(spawner: Spawner) {
 
     info!("Hello World!");
 
-    // start the watchdog
-    let wdg = IndependentWatchdog::new(p.IWDG, 2_000_000);
-
-    spawner.must_spawn(watchdog_task(wdg));
+    // // start the watchdog
+    // let wdg = IndependentWatchdog::new(p.IWDG, 2_000_000);
+    // spawner.must_spawn(watchdog_task(wdg));
 
     // set up pins
     let led = Output::new(p.PC13, Level::High, Speed::Low);
@@ -190,14 +194,6 @@ async fn main(spawner: Spawner) {
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 
-    // create windows and weights and everything before starting any tasks
-    let audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
-
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
-        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
-
-    let bark_scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
-
     setup_leds().await;
 
     // all the hardware should be set up now.
@@ -205,14 +201,12 @@ async fn main(spawner: Spawner) {
     // spawn the tasks
     spawner.must_spawn(blink_task(led));
 
+    spawner.must_spawn(fft_task(mic_rx, loudness_tx));
+
+    // TODO: oneshot/confvar to wait until the FFT is configured
+    Timer::after_secs(1).await;
+
     spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx));
-    spawner.must_spawn(fft_task(
-        audio_buffer,
-        fft,
-        bark_scale_builder,
-        mic_rx,
-        loudness_tx,
-    ));
 
     spawner.must_spawn(light_task(loudness_rx));
 }

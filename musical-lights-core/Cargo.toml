@@ -6,12 +6,13 @@ edition = "2021"
 [dependencies]
 circular-buffer = { version = "0.1.6", default-features = false }
 defmt = { version = "0.3.5", default-features = false }
-embassy-time = { version = "0.2" }
+embedded-graphics = { version = "0.8.1", features = ["defmt"] }
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"
 num-complex = { version = "0.4.4", default-features = false }
 smart-leds = "0.3.0"
+smart-leds-matrix = "0.1.0"
 
 # # TODO:
 # cichlid = { version = "0.2.1", features = ["no-std"] }

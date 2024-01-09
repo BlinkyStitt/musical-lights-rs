@@ -41,17 +41,14 @@ embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a83
 incremental = false
 codegen-units = 1
 debug = true
-lto = false
+lto = true
 
-# timings on neopixels are very sensitive
-opt-level = "z"
+# timings on neopixels are very sensitive. i think we will need "3", but it might not fit!
+# # TODO: optimisize for size when compiling?
+opt-level = 3
 
 [profile.release]
 debug = true
 lto = true
 
-# # TODO: optimisize for size when compiling?
-# opt-level = "s"
-
-# timings on neopixels are very sensitive. i think we will need this, but i don't think it fits!
 opt-level = 3
