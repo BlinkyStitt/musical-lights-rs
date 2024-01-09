@@ -13,7 +13,7 @@ impl<const N: usize> Window<N> for HanningWindow<N> {
         0.5 - 0.5 * (2.0 * PI * i as f32 / N as f32).cos()
     }
 
-    /// TODO: what is the actual offset?
+    /// 1 / coherent_gain
     fn scaling() -> f32 {
         2.0
     }
