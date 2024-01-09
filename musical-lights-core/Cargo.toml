@@ -10,6 +10,7 @@ log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"
 num-complex = { version = "0.4.4", default-features = false }
+smart-leds = "0.3.0"
 
 # # TODO:
 # cichlid = { version = "0.2.1", features = ["no-std"] }
