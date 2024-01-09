@@ -12,15 +12,18 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::microphone::{AudioProcessing, EqualLoudness};
+use musical_lights_core::audio::{
+    AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT,
+};
+use musical_lights_core::windows::HanningWindow;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
     ADC1_2 => adc::InterruptHandler<ADC1>;
 });
 
-static MIC_CHANNEL: Channel<ThreadModeRawMutex, u16, 16> = Channel::new();
-static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, EqualLoudness<24>, 16> = Channel::new();
+const FFT_INPUTS: usize = 2048;
+const FFT_OUTPUTS: usize = 1024;
 
 #[embassy_executor::task]
 async fn blink_task(mut led: Output<'static, PA5>) {
@@ -69,13 +72,20 @@ async fn mic_task(
 #[embassy_executor::task]
 async fn fft_task(
     mic_rx: Receiver<'static, ThreadModeRawMutex, u16, 16>,
-    loudness_tx: Sender<'static, ThreadModeRawMutex, EqualLoudness<24>, 16>,
+    loudness_tx: Sender<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
     // TODO: how do we set resolution? 12 bit is slower than 6. but 12 is probably fast enough. i think 12 is the default
     let resolution = 12;
     let range = 2.0f32.powi(resolution) - 1.0;
 
-    let mut audio_processing: AudioProcessing<512, 2048, 1024, 24> = AudioProcessing::new(44_100);
+    let mut audio_buffer = AudioBuffer::<512, FFT_INPUTS>::new::<HanningWindow<FFT_INPUTS>>();
+
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::default();
+
+    // TODO: what sample rate?
+    let bark_scale_builder = BarkScaleBuilder::new(44_100);
+
+    // TODO: track a peak and have it decay slowly
 
     loop {
         let sample = mic_rx.receive().await;
@@ -85,11 +95,17 @@ async fn fft_task(
 
         let sample = sample as f32 / range;
 
-        info!("mic: {}", sample);
+        trace!("mic: {}", sample);
 
-        if audio_processing.buffer_sample(sample) {
-            // every 512 samples, do an FFT
-            let loudness = audio_processing.equal_loudness();
+        if audio_buffer.buffer_sample(sample) {
+            // every `S` samples (probably 512), do an FFT
+            let samples = audio_buffer.copy_windowed_samples();
+
+            let amplitudes = fft.weighted_amplitudes(samples);
+
+            let loudness = bark_scale_builder.build(amplitudes);
+
+            // let loudness = fft.decibels(amplitudes);
 
             // TODO: shazam
             // TODO: beat detection
@@ -100,8 +116,9 @@ async fn fft_task(
     }
 }
 
+// TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
 #[embassy_executor::task]
-async fn light_task(loudness_rx: Receiver<'static, ThreadModeRawMutex, EqualLoudness<24>, 16>) {}
+async fn light_task(loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>) {}
 
 #[embassy_executor::task]
 async fn watchdog_task(mut wdg: IndependentWatchdog<'static, IWDG>) {
@@ -145,10 +162,12 @@ async fn main(spawner: Spawner) {
     // TODO: pin_alias?
 
     // channel for mic samples -> FFT
+    static MIC_CHANNEL: Channel<ThreadModeRawMutex, u16, 16> = Channel::new();
     let mic_tx = MIC_CHANNEL.sender();
     let mic_rx = MIC_CHANNEL.receiver();
 
     // channel for FFT -> LEDs
+    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, BarkScaleAmplitudes, 16> = Channel::new();
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 

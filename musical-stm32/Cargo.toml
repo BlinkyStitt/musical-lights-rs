@@ -42,7 +42,15 @@ codegen-units = 1
 debug = true
 lto = false
 
+# timings on neopixels are very sensitive
+opt-level = 3
+
 [profile.release]
 debug = true
 lto = true
-opt-level = "s"
+
+# # TODO: optimisize for size when compiling?
+# opt-level = "s"
+
+# timings on neopixels are very sensitive
+opt-level = 3

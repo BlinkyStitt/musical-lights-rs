@@ -7,18 +7,17 @@ use std::env;
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use musical_lights_core::{
+    audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
     lights::DancingLights,
     logging::{debug, error, info},
-    microphone::{AudioProcessing, EqualLoudness},
+    windows::HanningWindow,
 };
 
 const MIC_SAMPLES: usize = 512;
 const NUM_CHANNELS: usize = 24;
+const FFT_INPUTS: usize = 2048;
 
-/// TODO: make sure SAMPLE_BUFFER >= MIC_SAMPLES
-/// TODO: support SAMPLE_BUFFER > MIC_SAMPLES
-const SAMPLE_BUFFER: usize = 2048;
-const FFT_BINS: usize = SAMPLE_BUFFER / 2;
+const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 #[embassy_executor::task]
 async fn tick_task() {
@@ -30,18 +29,28 @@ async fn tick_task() {
 
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
 #[embassy_executor::task]
-async fn audio_task(tx_loudness: flume::Sender<EqualLoudness<NUM_CHANNELS>>) {
+async fn audio_task(tx_loudness: flume::Sender<BarkScaleAmplitudes>) {
     match audio::MicrophoneStream::try_new() {
         Ok(x) => {
-            let mut audio_processing =
-                AudioProcessing::<MIC_SAMPLES, SAMPLE_BUFFER, FFT_BINS, NUM_CHANNELS>::new(
-                    x.sample_rate.0,
-                );
+            let mut audio_buffer =
+                AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new::<HanningWindow<FFT_INPUTS>>();
+
+            let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::default();
+
+            let bark_scale_builder = BarkScaleBuilder::new(x.sample_rate.0);
 
             while let Ok(samples) = x.stream.recv_async().await {
-                audio_processing.buffer_samples(samples);
+                audio_buffer.buffer_samples(samples);
 
-                let loudness = audio_processing.equal_loudness();
+                let samples = audio_buffer.copy_windowed_samples();
+
+                let amplitudes = fft.weighted_amplitudes(samples);
+
+                let loudness = bark_scale_builder.build(amplitudes);
+
+                // TODO: shazam
+                // TODO: beat detection
+                // TODO: peak detection
 
                 tx_loudness.send_async(loudness).await.unwrap();
             }
@@ -55,7 +64,7 @@ async fn audio_task(tx_loudness: flume::Sender<EqualLoudness<NUM_CHANNELS>>) {
 }
 
 #[embassy_executor::task]
-async fn lights_task(rx_loudness: flume::Receiver<EqualLoudness<NUM_CHANNELS>>) {
+async fn lights_task(rx_loudness: flume::Receiver<BarkScaleAmplitudes>) {
     let mut dancing_lights = DancingLights::<NUM_CHANNELS>::new();
 
     // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple channels

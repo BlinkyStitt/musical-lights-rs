@@ -1,0 +1,1 @@
+This is currently being written for the STM32 discovery, but I plan on using a blackpill in the final project. They are similar, but there will be some changes

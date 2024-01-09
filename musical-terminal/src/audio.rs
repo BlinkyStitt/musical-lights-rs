@@ -4,8 +4,8 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleRate, Stream,
 };
+use musical_lights_core::audio::Samples;
 use musical_lights_core::logging::{error, info, trace};
-use musical_lights_core::microphone::Samples;
 
 // i wanted this to be generic, but that's making things complicated
 const SAMPLES: usize = 512;
