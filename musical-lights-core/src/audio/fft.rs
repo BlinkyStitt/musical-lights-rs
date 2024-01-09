@@ -1,4 +1,7 @@
-use super::{amplitudes::WeightedAmplitudes, samples::WindowedSamples};
+use super::{
+    amplitudes::WeightedAmplitudes,
+    samples::{Samples, WindowedSamples},
+};
 use crate::audio::amplitudes::Amplitudes;
 use crate::logging::trace;
 
@@ -7,18 +10,22 @@ use crate::logging::trace;
 use micromath::F32Ext;
 
 pub struct FFT<const IN: usize, const OUT: usize> {
+    /// apply a window to the samples before processing them with the FFT
+    /// hanning window or similar things can be applied with this
+    window_multipliers: [f32; IN],
+
     /// apply this curve to amplitudes after the FFT calculates them
+    /// a-weighting or similra things can be applied with this
     equal_loudness_curve: [f32; OUT],
 }
 
 impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
-    pub fn new(equal_loudness_curve: [f32; OUT]) -> Self {
+    pub fn new(window_multipliers: [f32; IN], equal_loudness_curve: [f32; OUT]) -> Self {
         // TODO: compile time assert
         debug_assert_eq!(IN / 2, OUT);
 
-        // TODO: a weighting or any other curve. will need to move this to the "new" method then
-
         Self {
+            window_multipliers,
             equal_loudness_curve,
         }
     }
@@ -26,9 +33,11 @@ impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
 
 impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
     fn default() -> Self {
+        let window_multipliers = [1.0; IN];
+
         let equal_loudness_curve = [1.0; OUT];
 
-        Self::new(equal_loudness_curve)
+        Self::new(window_multipliers, equal_loudness_curve)
     }
 }
 
@@ -36,10 +45,14 @@ impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
 macro_rules! impl_fft {
     ($in_size:expr) => {
         impl FFT<$in_size, { $in_size / 2 }> {
+            /// a windowed and weighted FFT
             pub fn weighted_amplitudes(
                 &self,
-                windowed_samples: WindowedSamples<$in_size>,
+                samples: Samples<$in_size>,
             ) -> WeightedAmplitudes<{ $in_size / 2 }> {
+                let windowed_samples =
+                    WindowedSamples::from_samples(samples, &self.window_multipliers);
+
                 let amplitudes =
                     Amplitudes::<{ $in_size / 2 }>::fft_windowed_samples(windowed_samples);
 

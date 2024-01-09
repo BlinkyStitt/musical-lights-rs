@@ -32,17 +32,17 @@ async fn tick_task() {
 async fn audio_task(tx_loudness: flume::Sender<BarkScaleAmplitudes>) {
     match audio::MicrophoneStream::try_new() {
         Ok(x) => {
-            let mut audio_buffer =
-                AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new::<HanningWindow<FFT_INPUTS>>();
+            let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
 
-            let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::default();
+            let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
+                FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(x.sample_rate.0);
 
             let bark_scale_builder = BarkScaleBuilder::new(x.sample_rate.0);
 
             while let Ok(samples) = x.stream.recv_async().await {
                 audio_buffer.buffer_samples(samples);
 
-                let samples = audio_buffer.copy_windowed_samples();
+                let samples = audio_buffer.copy_buffered_samples();
 
                 let amplitudes = fft.weighted_amplitudes(samples);
 

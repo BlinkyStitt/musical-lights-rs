@@ -77,14 +77,17 @@ async fn fft_task(
 ) {
     // TODO: how do we set resolution? 12 bit is slower than 6. but 12 is probably fast enough. i think 12 is the default
     let resolution = 12;
+    let sample_rate = 44_100;
+
     let range = 2.0f32.powi(resolution) - 1.0;
 
-    let mut audio_buffer = AudioBuffer::<512, FFT_INPUTS>::new::<HanningWindow<FFT_INPUTS>>();
+    let mut audio_buffer = AudioBuffer::<512, FFT_INPUTS>::new();
 
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::default();
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
+        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(sample_rate);
 
     // TODO: what sample rate?
-    let bark_scale_builder = BarkScaleBuilder::new(44_100);
+    let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
 
     // TODO: track a peak and have it decay slowly
 
@@ -100,17 +103,16 @@ async fn fft_task(
 
         if audio_buffer.buffer_sample(sample) {
             // every `S` samples (probably 512), do an FFT
-            let samples = audio_buffer.copy_windowed_samples();
+            let samples = audio_buffer.copy_buffered_samples();
 
             let amplitudes = fft.weighted_amplitudes(samples);
 
             let loudness = bark_scale_builder.build(amplitudes);
 
-            // let loudness = fft.decibels(amplitudes);
+            // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
 
             // TODO: shazam
             // TODO: beat detection
-            // TODO: peak detection
 
             loudness_tx.send(loudness).await;
         }
