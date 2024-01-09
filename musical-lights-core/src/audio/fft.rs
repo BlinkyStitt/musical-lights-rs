@@ -25,39 +25,29 @@ impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
     }
 }
 
-/// TODO: macro for this?
-impl FFT<512, 256> {
-    pub fn weighted_amplitudes(
-        &self,
-        windowed_samples: WindowedSamples<512>,
-    ) -> WeightedAmplitudes<256> {
-        let amplitudes = Amplitudes::<256>::from_windowed_samples(windowed_samples);
+#[macro_export]
+macro_rules! impl_fft {
+    ($in_size:expr) => {
+        impl FFT<$in_size, { $in_size / 2 }> {
+            pub fn weighted_amplitudes(
+                &self,
+                windowed_samples: WindowedSamples<$in_size>,
+            ) -> WeightedAmplitudes<{ $in_size / 2 }> {
+                let amplitudes =
+                    Amplitudes::<{ $in_size / 2 }>::from_windowed_samples(windowed_samples);
 
-        trace!("{:?}", amplitudes);
+                trace!("{:?}", amplitudes);
 
-        let weighted_amplitudes =
-            WeightedAmplitudes::from_amplitudes(amplitudes, &self.equal_loudness_curve);
+                let weighted_amplitudes =
+                    WeightedAmplitudes::from_amplitudes(amplitudes, &self.equal_loudness_curve);
 
-        trace!("{:?}", weighted_amplitudes);
+                trace!("{:?}", weighted_amplitudes);
 
-        weighted_amplitudes
-    }
+                weighted_amplitudes
+            }
+        }
+    };
 }
 
-impl FFT<2048, 1024> {
-    pub fn weighted_amplitudes(
-        &self,
-        windowed_samples: WindowedSamples<2048>,
-    ) -> WeightedAmplitudes<1024> {
-        let amplitudes = Amplitudes::<1024>::from_windowed_samples(windowed_samples);
-
-        trace!("{:?}", amplitudes);
-
-        let weighted_amplitudes =
-            WeightedAmplitudes::from_amplitudes(amplitudes, &self.equal_loudness_curve);
-
-        trace!("{:?}", weighted_amplitudes);
-
-        weighted_amplitudes
-    }
-}
+impl_fft!(512);
+impl_fft!(2048);
