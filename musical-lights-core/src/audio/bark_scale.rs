@@ -14,13 +14,10 @@ pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<24>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
     pub fn new(sample_rate_hz: u32) -> Self {
-        // TODO: map using the bark scale or something else?
         let mut map = [Some(0); BINS];
         for (i, x) in map.iter_mut().enumerate() {
             let f = bin_to_frequency(i, sample_rate_hz, BINS);
 
-            // TODO: i don't think bark is what we want, but lets try it for now
-            // TODO: zero everything over 20khz
             // bark is 1-24, but we want 0-23
             let b = bark_scale(f).map(|x| x - 1);
 

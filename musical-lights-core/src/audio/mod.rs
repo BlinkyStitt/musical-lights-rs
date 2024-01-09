@@ -10,6 +10,7 @@ pub mod fft;
 pub mod peak_scaled;
 pub mod samples;
 pub mod shazam;
+pub mod weighting;
 
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]

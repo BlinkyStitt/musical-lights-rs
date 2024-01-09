@@ -11,17 +11,24 @@ pub struct FFT<const IN: usize, const OUT: usize> {
     equal_loudness_curve: [f32; OUT],
 }
 
-impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
-    fn default() -> Self {
+impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
+    pub fn new(equal_loudness_curve: [f32; OUT]) -> Self {
         // TODO: compile time assert
         debug_assert_eq!(IN / 2, OUT);
 
         // TODO: a weighting or any other curve. will need to move this to the "new" method then
-        let equal_loudness_curve = [1.0; OUT];
 
         Self {
             equal_loudness_curve,
         }
+    }
+}
+
+impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
+    fn default() -> Self {
+        let equal_loudness_curve = [1.0; OUT];
+
+        Self::new(equal_loudness_curve)
     }
 }
 

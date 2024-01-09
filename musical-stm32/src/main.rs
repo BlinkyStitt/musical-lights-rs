@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use defmt::{debug, info, trace};
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{self, Adc, SampleTime};
 use embassy_stm32::bind_interrupts;
@@ -12,10 +11,11 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::audio::{
-    AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT,
+use musical_lights_core::{
+    audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
+    logging::{info, trace},
+    windows::HanningWindow,
 };
-use musical_lights_core::windows::HanningWindow;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -44,6 +44,7 @@ async fn mic_task(
     mut mic_pin: PA0,
     tx: Sender<'static, ThreadModeRawMutex, u16, 16>,
 ) {
+    // TODO: i kind of wish i'd ordered the i2s mic
     let mut adc = Adc::new(mic_adc, Irqs, &mut Delay);
 
     // 100 mHz processor
@@ -118,7 +119,13 @@ async fn fft_task(
 
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
 #[embassy_executor::task]
-async fn light_task(loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>) {}
+async fn light_task(loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>) {
+    loop {
+        let loudness = loudness_rx.receive().await;
+
+        info!("{:?}", loudness);
+    }
+}
 
 #[embassy_executor::task]
 async fn watchdog_task(mut wdg: IndependentWatchdog<'static, IWDG>) {
