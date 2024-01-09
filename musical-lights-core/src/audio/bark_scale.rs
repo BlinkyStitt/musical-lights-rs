@@ -1,7 +1,6 @@
 use crate::audio::bin_to_frequency;
 
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::logging::trace;
 use defmt::Format;
 
 pub struct BarkScaleBuilder<const IN: usize> {

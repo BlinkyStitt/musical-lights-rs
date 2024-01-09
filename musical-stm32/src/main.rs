@@ -5,7 +5,7 @@
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::gpio::{Level, Output, Speed};
-use embassy_stm32::peripherals::{ADC1, IWDG, PA0, PA5};
+use embassy_stm32::peripherals::{ADC1, IWDG, PA0, PC13};
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
@@ -18,6 +18,7 @@ use musical_lights_core::{
 };
 use {defmt_rtt as _, panic_probe as _};
 
+const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
 const FFT_OUTPUTS: usize = 1024;
 
@@ -28,7 +29,7 @@ const SAMPLE_RATE: u32 = 44_100;
 // const VREFINT_CALIBRATED: u16 = 1230;
 
 #[embassy_executor::task]
-async fn blink_task(mut led: Output<'static, PA5>) {
+async fn blink_task(mut led: Output<'static, PC13>) {
     loop {
         info!("high");
         led.set_high();
@@ -51,19 +52,20 @@ async fn mic_task(
     // TODO: i kind of wish i'd ordered the i2s mic
     let mut adc = Adc::new(mic_adc, &mut Delay);
 
-    // TODO: how do we set resolution? 12 bit is slower than 6. but 12 is probably fast enough. i think 12 is the default
-    // TODO: do some tests to make sure this really is a 12-bit read
+    // TODO: what resolution?
     let adc_resolution = 12;
 
     let range = 2.0f32.powi(adc_resolution) - 1.0;
 
+    let half_range = range / 2.0 + 1.0;
+
     // 100 mHz processor
     // TODO: how long should we sample?
-    adc.set_sample_time(SampleTime::Cycles480);
+    adc.set_sample_time(SampleTime::Cycles144);
     adc.set_resolution(embassy_stm32::adc::Resolution::TwelveBit);
 
     // // TODO: i think we should be able to use this instead of adc_resolution.
-    let mut vrefint = adc.enable_vrefint();
+    // let mut vrefint = adc.enable_vrefint();
 
     // TODO: how do we get the calibrated value out of this? I think it is 1230, but I'm not sure
 
@@ -74,17 +76,21 @@ async fn mic_task(
     // info!("temp: {}", temp_sample);
 
     loop {
-        let vref = adc.read(&mut vrefint);
+        // let vref = adc.read(&mut vrefint);
 
         let sample = adc.read(&mut mic_pin);
+
+        trace!("mic u16: {}", sample);
 
         // scale 0-4095 to millivolts
         // TODO: is this right?
         // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
 
-        trace!("mic: {}", sample);
+        let sample = (sample as f32 - half_range) / half_range;
 
-        tx.send(sample as f32).await;
+        trace!("mic f32: {}", sample);
+
+        tx.send(sample).await;
 
         // 44.1kHz = 22,676 nanoseconds
         Timer::after_nanos(22_676).await;
@@ -93,19 +99,12 @@ async fn mic_task(
 
 #[embassy_executor::task]
 async fn fft_task(
+    mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS>,
+    fft: FFT<FFT_INPUTS, FFT_OUTPUTS>,
+    bark_scale_builder: BarkScaleBuilder<FFT_OUTPUTS>,
     mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
     loudness_tx: Sender<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
-    let mut audio_buffer = AudioBuffer::<512, FFT_INPUTS>::new();
-
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
-        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
-
-    // TODO: what sample rate?
-    let bark_scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
-
-    // TODO: track a peak and have it decay slowly
-
     loop {
         let sample = mic_rx.receive().await;
 
@@ -113,7 +112,7 @@ async fn fft_task(
         // info!("mic: {} mV", millivolts);
 
         if audio_buffer.push_sample(sample) {
-            // every `S` samples (probably 512), do an FFT
+            // every `MIC_SAMPLES` samples (probably 512), do an FFT
             let samples = audio_buffer.samples();
 
             let amplitudes = fft.weighted_amplitudes(samples);
@@ -174,7 +173,7 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(watchdog_task(wdg));
 
     // set up pins
-    let led = Output::new(p.PA5, Level::High, Speed::Low);
+    let led = Output::new(p.PC13, Level::High, Speed::Low);
 
     let mic_adc = p.ADC1;
     let mic_pin = p.PA0;
@@ -191,17 +190,35 @@ async fn main(spawner: Spawner) {
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 
+    // create windows and weights and everything before starting any tasks
+    let audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
+
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
+        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
+
+    let bark_scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
+
     setup_leds().await;
+
+    // all the hardware should be set up now.
 
     // spawn the tasks
     spawner.must_spawn(blink_task(led));
+
     spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx));
-    spawner.must_spawn(fft_task(mic_rx, loudness_tx));
+    spawner.must_spawn(fft_task(
+        audio_buffer,
+        fft,
+        bark_scale_builder,
+        mic_rx,
+        loudness_tx,
+    ));
+
     spawner.must_spawn(light_task(loudness_rx));
 }
 
 async fn setup_leds() {
-    // TODO: clear the leds
+    // TODO: clear the led matrix
 
     // TODO: 1 red, 2 green, 3 blue, 4 white
 

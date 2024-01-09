@@ -44,7 +44,7 @@ debug = true
 lto = false
 
 # timings on neopixels are very sensitive
-opt-level = 3
+opt-level = "z"
 
 [profile.release]
 debug = true
@@ -53,5 +53,5 @@ lto = true
 # # TODO: optimisize for size when compiling?
 # opt-level = "s"
 
-# timings on neopixels are very sensitive
+# timings on neopixels are very sensitive. i think we will need this, but i don't think it fits!
 opt-level = 3
