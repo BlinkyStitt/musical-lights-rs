@@ -1,9 +1,9 @@
 #![no_std]
 #![no_main]
+#![feature(type_alias_impl_trait)]
 
 use embassy_executor::Spawner;
-use embassy_stm32::adc::{self, Adc, SampleTime};
-use embassy_stm32::bind_interrupts;
+use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::peripherals::{ADC1, IWDG, PA0, PA5};
 use embassy_stm32::wdg::IndependentWatchdog;
@@ -18,12 +18,14 @@ use musical_lights_core::{
 };
 use {defmt_rtt as _, panic_probe as _};
 
-bind_interrupts!(struct Irqs {
-    ADC1_2 => adc::InterruptHandler<ADC1>;
-});
-
 const FFT_INPUTS: usize = 2048;
 const FFT_OUTPUTS: usize = 1024;
+
+/// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
+const SAMPLE_RATE: u32 = 44_100;
+
+// const VREF_NOMINAL: u16 = 3300;
+// const VREFINT_CALIBRATED: u16 = 1230;
 
 #[embassy_executor::task]
 async fn blink_task(mut led: Output<'static, PA5>) {
@@ -42,17 +44,28 @@ async fn blink_task(mut led: Output<'static, PA5>) {
 async fn mic_task(
     mic_adc: ADC1,
     mut mic_pin: PA0,
-    tx: Sender<'static, ThreadModeRawMutex, u16, 16>,
+    tx: Sender<'static, ThreadModeRawMutex, f32, 16>,
+    // vref_nominal: u16,
+    // vrefint_calibrated: u16,
 ) {
     // TODO: i kind of wish i'd ordered the i2s mic
-    let mut adc = Adc::new(mic_adc, Irqs, &mut Delay);
+    let mut adc = Adc::new(mic_adc, &mut Delay);
+
+    // TODO: how do we set resolution? 12 bit is slower than 6. but 12 is probably fast enough. i think 12 is the default
+    // TODO: do some tests to make sure this really is a 12-bit read
+    let adc_resolution = 12;
+
+    let range = 2.0f32.powi(adc_resolution) - 1.0;
 
     // 100 mHz processor
-    // TODO: how long should we sample? how do we set the resolution to 12 bit?
-    adc.set_sample_time(SampleTime::Cycles61_5);
+    // TODO: how long should we sample?
+    adc.set_sample_time(SampleTime::Cycles480);
+    adc.set_resolution(embassy_stm32::adc::Resolution::TwelveBit);
 
-    // let vrefint = adc.enable_vref(&mut Delay);
-    // let vrefint_sample = vrefint.value();
+    // // TODO: i think we should be able to use this instead of adc_resolution.
+    let mut vrefint = adc.enable_vrefint();
+
+    // TODO: how do we get the calibrated value out of this? I think it is 1230, but I'm not sure
 
     // // TODO: do we care about the temperature?
     // // TODO: shut down if hot?
@@ -61,9 +74,17 @@ async fn mic_task(
     // info!("temp: {}", temp_sample);
 
     loop {
-        let sample = adc.read(&mut mic_pin).await;
+        let vref = adc.read(&mut vrefint);
 
-        tx.send(sample).await;
+        let sample = adc.read(&mut mic_pin);
+
+        // scale 0-4095 to millivolts
+        // TODO: is this right?
+        // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
+
+        trace!("mic: {}", sample);
+
+        tx.send(sample as f32).await;
 
         // 44.1kHz = 22,676 nanoseconds
         Timer::after_nanos(22_676).await;
@@ -72,22 +93,16 @@ async fn mic_task(
 
 #[embassy_executor::task]
 async fn fft_task(
-    mic_rx: Receiver<'static, ThreadModeRawMutex, u16, 16>,
+    mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
     loudness_tx: Sender<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
-    // TODO: how do we set resolution? 12 bit is slower than 6. but 12 is probably fast enough. i think 12 is the default
-    let resolution = 12;
-    let sample_rate = 44_100;
-
-    let range = 2.0f32.powi(resolution) - 1.0;
-
     let mut audio_buffer = AudioBuffer::<512, FFT_INPUTS>::new();
 
     let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
-        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(sample_rate);
+        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
 
     // TODO: what sample rate?
-    let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
+    let bark_scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
 
     // TODO: track a peak and have it decay slowly
 
@@ -97,13 +112,9 @@ async fn fft_task(
         // let millivolts = convert_to_millivolts(sample, vrefint_sample);
         // info!("mic: {} mV", millivolts);
 
-        let sample = sample as f32 / range;
-
-        trace!("mic: {}", sample);
-
-        if audio_buffer.buffer_sample(sample) {
+        if audio_buffer.push_sample(sample) {
             // every `S` samples (probably 512), do an FFT
-            let samples = audio_buffer.copy_buffered_samples();
+            let samples = audio_buffer.samples();
 
             let amplitudes = fft.weighted_amplitudes(samples);
 
@@ -171,7 +182,7 @@ async fn main(spawner: Spawner) {
     // TODO: pin_alias?
 
     // channel for mic samples -> FFT
-    static MIC_CHANNEL: Channel<ThreadModeRawMutex, u16, 16> = Channel::new();
+    static MIC_CHANNEL: Channel<ThreadModeRawMutex, f32, 16> = Channel::new();
     let mic_tx = MIC_CHANNEL.sender();
     let mic_rx = MIC_CHANNEL.receiver();
 
@@ -180,9 +191,21 @@ async fn main(spawner: Spawner) {
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 
+    setup_leds().await;
+
     // spawn the tasks
     spawner.must_spawn(blink_task(led));
     spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx));
     spawner.must_spawn(fft_task(mic_rx, loudness_tx));
     spawner.must_spawn(light_task(loudness_rx));
+}
+
+async fn setup_leds() {
+    // TODO: clear the leds
+
+    // TODO: 1 red, 2 green, 3 blue, 4 white
+
+    // TODO: sleep
+
+    // TODO: clear the leds
 }

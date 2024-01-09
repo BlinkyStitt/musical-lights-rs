@@ -21,7 +21,7 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
             // bark is 1-24, but we want 0-23
             let b = bark_scale(f).map(|x| x - 1);
 
-            trace!("{} {} = {:?}", i, f, b);
+            // trace!("{} {} = {:?}", i, f, b);
 
             *x = b;
         }

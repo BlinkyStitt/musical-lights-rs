@@ -540,9 +540,11 @@ version = "0.1.0"
 dependencies = [
  "circular-buffer",
  "defmt",
+ "embassy-time",
  "microfft",
  "micromath",
  "num-complex",
+ "smart-leds",
 ]
 
 [[package]]
@@ -705,6 +707,15 @@ name = "semver-parser"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
+
+[[package]]
+name = "smart-leds"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38dd45fa275f70b4110eac5f5182611ad384f88bb22b68b9a9c3cafd7015290b"
+dependencies = [
+ "smart-leds-trait",
+]
 
 [[package]]
 name = "smart-leds-trait"

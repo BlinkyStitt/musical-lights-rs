@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 circular-buffer = { version = "0.1.6", default-features = false }
 defmt = { version = "0.3.5", default-features = false }
+embassy-time = { version = "0.2" }
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"

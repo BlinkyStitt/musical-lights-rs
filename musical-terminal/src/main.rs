@@ -40,9 +40,9 @@ async fn audio_task(tx_loudness: flume::Sender<BarkScaleAmplitudes>) {
             let bark_scale_builder = BarkScaleBuilder::new(x.sample_rate.0);
 
             while let Ok(samples) = x.stream.recv_async().await {
-                audio_buffer.buffer_samples(samples);
+                audio_buffer.push_samples(samples);
 
-                let samples = audio_buffer.copy_buffered_samples();
+                let samples = audio_buffer.samples();
 
                 let amplitudes = fft.weighted_amplitudes(samples);
 

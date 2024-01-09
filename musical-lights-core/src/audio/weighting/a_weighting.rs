@@ -7,12 +7,12 @@ use crate::{
 use micromath::F32Ext;
 
 impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
+    /// TODO: use a trait just like we do for the window
     pub fn a_weighting<W: Window<IN>>(sample_rate_hz: u32) -> Self {
         let window_multipliers = W::windows();
 
         let window_scaling = W::scaling();
 
-        // TODO: use a trait just like we do for the window
         let mut equal_loudness_curve = [1.0; OUT];
         for (i, x) in equal_loudness_curve.iter_mut().enumerate() {
             // TODO: bin_to_frequency is used twice. should we take it as an input instead of sample_rate_hz?

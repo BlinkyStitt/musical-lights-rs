@@ -1,3 +1,4 @@
+// TODO: only import Format if defmt feature is enabled
 use defmt::Format;
 use microfft::real::{rfft_2048, rfft_512};
 

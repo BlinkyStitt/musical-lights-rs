@@ -37,4 +37,5 @@ pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
 pub use buffer::AudioBuffer;
 pub use decibels::Decibels;
 pub use fft::FFT;
+pub use peak_scaled::PeakScaled;
 pub use samples::{Samples, WindowedSamples};
