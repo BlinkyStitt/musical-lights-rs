@@ -121,6 +121,7 @@ impl<'a, PERI: spi::Instance, TX, RX, D> SmartLedsWrite for Ws2812<'a, PERI, TX,
         // We introduce an offset in the fifo here, so there's always one byte in transit
         // Some MCUs (like the stm32f1) only a one byte fifo, which would result
         // in overrun error if two bytes need to be stored
+        // TODO: why is this needed?
         self.spi.blocking_write(&[0u8])?;
 
         if cfg!(feature = "mosi_idle_high") {
@@ -135,40 +136,10 @@ impl<'a, PERI: spi::Instance, TX, RX, D> SmartLedsWrite for Ws2812<'a, PERI, TX,
         }
         self.flush()?;
 
-        // Now, resolve the offset we introduced at the beginning
+        // // Now, resolve the offset we introduced at the beginning
+        // // TODO: do we need this? we have a write-only spi
         // self.spi.blocking_read()?;
 
         Ok(())
     }
 }
-
-// impl<'a, PERI, TX, RX, E> SmartLedsWrite for Ws2812<'a, PERI, TX, RX, devices::Sk6812w> {
-//     type Error = E;
-//     type Color = RGBW<u8, u8>;
-//     /// Write all the items of an iterator to a ws2812 strip
-//     fn write<T, I>(&mut self, iterator: T) -> Result<(), E>
-//     where
-//         T: Iterator<Item = I>,
-//         I: Into<Self::Color>,
-//     {
-//         // We introduce an offset in the fifo here, so there's always one byte in transit
-//         // Some MCUs (like the stm32f1) only a one byte fifo, which would result
-//         // in overrun error if two bytes need to be stored
-//         block!(self.spi.send(0))?;
-//         if cfg!(feature = "mosi_idle_high") {
-//             self.flush()?;
-//         }
-
-//         for item in iterator {
-//             let color = item.into();
-//             self.write_byte(color.g)?;
-//             self.write_byte(color.r)?;
-//             self.write_byte(color.b)?;
-//             self.write_byte(color.a.0)?;
-//         }
-//         self.flush()?;
-//         // Now, resolve the offset we introduced at the beginning
-//         block!(self.spi.read())?;
-//         Ok(())
-//     }
-// }
