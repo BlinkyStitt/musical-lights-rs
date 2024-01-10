@@ -2,12 +2,10 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-mod leds;
-
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
-use embassy_stm32::peripherals::{ADC1, DMA1_CH0, DMA1_CH1, IWDG, PA0, PB5, SPI1};
+use embassy_stm32::peripherals::{ADC1, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB5, SPI1};
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
 use embassy_stm32::wdg::IndependentWatchdog;
@@ -149,8 +147,8 @@ async fn fft_task(
 async fn light_task(
     spi_peri: SPI1,
     mosi: PB5,
-    txdma: DMA1_CH0,
-    rxdma: DMA1_CH1,
+    txdma: DMA2_CH2,
+    rxdma: DMA2_CH0,
     loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
     let mut spi_config = SpiConfig::default();
@@ -160,7 +158,7 @@ async fn light_task(
 
     let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, rxdma, spi_config);
 
-    let led_writer = leds::Ws2812::new(spi);
+    let led_writer = ws2812_embassy::Ws2812::<_, MATRIX_N>::new(spi);
 
     // TODO: what default brightness?
     let default_brightness = 15;
@@ -214,8 +212,8 @@ async fn main(spawner: Spawner) {
     // let light_miso = p.PB4;
 
     // TODO: What channels? NoDMA for receiver?
-    let light_txdma = p.DMA1_CH0;
-    let light_rxdma = p.DMA1_CH1;
+    let light_rxdma = p.DMA2_CH0;
+    let light_txdma = p.DMA2_CH2;
 
     // // start the watchdog
     // let wdg = IndependentWatchdog::new(p.IWDG, 5_000_000);

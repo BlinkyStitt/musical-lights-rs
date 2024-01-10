@@ -52,6 +52,7 @@ impl<const X: u32, const Y: u32, const N: usize, WRITER: SmartLedsWrite, INVERT>
         self.matrix.set_brightness(brightness);
 
         // clear the led matrix
+        // TODO: where is the "clear" method? it's in the examples, but not here.
         // self.matrix.clear(Rgb888::new(0, 0, 0));
 
         // TODO: 1 red, 2 green, 3 blue, 4 white

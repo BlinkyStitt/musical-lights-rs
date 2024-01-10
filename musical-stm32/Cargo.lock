@@ -351,19 +351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-graphics"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0649998afacf6d575d126d83e68b78c0ab0e00ca2ac7e9b3db11b4cbe8274ef0"
-dependencies = [
- "az",
- "byteorder",
- "embedded-graphics-core",
- "float-cmp",
- "micromath",
-]
-
-[[package]]
 name = "embedded-graphics-core"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -386,8 +373,7 @@ dependencies = [
 [[package]]
 name = "embedded-hal"
 version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
+source = "git+https://github.com/rust-embedded/embedded-hal?rev=f8c79fee1df1900ee59e90160729edfa16a99b63#f8c79fee1df1900ee59e90160729edfa16a99b63"
 
 [[package]]
 name = "embedded-hal-async"
@@ -440,15 +426,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1763775e2323b7d5f0aa6090657f5e21cfa02ede71f5dc40eead06d64dcd15cc"
 dependencies = [
  "embedded-storage",
-]
-
-[[package]]
-name = "float-cmp"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -584,7 +561,6 @@ version = "0.1.0"
 dependencies = [
  "circular-buffer",
  "defmt",
- "embedded-graphics",
  "microfft",
  "micromath",
  "num-complex",
@@ -612,6 +588,7 @@ dependencies = [
  "smart-leds",
  "smart-leds-matrix",
  "smart-leds-trait",
+ "ws2812-embassy",
 ]
 
 [[package]]
@@ -896,3 +873,18 @@ checksum = "de437e2a6208b014ab52972a27e59b33fa2920d3e00fe05026167a1c509d19cc"
 dependencies = [
  "vcell",
 ]
+
+[[package]]
+name = "ws2812-embassy"
+version = "0.1.0"
+source = "git+https://github.com/WyseNynja/ws2812-embassy?rev=1c982393026e1a7463246e1faf30ee87b310a606#1c982393026e1a7463246e1faf30ee87b310a606"
+dependencies = [
+ "embassy-futures",
+ "embedded-hal-async",
+ "smart-leds",
+]
+
+[[patch.unused]]
+name = "ws2812-async"
+version = "0.1.0"
+source = "git+https://github.com/WyseNynja/ws2812-async.git?rev=9d2a3aa7fa800722e45ad2658feb0e39a6039f80#9d2a3aa7fa800722e45ad2658feb0e39a6039f80"

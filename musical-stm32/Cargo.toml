@@ -25,6 +25,7 @@ panic-probe = { version = "0.3", features = ["print-defmt"] }
 smart-leds = "0.3.0"
 smart-leds-matrix = "0.1.0"
 smart-leds-trait = "0.2.1"
+ws2812-embassy = { git = "https://github.com/WyseNynja/ws2812-embassy", rev = "1c982393026e1a7463246e1faf30ee87b310a606" }
 
 # TODO: if i end up using these, be sure to set patch.crate-io, too
 #embassy-futures = { version = "0.1.1" }
@@ -38,12 +39,15 @@ smart-leds-trait = "0.2.1"
 [patch.crates-io]
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "495b8b739aaba3d1fe7e105559c830496fabb1d7" }
 embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "495b8b739aaba3d1fe7e105559c830496fabb1d7" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "495b8b739aaba3d1fe7e105559c830496fabb1d7" }
 embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "495b8b739aaba3d1fe7e105559c830496fabb1d7" }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "495b8b739aaba3d1fe7e105559c830496fabb1d7" }
 embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "495b8b739aaba3d1fe7e105559c830496fabb1d7" }
+embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "f8c79fee1df1900ee59e90160729edfa16a99b63" }
 
 # unreleased version of smart-leds-matrix that upgrades embedded-graphics-core to 0.4.0
 smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
+ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "9d2a3aa7fa800722e45ad2658feb0e39a6039f80" }
 
 [profile.dev]
 incremental = false
