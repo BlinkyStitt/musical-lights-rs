@@ -2,34 +2,44 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+mod leds;
+
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, SampleTime};
-use embassy_stm32::gpio::{Level, Output, Speed};
-use embassy_stm32::peripherals::{ADC1, IWDG, PA0, PC13};
+use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
+use embassy_stm32::peripherals::{ADC1, DMA1_CH0, DMA1_CH1, IWDG, PA0, PB5, SPI1};
+use embassy_stm32::spi::{Config as SpiConfig, Spi};
+use embassy_stm32::time::mhz;
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
+use musical_lights_core::lights;
 use musical_lights_core::{
     audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
     logging::{info, trace},
     windows::HanningWindow,
 };
+use smart_leds_matrix::layout::invert_axis::NoInvert;
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
 const FFT_OUTPUTS: usize = 1024;
+const MATRIX_X: u32 = 32;
+const MATRIX_Y: u32 = 8;
 
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
 const SAMPLE_RATE: u32 = 44_100;
+
+const MATRIX_N: usize = MATRIX_X as usize * MATRIX_Y as usize;
 
 // const VREF_NOMINAL: u16 = 3300;
 // const VREFINT_CALIBRATED: u16 = 1230;
 
 #[embassy_executor::task]
-async fn blink_task(mut led: Output<'static, PC13>) {
+async fn blink_task(mut led: Output<'static, AnyPin>) {
     loop {
         info!("high");
         led.set_high();
@@ -103,7 +113,7 @@ async fn fft_task(
     loudness_tx: Sender<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
-    let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
+    let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
 
     let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
         FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
@@ -136,11 +146,36 @@ async fn fft_task(
 
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
 #[embassy_executor::task]
-async fn light_task(loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>) {
+async fn light_task(
+    spi_peri: SPI1,
+    mosi: PB5,
+    txdma: DMA1_CH0,
+    rxdma: DMA1_CH1,
+    loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
+) {
+    let mut spi_config = SpiConfig::default();
+
+    // TODO: this setup feels like it should be inside leds::Ws2812. like frequency check that its >2 and <3.8
+    spi_config.frequency = mhz(38) / 10u32; // 3.8MHz
+
+    let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, rxdma, spi_config);
+
+    let led_writer = leds::Ws2812::new(spi);
+
+    // TODO: what default brightness?
+    let default_brightness = 15;
+
+    let mut dancing_lights =
+        lights::DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N, _, NoInvert>::new(
+            led_writer,
+            default_brightness,
+        )
+        .await;
+
     loop {
         let loudness = loudness_rx.receive().await;
 
-        info!("{:?}", loudness);
+        dancing_lights.update(loudness);
     }
 }
 
@@ -166,18 +201,28 @@ async fn main(spawner: Spawner) {
     // config.rcc.pclk1 = Some(mhz(32));
     // config.rcc.pclk2 = Some(mhz(64));
     // config.rcc.adc = Some(AdcClockSource::Pll(Adcpres::DIV1));
-    let config = Default::default();
+    let peripheral_config = Default::default();
 
-    let p = embassy_stm32::init(config);
+    let p = embassy_stm32::init(peripheral_config);
 
     info!("Hello World!");
 
+    // TODO: what pins? i copied these from <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f3/src/bin/spi_dma.rs>
+    let light_spi = p.SPI1;
+    // let light_sck = p.PB3;
+    let light_mosi = p.PB5;
+    // let light_miso = p.PB4;
+
+    // TODO: What channels? NoDMA for receiver?
+    let light_txdma = p.DMA1_CH0;
+    let light_rxdma = p.DMA1_CH1;
+
     // // start the watchdog
-    // let wdg = IndependentWatchdog::new(p.IWDG, 2_000_000);
+    // let wdg = IndependentWatchdog::new(p.IWDG, 5_000_000);
     // spawner.must_spawn(watchdog_task(wdg));
 
     // set up pins
-    let led = Output::new(p.PC13, Level::High, Speed::Low);
+    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low).degrade();
 
     let mic_adc = p.ADC1;
     let mic_pin = p.PA0;
@@ -194,29 +239,23 @@ async fn main(spawner: Spawner) {
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 
-    setup_leds().await;
-
     // all the hardware should be set up now.
 
     // spawn the tasks
-    spawner.must_spawn(blink_task(led));
+    spawner.must_spawn(blink_task(onboard_led));
+
+    spawner.must_spawn(light_task(
+        light_spi,
+        light_mosi,
+        light_txdma,
+        light_rxdma,
+        loudness_rx,
+    ));
 
     spawner.must_spawn(fft_task(mic_rx, loudness_tx));
 
-    // TODO: oneshot/confvar to wait until the FFT is configured
-    Timer::after_secs(1).await;
+    // TODO: oneshot/confvar to wait until the lights and FFT are configured
+    Timer::after_secs(3).await;
 
     spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx));
-
-    spawner.must_spawn(light_task(loudness_rx));
-}
-
-async fn setup_leds() {
-    // TODO: clear the led matrix
-
-    // TODO: 1 red, 2 green, 3 blue, 4 white
-
-    // TODO: sleep
-
-    // TODO: clear the leds
 }
