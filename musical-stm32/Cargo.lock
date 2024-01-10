@@ -212,14 +212,14 @@ dependencies = [
 [[package]]
 name = "embassy-embedded-hal"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "defmt",
  "embassy-futures",
  "embassy-sync",
  "embassy-time",
  "embedded-hal 0.2.7",
- "embedded-hal 1.0.0-rc.3",
+ "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-storage",
  "embedded-storage-async",
@@ -229,7 +229,7 @@ dependencies = [
 [[package]]
 name = "embassy-executor"
 version = "0.4.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "cortex-m",
  "critical-section",
@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "embassy-executor-macros"
 version = "0.4.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -253,12 +253,12 @@ dependencies = [
 [[package]]
 name = "embassy-futures"
 version = "0.1.1"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 
 [[package]]
 name = "embassy-hal-internal"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "cortex-m",
  "critical-section",
@@ -269,7 +269,7 @@ dependencies = [
 [[package]]
 name = "embassy-net-driver"
 version = "0.2.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "defmt",
 ]
@@ -277,7 +277,7 @@ dependencies = [
 [[package]]
 name = "embassy-stm32"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "bit_field",
  "bxcan",
@@ -295,7 +295,7 @@ dependencies = [
  "embassy-time",
  "embassy-usb-driver",
  "embedded-hal 0.2.7",
- "embedded-hal 1.0.0-rc.3",
+ "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-hal-nb",
  "embedded-io",
@@ -316,7 +316,7 @@ dependencies = [
 [[package]]
 name = "embassy-sync"
 version = "0.5.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -329,14 +329,14 @@ dependencies = [
 [[package]]
 name = "embassy-time"
 version = "0.2.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "cfg-if",
  "critical-section",
  "defmt",
  "document-features",
  "embedded-hal 0.2.7",
- "embedded-hal 1.0.0-rc.3",
+ "embedded-hal 1.0.0",
  "embedded-hal-async",
  "futures-util",
  "heapless",
@@ -345,7 +345,7 @@ dependencies = [
 [[package]]
 name = "embassy-usb-driver"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy.git?rev=e8a832e17715c34377f5dfbe32f8a66ac1c22b45#e8a832e17715c34377f5dfbe32f8a66ac1c22b45"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=495b8b739aaba3d1fe7e105559c830496fabb1d7#495b8b739aaba3d1fe7e105559c830496fabb1d7"
 dependencies = [
  "defmt",
 ]
@@ -385,26 +385,26 @@ dependencies = [
 
 [[package]]
 name = "embedded-hal"
-version = "1.0.0-rc.3"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc402f79e1fd22731ca945b4f97b5ff37e7b3f379312595c42bb2e8811c29920"
+checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 
 [[package]]
 name = "embedded-hal-async"
-version = "1.0.0-rc.3"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa1fba2ef2ffb35d614acc6fb323ddf7facc45c069f24544d49ea54e5043626d"
+checksum = "0c4c685bbef7fe13c3c6dd4da26841ed3980ef33e841cddfa15ce8a8fb3f1884"
 dependencies = [
- "embedded-hal 1.0.0-rc.3",
+ "embedded-hal 1.0.0",
 ]
 
 [[package]]
 name = "embedded-hal-nb"
-version = "1.0.0-rc.3"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cde58312a0675b6c0389eb0dceb2bf8c735a697b0b5baa1f23bbaf030636deb"
+checksum = "fba4268c14288c828995299e59b12babdbe170f6c6d73731af1b4648142e8605"
 dependencies = [
- "embedded-hal 1.0.0-rc.3",
+ "embedded-hal 1.0.0",
  "nb 1.1.0",
 ]
 
@@ -606,7 +606,6 @@ dependencies = [
  "embassy-stm32",
  "embassy-sync",
  "embassy-time",
- "embedded-graphics",
  "micromath",
  "musical-lights-core",
  "panic-probe",
@@ -769,11 +768,11 @@ dependencies = [
 [[package]]
 name = "smart-leds-matrix"
 version = "0.1.0"
-source = "git+https://github.com/smart-leds-rs/smart-leds-matrix.git?rev=b1f8cec6139780efd5f7a4f246765337f9473b68#b1f8cec6139780efd5f7a4f246765337f9473b68"
+source = "git+https://github.com/WyseNynja/smart-leds-matrix.git?rev=bc4188d311498c9396afc9c798ce42171c009ab1#bc4188d311498c9396afc9c798ce42171c009ab1"
 dependencies = [
  "display-interface",
  "embedded-graphics-core",
- "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0",
  "smart-leds",
  "smart-leds-trait",
 ]

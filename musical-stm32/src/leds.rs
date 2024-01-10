@@ -10,6 +10,8 @@
 //! Forked from <https://github.com/smart-leds-rs/ws2812-spi-rs/commit/10ab8eb87935b1a8ed018ac939b10279e7a93ea1>.
 //!
 //! TODO: make this more general and then put it in its own crate
+//!
+//! TODO: look at https://github.com/WyseNynja/ws2812-async/blob/main/src/lib.rs. I don't see where they `impl SmartLedsWrite`
 
 // Timings for ws2812 from https://cpldcpu.files.wordpress.com/2014/01/ws2812_timing_table.png
 // Timings for sk6812 from https://cpldcpu.wordpress.com/2016/03/09/the-sk6812-another-intelligent-rgb-led/
@@ -29,6 +31,7 @@ pub mod devices {
 pub struct Ws2812<'a, PERI: spi::Instance, TX, RX, DEVICE = devices::Ws2812> {
     spi: Spi<'a, PERI, TX, RX>,
     device: PhantomData<DEVICE>,
+    buf: [u8; 4],
 }
 
 impl<'a, PERI: spi::Instance, TX, RX> Ws2812<'a, PERI, TX, RX> {
@@ -46,6 +49,7 @@ impl<'a, PERI: spi::Instance, TX, RX> Ws2812<'a, PERI, TX, RX> {
         Self {
             spi,
             device: PhantomData {},
+            buf: [0; 4],
         }
     }
 }
@@ -76,21 +80,29 @@ impl<'a, PERI: spi::Instance, TX, RX, D> Ws2812<'a, PERI, TX, RX, D> {
         // Send two bits in one spi byte. High time first, then the low time
         // The maximum for T0H is 500ns, the minimum for one bit 1063 ns.
         // These result in the upper and lower spi frequency limits
-        // TODO: i do not understand this at all
+        // TODO: i do not understand this at all, but it works for other people so hopefully will work for me too
+        // TODO: hopefully my changes to make this work with embassy didn't break it
         const PATTERNS: [u8; 4] = [0b1000_1000, 0b1000_1110, 0b11101000, 0b11101110];
 
-        for _ in 0..4 {
+        for b in self.buf.iter_mut() {
             let bits = (data & 0b1100_0000) >> 6;
-            self.spi.blocking_write(&[PATTERNS[bits as usize]])?;
+
+            *b = PATTERNS[bits as usize];
+
             data <<= 2;
         }
+
+        self.spi.blocking_write(&self.buf)?;
+
         Ok(())
     }
 
     fn flush(&mut self) -> Result<(), spi::Error> {
         // Should be > 300μs, so for an SPI Freq. of 3.8MHz, we have to send at least 1140 low bits or 140 low bytes
         // TODO: set the N based on actual frequency
-        self.spi.blocking_write(&[0u8; 140])?;
+        const empty: [u8; 140] = [0; 140];
+
+        self.spi.blocking_write(&empty)?;
 
         Ok(())
     }
