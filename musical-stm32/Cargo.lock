@@ -588,7 +588,7 @@ dependencies = [
  "smart-leds",
  "smart-leds-matrix",
  "smart-leds-trait",
- "ws2812-embassy",
+ "ws2812-async",
 ]
 
 [[package]]
@@ -875,16 +875,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ws2812-embassy"
+name = "ws2812-async"
 version = "0.1.0"
-source = "git+https://github.com/WyseNynja/ws2812-embassy?rev=1c982393026e1a7463246e1faf30ee87b310a606#1c982393026e1a7463246e1faf30ee87b310a606"
+source = "git+https://github.com/WyseNynja/ws2812-async.git?rev=bb1004e9f2379a1e7fa072ed453494d3e014ad53#bb1004e9f2379a1e7fa072ed453494d3e014ad53"
 dependencies = [
- "embassy-futures",
  "embedded-hal-async",
  "smart-leds",
 ]
-
-[[patch.unused]]
-name = "ws2812-async"
-version = "0.1.0"
-source = "git+https://github.com/WyseNynja/ws2812-async.git?rev=9d2a3aa7fa800722e45ad2658feb0e39a6039f80#9d2a3aa7fa800722e45ad2658feb0e39a6039f80"

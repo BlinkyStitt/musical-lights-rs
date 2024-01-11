@@ -13,13 +13,11 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::lights;
 use musical_lights_core::{
     audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
-    logging::{info, trace},
+    logging::{debug, info, trace},
     windows::HanningWindow,
 };
-use smart_leds_matrix::layout::invert_axis::NoInvert;
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
@@ -37,7 +35,7 @@ const MATRIX_N: usize = MATRIX_X as usize * MATRIX_Y as usize;
 // const VREFINT_CALIBRATED: u16 = 1230;
 
 #[embassy_executor::task]
-async fn blink_task(mut led: Output<'static, AnyPin>) {
+pub async fn blink_task(mut led: Output<'static, AnyPin>) {
     loop {
         info!("high");
         led.set_high();
@@ -142,6 +140,8 @@ async fn fft_task(
     }
 }
 
+pub type LedWriter<'a> = ws2812_async::Ws2812<Spi<'a, SPI1, DMA2_CH2, DMA2_CH0>, { MATRIX_N * 12 }>;
+
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
 #[embassy_executor::task]
 async fn light_task(
@@ -158,22 +158,25 @@ async fn light_task(
 
     let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, rxdma, spi_config);
 
-    let led_writer = ws2812_embassy::Ws2812::<_, MATRIX_N>::new(spi);
+    let led_writer = ws2812_async::Ws2812::<_, { MATRIX_N * 12 }>::new(spi);
 
     // TODO: what default brightness?
-    let default_brightness = 15;
+    // let default_brightness = 15;
 
-    let mut dancing_lights =
-        lights::DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N, _, NoInvert>::new(
-            led_writer,
-            default_brightness,
-        )
-        .await;
+    // TODO: setup seems to crash the program. blocking code must not be done correctly :(
+    // let mut dancing_lights =
+    //     lights::DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N, _, NoInvert>::new(
+    //         led_writer,
+    //         default_brightness,
+    //     )
+    //     .await;
 
     loop {
         let loudness = loudness_rx.receive().await;
 
-        dancing_lights.update(loudness);
+        // dancing_lights.update(loudness);
+
+        info!("{:?}", loudness);
     }
 }
 
@@ -204,6 +207,7 @@ async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(peripheral_config);
 
     info!("Hello World!");
+    Timer::after_secs(1).await;
 
     // TODO: what pins? i copied these from <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f3/src/bin/spi_dma.rs>
     let light_spi = p.SPI1;
@@ -238,6 +242,7 @@ async fn main(spawner: Spawner) {
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 
     // all the hardware should be set up now.
+    debug!("spawning tasks 1");
 
     // spawn the tasks
     spawner.must_spawn(blink_task(onboard_led));
@@ -253,7 +258,11 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(fft_task(mic_rx, loudness_tx));
 
     // TODO: oneshot/confvar to wait until the lights and FFT are configured
+    debug!("waiting for part 1");
     Timer::after_secs(3).await;
+    debug!("spawning tasks part 2");
 
     spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx));
+
+    info!("all tasks started");
 }

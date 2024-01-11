@@ -1,5 +1,4 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# replace STM32F429ZITx with your chip as listed in `probe-rs chip list`
 runner = "probe-rs run --chip stm32f411ceu6"
 
 [build]
