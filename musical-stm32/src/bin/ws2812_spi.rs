@@ -63,6 +63,7 @@ async fn main(spawner: Spawner) {
     static BLANK: [RGB8; MATRIX_N] = [RGB8::new(0, 0, 0); MATRIX_N];
 
     neopixel.write(BLANK.iter().copied()).await.unwrap();
+    Timer::after_secs(1).await;
 
     // 1 red, 1 black, 2 green, 1 black, 3 blue, 1 red, 1 green, 1 blue, 1 white, 1 black
     static TEST_PATTERN: [RGB8; 14] = [
@@ -96,9 +97,45 @@ async fn main(spawner: Spawner) {
     // TODO: brightness and gamma correction!
 
     // TODO: loop to rotate this wheel
-    neopixel.write(TEST_PATTERN.iter().copied()).await.unwrap();
+    neopixel
+        .write(RbgToGrb {
+            iter: TEST_PATTERN.iter().copied(),
+        })
+        .await
+        .unwrap();
+    Timer::after_secs(3).await;
 
-    // TODO: loop to rotate this wheel
+    static FULL_PATTERN: [RGB8; 8 * 32] = [RGB8::new(32, 32, 32); 8 * 32];
+
+    neopixel
+        .write(RbgToGrb {
+            iter: FULL_PATTERN.iter().copied(),
+        })
+        .await
+        .unwrap();
+    Timer::after_secs(3).await;
+
+    // TODO: scroll a rainbow instead of full white
 
     info!("all tasks started");
+}
+
+/// https://github.com/smart-leds-rs/ws2812-spi-rs/issues/7
+pub struct RbgToGrb<I> {
+    iter: I,
+}
+
+impl<I> Iterator for RbgToGrb<I>
+where
+    I: Iterator<Item = RGB8>,
+{
+    type Item = RGB8;
+
+    fn next(&mut self) -> Option<RGB8> {
+        self.iter.next().map(|a| RGB8 {
+            r: a.g,
+            g: a.r,
+            b: a.b,
+        })
+    }
 }

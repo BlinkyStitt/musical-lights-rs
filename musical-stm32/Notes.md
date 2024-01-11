@@ -6,6 +6,7 @@ This can happen if you flash a broken program. Either fix the program or flash s
 
 1. unplug
 2. hold boot0 button
+3. plug
 3. start flashing. as soon as it starts erasing the existing firmware, LET GO OF BOOT0!
 4. the flash should succeed
 

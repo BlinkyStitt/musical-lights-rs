@@ -31,6 +31,8 @@ const SAMPLE_RATE: u32 = 44_100;
 
 const MATRIX_N: usize = MATRIX_X as usize * MATRIX_Y as usize;
 
+const MATRIX_BUFFER: usize = MATRIX_N * 12;
+
 // const VREF_NOMINAL: u16 = 3300;
 // const VREFINT_CALIBRATED: u16 = 1230;
 
@@ -158,7 +160,7 @@ async fn light_task(
 
     let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, rxdma, spi_config);
 
-    let led_writer = ws2812_async::Ws2812::<_, { MATRIX_N * 12 }>::new(spi);
+    let led_writer = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi);
 
     // TODO: what default brightness?
     // let default_brightness = 15;

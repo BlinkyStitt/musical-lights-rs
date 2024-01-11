@@ -10,7 +10,6 @@ use embassy_stm32::{
     peripherals::{ADC1, PA0},
 };
 use embassy_time::{Delay, Timer};
-use micromath::F32Ext;
 use musical_lights_core::logging::info;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -51,7 +50,6 @@ async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0) {
 
     // the dc offset is printed on the microphone board
     const MIC_DC_OFFSET_MV: u32 = 1250;
-    const MIC_VPP: f32 = 2000.0;
 
     // TODO: how do we get the calibrated value out of this? I think it is 1230, but I'm not sure
 
