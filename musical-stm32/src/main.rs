@@ -5,7 +5,9 @@
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
-use embassy_stm32::peripherals::{ADC1, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB5, SPI1};
+use embassy_stm32::peripherals::{
+    ADC1, DMA1_CH3, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
+};
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
 use embassy_stm32::wdg::IndependentWatchdog;
@@ -13,6 +15,7 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
+use musical_lights_core::lights::DancingLights;
 use musical_lights_core::{
     audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
     logging::{debug, info, trace},
@@ -23,13 +26,13 @@ use {defmt_rtt as _, panic_probe as _};
 const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
 const FFT_OUTPUTS: usize = 1024;
-const MATRIX_X: u32 = 32;
-const MATRIX_Y: u32 = 8;
+const MATRIX_X: usize = 32;
+const MATRIX_Y: u8 = 8;
 
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
 const SAMPLE_RATE: u32 = 44_100;
 
-const MATRIX_N: usize = MATRIX_X as usize * MATRIX_Y as usize;
+const MATRIX_N: usize = MATRIX_X * MATRIX_Y as usize;
 
 const MATRIX_BUFFER: usize = MATRIX_N * 12;
 
@@ -145,40 +148,44 @@ async fn fft_task(
 pub type LedWriter<'a> = ws2812_async::Ws2812<Spi<'a, SPI1, DMA2_CH2, DMA2_CH0>, { MATRIX_N * 12 }>;
 
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
+#[allow(clippy::too_many_arguments)]
 #[embassy_executor::task]
 async fn light_task(
-    spi_peri: SPI1,
-    mosi: PB5,
-    txdma: DMA2_CH2,
-    rxdma: DMA2_CH0,
+    left_mosi: PB5,
+    left_peri: SPI1,
+    left_rxdma: DMA2_CH0,
+    left_txdma: DMA2_CH2,
+    right_mosi: PB15,
+    right_peri: SPI2,
+    right_rxmda: DMA1_CH3,
+    right_txdma: DMA1_CH4,
     loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
 ) {
     let mut spi_config = SpiConfig::default();
 
     // TODO: this setup feels like it should be inside leds::Ws2812. like frequency check that its >2 and <3.8
     spi_config.frequency = mhz(38) / 10u32; // 3.8MHz
+    spi_config.mode = embassy_stm32::spi::MODE_0;
 
-    let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, rxdma, spi_config);
+    let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, left_rxdma, spi_config);
+    let spi_right =
+        Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, right_rxmda, spi_config);
 
-    let led_writer = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi);
+    let led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
+    let led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
 
     // TODO: what default brightness?
     // let default_brightness = 15;
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
-    // let mut dancing_lights =
-    //     lights::DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N, _, NoInvert>::new(
-    //         led_writer,
-    //         default_brightness,
-    //     )
-    //     .await;
+    // TODO: how many ticks per decay?
+    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y>::new();
 
     loop {
+        // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
         let loudness = loudness_rx.receive().await;
 
-        // dancing_lights.update(loudness);
-
-        info!("{:?}", loudness);
+        dancing_lights.update(loudness);
     }
 }
 
@@ -212,14 +219,20 @@ async fn main(spawner: Spawner) {
     Timer::after_secs(1).await;
 
     // TODO: what pins? i copied these from <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f3/src/bin/spi_dma.rs>
-    let light_spi = p.SPI1;
+    let left_peri = p.SPI1;
     // let light_sck = p.PB3;
-    let light_mosi = p.PB5;
+    let left_mosi = p.PB5;
     // let light_miso = p.PB4;
 
+    let right_peri = p.SPI2;
+    let right_mosi = p.PB15;
+
     // TODO: What channels? NoDMA for receiver?
-    let light_rxdma = p.DMA2_CH0;
-    let light_txdma = p.DMA2_CH2;
+    let left_rxdma = p.DMA2_CH0;
+    let left_txdma = p.DMA2_CH2;
+
+    let right_rxdma = p.DMA1_CH3;
+    let right_txdma = p.DMA1_CH4;
 
     // // start the watchdog
     // let wdg = IndependentWatchdog::new(p.IWDG, 5_000_000);
@@ -250,10 +263,14 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(blink_task(onboard_led));
 
     spawner.must_spawn(light_task(
-        light_spi,
-        light_mosi,
-        light_txdma,
-        light_rxdma,
+        left_mosi,
+        left_peri,
+        left_rxdma,
+        left_txdma,
+        right_mosi,
+        right_peri,
+        right_rxdma,
+        right_txdma,
         loudness_rx,
     ));
 

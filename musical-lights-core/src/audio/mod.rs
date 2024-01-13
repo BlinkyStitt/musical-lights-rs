@@ -2,15 +2,16 @@
 //!
 //! Samples -> Buffer -> FFT -> Amplitudes -> WeightedAmplitudes -> AggregatedAmplitudes -> Decibels/PeakScaled
 //!                                                                 (Bark, Shazam, etc.)
-pub mod amplitudes;
-pub mod bark_scale;
-pub mod buffer;
-pub mod decibels;
-pub mod fft;
-pub mod peak_scaled;
-pub mod samples;
-pub mod shazam;
-pub mod weighting;
+mod amplitudes;
+mod bark_scale;
+mod buffer;
+mod decibels;
+mod exponential_scale;
+mod fft;
+mod peak_scaled;
+mod samples;
+mod shazam;
+mod weighting;
 
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
