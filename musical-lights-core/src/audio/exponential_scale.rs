@@ -1,7 +1,7 @@
 //! todo: better name
-use crate::audio::bin_to_frequency;
-
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
+use crate::audio::bin_to_frequency;
+use crate::logging::error;
 use defmt::Format;
 
 pub struct ExponentialScaleBuilder<const IN: usize> {
@@ -15,8 +15,13 @@ pub struct ExponentialScaleAmplitudes(pub AggregatedAmplitudes<24>);
 impl<const BINS: usize> ExponentialScaleBuilder<BINS> {
     pub fn new(sample_rate_hz: u32) -> Self {
         let mut map = [Some(0); BINS];
+
+        error!("actually calculate exponential scale!");
+
         for (i, x) in map.iter_mut().enumerate() {
-            let b = exponential_scale(i, 20.0, sample_rate_hz / 2, BINS);
+            // let b = exponential_scale(i, 20.0, sample_rate_hz / 2, BINS);
+
+            let b = Some(0);
 
             *x = b;
         }
@@ -37,12 +42,11 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN> for ExponentialScaleBuilde
 
 /// turn a frequency into a channel where each channel covers more frequencies than the last
 pub fn exponential_scale(bin: u8, min_freq: f32, max_freq: f32, num_bins: u8) -> Option<usize> {
-    let f = bin_to_frequency(i, sample_rate_hz, BINS);
+    // let f = bin_to_frequency(i, sample_rate_hz, BINS);
 
     // trace!("{} {} = {:?}", i, f, b);
-    error!("actually calculate exponential scale!");
 
-    Some(0)
+    todo!();
 }
 
 #[cfg(test)]
