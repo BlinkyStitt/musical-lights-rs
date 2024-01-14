@@ -3,6 +3,7 @@
 #![feature(type_alias_impl_trait)]
 
 use embassy_executor::Spawner;
+use embassy_futures::join::join;
 use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
 use embassy_stm32::peripherals::{
@@ -21,6 +22,7 @@ use musical_lights_core::{
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
+use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
@@ -171,11 +173,63 @@ async fn light_task(
     let spi_right =
         Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, right_rxmda, spi_config);
 
-    let led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
-    let led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
+    let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
+    let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
 
-    // TODO: what default brightness?
-    // let default_brightness = 15;
+    const BLANK: [RGB8; MATRIX_N] = [RGB8::new(0, 0, 0); MATRIX_N];
+
+    let blank_left_f = led_left.write(BLANK.iter().copied());
+    let blank_right_f = led_right.write(BLANK.iter().copied());
+
+    let (left, right) = join(blank_left_f, blank_right_f).await;
+
+    left.unwrap();
+    right.unwrap();
+
+    Timer::after_millis(100).await;
+
+    const TEST_PATTERN: [RGB8; 16] = [
+        RGB8::new(255, 0, 0),
+        RGB8::new(0, 255, 0),
+        RGB8::new(0, 255, 0),
+        RGB8::new(0, 0, 255),
+        RGB8::new(0, 0, 255),
+        RGB8::new(0, 0, 255),
+        RGB8::new(0, 0, 0),
+        RGB8::new(0, 0, 0),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+        RGB8::new(32, 32, 32),
+    ];
+
+    // TODO! wrong! we need to turn RGB into GRB!
+    let test_left_f = led_left.write(TEST_PATTERN.iter().copied());
+    let test_right_f = led_right.write(TEST_PATTERN.iter().copied());
+
+    let (left, right) = join(test_left_f, test_right_f).await;
+
+    left.unwrap();
+    right.unwrap();
+
+    Timer::after_secs(2).await;
+
+    // TODO: smarter iter on this
+    const FILL_PATTERN: [RGB8; MATRIX_N] = [RGB8::new(32, 32, 32); MATRIX_N];
+
+    let fill_left_f = led_left.write(FILL_PATTERN.iter().copied());
+    let fill_right_f = led_right.write(FILL_PATTERN.iter().copied());
+
+    let (left, right) = join(fill_left_f, fill_right_f).await;
+
+    left.unwrap();
+    right.unwrap();
+
+    // Timer::after_secs(1).await;
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
     // TODO: how many ticks per decay?
