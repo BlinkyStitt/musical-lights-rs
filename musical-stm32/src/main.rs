@@ -208,7 +208,12 @@ async fn light_task(
     ];
 
     // TODO! wrong! we need to turn RGB into GRB!
-    let test_left_f = led_left.write(TEST_PATTERN.iter().copied());
+    let test_left_f = led_left.write(
+        TEST_PATTERN
+            .iter()
+            .chain(BLANK.iter().take(MATRIX_N - TEST_PATTERN.len()))
+            .copied(),
+    );
     let test_right_f = led_right.write(TEST_PATTERN.iter().copied());
 
     let (left, right) = join(test_left_f, test_right_f).await;
