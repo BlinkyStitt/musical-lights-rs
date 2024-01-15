@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+use core::iter::repeat;
+
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
 use embassy_stm32::adc::{Adc, SampleTime};
@@ -18,7 +20,10 @@ use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
 use musical_lights_core::lights::DancingLights;
 use musical_lights_core::{
-    audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
+    audio::{
+        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
+        ExponentialScaleBuilder, FFT,
+    },
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
@@ -75,6 +80,7 @@ async fn mic_task(
     // 100 mHz processor
     // TODO: how long should we sample?
     adc.set_sample_time(SampleTime::Cycles144);
+    // TODO: impl From<u8> for Resolution? or maybe have "bits" and "range" functions on Resolution
     adc.set_resolution(embassy_stm32::adc::Resolution::TwelveBit);
 
     // // TODO: i think we should be able to use this instead of adc_resolution.
@@ -99,12 +105,14 @@ async fn mic_task(
         // TODO: is this right?
         // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
 
+        // 0-centered
         let sample = (sample as f32 - half_range) / half_range;
 
         trace!("mic f32: {}", sample);
 
         tx.send(sample).await;
 
+        // TODO: how accurate is this timer? we would probably do better with a smarter cheap and reading samples over i2s or spi
         // 44.1kHz = 22,676 nanoseconds
         Timer::after_nanos(22_676).await;
     }
@@ -113,7 +121,7 @@ async fn mic_task(
 #[embassy_executor::task]
 async fn fft_task(
     mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
-    loudness_tx: Sender<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
+    loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<32>, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
     let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
@@ -121,7 +129,8 @@ async fn fft_task(
     let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
         FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
 
-    let bark_scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
+    let scale_builder =
+        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_X>::new(20.0, 19_000.0, SAMPLE_RATE);
 
     loop {
         let sample = mic_rx.receive().await;
@@ -135,7 +144,7 @@ async fn fft_task(
 
             let amplitudes = fft.weighted_amplitudes(samples);
 
-            let loudness = bark_scale_builder.build(amplitudes);
+            let loudness = scale_builder.build(amplitudes);
 
             // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
 
@@ -161,7 +170,7 @@ async fn light_task(
     right_peri: SPI2,
     right_rxmda: DMA1_CH3,
     right_txdma: DMA1_CH4,
-    loudness_rx: Receiver<'static, ThreadModeRawMutex, BarkScaleAmplitudes, 16>,
+    loudness_rx: Receiver<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes, 16>,
 ) {
     let mut spi_config = SpiConfig::default();
 
@@ -176,10 +185,10 @@ async fn light_task(
     let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
     let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
 
-    const BLANK: [RGB8; MATRIX_N] = [RGB8::new(0, 0, 0); MATRIX_N];
+    let blank_iter = || repeat(RGB8::new(0, 0, 0));
 
-    let blank_left_f = led_left.write(BLANK.iter().copied());
-    let blank_right_f = led_right.write(BLANK.iter().copied());
+    let blank_left_f = led_left.write(blank_iter().take(MATRIX_N));
+    let blank_right_f = led_right.write(blank_iter().take(MATRIX_N));
 
     let (left, right) = join(blank_left_f, blank_right_f).await;
 
@@ -207,14 +216,17 @@ async fn light_task(
         RGB8::new(32, 32, 32),
     ];
 
-    // TODO! wrong! we need to turn RGB into GRB!
-    let test_left_f = led_left.write(
+    let test_iter = || {
         TEST_PATTERN
             .iter()
-            .chain(BLANK.iter().take(MATRIX_N - TEST_PATTERN.len()))
-            .copied(),
-    );
-    let test_right_f = led_right.write(TEST_PATTERN.iter().copied());
+            .copied()
+            .chain(blank_iter())
+            .take(MATRIX_N)
+    };
+
+    // TODO! wrong! we need to turn RGB into GRB!
+    let test_left_f = led_left.write(test_iter());
+    let test_right_f = led_right.write(test_iter());
 
     let (left, right) = join(test_left_f, test_right_f).await;
 
@@ -223,11 +235,10 @@ async fn light_task(
 
     Timer::after_secs(2).await;
 
-    // TODO: smarter iter on this
-    const FILL_PATTERN: [RGB8; MATRIX_N] = [RGB8::new(32, 32, 32); MATRIX_N];
+    let fill_white_iter = || repeat(RGB8::new(32, 32, 32).iter().take(MATRIX_N));
 
-    let fill_left_f = led_left.write(FILL_PATTERN.iter().copied());
-    let fill_right_f = led_right.write(FILL_PATTERN.iter().copied());
+    let fill_left_f = led_left.write(fill_white_iter());
+    let fill_right_f = led_right.write(fill_white_iter());
 
     let (left, right) = join(fill_left_f, fill_right_f).await;
 
@@ -311,7 +322,8 @@ async fn main(spawner: Spawner) {
     let mic_rx = MIC_CHANNEL.receiver();
 
     // channel for FFT -> LEDs
-    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, BarkScaleAmplitudes, 16> = Channel::new();
+    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, ExponentialScaleAmplitudes, 16> =
+        Channel::new();
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
 
