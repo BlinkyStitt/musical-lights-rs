@@ -11,7 +11,7 @@ log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"
 num-complex = { version = "0.4.4", default-features = false }
-smart-leds = "0.3.0"
+smart-leds = "0.4.0"
 
 # # TODO: use these?
 # embedded-graphics = { version = "0.8.1" }
@@ -21,7 +21,7 @@ smart-leds = "0.3.0"
 test-log = "0.2.14"
 
 [patch.crates-io]
-smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
+# smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "9d2a3aa7fa800722e45ad2658feb0e39a6039f80" }
 
 [features]
