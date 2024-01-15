@@ -2,6 +2,24 @@
 
 Rust code for making lights blink to music.
 
+## Reading
+
+- Hanning and other window functions
+- FFT
+- A-weighting, ISO-226:2023, and other equal-level-loudness contours
+- Bitbanging with SPI
+- Color spaces (HSLuv and RGB8)
+- Gamma correction
+- Level shifters
+
+## Core
+
+The "core" library can be used on any platform. It does not use the std library or an allocator. This makes some things harder to build, but works on pretty much anything. There are some optional features that bring in "std" and other features.
+
+    ```bash
+    RUST_LOG=trace cargo test --features log
+    ```
+
 ## Mac
 
     ```bash
@@ -38,7 +56,7 @@ Rust code for making lights blink to music.
     ```bash
     cd musical-stm32
     cargo check
-    cargo hf2 --release
+    cargo run --release
     ```
 
 ## TODO

@@ -1,6 +1,8 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
 use crate::audio::BarkScaleAmplitudes;
 use crate::logging::info;
+
+#[allow(unused_imports)]
 use micromath::F32Ext;
 
 /// TODO: this is probably going to be refactored several times
@@ -18,6 +20,7 @@ impl<const X: usize, const Y: u8> DancingLights<X, Y> {
     pub fn update(&mut self, loudness: BarkScaleAmplitudes) {
         info!("{:?}", loudness);
 
+        // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
         let mut min = f32::MAX;
         let mut max = f32::MIN;
 
@@ -32,8 +35,8 @@ impl<const X: usize, const Y: u8> DancingLights<X, Y> {
 
             let scaled = scaled.round() as u8;
 
-            // TODO: flick protection where? is that on the drawing side? what about decay?
-            *channel = scaled;
+            // TODO: decay even slower. keep track of a last time we updated each channel and only decay if it's been long enough to prevent epilepsy
+            *channel = scaled.max(*channel - 1);
         }
     }
 }

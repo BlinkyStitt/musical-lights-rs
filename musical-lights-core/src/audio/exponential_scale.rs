@@ -1,8 +1,10 @@
 //! todo: better name
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::audio::{bin_to_frequency, frequency_to_bin};
-use crate::logging::{error, info, trace};
+use crate::audio::frequency_to_bin;
+use crate::logging::info;
 use defmt::Format;
+
+#[allow(unused_imports)]
 use micromath::F32Ext;
 
 pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
@@ -39,21 +41,23 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         let mut end_bins = [0; OUT];
 
         let mut count = min_bin;
-        for b in 0..OUT {
+        for (b, end_bin) in end_bins.iter_mut().enumerate() {
             let n = e.powi(b as i32);
 
             let d = n.ceil() as usize;
 
             count += d;
 
-            // // TODO: is there where max_bin should be checked? we shouldn't be that far over, but we should test more
-            end_bins[b] = count.min(max_bin);
+            // TODO: is there where max_bin should be checked? we shouldn't be that far over, but we should test more if its a lot over
+            *end_bin = count.min(max_bin);
         }
+
+        // TODO: what if end_bin is < max_bin?
 
         let mut start_bin = min_bin;
         for (b, &end_bin) in end_bins.iter().enumerate() {
-            for x in start_bin..end_bin {
-                map[x] = Some(b);
+            for x in map.iter_mut().take(end_bin).skip(start_bin) {
+                *x = Some(b);
             }
 
             start_bin = end_bin;
@@ -92,17 +96,20 @@ fn find_e(bands: u16, min_bin: u16, max_bin: u16) -> Option<f32> {
             count += d;
         }
 
-        if count > max_bin {
-            e_test -= increment;
-            increment /= 10.0;
+        match count.cmp(&max_bin) {
+            core::cmp::Ordering::Greater => {
+                e_test -= increment;
+                increment /= 10.0;
 
-            if increment < 0.0000001 {
-                return Some(e_test - increment);
+                if increment < 0.0000001 {
+                    return Some(e_test - increment);
+                }
             }
-        } else if count == max_bin {
-            return Some(e_test);
+            core::cmp::Ordering::Equal => {
+                return Some(e_test);
+            }
+            core::cmp::Ordering::Less => {}
         }
-
         e_test += increment;
     }
 
