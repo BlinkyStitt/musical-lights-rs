@@ -28,6 +28,8 @@ use musical_lights_core::{
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
+use palette::white_point::D65;
+use palette::{Hsluv, ShiftHue};
 use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -193,6 +195,7 @@ async fn light_task(
     let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
     let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
 
+    // blank the leds
     let blank_iter = || repeat(RGB8::new(0, 0, 0));
 
     let blank_left_f = led_left.write(color_corrected_matrix(blank_iter()));
@@ -205,6 +208,7 @@ async fn light_task(
 
     Timer::after_millis(100).await;
 
+    // do a test pattern that makes it easy to tell if RGB is set up correctly
     const TEST_PATTERN: [RGB8; 16] = [
         RGB8::new(255, 0, 0),
         RGB8::new(0, 255, 0),
@@ -232,7 +236,6 @@ async fn light_task(
             .take(MATRIX_N)
     };
 
-    // TODO! wrong! we need to turn RGB into GRB!
     let test_left_f = led_left.write(color_corrected_matrix(test_iter()));
     let test_right_f = led_right.write(color_corrected_matrix(test_iter()));
 
@@ -243,6 +246,7 @@ async fn light_task(
 
     Timer::after_secs(2).await;
 
+    // fill one panel with red and the other with blue
     let fill_red_iter = || repeat(RGB8::new(255, 0, 0));
     let fill_blue_iter = || repeat(RGB8::new(0, 0, 255));
 
@@ -254,13 +258,13 @@ async fn light_task(
     left.unwrap();
     right.unwrap();
 
-    // Timer::after_secs(1).await;
+    Timer::after_secs(1).await;
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
     // TODO: how many ticks per decay?
     let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y>::new();
 
-    // let mut base_color = HSLuv::new(0.0, 1.0, 0.25);
+    let mut base_color: Hsluv<D65, u8> = Hsluv::new(0, 255, 255);
 
     loop {
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
@@ -268,7 +272,7 @@ async fn light_task(
 
         dancing_lights.update(loudness);
 
-        // base_color.shift_hue(1);
+        base_color = base_color.shift_hue(1);
     }
 }
 

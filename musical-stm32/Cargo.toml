@@ -24,6 +24,7 @@ embassy-time = { version = "0.3", features = ["defmt", "defmt-timestamp-uptime",
 itertools = { version = "0.12.0", default-features = false }
 micromath = "2.1.0"
 musical-lights-core = { path = "../musical-lights-core" }
+palette = { version = "0.7.3", features = ["libm"], default-features = false }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 smart-leds = "0.4.0"
 smart-leds-trait = "0.3.0"
