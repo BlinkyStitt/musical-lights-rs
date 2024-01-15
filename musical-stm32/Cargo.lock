@@ -644,6 +644,7 @@ dependencies = [
  "microfft",
  "micromath",
  "num-complex",
+ "palette",
  "smart-leds 0.4.0",
 ]
 

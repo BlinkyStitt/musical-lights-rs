@@ -11,6 +11,7 @@ log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
 micromath = "2.1.0"
 num-complex = { version = "0.4.4", default-features = false }
+palette = { version = "0.7.3", default-features = false }
 smart-leds = "0.4.0"
 
 # # TODO: use these?
@@ -28,5 +29,6 @@ ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "9
 
 # TODO: defmt should be optional. both defmt and log should be additive!
 
-default = []
-std = ["microfft/std", "num-complex/std", "log/std"]
+default = ["libm"]
+libm = ["palette/libm"]
+std = ["log/std", "microfft/std", "num-complex/std", "palette/std"]

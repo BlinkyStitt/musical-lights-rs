@@ -6,5 +6,5 @@ mod networked;
 mod pattern;
 mod visualizer;
 
-pub use color_correction::{color_correction, color_order, ColorCorrection};
+pub use color_correction::{color_correction, color_order, convert_color, ColorCorrection};
 pub use dancing_lights::DancingLights;

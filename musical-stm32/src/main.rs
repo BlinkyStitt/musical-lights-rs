@@ -18,8 +18,9 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::lights::color_order::GRB;
-use musical_lights_core::lights::{color_correction, DancingLights};
+use musical_lights_core::lights::{
+    color_correction, color_order::GRB, convert_color, DancingLights,
+};
 use musical_lights_core::{
     audio::{
         AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
@@ -28,8 +29,7 @@ use musical_lights_core::{
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
-use palette::white_point::D65;
-use palette::{Hsluv, ShiftHue};
+use palette::{white_point, Hsluv, ShiftHueAssign};
 use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -165,7 +165,7 @@ pub fn color_corrected_matrix<I>(iter: I) -> impl Iterator<Item = RGB8>
 where
     I: Iterator<Item = RGB8>,
 {
-    color_correction::<GRB, I>(iter, 25, MATRIX_N)
+    color_correction::<GRB, I>(iter, 32, MATRIX_N)
 }
 
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
@@ -264,7 +264,9 @@ async fn light_task(
     // TODO: how many ticks per decay?
     let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y>::new();
 
-    let mut base_color: Hsluv<D65, u8> = Hsluv::new(0, 255, 255);
+    // TODO: what white point?
+    let mut left_color: Hsluv<white_point::D65, f32> = Hsluv::new(0.0, 100.0, 50.0);
+    let mut right_color: Hsluv<white_point::D65, f32> = Hsluv::new(180.0, 100.0, 50.0);
 
     loop {
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
@@ -272,7 +274,20 @@ async fn light_task(
 
         dancing_lights.update(loudness);
 
-        base_color = base_color.shift_hue(1);
+        let left_rgb = convert_color(left_color);
+        let right_rgb = convert_color(right_color);
+
+        let fill_left_f = led_left.write(color_corrected_matrix(repeat(left_rgb)));
+        let fill_right_f = led_right.write(color_corrected_matrix(repeat(right_rgb)));
+
+        let (left, right) = join(fill_left_f, fill_right_f).await;
+
+        left.unwrap();
+        right.unwrap();
+
+        // TODO: how much should we shift? i think we want to do this differently. we want to use a gradient helper
+        left_color.shift_hue_assign(0.1);
+        right_color.shift_hue_assign(0.1);
     }
 }
 
