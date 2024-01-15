@@ -26,7 +26,8 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         // always skip the very first bin. it is too noisy
         let min_bin = frequency_to_bin(min_freq, sample_rate_hz, IN).max(1);
 
-        let max_bin = frequency_to_bin(max_freq, sample_rate_hz, IN);
+        // TODO: off by 1?
+        let max_bin = frequency_to_bin(max_freq, sample_rate_hz, IN) + 1;
 
         let frequency_resolution = sample_rate_hz / 2.0 / (IN as f32);
         info!("frequency resolution = {}", frequency_resolution);
@@ -34,20 +35,19 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         let e = find_e(OUT as u16, min_bin as u16, max_bin as u16).unwrap();
         info!("E = {}", e);
 
-        let mut count = min_bin;
-
         // TODO: use end_bins instead of map? less RAM but more complicated code
         let mut end_bins = [0; OUT];
 
+        let mut count = min_bin;
         for b in 0..OUT {
-            let n = e.powi(b as i32 + 1);
+            let n = e.powi(b as i32);
 
             let d = n.ceil() as usize;
 
             count += d;
 
-            // TODO: is there where max_bin should be checked?
-            end_bins[b] = count;
+            // // TODO: is there where max_bin should be checked? we shouldn't be that far over, but we should test more
+            end_bins[b] = count.min(max_bin);
         }
 
         let mut start_bin = min_bin;
@@ -56,7 +56,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
                 map[x] = Some(b);
             }
 
-            start_bin = end_bin + 1;
+            start_bin = end_bin;
         }
 
         Self { map }
