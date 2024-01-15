@@ -18,7 +18,8 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::lights::DancingLights;
+use musical_lights_core::lights::color_order::GRB;
+use musical_lights_core::lights::{color_correction, DancingLights};
 use musical_lights_core::{
     audio::{
         AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
@@ -121,7 +122,7 @@ async fn mic_task(
 #[embassy_executor::task]
 async fn fft_task(
     mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
-    loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<32>, 16>,
+    loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_X>, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
     let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
@@ -158,6 +159,13 @@ async fn fft_task(
 
 pub type LedWriter<'a> = ws2812_async::Ws2812<Spi<'a, SPI1, DMA2_CH2, DMA2_CH0>, { MATRIX_N * 12 }>;
 
+pub fn color_corrected_matrix<I>(iter: I) -> impl Iterator<Item = RGB8>
+where
+    I: Iterator<Item = RGB8>,
+{
+    color_correction::<GRB, I>(iter, 25, MATRIX_N)
+}
+
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
 #[allow(clippy::too_many_arguments)]
 #[embassy_executor::task]
@@ -170,7 +178,7 @@ async fn light_task(
     right_peri: SPI2,
     right_rxmda: DMA1_CH3,
     right_txdma: DMA1_CH4,
-    loudness_rx: Receiver<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes, 16>,
+    loudness_rx: Receiver<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_X>, 16>,
 ) {
     let mut spi_config = SpiConfig::default();
 
@@ -187,8 +195,8 @@ async fn light_task(
 
     let blank_iter = || repeat(RGB8::new(0, 0, 0));
 
-    let blank_left_f = led_left.write(blank_iter().take(MATRIX_N));
-    let blank_right_f = led_right.write(blank_iter().take(MATRIX_N));
+    let blank_left_f = led_left.write(color_corrected_matrix(blank_iter()));
+    let blank_right_f = led_right.write(color_corrected_matrix(blank_iter()));
 
     let (left, right) = join(blank_left_f, blank_right_f).await;
 
@@ -206,14 +214,14 @@ async fn light_task(
         RGB8::new(0, 0, 255),
         RGB8::new(0, 0, 0),
         RGB8::new(0, 0, 0),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
-        RGB8::new(32, 32, 32),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
+        RGB8::new(255, 255, 255),
     ];
 
     let test_iter = || {
@@ -225,8 +233,8 @@ async fn light_task(
     };
 
     // TODO! wrong! we need to turn RGB into GRB!
-    let test_left_f = led_left.write(test_iter());
-    let test_right_f = led_right.write(test_iter());
+    let test_left_f = led_left.write(color_corrected_matrix(test_iter()));
+    let test_right_f = led_right.write(color_corrected_matrix(test_iter()));
 
     let (left, right) = join(test_left_f, test_right_f).await;
 
@@ -235,10 +243,11 @@ async fn light_task(
 
     Timer::after_secs(2).await;
 
-    let fill_white_iter = || repeat(RGB8::new(32, 32, 32).iter().take(MATRIX_N));
+    let fill_red_iter = || repeat(RGB8::new(255, 0, 0));
+    let fill_blue_iter = || repeat(RGB8::new(0, 0, 255));
 
-    let fill_left_f = led_left.write(fill_white_iter());
-    let fill_right_f = led_right.write(fill_white_iter());
+    let fill_left_f = led_left.write(color_corrected_matrix(fill_red_iter()));
+    let fill_right_f = led_right.write(color_corrected_matrix(fill_blue_iter()));
 
     let (left, right) = join(fill_left_f, fill_right_f).await;
 
@@ -251,11 +260,15 @@ async fn light_task(
     // TODO: how many ticks per decay?
     let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y>::new();
 
+    // let mut base_color = HSLuv::new(0.0, 1.0, 0.25);
+
     loop {
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
         let loudness = loudness_rx.receive().await;
 
         dancing_lights.update(loudness);
+
+        // base_color.shift_hue(1);
     }
 }
 
@@ -322,7 +335,7 @@ async fn main(spawner: Spawner) {
     let mic_rx = MIC_CHANNEL.receiver();
 
     // channel for FFT -> LEDs
-    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, ExponentialScaleAmplitudes, 16> =
+    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_X>, 16> =
         Channel::new();
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();

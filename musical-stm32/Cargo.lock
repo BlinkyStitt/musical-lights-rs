@@ -195,12 +195,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "display-interface"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7517c040926d7b02b111884aa089177db80878533127f7c1b480d852c5fb4112"
-
-[[package]]
 name = "document-features"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -661,7 +655,6 @@ dependencies = [
  "musical-lights-core",
  "panic-probe",
  "smart-leds 0.4.0",
- "smart-leds-matrix",
  "smart-leds-trait 0.3.0",
  "ws2812-async",
 ]
@@ -824,18 +817,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66df34e571fa9993fa6f99131a374d58ca3d694b75f9baac93458fe0d6057bf0"
 dependencies = [
  "smart-leds-trait 0.3.0",
-]
-
-[[package]]
-name = "smart-leds-matrix"
-version = "0.1.0"
-source = "git+https://github.com/WyseNynja/smart-leds-matrix.git?rev=bc4188d311498c9396afc9c798ce42171c009ab1#bc4188d311498c9396afc9c798ce42171c009ab1"
-dependencies = [
- "display-interface",
- "embedded-graphics-core",
- "embedded-hal 1.0.0",
- "smart-leds 0.3.0",
- "smart-leds-trait 0.2.1",
 ]
 
 [[package]]

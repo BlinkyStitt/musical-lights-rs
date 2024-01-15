@@ -1,5 +1,5 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
-use crate::audio::BarkScaleAmplitudes;
+use crate::audio::ExponentialScaleAmplitudes;
 use crate::logging::info;
 
 #[allow(unused_imports)]
@@ -17,14 +17,14 @@ impl<const X: usize, const Y: u8> DancingLights<X, Y> {
         Self { channels: [0; X] }
     }
 
-    pub fn update(&mut self, loudness: BarkScaleAmplitudes) {
+    pub fn update(&mut self, loudness: ExponentialScaleAmplitudes<X>) {
         info!("{:?}", loudness);
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
         let mut min = f32::MAX;
         let mut max = f32::MIN;
 
-        // TODO: .0.0 is weird
+        // TODO: .0.0 is weird. loudness should be Iter
         for &loudness in loudness.0 .0.iter() {
             min = min.min(loudness);
             max = max.max(loudness);

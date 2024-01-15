@@ -26,7 +26,6 @@ micromath = "2.1.0"
 musical-lights-core = { path = "../musical-lights-core" }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 smart-leds = "0.4.0"
-smart-leds-matrix = "0.1.0"
 smart-leds-trait = "0.3.0"
 ws2812-async = "0.1.0"
 
@@ -50,8 +49,9 @@ embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb5
 embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "f8c79fee1df1900ee59e90160729edfa16a99b63" }
 
 # upgrade all the deps to get things onto 1.0.0
-smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "bb1004e9f2379a1e7fa072ed453494d3e014ad53" }
+
+#smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 
 [profile.dev]
 incremental = false
