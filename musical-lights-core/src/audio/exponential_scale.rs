@@ -36,23 +36,23 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
 
         let mut count = min_bin;
 
+        // TODO: use end_bins instead of map? less RAM but more complicated code
         let mut end_bins = [0; OUT];
 
-        // TODO: save last end_bin as max_bin now instead of doing math?
         for b in 0..OUT {
             let n = e.powi(b as i32 + 1);
 
-            // TODO: this is probably an off-by-one error
             let d = n.ceil() as usize;
 
-            end_bins[b] = count;
+            count += d;
 
-            count += d as usize;
+            // TODO: is there where max_bin should be checked?
+            end_bins[b] = count;
         }
 
         let mut start_bin = min_bin;
         for (b, &end_bin) in end_bins.iter().enumerate() {
-            for x in start_bin..=end_bin {
+            for x in start_bin..end_bin {
                 map[x] = Some(b);
             }
 
