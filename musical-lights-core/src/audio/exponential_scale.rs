@@ -112,11 +112,18 @@ fn find_e(bands: u16, min_bin: u16, max_bin: u16) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::ExponentialScaleBuilder;
+    use crate::logging::info;
 
     #[test_log::test]
     fn test_e() {
-        let builder = ExponentialScaleBuilder::<1024, 16>::new(20.0, 20_000.0, 44_100.0);
+        let small_builder = ExponentialScaleBuilder::<512, 8>::new(20.0, 20_000.0, 44_100.0);
 
-        panic!("{:?}", builder.map);
+        info!("{:?}", small_builder.map);
+
+        let medium_builder = ExponentialScaleBuilder::<1024, 32>::new(20.0, 20_000.0, 44_100.0);
+
+        info!("{:?}", medium_builder.map);
+
+        panic!("actually assert things about the maps")
     }
 }
