@@ -1,37 +1,72 @@
 //! todo: better name
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::audio::bin_to_frequency;
-use crate::logging::error;
+use crate::audio::{bin_to_frequency, frequency_to_bin};
+use crate::logging::{error, info, trace};
 use defmt::Format;
+use micromath::F32Ext;
 
-pub struct ExponentialScaleBuilder<const IN: usize> {
+pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
     map: [Option<usize>; IN],
 }
 
 /// TODO: should this be a trait instead?
 #[derive(Debug, Format)]
-pub struct ExponentialScaleAmplitudes(pub AggregatedAmplitudes<24>);
+pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes<OUT>);
 
-impl<const BINS: usize> ExponentialScaleBuilder<BINS> {
-    pub fn new(sample_rate_hz: u32) -> Self {
-        let mut map = [Some(0); BINS];
+/// bins in, bands/channels out
+impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
+    pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
+        let mut map = [None; IN];
 
-        error!("actually calculate exponential scale!");
+        debug_assert!(
+            sample_rate_hz / 2.0 >= max_freq,
+            "sample rate too low. must be at least double the maximum frequency"
+        );
 
-        for (i, x) in map.iter_mut().enumerate() {
-            // let b = exponential_scale(i, 20.0, sample_rate_hz / 2, BINS);
+        // always skip the very first bin. it is too noisy
+        let min_bin = frequency_to_bin(min_freq, sample_rate_hz, IN).max(1);
 
-            let b = Some(0);
+        let max_bin = frequency_to_bin(max_freq, sample_rate_hz, IN);
 
-            *x = b;
+        let frequency_resolution = sample_rate_hz / 2.0 / (IN as f32);
+        info!("frequency resolution = {}", frequency_resolution);
+
+        let e = find_e(OUT as u16, min_bin as u16, max_bin as u16).unwrap();
+        info!("E = {}", e);
+
+        let mut count = min_bin;
+
+        let mut end_bins = [0; OUT];
+
+        // TODO: save last end_bin as max_bin now instead of doing math?
+        for b in 0..OUT {
+            let n = e.powi(b as i32 + 1);
+
+            // TODO: this is probably an off-by-one error
+            let d = n.ceil() as usize;
+
+            end_bins[b] = count;
+
+            count += d as usize;
+        }
+
+        let mut start_bin = min_bin;
+        for (b, &end_bin) in end_bins.iter().enumerate() {
+            for x in start_bin..=end_bin {
+                map[x] = Some(b);
+            }
+
+            start_bin = end_bin + 1;
         }
 
         Self { map }
     }
 }
 
-impl<const IN: usize> AggregatedAmplitudesBuilder<IN> for ExponentialScaleBuilder<IN> {
-    type Output = ExponentialScaleAmplitudes;
+impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN>
+    for ExponentialScaleBuilder<IN, OUT>
+{
+    type Output = ExponentialScaleAmplitudes<OUT>;
 
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
         let x = AggregatedAmplitudes::aggregate(&self.map, x);
@@ -40,74 +75,48 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN> for ExponentialScaleBuilde
     }
 }
 
-/// turn a frequency into a channel where each channel covers more frequencies than the last
-pub fn exponential_scale(bin: u8, min_freq: f32, max_freq: f32, num_bins: u8) -> Option<usize> {
-    // let f = bin_to_frequency(i, sample_rate_hz, BINS);
+/// Find E through brute force calculations
+/// <https://forum.pjrc.com/threads/32677-Is-there-a-logarithmic-function-for-FFT-bin-selection-for-any-given-of-bands?p=133842&viewfull=1#post133842>
+fn find_e(bands: u16, min_bin: u16, max_bin: u16) -> Option<f32> {
+    let mut increment = 0.1;
+    let mut e_test = 1.0;
 
-    // trace!("{} {} = {:?}", i, f, b);
+    while e_test < max_bin as f32 {
+        let mut count = min_bin;
 
-    todo!();
+        // Calculate full log values
+        for b in 0..bands {
+            let n = e_test.powi(b as i32);
+            // round up
+            let d = n.ceil() as u16;
+            count += d;
+        }
+
+        if count > max_bin {
+            e_test -= increment;
+            increment /= 10.0;
+
+            if increment < 0.0000001 {
+                return Some(e_test - increment);
+            }
+        } else if count == max_bin {
+            return Some(e_test);
+        }
+
+        e_test += increment;
+    }
+
+    None
 }
 
 #[cfg(test)]
 mod tests {
-    use super::bark_scale;
+    use super::ExponentialScaleBuilder;
 
-    #[test]
-    fn test_bark_scale() {
-        assert_eq!(bark_scale(-1.0), None);
-        assert_eq!(bark_scale(0.0), None);
-        assert_eq!(bark_scale(20.0), Some(1));
-        assert_eq!(bark_scale(50.0), Some(1));
-        assert_eq!(bark_scale(100.0), Some(1));
-        assert_eq!(bark_scale(150.0), Some(2));
-        assert_eq!(bark_scale(200.0), Some(2));
-        assert_eq!(bark_scale(250.0), Some(3));
-        assert_eq!(bark_scale(300.0), Some(3));
-        assert_eq!(bark_scale(350.0), Some(4));
-        assert_eq!(bark_scale(400.0), Some(4));
-        assert_eq!(bark_scale(450.0), Some(5));
-        assert_eq!(bark_scale(510.0), Some(5));
-        assert_eq!(bark_scale(570.0), Some(6));
-        assert_eq!(bark_scale(630.0), Some(6));
-        assert_eq!(bark_scale(700.0), Some(7));
-        assert_eq!(bark_scale(770.0), Some(7));
-        assert_eq!(bark_scale(840.0), Some(8));
-        assert_eq!(bark_scale(920.0), Some(8));
-        assert_eq!(bark_scale(1000.0), Some(9));
-        assert_eq!(bark_scale(1080.0), Some(9));
-        assert_eq!(bark_scale(1170.0), Some(10));
-        assert_eq!(bark_scale(1270.0), Some(10));
-        assert_eq!(bark_scale(1370.0), Some(11));
-        assert_eq!(bark_scale(1480.0), Some(11));
-        assert_eq!(bark_scale(1600.0), Some(12));
-        assert_eq!(bark_scale(1720.0), Some(12));
-        assert_eq!(bark_scale(1850.0), Some(13));
-        assert_eq!(bark_scale(2000.0), Some(13));
-        assert_eq!(bark_scale(2150.0), Some(14));
-        assert_eq!(bark_scale(2320.0), Some(14));
-        assert_eq!(bark_scale(2500.0), Some(15));
-        assert_eq!(bark_scale(2700.0), Some(15));
-        assert_eq!(bark_scale(2900.0), Some(16));
-        assert_eq!(bark_scale(3150.0), Some(16));
-        assert_eq!(bark_scale(3400.0), Some(17));
-        assert_eq!(bark_scale(3700.0), Some(17));
-        assert_eq!(bark_scale(4000.0), Some(18));
-        assert_eq!(bark_scale(4400.0), Some(18));
-        assert_eq!(bark_scale(4800.0), Some(19));
-        assert_eq!(bark_scale(5300.0), Some(19));
-        assert_eq!(bark_scale(5800.0), Some(20));
-        assert_eq!(bark_scale(6400.0), Some(20));
-        assert_eq!(bark_scale(7000.0), Some(21));
-        assert_eq!(bark_scale(7700.0), Some(21));
-        assert_eq!(bark_scale(8500.0), Some(22));
-        assert_eq!(bark_scale(9500.0), Some(22));
-        assert_eq!(bark_scale(10500.0), Some(23));
-        assert_eq!(bark_scale(12000.0), Some(23));
-        assert_eq!(bark_scale(13500.0), Some(24));
-        assert_eq!(bark_scale(15500.0), Some(24));
-        assert_eq!(bark_scale(16000.0), None); // Beyond the Bark scale
-                                               // TODO: i might actually want to go higher than this to get to 18 or 20kHz
-        assert_eq!(bark_scale(f32::MAX), None);
+    #[test_log::test]
+    fn test_e() {
+        let builder = ExponentialScaleBuilder::<1024, 16>::new(20.0, 20_000.0, 44_100.0);
+
+        panic!("{:?}", builder.map);
     }
 }

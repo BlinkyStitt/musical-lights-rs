@@ -18,7 +18,7 @@ pub struct Amplitudes<const N: usize>(pub [f32; N]);
 #[derive(Debug, Format)]
 pub struct WeightedAmplitudes<const N: usize>(pub [f32; N]);
 
-///  bin amounts scale exponentially
+/// bin amounts summed in some way, probably exponentially
 #[derive(Debug, Format)]
 pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
 

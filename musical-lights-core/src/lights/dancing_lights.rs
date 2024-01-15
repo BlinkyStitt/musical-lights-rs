@@ -10,6 +10,7 @@ pub struct DancingLights<const X: usize, const Y: u8> {
 
 /// TODO: macro for all the different inverts
 impl<const X: usize, const Y: u8> DancingLights<X, Y> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self { channels: [0; X] }
     }

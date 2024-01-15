@@ -12,7 +12,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<24>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
-    pub fn new(sample_rate_hz: u32) -> Self {
+    pub fn new(sample_rate_hz: f32) -> Self {
         let mut map = [Some(0); BINS];
         for (i, x) in map.iter_mut().enumerate() {
             let f = bin_to_frequency(i, sample_rate_hz, BINS);

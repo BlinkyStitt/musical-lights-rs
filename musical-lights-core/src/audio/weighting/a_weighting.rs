@@ -8,7 +8,7 @@ use micromath::F32Ext;
 
 impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
     /// TODO: use a trait just like we do for the window
-    pub fn a_weighting<W: Window<IN>>(sample_rate_hz: u32) -> Self {
+    pub fn a_weighting<W: Window<IN>>(sample_rate_hz: f32) -> Self {
         let window_multipliers = W::windows();
 
         let window_scaling = W::scaling();

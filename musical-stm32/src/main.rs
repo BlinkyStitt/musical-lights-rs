@@ -32,7 +32,7 @@ const MATRIX_X: usize = 32;
 const MATRIX_Y: u8 = 8;
 
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
-const SAMPLE_RATE: u32 = 44_100;
+const SAMPLE_RATE: f32 = 44_100.0;
 
 const MATRIX_N: usize = MATRIX_X * MATRIX_Y as usize;
 

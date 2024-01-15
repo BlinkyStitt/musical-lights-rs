@@ -71,3 +71,11 @@ macro_rules! impl_fft {
 
 impl_fft!(512);
 impl_fft!(2048);
+
+pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
+    (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)
+}
+
+pub fn frequency_to_bin(frequency: f32, sample_rate_hz: f32, num_bins: usize) -> usize {
+    ((frequency * (num_bins * 2) as f32) / sample_rate_hz).round() as usize
+}
