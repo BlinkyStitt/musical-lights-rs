@@ -658,6 +658,7 @@ dependencies = [
  "circular-buffer",
  "defmt",
  "embedded-graphics-framebuf",
+ "enterpolation",
  "microfft",
  "micromath",
  "num-complex",

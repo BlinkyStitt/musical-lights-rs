@@ -39,6 +39,8 @@ const FFT_OUTPUTS: usize = 1024;
 const MATRIX_X: usize = 32;
 const MATRIX_Y: u8 = 8;
 
+type MatrixWhitePoint = white_point::E;
+
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
 const SAMPLE_RATE: f32 = 44_100.0;
 
@@ -265,8 +267,8 @@ async fn light_task(
     let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y>::new();
 
     // TODO: what white point?
-    let mut left_color: Hsluv<white_point::D65, f32> = Hsluv::new(0.0, 100.0, 50.0);
-    let mut right_color: Hsluv<white_point::D65, f32> = Hsluv::new(180.0, 100.0, 50.0);
+    let mut left_color: Hsluv<MatrixWhitePoint, f32> = Hsluv::new(0.0, 100.0, 50.0);
+    let mut right_color: Hsluv<MatrixWhitePoint, f32> = Hsluv::new(180.0, 100.0, 50.0);
 
     loop {
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more

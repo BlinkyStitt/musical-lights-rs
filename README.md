@@ -9,6 +9,7 @@ Rust code for making lights blink to music.
 - A-weighting, ISO-226:2023, and other equal-level-loudness contours
 - Bitbanging with SPI
 - Color spaces (HSLuv and RGB8)
+- Splines and Gradients
 - Gamma correction
 - Level shifters
 
