@@ -5,6 +5,7 @@ use super::{
 use crate::audio::amplitudes::Amplitudes;
 use crate::logging::trace;
 
+use microfft::real::{rfft_1024, rfft_2048, rfft_512};
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
 use micromath::F32Ext;
@@ -43,7 +44,7 @@ impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
 
 #[macro_export]
 macro_rules! impl_fft {
-    ($in_size:expr) => {
+    ($in_size:expr, $fft_func:ident) => {
         impl FFT<$in_size, { $in_size / 2 }> {
             /// a windowed and weighted FFT
             pub fn weighted_amplitudes(
@@ -66,11 +67,31 @@ macro_rules! impl_fft {
                 weighted_amplitudes
             }
         }
+
+        impl Amplitudes<{ $in_size / 2 }> {
+            pub fn fft_windowed_samples(x: WindowedSamples<$in_size>) -> Self {
+                let mut fft_input = x.0;
+
+                // Use the provided FFT function
+                let fft_output = $fft_func(&mut fft_input);
+
+                fft_output[0].im = 0.0;
+
+                let mut amplitudes: [f32; { $in_size / 2 }] = [0.0; { $in_size / 2 }];
+
+                for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
+                    *x = spectrum.norm();
+                }
+
+                Self(amplitudes)
+            }
+        }
     };
 }
 
-impl_fft!(512);
-impl_fft!(2048);
+impl_fft!(512, rfft_512);
+impl_fft!(1024, rfft_1024);
+impl_fft!(2048, rfft_2048);
 
 pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
     (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)

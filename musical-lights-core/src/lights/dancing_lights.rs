@@ -9,7 +9,6 @@ use micromath::F32Ext;
 use smart_leds::RGB8;
 
 /// TODO: this is probably going to be refactored several times
-/// TODO: keep generic PixelColor
 pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
     channels: [u8; Y],
     /// TODO: use a framebuf crate that supports DMA and drawing fonts and such
@@ -37,11 +36,9 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
             let r = 255;
 
-            // TODO: need a helper to go from n -> (x, y) and (x, y) -> n
             // TODO: handle different layouts
             let inside = xy_to_n(0, y, X);
             let outside = xy_to_n(X - 1, y, X);
-            // let top = xy_to_n(x, Y - 1, X);
 
             info!("{} ({}): {} {} {}", y, inside, r, g, b);
 

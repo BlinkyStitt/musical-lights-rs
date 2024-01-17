@@ -2,7 +2,7 @@ use enterpolation::{
     bspline::{BSpline, BorderBuffer},
     Curve, Equidistant, Generator, Merge,
 };
-use palette::{chromatic_adaptation::AdaptInto, Hsluv, Mix, Srgb};
+use palette::{chromatic_adaptation::AdaptInto, Hsluv, LinSrgb, Mix, Srgb};
 
 // As HSL does neither implement multiplication with a scalar nor the merge trait in `topology-traits` crate,
 // we need to use a newtype pattern
@@ -59,14 +59,15 @@ impl MermaidGradient {
             .gen(remap(
                 n as f32,
                 0.0,
-                width as f32,
+                (width - 1) as f32,
                 self.domain_min,
                 self.domain_max,
             ))
             .0;
 
         // TODO: do we want linear srgb? i think so, but not sure
-        let srgb: Srgb = hsluv.adapt_into();
+        // TODO: handle gamma and brightness where? both smart-leds and palette have code for it
+        let srgb: LinSrgb = hsluv.adapt_into();
 
         srgb.into_format().into_components()
     }

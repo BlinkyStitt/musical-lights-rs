@@ -32,5 +32,5 @@ ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "9
 
 default = ["libm", "defmt"]
 defmt = ["dep:defmt"]
-libm = ["palette/libm", "enterpolation/libm"]
+libm = ["palette/libm", "enterpolation/libm", "num-complex/libm"]
 std = ["log?/std", "microfft/std", "num-complex/std", "palette/std", "enterpolation/std"]
