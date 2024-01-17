@@ -12,7 +12,7 @@ pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
 
 /// TODO: should this be a trait instead?
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes<OUT>);
 
 /// bins in, bands/channels out

@@ -10,17 +10,17 @@ use micromath::F32Ext;
 /// If N == S/2, there is no aggregation
 /// If N < S/2,  there is aggregation
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Amplitudes<const N: usize>(pub [f32; N]);
 
 /// this //could// re-use the Amplitudes struct, but a dedicated type makes sure we always use the right level of processing
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WeightedAmplitudes<const N: usize>(pub [f32; N]);
 
 /// bin amounts summed in some way, probably exponentially
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
 
 pub trait AggregatedAmplitudesBuilder<const IN: usize> {

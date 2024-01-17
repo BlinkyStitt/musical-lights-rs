@@ -4,7 +4,7 @@ use micromath::F32Ext;
 use super::amplitudes::{AggregatedAmplitudes, Amplitudes};
 
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Decibels<const N: usize>(pub [f32; N]);
 
 impl<const B: usize> Decibels<B> {
