@@ -3,7 +3,6 @@ use enterpolation::{
     Curve, Equidistant, Generator, Merge,
 };
 use palette::{chromatic_adaptation::AdaptInto, Hsluv, Mix, Srgb};
-use smart_leds::RGB8;
 
 // As HSL does neither implement multiplication with a scalar nor the merge trait in `topology-traits` crate,
 // we need to use a newtype pattern
@@ -34,28 +33,33 @@ pub struct MermaidGradient {
     spline: MermaidSpline,
     domain_min: f32,
     domain_max: f32,
-    width: f32,
+}
+
+impl Default for MermaidGradient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MermaidGradient {
-    pub fn new(width: usize) -> Self {
+    pub fn new() -> Self {
         let spline = mermaid_spline();
         let [domain_min, domain_max] = spline.domain();
         Self {
             spline,
             domain_min,
             domain_max,
-            width: width as f32,
         }
     }
 
-    pub fn get(&self, x: usize) -> RGB8 {
+    /// TODO: i don't think this is right. need to read more examples and write some tests
+    pub fn get(&self, n: usize, width: usize) -> (u8, u8, u8) {
         let hsluv = self
             .spline
             .gen(remap(
-                x as f32,
+                n as f32,
                 0.0,
-                self.width,
+                width as f32,
                 self.domain_min,
                 self.domain_max,
             ))
@@ -64,9 +68,7 @@ impl MermaidGradient {
         // TODO: do we want linear srgb? i think so, but not sure
         let srgb: Srgb = hsluv.adapt_into();
 
-        let raw: (u8, u8, u8) = srgb.into_format().into_components();
-
-        RGB8::new(raw.0, raw.1, raw.2)
+        srgb.into_format().into_components()
     }
 }
 

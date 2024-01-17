@@ -61,15 +61,15 @@ where
     }
 }
 
-pub fn convert_color(color: Hsluv<white_point::E, f32>) -> RGB8 {
+/// TODO: generic whitepoint
+pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
     let rgb: Srgb<f32> = color.adapt_into();
 
     debug_assert!(rgb.is_within_bounds());
 
     let rgb: Srgb<u8> = rgb.into_format();
 
-    // TODO: this could definitely be more efficient
-    rgb.into_components().into()
+    rgb.into_components()
 }
 
 #[cfg(test)]

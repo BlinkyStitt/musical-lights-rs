@@ -18,9 +18,8 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::lights::{
-    color_correction, color_order::GRB, convert_color, DancingLights,
-};
+use musical_lights_core::lights::MermaidGradient;
+use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights};
 use musical_lights_core::{
     audio::{
         AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
@@ -29,22 +28,19 @@ use musical_lights_core::{
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
-use palette::{white_point, Hsluv, ShiftHueAssign};
 use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
 const FFT_OUTPUTS: usize = 1024;
-const MATRIX_X: usize = 32;
-const MATRIX_Y: u8 = 8;
-
-type MatrixWhitePoint = white_point::E;
+const MATRIX_X: usize = 8;
+const MATRIX_Y: usize = 32;
 
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
 const SAMPLE_RATE: f32 = 44_100.0;
 
-const MATRIX_N: usize = MATRIX_X * MATRIX_Y as usize;
+const MATRIX_N: usize = MATRIX_X * MATRIX_Y;
 
 const MATRIX_BUFFER: usize = MATRIX_N * 12;
 
@@ -126,7 +122,7 @@ async fn mic_task(
 #[embassy_executor::task]
 async fn fft_task(
     mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
-    loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_X>, 16>,
+    loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
     let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
@@ -135,7 +131,7 @@ async fn fft_task(
         FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
 
     let scale_builder =
-        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_X>::new(20.0, 19_000.0, SAMPLE_RATE);
+        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(20.0, 19_000.0, SAMPLE_RATE);
 
     loop {
         let sample = mic_rx.receive().await;
@@ -182,7 +178,7 @@ async fn light_task(
     right_peri: SPI2,
     right_rxmda: DMA1_CH3,
     right_txdma: DMA1_CH4,
-    loudness_rx: Receiver<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_X>, 16>,
+    loudness_rx: Receiver<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16>,
 ) {
     let mut spi_config = SpiConfig::default();
 
@@ -249,6 +245,7 @@ async fn light_task(
     Timer::after_secs(2).await;
 
     // fill one panel with red and the other with blue
+    // TODO: fill with a gradient across them instead
     let fill_red_iter = || repeat(RGB8::new(255, 0, 0));
     let fill_blue_iter = || repeat(RGB8::new(0, 0, 255));
 
@@ -262,13 +259,15 @@ async fn light_task(
 
     Timer::after_secs(1).await;
 
+    let gradient = MermaidGradient::default();
+
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
     // TODO: how many ticks per decay?
-    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y>::new();
+    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N>::new(gradient);
 
-    // TODO: what white point?
-    let mut left_color: Hsluv<MatrixWhitePoint, f32> = Hsluv::new(0.0, 100.0, 50.0);
-    let mut right_color: Hsluv<MatrixWhitePoint, f32> = Hsluv::new(180.0, 100.0, 50.0);
+    // TODO: how should we use frame_number to offset the animation?
+    // TODO: track framerate
+    let mut frame_number: usize = 0;
 
     loop {
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
@@ -276,20 +275,22 @@ async fn light_task(
 
         dancing_lights.update(loudness);
 
-        let left_rgb = convert_color(left_color);
-        let right_rgb = convert_color(right_color);
+        // TODO: why do we need copied? can we avoid it?
+        let left_iter = dancing_lights.fbuf.iter().copied();
+        let right_iter = dancing_lights.fbuf.iter().copied();
 
-        let fill_left_f = led_left.write(color_corrected_matrix(repeat(left_rgb)));
-        let fill_right_f = led_right.write(color_corrected_matrix(repeat(right_rgb)));
+        // TODO: don't just repeat. use gradient instead!
+        let fill_left_f = led_left.write(color_corrected_matrix(left_iter));
+        let fill_right_f = led_right.write(color_corrected_matrix(right_iter));
 
         let (left, right) = join(fill_left_f, fill_right_f).await;
 
         left.unwrap();
         right.unwrap();
 
-        // TODO: how much should we shift? i think we want to do this differently. we want to use a gradient helper
-        left_color.shift_hue_assign(0.1);
-        right_color.shift_hue_assign(0.1);
+        frame_number += 1;
+
+        debug!("frame #{}", frame_number);
     }
 }
 
@@ -356,7 +357,7 @@ async fn main(spawner: Spawner) {
     let mic_rx = MIC_CHANNEL.receiver();
 
     // channel for FFT -> LEDs
-    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_X>, 16> =
+    static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16> =
         Channel::new();
     let loudness_tx = LOUDNESS_CHANNEL.sender();
     let loudness_rx = LOUDNESS_CHANNEL.receiver();
