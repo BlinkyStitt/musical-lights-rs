@@ -1,11 +1,10 @@
-use defmt::Format;
-
 #[allow(unused_imports)]
 use micromath::F32Ext;
 
 use super::amplitudes::{AggregatedAmplitudes, Amplitudes};
 
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct Decibels<const N: usize>(pub [f32; N]);
 
 impl<const B: usize> Decibels<B> {

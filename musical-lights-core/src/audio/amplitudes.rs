@@ -1,5 +1,3 @@
-// TODO: only import Format if defmt feature is enabled
-use defmt::Format;
 use microfft::real::{rfft_2048, rfft_512};
 
 use super::samples::WindowedSamples;
@@ -11,15 +9,18 @@ use micromath::F32Ext;
 /// IF N > S/2, there is an error
 /// If N == S/2, there is no aggregation
 /// If N < S/2,  there is aggregation
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct Amplitudes<const N: usize>(pub [f32; N]);
 
 /// this //could// re-use the Amplitudes struct, but a dedicated type makes sure we always use the right level of processing
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct WeightedAmplitudes<const N: usize>(pub [f32; N]);
 
 /// bin amounts summed in some way, probably exponentially
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
 
 pub trait AggregatedAmplitudesBuilder<const IN: usize> {

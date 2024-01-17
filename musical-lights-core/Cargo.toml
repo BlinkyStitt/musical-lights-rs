@@ -7,8 +7,9 @@ edition = "2021"
 circular-buffer = { version = "0.1.6", default-features = false }
 defmt = { version = "0.3.5", default-features = false }
 embedded-graphics-framebuf = "0.5.0"
+enterpolation = { version = "0.2.1", default-features = false, features = ["bspline"] }
 log = { version = "*", default-features = false, optional = true }
-microfft = { version = "0.5.1", default-features = false, features = ["size-2048"]}
+microfft = { version = "0.5.1", default-features = false, features = ["size-2048"] }
 micromath = "2.1.0"
 num-complex = { version = "0.4.4", default-features = false }
 palette = { version = "0.7.3", default-features = false }
@@ -30,5 +31,5 @@ ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "9
 # TODO: defmt should be optional. both defmt and log should be additive!
 
 default = ["libm"]
-libm = ["palette/libm"]
-std = ["log/std", "microfft/std", "num-complex/std", "palette/std"]
+libm = ["palette/libm", "enterpolation/libm"]
+std = ["log/std", "microfft/std", "num-complex/std", "palette/std", "enterpolation/std"]

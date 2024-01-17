@@ -1,10 +1,10 @@
-use defmt::Format;
-
 /// S = number of microphone samples
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct Samples<const S: usize>(pub [f32; S]);
 
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct WindowedSamples<const S: usize>(pub [f32; S]);
 
 impl<const S: usize> WindowedSamples<S> {

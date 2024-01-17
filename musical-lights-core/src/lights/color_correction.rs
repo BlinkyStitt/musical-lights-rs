@@ -2,7 +2,7 @@
 
 use core::{iter::Take, marker::PhantomData};
 
-use palette::{white_point, Hsluv, IntoColor, IsWithinBounds, Srgb};
+use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, Srgb};
 use smart_leds::{brightness as brightness_iter, gamma, Brightness, Gamma, RGB8};
 
 pub mod color_order {
@@ -61,8 +61,8 @@ where
     }
 }
 
-pub fn convert_color(color: Hsluv<white_point::D65, f32>) -> RGB8 {
-    let rgb: Srgb<f32> = color.into_color();
+pub fn convert_color(color: Hsluv<white_point::E, f32>) -> RGB8 {
+    let rgb: Srgb<f32> = color.adapt_into();
 
     debug_assert!(rgb.is_within_bounds());
 

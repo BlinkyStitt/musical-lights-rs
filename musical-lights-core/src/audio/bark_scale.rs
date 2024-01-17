@@ -1,14 +1,14 @@
 use crate::audio::bin_to_frequency;
 
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use defmt::Format;
 
 pub struct BarkScaleBuilder<const IN: usize> {
     map: [Option<usize>; IN],
 }
 
 /// TODO: should this be a trait instead?
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<24>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {

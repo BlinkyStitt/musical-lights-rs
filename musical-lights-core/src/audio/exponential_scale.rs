@@ -2,7 +2,6 @@
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
-use defmt::Format;
 
 #[allow(unused_imports)]
 use micromath::F32Ext;
@@ -12,7 +11,8 @@ pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
 }
 
 /// TODO: should this be a trait instead?
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", defmt::Format)]
 pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes<OUT>);
 
 /// bins in, bands/channels out
