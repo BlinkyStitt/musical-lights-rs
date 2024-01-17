@@ -89,24 +89,26 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             *channel = scaled.max((*channel).saturating_sub(1));
 
             // // TODO: draw to fbuf here
-            // let inside_n = xy_to_n(0, y, X);
+            let inside_n = xy_to_n(0, y, X);
 
-            // let color = self.fbuf[inside_n];
+            let color = self.fbuf[inside_n];
 
-            // for x in 1..(X - 1) {
-            //     let n = xy_to_n(x, y, X);
+            // just the inner ring
+            for x in 1..(X - 1) {
+                let n = xy_to_n(x, y, X);
 
-            //     // TODO: do different things based on if it went up or down or stayed the same
-            //     if x == *channel as usize && x > last as usize {
-            //         // if it went up, top should be white
-            //         // TODO: silver instead?
-            //         self.fbuf[n] = WHITE;
-            //     } else if x <= *channel as usize {
-            //         self.fbuf[n] = color;
-            //     } else {
-            //         self.fbuf[n] = BLACK;
-            //     }
-            // }
+                if x == *channel as usize && x > last as usize {
+                    // if it went up, do something special. maybe just bump the brightness instead of going full white
+                    // TODO: silver? white?
+                    self.fbuf[n] = color;
+                } else if x <= *channel as usize {
+                    self.fbuf[n] = color;
+                } else {
+                    // make sure they are off
+                    // TODO: this could probably be skipped. probably better to dim instead of turn it off entireley
+                    self.fbuf[n] = BLACK;
+                }
+            }
         }
 
         info!("channels: {:?}", self.channels);
