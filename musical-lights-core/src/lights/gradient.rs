@@ -65,7 +65,7 @@ impl MermaidGradient {
             ))
             .0;
 
-        // TODO: do we want linear srgb? i think so, but not sure
+        // TODO: do we want linear srgb or not? i think so, but not sure
         // TODO: handle gamma and brightness where? both smart-leds and palette have code for it
         let srgb: LinSrgb = hsluv.adapt_into();
 

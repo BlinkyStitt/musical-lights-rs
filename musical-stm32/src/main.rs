@@ -32,14 +32,15 @@ use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
-const FFT_INPUTS: usize = 1024;
-const FFT_OUTPUTS: usize = 512;
+const FFT_INPUTS: usize = 2048;
 const MATRIX_X: usize = 8;
 const MATRIX_Y: usize = 32;
 
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
+/// TODO: i don't think the micro controller actually samples this fast! we need a dedicated chip
 const SAMPLE_RATE: f32 = 44_100.0;
 
+const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 const MATRIX_N: usize = MATRIX_X * MATRIX_Y;
 
 const MATRIX_BUFFER: usize = MATRIX_N * 12;
@@ -290,7 +291,7 @@ async fn light_task(
 
         frame_number += 1;
 
-        debug!("frame #{}", frame_number);
+        trace!("frame #{}", frame_number);
     }
 }
 

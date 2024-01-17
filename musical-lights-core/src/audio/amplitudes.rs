@@ -1,7 +1,3 @@
-use microfft::real::{rfft_2048, rfft_512};
-
-use super::samples::WindowedSamples;
-
 #[allow(unused_imports)]
 use micromath::F32Ext;
 

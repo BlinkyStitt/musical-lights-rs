@@ -72,9 +72,11 @@ macro_rules! impl_fft {
             pub fn fft_windowed_samples(x: WindowedSamples<$in_size>) -> Self {
                 let mut fft_input = x.0;
 
-                // Use the provided FFT function
                 let fft_output = $fft_func(&mut fft_input);
 
+                // TODO: i think we want to ignore the first bin entirely
+                // fft_output[0].re = 0.0;
+                // TODO: document why we do this. something about this having the max amplitude and being a DC offset?
                 fft_output[0].im = 0.0;
 
                 let mut amplitudes: [f32; { $in_size / 2 }] = [0.0; { $in_size / 2 }];
