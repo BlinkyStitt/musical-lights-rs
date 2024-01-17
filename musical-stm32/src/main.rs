@@ -32,8 +32,8 @@ use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
-const FFT_INPUTS: usize = 2048;
-const FFT_OUTPUTS: usize = 1024;
+const FFT_INPUTS: usize = 1024;
+const FFT_OUTPUTS: usize = 512;
 const MATRIX_X: usize = 8;
 const MATRIX_Y: usize = 32;
 
