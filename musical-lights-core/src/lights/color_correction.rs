@@ -1,6 +1,5 @@
 //! TODO: `brightness_video` and `gamma_video` that doesn't dim lower than 1
 
-use crate::logging::debug;
 use core::{iter::Take, marker::PhantomData};
 use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, LinSrgb};
 use smart_leds::{brightness as brightness_iter, gamma, Brightness, Gamma, RGB8};
@@ -70,7 +69,11 @@ pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
 
     let rgb: LinSrgb<u8> = rgb.into_format();
 
-    debug!("{:?} -> {:?}", color, rgb);
+    // // TODO: how to debug log the hue?
+    // debug!(
+    //     "{} {} {} -> {} {} {}",
+    //     color.hue.0, color.saturation, color.l, rgb.red, rgb.green, rgb.blue,
+    // );
 
     rgb.into_components()
 }
