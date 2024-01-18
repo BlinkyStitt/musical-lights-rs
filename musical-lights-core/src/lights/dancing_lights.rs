@@ -1,11 +1,13 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
+
 use super::MermaidGradient;
 use crate::audio::ExponentialScaleAmplitudes;
-use crate::lights::xy_to_n;
+use crate::lights::{Layout, SnakeXY};
 use crate::logging::{info, trace};
 
 #[allow(unused_imports)]
 use micromath::F32Ext;
+use smart_leds::colors::{BLACK, SILVER};
 use smart_leds::RGB8;
 
 /// TODO: this is probably going to be refactored several times
@@ -22,7 +24,8 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
     /// let mut dancing_lights = DancingLights::new(&mut data);
     /// ```
     /// TODO: generic gradient
-    pub fn new(gradient: MermaidGradient) -> Self {
+    /// TODO: generic layout
+    pub fn new(gradient: MermaidGradient<Y>) -> Self {
         // TODO: compile time assert
         debug_assert_eq!(X * Y, N);
 
@@ -32,21 +35,20 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         for y in 0..Y {
             // TODO: something is wrong with this gradient code. it always gives nearly off numbers
-            let (r, g, b) = gradient.get(y, Y);
-
-            let r = 255;
+            let rgb_color = gradient.colors[y];
 
             // TODO: handle different layouts
-            let inside = xy_to_n(0, y, X);
-            let outside = xy_to_n(X - 1, y, X);
+            let inside = SnakeXY::xy_to_n(0, y, X);
+            let outside = SnakeXY::xy_to_n(X - 1, y, X);
 
-            info!("{} ({}): {} {} {}", y, inside, r, g, b);
-
-            let rgb = (r, g, b).into();
+            info!(
+                "{} ({}): {} {} {}",
+                y, inside, rgb_color.r, rgb_color.g, rgb_color.b
+            );
 
             // TODO: fill top and bottom LED for the row
-            fbuf[inside] = rgb;
-            fbuf[outside] = rgb;
+            fbuf[inside] = rgb_color;
+            fbuf[outside] = rgb_color;
         }
 
         // TODO: get rid of channels. just use the fbuf
@@ -68,9 +70,6 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             max = max.max(loudness);
         }
 
-        const WHITE: RGB8 = RGB8::new(255, 255, 255);
-        const BLACK: RGB8 = RGB8::new(0, 0, 0);
-
         for (y, (&loudness, channel)) in loudness
             .0
              .0
@@ -89,18 +88,17 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             *channel = scaled.max((*channel).saturating_sub(1));
 
             // // TODO: draw to fbuf here
-            let inside_n = xy_to_n(0, y, X);
+            let inside_n = SnakeXY::xy_to_n(0, y, X);
 
             let color = self.fbuf[inside_n];
 
             // just the inner ring
             for x in 1..(X - 1) {
-                let n = xy_to_n(x, y, X);
+                let n = SnakeXY::xy_to_n(x, y, X);
 
                 if x == *channel as usize && x > last as usize {
-                    // if it went up, do something special. maybe just bump the brightness instead of going full white
-                    // TODO: silver? white?
-                    self.fbuf[n] = color;
+                    // if it went up, do something special. maybe just bump the brightness instead of going full silver
+                    self.fbuf[n] = SILVER;
                 } else if x <= *channel as usize {
                     self.fbuf[n] = color;
                 } else {

@@ -1,8 +1,8 @@
 //! TODO: `brightness_video` and `gamma_video` that doesn't dim lower than 1
 
+use crate::logging::debug;
 use core::{iter::Take, marker::PhantomData};
-
-use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, Srgb};
+use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, LinSrgb};
 use smart_leds::{brightness as brightness_iter, gamma, Brightness, Gamma, RGB8};
 
 pub mod color_order {
@@ -62,12 +62,15 @@ where
 }
 
 /// TODO: generic whitepoint
+/// TODO: linear srgb or no? i have no idea what i am doing
 pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
-    let rgb: Srgb<f32> = color.adapt_into();
+    let rgb: LinSrgb<f32> = color.adapt_into();
 
     debug_assert!(rgb.is_within_bounds());
 
-    let rgb: Srgb<u8> = rgb.into_format();
+    let rgb: LinSrgb<u8> = rgb.into_format();
+
+    debug!("{:?} -> {:?}", color, rgb);
 
     rgb.into_components()
 }

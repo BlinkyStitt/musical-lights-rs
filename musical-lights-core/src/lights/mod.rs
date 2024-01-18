@@ -11,4 +11,4 @@ mod visualizer;
 pub use color_correction::{color_correction, color_order, convert_color, ColorCorrection};
 pub use dancing_lights::DancingLights;
 pub use gradient::MermaidGradient;
-pub use matrix::{n_to_xy, xy_to_n};
+pub use matrix::{Layout, SimpleXY, SnakeXY};

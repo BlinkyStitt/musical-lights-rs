@@ -18,8 +18,9 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::lights::MermaidGradient;
-use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights};
+use musical_lights_core::lights::{
+    color_correction, color_order::GRB, DancingLights, MermaidGradient, SnakeXY,
+};
 use musical_lights_core::{
     audio::{
         AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
@@ -278,6 +279,8 @@ async fn light_task(
 
         // TODO: why do we need copied? can we avoid it?
         let left_iter = dancing_lights.fbuf.iter().copied();
+
+        // TODO: flip the x axis
         let right_iter = dancing_lights.fbuf.iter().copied();
 
         // TODO: don't just repeat. use gradient instead!
