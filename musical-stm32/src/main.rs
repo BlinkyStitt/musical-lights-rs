@@ -29,6 +29,7 @@ use musical_lights_core::{
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
+use smart_leds::colors::{BLUE, RED};
 use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -244,12 +245,12 @@ async fn light_task(
     left.unwrap();
     right.unwrap();
 
-    Timer::after_secs(2).await;
+    Timer::after_secs(1).await;
 
     // fill one panel with red and the other with blue
     // TODO: fill with a gradient across them instead
-    let fill_red_iter = || repeat(RGB8::new(255, 0, 0));
-    let fill_blue_iter = || repeat(RGB8::new(0, 0, 255));
+    let fill_red_iter = || repeat(RED);
+    let fill_blue_iter = || repeat(BLUE);
 
     let fill_left_f = led_left.write(color_corrected_matrix(fill_red_iter()));
     let fill_right_f = led_right.write(color_corrected_matrix(fill_blue_iter()));

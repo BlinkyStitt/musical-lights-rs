@@ -78,7 +78,7 @@ impl<const N: usize> MermaidGradient<N> {
 /// TODO: return traits to make this easier to change
 type MermaidSpline = BSpline<
     BorderBuffer<Equidistant<f32>>,
-    [CustomColor<Hsluv<white_point::E>>; 5],
+    [CustomColor<Hsluv<white_point::E>>; 4],
     enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 4>,
 >;
 
@@ -102,16 +102,13 @@ fn mermaid_spline() -> MermaidSpline {
     // generate #5D79F7
     let crayola_blue: CustomColor<_> = Hsluv::new(261.5, 93.8, 54.8).into();
 
-    // generate #A6A6A6
-    let silver: CustomColor<_> = Hsluv::new(0.0, 0.0, 68.1).into();
-
     // generate #27B26E
     let jade: CustomColor<_> = Hsluv::new(142.2, 93.3, 64.5).into();
 
     // we want to use a bspline with degree 3
     BSpline::builder()
         .clamped()
-        .elements([cobalt_blue, slate_blue, crayola_blue, silver, jade])
+        .elements([cobalt_blue, slate_blue, crayola_blue, jade])
         .equidistant::<f32>()
         .degree(3)
         .normalized()
