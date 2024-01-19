@@ -2,7 +2,7 @@ use enterpolation::{
     bspline::{BSpline, BorderBuffer},
     Curve, Equidistant, Merge,
 };
-use palette::{white_point, Hsl, Hsluv, LinSrgb, Mix};
+use palette::{white_point, Hsluv, Mix};
 use smart_leds::{colors::BLACK, RGB8};
 
 use super::convert_color;
@@ -97,6 +97,7 @@ fn mermaid_spline() -> MermaidSpline {
     let jade: CustomColor<_> = Hsluv::new(142.2, 93.3, 64.5).into();
 
     // we want to use a bspline with degree 3
+    // TODO: more jade
     BSpline::builder()
         .clamped()
         .elements([cobalt_blue, slate_blue, crayola_blue, jade])
@@ -108,51 +109,15 @@ fn mermaid_spline() -> MermaidSpline {
         .expect("As the curve is hardcoded, this should always work")
 }
 
-type ExampleSpline = BSpline<
-    BorderBuffer<Equidistant<f32>>,
-    [CustomColor<Hsl<palette::rgb::Rgb<palette::encoding::Linear<palette::encoding::Srgb>>>>; 5],
-    enterpolation::ConstSpace<
-        CustomColor<Hsl<palette::rgb::Rgb<palette::encoding::Linear<palette::encoding::Srgb>>>>,
-        4,
-    >,
->;
-
-/// TODO: return using Traits
-fn example_spline() -> ExampleSpline {
-    //generate #1f005c
-    let navy: CustomColor<_> = Hsl::<LinSrgb>::new(260.0, 1.0, 18.0).into();
-    // generate #8c00a0
-    let magenta: CustomColor<_> = Hsl::new(292.0, 1.0, 31.4).into();
-    // generate #e30084
-    let pink: CustomColor<_> = Hsl::new(325.0, 1.0, 44.5).into();
-    // generate #ff2830
-    let red: CustomColor<_> = Hsl::new(358.0, 1.0, 57.8).into();
-    // generate #ffb56b
-    let sandy: CustomColor<_> = Hsl::new(30.0, 1.0, 71.0).into();
-    // we want to use a bspline with degree 3
-    BSpline::builder()
-        .clamped()
-        .elements([navy, magenta, pink, red, sandy])
-        .equidistant::<f32>()
-        .degree(3)
-        .normalized()
-        .constant::<4>()
-        .build()
-        .expect("As the curve is hardcoded, this should always work")
-}
-
 /// Map t in range [a, b] to range [c, d]
+/// TODO: remap for u8 and u16
 pub fn remap(t: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
     (t - a) * ((d - c) / (b - a)) + c
 }
 
 #[cfg(test)]
 mod tests {
-    use super::example_spline;
-    use crate::{
-        lights::{convert_color, gradient::mermaid_spline},
-        logging::info,
-    };
+    use crate::lights::{convert_color, gradient::mermaid_spline};
     use enterpolation::Curve;
 
     #[test_log::test]
@@ -161,17 +126,6 @@ mod tests {
 
         for hsluv in spline.take(8).map(|x| x.0) {
             convert_color(hsluv);
-        }
-
-        todo!("actually assert things");
-    }
-
-    #[test_log::test]
-    fn test_example_spline() {
-        let spline = example_spline();
-
-        for hsluv in spline.take(5).map(|x| x.0) {
-            info!("{:?} -> ???", hsluv);
         }
 
         todo!("actually assert things");

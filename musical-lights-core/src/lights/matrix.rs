@@ -3,6 +3,12 @@ pub struct SnakeXY;
 
 pub trait Layout {
     fn n_to_xy(n: usize, width: usize) -> (usize, usize);
+
+    fn n_to_flipped_x_and_y(n: usize, width: usize) -> (usize, usize) {
+        let (x, y) = Self::n_to_xy(n, width);
+        (width - 1 - x, y)
+    }
+
     fn xy_to_n(x: usize, y: usize, width: usize) -> usize;
 }
 

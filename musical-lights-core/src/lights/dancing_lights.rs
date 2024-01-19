@@ -1,5 +1,4 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
-
 use super::Gradient;
 use crate::audio::ExponentialScaleAmplitudes;
 use crate::lights::gradient::remap;
@@ -109,10 +108,11 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             // *channel = scaled.max((*channel).saturating_sub(1));
             *channel = scaled;
 
-            let inside_n = SnakeXY::xy_to_n(0, y, X);
+            // get the index of the first pixel of the row. this always has the color we want
+            let bottom_n = SnakeXY::xy_to_n(0, y, X);
 
             // get the color for this frequency. this was set when self was created
-            let color = self.fbuf[inside_n];
+            let color = self.fbuf[bottom_n];
 
             // just the middle pixels. the edges are left always lit
             for x in 1..(X - 1) {
@@ -132,6 +132,22 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         }
 
         info!("channels: {:?}", self.channels);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &RGB8> {
+        // TODO: store as SimpleXY and then convert inside `iter` and `iter_flipped_x`?
+        // the fbuf is already laid out as SnakeXY.
+        self.fbuf.iter()
+    }
+
+    pub fn iter_flipped_x(&self) -> impl Iterator<Item = &RGB8> {
+        (0..N).map(move |n| {
+            let (flipped_x, y) = SnakeXY::n_to_flipped_x_and_y(n, X);
+
+            let flipped_n = SnakeXY::xy_to_n(flipped_x, y, X);
+
+            &self.fbuf[flipped_n]
+        })
     }
 }
 

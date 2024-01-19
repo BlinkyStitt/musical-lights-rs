@@ -17,6 +17,7 @@ use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
+use itertools::repeat_n;
 use micromath::F32Ext;
 use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights, Gradient};
 use musical_lights_core::{
@@ -27,7 +28,7 @@ use musical_lights_core::{
     logging::{debug, info, trace},
     windows::HanningWindow,
 };
-use smart_leds::colors::{BLUE, RED};
+use smart_leds::colors::{BLACK, BLUE, RED};
 use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -231,7 +232,8 @@ async fn light_task(
         TEST_PATTERN
             .iter()
             .copied()
-            .chain(repeat(fill_color))
+            .chain(repeat_n(fill_color, MATRIX_X * 2))
+            .chain(repeat(BLACK))
             .take(MATRIX_N)
     };
 
@@ -250,7 +252,7 @@ async fn light_task(
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
     // TODO: how many ticks per decay?
-    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N>::new(gradient, 0.97);
+    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N>::new(gradient, 0.975);
 
     // TODO: how should we use frame_number to offset the animation?
     // TODO: track framerate
@@ -263,10 +265,9 @@ async fn light_task(
         dancing_lights.update(loudness);
 
         // TODO: why do we need copied? can we avoid it?
-        let left_iter = dancing_lights.fbuf.iter().copied();
+        let left_iter = dancing_lights.iter_flipped_x().copied();
 
-        // TODO: flip the x axis
-        let right_iter = dancing_lights.fbuf.iter().copied();
+        let right_iter = dancing_lights.iter().copied();
 
         // TODO: don't just repeat. use gradient instead!
         let fill_left_f = led_left.write(color_corrected_matrix(left_iter));
