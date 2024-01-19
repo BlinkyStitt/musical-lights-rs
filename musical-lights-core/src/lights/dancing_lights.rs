@@ -16,8 +16,10 @@ pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
     channels: [u8; Y],
     /// TODO: use a framebuf crate that supports DMA and drawing fonts and such
     pub fbuf: [RGB8; N],
-    /// recent maximum loudness. decays slowly
+    /// recent maximum loudness. decays over time
     pub peak_max: f32,
+    /// how fast to decay peak_max
+    pub decay_alpha: f32,
 }
 
 /// TODO: macro for all the different inverts
@@ -28,7 +30,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
     /// ```
     /// TODO: generic gradient
     /// TODO: generic layout
-    pub fn new(gradient: Gradient<Y>) -> Self {
+    pub fn new(gradient: Gradient<Y>, peak_decay: f32) -> Self {
         // TODO: compile time assert
         debug_assert_eq!(X * Y, N);
 
@@ -59,14 +61,19 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         let peak_max = 0.1;
 
+        // TODO: error for nonsense peak_decay
+
+        let decay_alpha = peak_decay;
+
         Self {
             channels,
             fbuf,
             peak_max,
+            decay_alpha,
         }
     }
 
-    pub fn update(&mut self, loudness: ExponentialScaleAmplitudes<Y>) {
+    pub fn update(&mut self, mut loudness: ExponentialScaleAmplitudes<Y>) {
         trace!("{:?}", loudness);
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
@@ -74,12 +81,15 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         let mut current_max = 0.1f32;
 
         // TODO: .0.0 is weird. loudness should be Iter
-        for loudness in loudness.0 .0.iter().copied() {
-            current_max = current_max.max(loudness);
+        for loudness in loudness.0 .0.iter_mut() {
+            // // TODO: convert loudness to decibels?
+            // *loudness = 20.0 * (*loudness).log10();
+
+            current_max = current_max.max(*loudness);
         }
 
         // TODO: decay how fast?
-        let decayed_peak = self.peak_max * 0.98;
+        let decayed_peak = self.peak_max * self.decay_alpha;
 
         self.peak_max = current_max.max(decayed_peak);
 

@@ -250,7 +250,7 @@ async fn light_task(
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
     // TODO: how many ticks per decay?
-    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N>::new(gradient);
+    let mut dancing_lights = DancingLights::<MATRIX_X, MATRIX_Y, MATRIX_N>::new(gradient, 0.97);
 
     // TODO: how should we use frame_number to offset the animation?
     // TODO: track framerate
