@@ -97,7 +97,7 @@ fn mermaid_spline() -> MermaidSpline {
     let jade: CustomColor<_> = Hsluv::new(142.2, 93.3, 64.5).into();
 
     // we want to use a bspline with degree 3
-    // TODO: more jade
+    // TODO: more jade, but it doesn't wrap well (goes to close to black)
     BSpline::builder()
         .clamped()
         .elements([cobalt_blue, slate_blue, crayola_blue, jade])

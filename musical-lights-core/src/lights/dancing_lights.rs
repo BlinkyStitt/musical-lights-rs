@@ -134,17 +134,27 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         info!("channels: {:?}", self.channels);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &RGB8> {
+    pub fn iter(&self, y_offset: usize) -> impl Iterator<Item = &RGB8> {
         // TODO: store as SimpleXY and then convert inside `iter` and `iter_flipped_x`?
         // the fbuf is already laid out as SnakeXY.
-        self.fbuf.iter()
+        (0..N).map(move |n| {
+            let (x, y) = SnakeXY::n_to_xy(n, X);
+
+            let offset_y = (y + y_offset) % Y;
+
+            let flipped_n = SnakeXY::xy_to_n(x, offset_y, X);
+
+            &self.fbuf[flipped_n]
+        })
     }
 
-    pub fn iter_flipped_x(&self) -> impl Iterator<Item = &RGB8> {
+    pub fn iter_flipped_x(&self, y_offset: usize) -> impl Iterator<Item = &RGB8> {
         (0..N).map(move |n| {
             let (flipped_x, y) = SnakeXY::n_to_flipped_x_and_y(n, X);
 
-            let flipped_n = SnakeXY::xy_to_n(flipped_x, y, X);
+            let offset_y = (y + y_offset) % Y;
+
+            let flipped_n = SnakeXY::xy_to_n(flipped_x, offset_y, X);
 
             &self.fbuf[flipped_n]
         })

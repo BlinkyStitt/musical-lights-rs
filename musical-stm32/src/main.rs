@@ -138,9 +138,9 @@ async fn fft_task(
         _,
     >(equal_loudness_weighting);
 
-    // TODO: figure out why 20-500 are too low
+    // TODO: figure out why 20-400 are too low. probably a weighting too strong and sample rate not being perfect
     let scale_builder =
-        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(500.0, 19_000.0, SAMPLE_RATE);
+        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(400.0, 18_000.0, SAMPLE_RATE);
 
     loop {
         let sample = mic_rx.receive().await;
@@ -251,6 +251,7 @@ async fn light_task(
     // TODO: how should we use frame_number to offset the animation?
     // TODO: track framerate
     let mut frame_number: usize = 0;
+    let y_offset = 0;
 
     loop {
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
@@ -258,9 +259,12 @@ async fn light_task(
 
         dancing_lights.update(loudness);
 
+        // TODO: how fast should we scroll? we used to do this based off time, not frame count.
+        // y_offset = frame_number / 8;
+
         // TODO: why do we need copied? can we avoid it?
-        let left_iter = dancing_lights.iter_flipped_x().copied();
-        let right_iter = dancing_lights.iter().copied();
+        let left_iter = dancing_lights.iter_flipped_x(y_offset).copied();
+        let right_iter = dancing_lights.iter(y_offset).copied();
 
         // TODO: don't just repeat. use gradient instead!
         let fill_left_f = led_left.write(color_corrected_matrix(left_iter));
