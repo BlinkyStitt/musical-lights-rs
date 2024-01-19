@@ -71,7 +71,7 @@ async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0) {
         // TODO: figure out what below is right and what is wrong
         // TODO: scale 0-4095 to millivolts. use vref to get rid of any bias. subcract dc offset. convert to float for the fft. fft wants 0 centered data
 
-        // max voltage should be ~2. subtract 1 to 0 center. to make fft happy
+        // max voltage should be ~2.  to make fft happy, subtract 1 to 0 center.
         let sample_mv = sample as f32 / full_range * VREF_CALIB_V - MIC_DC_OFFSET_V - 1000.0;
 
         // let sample_mv = (sample as u32 * VREFINT_VALUE / vref as u32) * VREF_CALIB_MV / full_range;

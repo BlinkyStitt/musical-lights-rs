@@ -1,7 +1,8 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
 
-use super::MermaidGradient;
+use super::Gradient;
 use crate::audio::ExponentialScaleAmplitudes;
+use crate::lights::gradient::remap;
 use crate::lights::{Layout, SnakeXY};
 use crate::logging::{info, trace};
 
@@ -15,6 +16,8 @@ pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
     channels: [u8; Y],
     /// TODO: use a framebuf crate that supports DMA and drawing fonts and such
     pub fbuf: [RGB8; N],
+    /// recent maximum loudness. decays slowly
+    pub peak_max: f32,
 }
 
 /// TODO: macro for all the different inverts
@@ -25,7 +28,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
     /// ```
     /// TODO: generic gradient
     /// TODO: generic layout
-    pub fn new(gradient: MermaidGradient<Y>) -> Self {
+    pub fn new(gradient: Gradient<Y>) -> Self {
         // TODO: compile time assert
         debug_assert_eq!(X * Y, N);
 
@@ -54,21 +57,31 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         // TODO: get rid of channels. just use the fbuf
         let channels = [0; Y];
 
-        Self { channels, fbuf }
+        let peak_max = 0.1;
+
+        Self {
+            channels,
+            fbuf,
+            peak_max,
+        }
     }
 
     pub fn update(&mut self, loudness: ExponentialScaleAmplitudes<Y>) {
         trace!("{:?}", loudness);
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
-        let mut min = f32::MAX;
-        let mut max = f32::MIN;
+        // TODO: what default?
+        let mut current_max = 0.1f32;
 
         // TODO: .0.0 is weird. loudness should be Iter
-        for &loudness in loudness.0 .0.iter() {
-            min = min.min(loudness);
-            max = max.max(loudness);
+        for loudness in loudness.0 .0.iter().copied() {
+            current_max = current_max.max(loudness);
         }
+
+        // TODO: decay how fast?
+        let decayed_peak = self.peak_max * 0.98;
+
+        self.peak_max = current_max.max(decayed_peak);
 
         for (y, (&loudness, channel)) in loudness
             .0
@@ -77,22 +90,21 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             .zip(self.channels.iter_mut())
             .enumerate()
         {
-            // TODO: use remap helper function
-            let scaled = (loudness - min) / (max - min) * (X - 1) as f32;
-
-            let scaled = scaled.round() as u8;
+            // TODO: log scale?
+            let scaled = remap(loudness, 0.0, self.peak_max, 0.0, (X - 2) as f32).round() as u8;
 
             let last = *channel;
 
             // TODO: decay even slower. keep track of a last time we updated each channel and only decay if it's been long enough to prevent epilepsy
-            *channel = scaled.max((*channel).saturating_sub(1));
+            // *channel = scaled.max((*channel).saturating_sub(1));
+            *channel = scaled;
 
-            // // TODO: draw to fbuf here
             let inside_n = SnakeXY::xy_to_n(0, y, X);
 
+            // get the color for this frequency. this was set when self was created
             let color = self.fbuf[inside_n];
 
-            // just the inner ring
+            // just the middle pixels. the edges are left always lit
             for x in 1..(X - 1) {
                 let n = SnakeXY::xy_to_n(x, y, X);
 

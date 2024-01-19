@@ -60,7 +60,7 @@ where
     }
 }
 
-/// TODO: generic whitepoint
+/// TODO: generic input color (and whitepoint)
 /// TODO: linear srgb or no? i have no idea what i am doing
 pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
     let rgb: LinSrgb<f32> = color.adapt_into();

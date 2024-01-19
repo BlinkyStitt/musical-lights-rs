@@ -18,9 +18,7 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
 use micromath::F32Ext;
-use musical_lights_core::lights::{
-    color_correction, color_order::GRB, DancingLights, MermaidGradient, SnakeXY,
-};
+use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
         AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
@@ -229,16 +227,17 @@ async fn light_task(
         RGB8::new(255, 255, 255),
     ];
 
-    let test_iter = || {
+    let test_iter = |fill_color: RGB8| {
         TEST_PATTERN
             .iter()
             .copied()
-            .chain(blank_iter())
+            .chain(repeat(fill_color))
             .take(MATRIX_N)
     };
 
-    let test_left_f = led_left.write(color_corrected_matrix(test_iter()));
-    let test_right_f = led_right.write(color_corrected_matrix(test_iter()));
+    // do a test pattern and then fill one panel with red and the other with blue. this makes it easy to tell if they got plugged in correctly
+    let test_left_f = led_left.write(color_corrected_matrix(test_iter(BLUE)));
+    let test_right_f = led_right.write(color_corrected_matrix(test_iter(RED)));
 
     let (left, right) = join(test_left_f, test_right_f).await;
 
@@ -247,22 +246,7 @@ async fn light_task(
 
     Timer::after_secs(1).await;
 
-    // fill one panel with red and the other with blue
-    // TODO: fill with a gradient across them instead
-    let fill_red_iter = || repeat(RED);
-    let fill_blue_iter = || repeat(BLUE);
-
-    let fill_left_f = led_left.write(color_corrected_matrix(fill_red_iter()));
-    let fill_right_f = led_right.write(color_corrected_matrix(fill_blue_iter()));
-
-    let (left, right) = join(fill_left_f, fill_right_f).await;
-
-    left.unwrap();
-    right.unwrap();
-
-    Timer::after_secs(1).await;
-
-    let gradient = MermaidGradient::default();
+    let gradient = Gradient::new_mermaid();
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
     // TODO: how many ticks per decay?

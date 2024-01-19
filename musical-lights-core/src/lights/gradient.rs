@@ -25,37 +25,28 @@ impl<C: Mix<Scalar = f32>> Merge<f32> for CustomColor<C> {
     }
 }
 
-pub struct MermaidGradient<const N: usize> {
+pub struct Gradient<const N: usize> {
     /// TODO: colors should probably be hsluv and convert later. then its easier to modify brightness and shift the color. but this is easier for now
     pub colors: [RGB8; N],
-    pub domain_min: f32,
-    pub domain_max: f32,
 }
 
-impl<const N: usize> Default for MermaidGradient<N> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<const N: usize> MermaidGradient<N> {
-    pub fn new() -> Self {
-        let spline = mermaid_spline();
-        let [domain_min, domain_max] = spline.domain();
-
+impl<const N: usize> Gradient<N> {
+    pub fn new(iter: impl Iterator<Item = RGB8>) -> Self {
         let mut colors = [BLACK; N];
 
-        let color_iter = spline.take(N).map(|x| x.0);
-
-        for (x, hsluv) in colors.iter_mut().zip(color_iter) {
-            *x = convert_color(hsluv).into()
+        for (x, color) in colors.iter_mut().zip(iter) {
+            *x = color
         }
 
-        Self {
-            colors,
-            domain_min,
-            domain_max,
-        }
+        Self { colors }
+    }
+
+    pub fn new_mermaid() -> Self {
+        let spline = mermaid_spline();
+
+        let color_iter = spline.take(N).map(|x| convert_color(x.0).into());
+
+        Self::new(color_iter)
     }
 
     // /// TODO: i don't think this is right. need to read more examples and write some tests
