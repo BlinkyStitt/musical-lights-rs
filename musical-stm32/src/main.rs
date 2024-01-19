@@ -140,7 +140,10 @@ async fn fft_task(
 
     // TODO: figure out why 20-400 are too low. probably a weighting too strong and sample rate not being perfect
     let scale_builder =
-        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(400.0, 18_000.0, SAMPLE_RATE);
+        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(400.0, 17_500.0, SAMPLE_RATE);
+
+    // TODO: make this work again
+    // let scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
 
     loop {
         let sample = mic_rx.receive().await;
