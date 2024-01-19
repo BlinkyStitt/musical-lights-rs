@@ -195,20 +195,7 @@ async fn light_task(
     let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
     let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
 
-    // blank the leds
-    let blank_iter = || repeat(RGB8::new(0, 0, 0));
-
-    let blank_left_f = led_left.write(color_corrected_matrix(blank_iter()));
-    let blank_right_f = led_right.write(color_corrected_matrix(blank_iter()));
-
-    let (left, right) = join(blank_left_f, blank_right_f).await;
-
-    left.unwrap();
-    right.unwrap();
-
-    Timer::after_millis(100).await;
-
-    // do a test pattern that makes it easy to tell if RGB is set up correctly
+    // do a test pattern that makes it easy to tell if RGB is set up correctly and the panels on are on the correct sides
     const TEST_PATTERN: [RGB8; 16] = [
         RGB8::new(255, 0, 0),
         RGB8::new(0, 255, 0),
@@ -246,7 +233,7 @@ async fn light_task(
     left.unwrap();
     right.unwrap();
 
-    Timer::after_secs(1).await;
+    Timer::after_secs(2).await;
 
     let gradient = Gradient::new_mermaid();
 
