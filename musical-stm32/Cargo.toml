@@ -1,6 +1,6 @@
 [package]
 name = "musical-stm32"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Bryan Stitt <bryan@stitthappens.com>"]
 description = "Musical Lights for STM32"
 repository = "https://github.com/WyseNynja/musical-lights-rs"

@@ -11,7 +11,6 @@ use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
 use embassy_stm32::peripherals::{
     ADC1, DMA1_CH3, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
 };
-use embassy_stm32::rcc::{Hse, HseMode, Sysclk};
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
 use embassy_stm32::wdg::IndependentWatchdog;
@@ -302,18 +301,15 @@ async fn watchdog_task(mut wdg: IndependentWatchdog<'static, IWDG>) {
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // default clocks: 0.000000 DEBUG rcc: Clocks { sys: Hertz(16000000), pclk1: Hertz(16000000), pclk1_tim: Hertz(16000000), pclk2: Hertz(16000000), pclk2_tim: Hertz(16000000), hclk1: Hertz(16000000), hclk2: Hertz(16000000), hclk3: Hertz(16000000), plli2s1_q: None, plli2s1_r: None, pll1_q: None, rtc: Some(Hertz(32000)) }
-    // // TODO: i think we might want non-default clocks. this board is simlar <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs>
-    // let mut peripheral_config = Config::default();
+    let peripheral_config = Config::default();
+    // TODO: configure system clock to be faster
+    // TODO: configure adc to be faster, too
+    // TODO: this board is simlar <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs>, but our board works differently
     // config.rcc.sysclk = Some(mhz(64));
     // config.rcc.hclk = Some(mhz(64));
     // config.rcc.pclk1 = Some(mhz(32));
     // config.rcc.pclk2 = Some(mhz(64));
     // config.rcc.adc = Some(AdcClockSource::Pll(Adcpres::DIV1));
-
-    let mut peripheral_config = Config::default();
-
-    // TODO: configure system clock to be faster
-    // TODO: configure adc to be faster, too
 
     let p = embassy_stm32::init(peripheral_config);
 
