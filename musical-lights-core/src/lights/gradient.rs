@@ -109,12 +109,6 @@ fn mermaid_spline() -> MermaidSpline {
         .expect("As the curve is hardcoded, this should always work")
 }
 
-/// Map t in range [a, b] to range [c, d]
-/// TODO: remap for u8 and u16
-pub fn remap(t: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
-    (t - a) * ((d - c) / (b - a)) + c
-}
-
 #[cfg(test)]
 mod tests {
     use crate::lights::{convert_color, gradient::mermaid_spline};

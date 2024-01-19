@@ -22,10 +22,11 @@ use micromath::F32Ext;
 use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
+        AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
         ExponentialScaleBuilder, FFT,
     },
     logging::{debug, info, trace},
+    remap,
     windows::HanningWindow,
 };
 use smart_leds::colors::{BLACK, BLUE, RED};
@@ -38,7 +39,7 @@ const MATRIX_X: usize = 8;
 const MATRIX_Y: usize = 32;
 
 /// oh. this is why they packed it in the first Complex. Because it's helpful to keep connected to the samples
-/// TODO: i don't think the micro controller actually samples this fast! we need a dedicated chip
+/// TODO: i don't think the micro controller actually samples this fast! we need a dedicated chip. we also need to time it!
 const SAMPLE_RATE: f32 = 44_100.0;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
@@ -58,7 +59,7 @@ pub async fn blink_task(mut led: Output<'static, AnyPin>) {
 
         info!("low");
         led.set_low();
-        Timer::after_millis(1000).await;
+        Timer::after_millis(5000).await;
     }
 }
 
@@ -66,7 +67,7 @@ pub async fn blink_task(mut led: Output<'static, AnyPin>) {
 async fn mic_task(
     mic_adc: ADC1,
     mut mic_pin: PA0,
-    tx: Sender<'static, ThreadModeRawMutex, f32, 16>,
+    tx: Sender<'static, ThreadModeRawMutex, f32, MIC_SAMPLES>,
     // vref_nominal: u16,
     // vrefint_calibrated: u16,
 ) {
@@ -78,11 +79,9 @@ async fn mic_task(
 
     let range = 2.0f32.powi(adc_resolution) - 1.0;
 
-    let half_range = range / 2.0 + 1.0;
-
     // 100 mHz processor
     // TODO: how long should we sample?
-    adc.set_sample_time(SampleTime::Cycles144);
+    adc.set_sample_time(SampleTime::Cycles3);
     // TODO: impl From<u8> for Resolution? or maybe have "bits" and "range" functions on Resolution
     adc.set_resolution(embassy_stm32::adc::Resolution::TwelveBit);
 
@@ -102,38 +101,46 @@ async fn mic_task(
 
         let sample = adc.read(&mut mic_pin);
 
-        trace!("mic u16: {}", sample);
+        // trace!("mic u16: {}", sample);
 
         // scale 0-4095 to millivolts
         // TODO: is this right?
         // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
 
-        // 0-centered
-        let sample = (sample as f32 - half_range) / half_range;
+        // 0-centered. i don't think is totally correct. we shlould be converting to voltage
+        let sample = remap(sample as f32, 0.0, range, -1.0, 1.0);
 
-        trace!("mic f32: {}", sample);
+        // trace!("mic f32: {}", sample);
 
         tx.send(sample).await;
 
         // TODO: how accurate is this timer? we would probably do better with a smarter cheap and reading samples over i2s or spi
         // 44.1kHz = 22,676 nanoseconds
+        // TODO: maybe we should do a blocking delay and then a yield every 512 samples? this needs to be accurate or the frequencies won't be correct
         Timer::after_nanos(22_676).await;
     }
 }
 
 #[embassy_executor::task]
 async fn fft_task(
-    mic_rx: Receiver<'static, ThreadModeRawMutex, f32, 16>,
+    mic_rx: Receiver<'static, ThreadModeRawMutex, f32, MIC_SAMPLES>,
     loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
     let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
 
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
-        FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(SAMPLE_RATE);
+    // TODO: i need custom weighting. the microphone dynamic gain might not work well with this
+    let equal_loudness_weighting = AWeighting::new(SAMPLE_RATE);
+    // let equal_loudness_weighting = FlatWeighting;
 
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::new_with_window_and_weighting::<
+        HanningWindow<FFT_INPUTS>,
+        _,
+    >(equal_loudness_weighting);
+
+    // TODO: figure out why 20-500 are too low
     let scale_builder =
-        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(20.0, 19_000.0, SAMPLE_RATE);
+        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(500.0, 19_000.0, SAMPLE_RATE);
 
     loop {
         let sample = mic_rx.receive().await;
@@ -253,7 +260,6 @@ async fn light_task(
 
         // TODO: why do we need copied? can we avoid it?
         let left_iter = dancing_lights.iter_flipped_x().copied();
-
         let right_iter = dancing_lights.iter().copied();
 
         // TODO: don't just repeat. use gradient instead!
@@ -329,11 +335,13 @@ async fn main(spawner: Spawner) {
     // TODO: pin_alias?
 
     // channel for mic samples -> FFT
-    static MIC_CHANNEL: Channel<ThreadModeRawMutex, f32, 16> = Channel::new();
+    // TODO: what size channel? need to measure high water mark
+    static MIC_CHANNEL: Channel<ThreadModeRawMutex, f32, 512> = Channel::new();
     let mic_tx = MIC_CHANNEL.sender();
     let mic_rx = MIC_CHANNEL.receiver();
 
     // channel for FFT -> LEDs
+    // TODO: what size channel? need to measure high water mark
     static LOUDNESS_CHANNEL: Channel<ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16> =
         Channel::new();
     let loudness_tx = LOUDNESS_CHANNEL.sender();

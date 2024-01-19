@@ -1,9 +1,11 @@
 use super::{
     amplitudes::WeightedAmplitudes,
     samples::{Samples, WindowedSamples},
+    weighting::Weighting,
+    FlatWeighting,
 };
-use crate::audio::amplitudes::Amplitudes;
 use crate::logging::trace;
+use crate::{audio::amplitudes::Amplitudes, windows::Window};
 
 use microfft::real::{rfft_1024, rfft_2048, rfft_512};
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
@@ -29,6 +31,28 @@ impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
             window_multipliers,
             equal_loudness_curve,
         }
+    }
+
+    pub fn new_with_window<WI: Window<IN>>() -> Self {
+        let weighting = FlatWeighting;
+
+        Self::new_with_window_and_weighting::<WI, _>(weighting)
+    }
+
+    pub fn new_with_window_and_weighting<WI: Window<IN>, WE: Weighting<OUT>>(
+        weighting: WE,
+    ) -> Self {
+        let window_multipliers = WI::windows();
+
+        let window_scaling = WI::scaling();
+
+        let mut equal_loudness_curve = weighting.curve();
+
+        for x in equal_loudness_curve.iter_mut() {
+            *x *= window_scaling;
+        }
+
+        Self::new(window_multipliers, equal_loudness_curve)
     }
 }
 

@@ -1,9 +1,9 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
 use super::Gradient;
 use crate::audio::ExponentialScaleAmplitudes;
-use crate::lights::gradient::remap;
 use crate::lights::{Layout, SnakeXY};
 use crate::logging::{info, trace};
+use crate::remap;
 
 #[allow(unused_imports)]
 use micromath::F32Ext;

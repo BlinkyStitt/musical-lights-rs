@@ -1,31 +1,24 @@
-use crate::{
-    audio::{bin_to_frequency, FFT},
-    logging::debug,
-    windows::Window,
-};
+use crate::audio::bin_to_frequency;
 
 use micromath::F32Ext;
 
-impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
-    /// TODO: use a trait just like we do for the window
-    pub fn a_weighting<W: Window<IN>>(sample_rate_hz: f32) -> Self {
-        let window_multipliers = W::windows();
+use super::Weighting;
 
-        let window_scaling = W::scaling();
+pub struct AWeighting<const N: usize> {
+    sample_rate_hz: f32,
+}
 
-        let mut equal_loudness_curve = [1.0; OUT];
-        for (i, x) in equal_loudness_curve.iter_mut().enumerate() {
-            // TODO: bin_to_frequency is used twice. should we take it as an input instead of sample_rate_hz?
-            let f = bin_to_frequency(i, sample_rate_hz, OUT);
+impl<const N: usize> AWeighting<N> {
+    pub fn new(sample_rate_hz: f32) -> Self {
+        Self { sample_rate_hz }
+    }
+}
 
-            let b = a_weighting(f) * window_scaling;
+impl<const N: usize> Weighting<N> for AWeighting<N> {
+    fn weight(&self, i: usize) -> f32 {
+        let f = bin_to_frequency(i, self.sample_rate_hz, N);
 
-            debug!("{} {} = {:?}", i, f, b);
-
-            *x = b;
-        }
-
-        Self::new(window_multipliers, equal_loudness_curve)
+        a_weighting(f)
     }
 }
 
