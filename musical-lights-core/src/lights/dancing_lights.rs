@@ -2,7 +2,7 @@
 use super::Gradient;
 use crate::audio::ExponentialScaleAmplitudes;
 use crate::lights::{Layout, SnakeXY};
-use crate::logging::{info, trace};
+use crate::logging::{debug, info, trace};
 use crate::remap;
 
 #[allow(unused_imports)]
@@ -131,7 +131,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             }
         }
 
-        info!("channels: {:?}", self.channels);
+        debug!("channels: {:?}", self.channels);
     }
 
     pub fn iter(&self, y_offset: usize) -> impl Iterator<Item = &RGB8> {

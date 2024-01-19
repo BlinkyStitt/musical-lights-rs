@@ -11,9 +11,11 @@ use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
 use embassy_stm32::peripherals::{
     ADC1, DMA1_CH3, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
 };
+use embassy_stm32::rcc::{Hse, HseMode, Sysclk};
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
 use embassy_stm32::wdg::IndependentWatchdog;
+use embassy_stm32::Config;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::{Delay, Timer};
@@ -53,11 +55,11 @@ const MATRIX_BUFFER: usize = MATRIX_N * 12;
 #[embassy_executor::task]
 pub async fn blink_task(mut led: Output<'static, AnyPin>) {
     loop {
-        info!("high");
+        debug!("high");
         led.set_high();
         Timer::after_millis(1000).await;
 
-        info!("low");
+        debug!("low");
         led.set_low();
         Timer::after_millis(5000).await;
     }
@@ -104,7 +106,7 @@ async fn mic_task(
         // trace!("mic u16: {}", sample);
 
         // scale 0-4095 to millivolts
-        // TODO: is this right?
+        // TODO: is this right? it worked on the discovery board, but .value() isn't available on the blackpill
         // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
 
         // 0-centered. i don't think is totally correct. we shlould be converting to voltage
@@ -149,7 +151,7 @@ async fn fft_task(
         let sample = mic_rx.receive().await;
 
         // let millivolts = convert_to_millivolts(sample, vrefint_sample);
-        // info!("mic: {} mV", millivolts);
+        // trace!("mic: {} mV", millivolts);
 
         if audio_buffer.push_sample(sample) {
             // every `MIC_SAMPLES` samples (probably 512), do an FFT
@@ -299,14 +301,19 @@ async fn watchdog_task(mut wdg: IndependentWatchdog<'static, IWDG>) {
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    // // TODO: i think we might want non-default clocks: https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs
-    // let mut config = Config::default();
+    // default clocks: 0.000000 DEBUG rcc: Clocks { sys: Hertz(16000000), pclk1: Hertz(16000000), pclk1_tim: Hertz(16000000), pclk2: Hertz(16000000), pclk2_tim: Hertz(16000000), hclk1: Hertz(16000000), hclk2: Hertz(16000000), hclk3: Hertz(16000000), plli2s1_q: None, plli2s1_r: None, pll1_q: None, rtc: Some(Hertz(32000)) }
+    // // TODO: i think we might want non-default clocks. this board is simlar <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs>
+    // let mut peripheral_config = Config::default();
     // config.rcc.sysclk = Some(mhz(64));
     // config.rcc.hclk = Some(mhz(64));
     // config.rcc.pclk1 = Some(mhz(32));
     // config.rcc.pclk2 = Some(mhz(64));
     // config.rcc.adc = Some(AdcClockSource::Pll(Adcpres::DIV1));
-    let peripheral_config = Default::default();
+
+    let mut peripheral_config = Config::default();
+
+    // TODO: configure system clock to be faster
+    // TODO: configure adc to be faster, too
 
     let p = embassy_stm32::init(peripheral_config);
 
