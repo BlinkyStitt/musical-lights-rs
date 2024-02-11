@@ -4,7 +4,6 @@ mod audio;
 
 use audio::MicrophoneStream;
 use embassy_executor::Spawner;
-use embassy_time::Timer;
 use musical_lights_core::{
     audio::{
         AWeighting, AggregatedAmplitudes, AggregatedAmplitudesBuilder, AudioBuffer,
@@ -92,7 +91,7 @@ async fn main(spawner: Spawner) {
     let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
 
     // TODO: have multiple scales and compare them. is "scale" the right term?
-    let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
+    // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
     // TODO: I'm never seeing anything in bucket 0
     let equal_tempered_scale_builder = ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
 

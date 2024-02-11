@@ -26,7 +26,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         );
 
         // always skip the very first bin. it is too noisy
-        let min_bin = frequency_to_bin(min_freq, sample_rate_hz, IN).max(1);
+        let min_bin = frequency_to_bin(min_freq, sample_rate_hz, IN);
 
         // TODO: off by 1?
         let max_bin = frequency_to_bin(max_freq, sample_rate_hz, IN) + 1;
