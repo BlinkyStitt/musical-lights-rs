@@ -7,8 +7,8 @@ use embassy_executor::Spawner;
 use embassy_time::Timer;
 use musical_lights_core::{
     audio::{
-        AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes,
-        BarkScaleBuilder, FFT,
+        AWeighting, AggregatedAmplitudes, AggregatedAmplitudesBuilder, AudioBuffer,
+        ExponentialScaleBuilder, FFT,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -18,17 +18,9 @@ use std::env;
 
 const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
-const NUM_CHANNELS: usize = 24;
+const NUM_CHANNELS: usize = 120;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
-
-#[embassy_executor::task]
-async fn tick_task() {
-    loop {
-        info!("tick");
-        Timer::after_secs(1).await;
-    }
-}
 
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
 #[embassy_executor::task]
@@ -36,8 +28,8 @@ async fn audio_task(
     mic_stream: MicrophoneStream,
     mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS>,
     fft: FFT<FFT_INPUTS, FFT_OUTPUTS>,
-    bark_scale_builder: BarkScaleBuilder<FFT_OUTPUTS>,
-    tx_loudness: flume::Sender<BarkScaleAmplitudes>,
+    scale_builder: ExponentialScaleBuilder<FFT_OUTPUTS, NUM_CHANNELS>,
+    tx_loudness: flume::Sender<AggregatedAmplitudes<NUM_CHANNELS>>,
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
         audio_buffer.push_samples(samples);
@@ -46,7 +38,7 @@ async fn audio_task(
 
         let amplitudes = fft.weighted_amplitudes(samples);
 
-        let loudness = bark_scale_builder.build(amplitudes);
+        let loudness = scale_builder.build(amplitudes).0;
 
         // TODO: shazam
         // TODO: beat detection
@@ -59,7 +51,7 @@ async fn audio_task(
 }
 
 #[embassy_executor::task]
-async fn lights_task(rx_loudness: flume::Receiver<BarkScaleAmplitudes>) {
+async fn lights_task(rx_loudness: flume::Receiver<AggregatedAmplitudes<NUM_CHANNELS>>) {
     // TODO: what should these be?
     let gradient = Gradient::new_mermaid();
     let peak_decay = 0.99;
@@ -69,7 +61,7 @@ async fn lights_task(rx_loudness: flume::Receiver<BarkScaleAmplitudes>) {
 
     // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple channels
     while let Ok(loudness) = rx_loudness.recv_async().await {
-        dancing_lights.update(loudness.0);
+        dancing_lights.update(loudness);
     }
 }
 
@@ -99,15 +91,16 @@ async fn main(spawner: Spawner) {
 
     let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
 
-    // TODO: have multiple scales and compare them
+    // TODO: have multiple scales and compare them. is "scale" the right term?
     let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
+    // TODO: I'm never seeing anything in bucket 0
+    let equal_tempered_scale_builder = ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
 
-    spawner.must_spawn(tick_task());
     spawner.must_spawn(audio_task(
         mic_stream,
         audio_buffer,
         fft,
-        bark_scale_builder,
+        equal_tempered_scale_builder,
         loudness_tx,
     ));
     spawner.must_spawn(lights_task(loudness_rx));
