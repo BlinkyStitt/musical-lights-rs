@@ -86,6 +86,7 @@ async fn main(spawner: Spawner) {
 
     let sample_rate = mic_stream.sample_rate.0 as f32;
 
+    // TODO: a-weighting probably isn't what we want. also, our microphone frequency response is definitely not flat
     let weighting = AWeighting::new(sample_rate);
 
     let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
