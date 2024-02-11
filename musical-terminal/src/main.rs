@@ -6,8 +6,11 @@ use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use musical_lights_core::{
-    audio::{AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes, BarkScaleBuilder, FFT},
-    lights::DancingLights,
+    audio::{
+        AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleAmplitudes,
+        BarkScaleBuilder, FFT,
+    },
+    lights::{DancingLights, Gradient},
     logging::{debug, info},
     windows::HanningWindow,
 };
@@ -57,11 +60,16 @@ async fn audio_task(
 
 #[embassy_executor::task]
 async fn lights_task(rx_loudness: flume::Receiver<BarkScaleAmplitudes>) {
-    let mut dancing_lights = DancingLights::<NUM_CHANNELS>::new();
+    // TODO: what should these be?
+    let gradient = Gradient::new_mermaid();
+    let peak_decay = 0.99;
+
+    let mut dancing_lights =
+        DancingLights::<8, NUM_CHANNELS, { 8 * NUM_CHANNELS }>::new(gradient, peak_decay);
 
     // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple channels
     while let Ok(loudness) = rx_loudness.recv_async().await {
-        dancing_lights.update(loudness);
+        dancing_lights.update(loudness.0);
     }
 }
 
@@ -85,9 +93,14 @@ async fn main(spawner: Spawner) {
 
     let audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
 
-    let fft = FFT::a_weighting::<HanningWindow<FFT_INPUTS>>(mic_stream.sample_rate.0);
+    let sample_rate = mic_stream.sample_rate.0 as f32;
 
-    let bark_scale_builder = BarkScaleBuilder::new(mic_stream.sample_rate.0);
+    let weighting = AWeighting::new(sample_rate);
+
+    let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
+
+    // TODO: have multiple scales and compare them
+    let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
 
     spawner.must_spawn(tick_task());
     spawner.must_spawn(audio_task(

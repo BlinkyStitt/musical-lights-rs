@@ -15,7 +15,7 @@ embassy-time = { version = "0.2.0", features = ["log", "std"] }
 env_logger = "0.10.1"
 flume = "0.11.0"
 log = { version = "0.4.20", features = ["std"] }
-musical-lights-core = { path = "../musical-lights-core", features = ["std"] }
+musical-lights-core = { path = "../musical-lights-core", features = ["std", "log"] }
 
 [patch.crates-io]
 embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }

@@ -139,9 +139,9 @@ async fn fft_task(
         _,
     >(equal_loudness_weighting);
 
-    // TODO: figure out why 20-400 are too low. probably a weighting too strong and sample rate not being perfect
+    // TODO: figure out why 20-400 are too low. probably a weighting too strong and adc timings/sample rate not being correct
     let scale_builder =
-        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(400.0, 17_500.0, SAMPLE_RATE);
+        ExponentialScaleBuilder::<FFT_OUTPUTS, MATRIX_Y>::new(80.0, 10_000.0, SAMPLE_RATE);
 
     // TODO: make this work again
     // let scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
@@ -261,7 +261,7 @@ async fn light_task(
         // TODO: i want to draw with a framerate, but we draw every time we receive. think about this more
         let loudness = loudness_rx.receive().await;
 
-        dancing_lights.update(loudness);
+        dancing_lights.update(loudness.0);
 
         // TODO: how fast should we scroll? we used to do this based off time, not frame count.
         // y_offset = frame_number / 8;

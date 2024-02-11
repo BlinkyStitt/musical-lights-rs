@@ -2,6 +2,8 @@
 //!
 //! Samples -> Buffer -> Window -> FFT -> Amplitudes -> WeightedAmplitudes -> AggregatedAmplitudes -> Decibels/PeakScaled
 //!                                                                           (Bark, Shazam, etc.)
+//!
+//! TODO: bucket by note
 mod amplitudes;
 mod bark_scale;
 mod buffer;

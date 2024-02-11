@@ -1,6 +1,6 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
 use super::Gradient;
-use crate::audio::ExponentialScaleAmplitudes;
+use crate::audio::AggregatedAmplitudes;
 use crate::lights::{Layout, SnakeXY};
 use crate::logging::{debug, info, trace};
 use crate::remap;
@@ -23,12 +23,6 @@ pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
 
 /// TODO: macro for all the different inverts
 impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
-    /// ```
-    /// let mut data = DancingLights::new_buffer();
-    /// let mut dancing_lights = DancingLights::new(&mut data);
-    /// ```
-    /// TODO: generic gradient
-    /// TODO: generic layout
     pub fn new(gradient: Gradient<Y>, peak_decay: f32) -> Self {
         // TODO: compile time assert
         debug_assert_eq!(X * Y, N);
@@ -43,7 +37,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
             // TODO: handle different layouts
             let inside = SnakeXY::xy_to_n(0, y, X);
-            let outside = SnakeXY::xy_to_n(X - 1, y, X);
+            // let outside = SnakeXY::xy_to_n(X - 1, y, X);
 
             info!(
                 "{} ({}): {} {} {}",
@@ -52,7 +46,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
             // TODO: fill top and bottom LED for the row
             fbuf[inside] = rgb_color;
-            fbuf[outside] = rgb_color;
+            // fbuf[outside] = rgb_color;
         }
 
         // TODO: get rid of channels. just use the fbuf
@@ -72,7 +66,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         }
     }
 
-    pub fn update(&mut self, mut loudness: ExponentialScaleAmplitudes<Y>) {
+    pub fn update(&mut self, mut loudness: AggregatedAmplitudes<Y>) {
         trace!("{:?}", loudness);
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
@@ -80,7 +74,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         let mut current_max = 0.1f32;
 
         // TODO: .0.0 is weird. loudness should be Iter
-        for loudness in loudness.0 .0.iter_mut() {
+        for loudness in loudness.0.iter_mut() {
             // // TODO: convert loudness to decibels?
             // *loudness = 20.0 * (*loudness).log10();
 
@@ -92,15 +86,17 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         self.peak_max = current_max.max(decayed_peak);
 
-        for (y, (&loudness, channel)) in loudness
-            .0
-             .0
-            .iter()
-            .zip(self.channels.iter_mut())
-            .enumerate()
+        // this needs to be atleast one because thats how i currently store the color. that won't work if we change it to zoom into part of the spectrum
+        const BOTTOM_BORDER: usize = 1;
+        const TOP_BORDER: usize = 0;
+
+        const BORDERS: usize = BOTTOM_BORDER + TOP_BORDER;
+
+        for (y, (&loudness, channel)) in loudness.0.iter().zip(self.channels.iter_mut()).enumerate()
         {
             // TODO: log scale?
-            let scaled = remap(loudness, 0.0, self.peak_max, 0.0, (X - 2) as f32).round() as u8;
+            let scaled =
+                remap(loudness, 0.0, self.peak_max, 0.0, (X - BORDERS) as f32).round() as u8;
 
             let last = *channel;
 
@@ -115,7 +111,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             let color = self.fbuf[bottom_n];
 
             // just the middle pixels. the edges are left always lit
-            for x in 1..(X - 1) {
+            for x in BOTTOM_BORDER..(X - TOP_BORDER) {
                 let n = SnakeXY::xy_to_n(x, y, X);
 
                 if x == *channel as usize && x > last as usize {

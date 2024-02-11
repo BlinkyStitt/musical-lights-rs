@@ -49,6 +49,10 @@ impl<const N: usize> Gradient<N> {
         Self::new(color_iter)
     }
 
+    pub fn new_rainbow() -> Self {
+        todo!();
+    }
+
     // /// TODO: i don't think this is right. need to read more examples and write some tests
     // pub fn get(&self, n: usize, width: usize) -> (u8, u8, u8) {
     //     let hsluv = self
