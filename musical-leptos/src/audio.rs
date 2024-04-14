@@ -1,0 +1,144 @@
+//! TODO: refactor this to use the types in microphone.rs
+
+use cpal::{
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+    SampleRate, Stream,
+};
+use leptos::*;
+use musical_lights_core::audio::Samples;
+use musical_lights_core::logging::{error, info, trace};
+use wasm_bindgen::{closure::Closure, JsValue};
+use web_sys::MediaStreamConstraints;
+
+// i wanted this to be generic, but that's making things complicated
+const SAMPLES: usize = 512;
+
+/// TODO: i think this should be a trait
+pub struct MicrophoneStream {
+    pub sample_rate: SampleRate,
+    pub stream: flume::Receiver<Samples<SAMPLES>>,
+
+    /// TODO: i think dropping this stops recording
+    _stream: Stream,
+}
+
+impl MicrophoneStream {
+    // TODO: what should the error type be?
+    pub fn try_new() -> Result<Self, String> {
+        let host = cpal::default_host();
+
+        // TODO: let the user pick?
+        // TODO: host.input_devices()?.find(|x| x.name().map(|y| y == opt.device).unwrap_or(false))
+        let device = host
+            .default_input_device()
+            .expect("Failed to get default input device");
+
+        let config = device.default_input_config().unwrap();
+
+        let err_fn = move |err| {
+            error!("an error occurred on stream: {:?}", err);
+        };
+
+        // samples per second
+        let sample_rate = config.sample_rate();
+        info!("sample rate = {}", sample_rate.0);
+
+        let buffer_size = config.buffer_size();
+        info!("buffer size = {:?}", buffer_size);
+
+        // TODO: what capacity channel? i think we want to discard old samples if we are lagging, so probably a watch
+        let (tx, rx) = flume::bounded(2);
+
+        let stream = match config.sample_format() {
+            // cpal::SampleFormat::I8 => device.build_input_stream(
+            //     &config.into(),
+            //     err_fn,
+            //     None,
+            // )?,
+            // cpal::SampleFormat::I16 => device.build_input_stream(
+            //     &config.into(),
+            //     move |data, _: &_| write_input_data::<i16>(data, &audio_processing),
+            //     err_fn,
+            //     None,
+            // )?,
+            // cpal::SampleFormat::I32 => device.build_input_stream(
+            //     &config.into(),
+            //     move |data, _: &_| write_input_data::<i32>(data, &audio_processing),
+            //     err_fn,
+            //     None,
+            // )?,
+            cpal::SampleFormat::F32 => device
+                .build_input_stream(
+                    &config.into(),
+                    move |data, _: &_| Self::send_mic_data(data, &tx),
+                    err_fn,
+                    None,
+                )
+                .map_err(|err| format!("{}", err))?,
+            sample_format => return Err("Unsupported sample format '{sample_format}'".to_string()),
+        };
+
+        stream.play().unwrap();
+
+        Ok(Self {
+            _stream: stream,
+            sample_rate,
+            stream: rx,
+        })
+    }
+
+    fn send_mic_data(samples: &[f32], tx: &flume::Sender<Samples<SAMPLES>>) {
+        trace!("heard {} samples", samples.len());
+
+        debug_assert_eq!(samples.len(), SAMPLES);
+
+        let samples: [f32; SAMPLES] = samples[..SAMPLES].try_into().unwrap();
+
+        tx.send(Samples(samples)).unwrap();
+
+        trace!("sent {} samples", samples.len());
+    }
+}
+
+/// Prompt the user for their microphone
+#[component]
+pub fn Microphone() -> impl IntoView {
+    let navigator = window().navigator();
+
+    let mut constraints = MediaStreamConstraints::new();
+    constraints.audio(&JsValue::from(true));
+
+    // TODO: this promise stuff doesn't feel right. move it to an async function
+    let promise = navigator
+        .media_devices()
+        .unwrap()
+        .get_user_media_with_constraints(&constraints)
+        .unwrap();
+
+    let (stream, set_stream) = create_signal("".to_string());
+
+    // Use `Closure` to handle the promise
+    let on_success = Closure::wrap(Box::new(move |stream: JsValue| {
+        // Handle success; stream is the MediaStream
+        info!("Success: {:?}", &stream);
+
+        // TODO: turn this into something?
+        set_stream(format!("{:?}", stream));
+    }) as Box<dyn FnMut(JsValue)>);
+
+    let on_error = Closure::wrap(Box::new(|error: JsValue| {
+        // Handle error
+        error!("{:?}", &error);
+
+        // TODO: what should we do with the error?
+    }) as Box<dyn FnMut(JsValue)>);
+
+    let promise = promise.then2(&on_success, &on_error);
+
+    // Prevent closures from being garbage collected
+    // TODO: this is blindly copied from ChatGPT
+    on_success.forget();
+    on_error.forget();
+
+    view! { <div>{stream}</div> }
+}
