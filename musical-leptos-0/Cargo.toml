@@ -1,0 +1,46 @@
+# <https://github.com/RustAudio/cpal/wiki/Setting-up-a-new-CPAL-WASM-project>
+
+[package]
+name = "musical-leptos"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+musical-lights-core = { path = "../musical-lights-core", features=["log"] }
+
+console_log = "1"
+cpal = { version = "0.15", features = ["wasm-bindgen"] }
+flume = "0.11.0"
+leptos = { version = "0.6.11", features = ["csr", "nightly"] }
+log = "0.4"
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so it's optional.
+console_error_panic_hook = { version = "0.1.5", optional = true }
+
+# The `wasm-bindgen` crate provides the bare minimum functionality needed
+# to interact with JavaScript.
+wasm-bindgen = "0.2.45"
+
+# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
+# compared to the default allocator's ~10K. However, it is slower than the default
+# allocator, so it's not enabled by default.
+# TODO: i'm not sure if we need this, but its part of the cpal example
+wee_alloc = { version = "0.4.2", optional = true }
+wasm-bindgen-futures = "0.4.42"
+
+# The `web-sys` crate allows you to interact with the various browser APIs,
+# like the DOM.
+[dependencies.web-sys]
+version = "0.3.22"
+features = ["console", "AudioContext", "MediaDevices", "MediaStream", "MediaStreamConstraints", "Navigator"]
+
+[profile.release]
+codegen-units = 1
+lto = true
