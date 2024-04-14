@@ -8,6 +8,7 @@ members = [
 
 exclude = [
     "musical-feather-m0",
+    "musical-leptos",
     "musical-stm32",
     "musical-terminal",
 ]
