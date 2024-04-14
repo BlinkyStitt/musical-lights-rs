@@ -127,6 +127,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             }
         }
 
+        // TODO: pretty print this
         debug!("channels: {:?}", self.channels);
     }
 
