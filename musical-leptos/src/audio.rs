@@ -7,8 +7,8 @@ use cpal::{
 use leptos::*;
 use musical_lights_core::audio::Samples;
 use musical_lights_core::logging::{error, info, trace};
-use wasm_bindgen::{closure::Closure, JsValue};
-use web_sys::MediaStreamConstraints;
+use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use web_sys::{MediaStream, MediaStreamConstraints};
 
 // i wanted this to be generic, but that's making things complicated
 const SAMPLES: usize = 512;
@@ -100,45 +100,36 @@ impl MicrophoneStream {
     }
 }
 
-/// Prompt the user for their microphone
-#[component]
-pub fn Microphone() -> impl IntoView {
+/// TODO: what type should we return on this?
+async fn load_media_stream() -> Result<MediaStream, JsValue> {
     let navigator = window().navigator();
 
     let mut constraints = MediaStreamConstraints::new();
     constraints.audio(&JsValue::from(true));
 
-    // TODO: this promise stuff doesn't feel right. move it to an async function
     let promise = navigator
         .media_devices()
         .unwrap()
         .get_user_media_with_constraints(&constraints)
         .unwrap();
 
-    let (stream, set_stream) = create_signal("".to_string());
+    let f = wasm_bindgen_futures::JsFuture::from(promise);
 
-    // Use `Closure` to handle the promise
-    let on_success = Closure::wrap(Box::new(move |stream: JsValue| {
-        // Handle success; stream is the MediaStream
-        info!("Success: {:?}", &stream);
+    let stream: MediaStream = f.await?.unchecked_into();
 
-        // TODO: turn this into something?
-        set_stream(format!("{:?}", stream));
-    }) as Box<dyn FnMut(JsValue)>);
+    Ok(stream)
+}
 
-    let on_error = Closure::wrap(Box::new(|error: JsValue| {
-        // Handle error
-        error!("{:?}", &error);
+/// Prompt the user for their microphone
+#[component]
+pub fn Microphone() -> impl IntoView {
+    let once = create_resource(|| (), |_| async move {
+        load_media_stream().await.map(|x| format!("{:?}", x)).map_err(|x| format!("{:?}", x))
+    });
 
-        // TODO: what should we do with the error?
-    }) as Box<dyn FnMut(JsValue)>);
-
-    let promise = promise.then2(&on_success, &on_error);
-
-    // Prevent closures from being garbage collected
-    // TODO: this is blindly copied from ChatGPT
-    on_success.forget();
-    on_error.forget();
-
-    view! { <div>{stream}</div> }
+    {move || match once.get() {
+        None => view! { <div>"Waiting for Microphone..."</div> }.into_view(),
+        Some(Ok(data)) => view! { <div>{data}</div> }.into_view(),
+        Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
+    }}
 }
