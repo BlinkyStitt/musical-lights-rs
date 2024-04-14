@@ -134,6 +134,7 @@ async fn audio_task(
     scale_builder: ExponentialScaleBuilder<FFT_OUTPUTS, NUM_CHANNELS>,
     tx_loudness: flume::Sender<AggregatedAmplitudes<NUM_CHANNELS>>,
 ) {
+    // TODO: we could maybe use signals for this, but all our other code uses channels so thats a larger refactor
     while let Ok(samples) = mic_stream.stream.recv_async().await {
         audio_buffer.push_samples(samples);
 
@@ -153,6 +154,22 @@ async fn audio_task(
     info!("audio task complete");
 }
 
+async fn lights_task(rx_loudness: flume::Receiver<AggregatedAmplitudes<NUM_CHANNELS>>) {
+    // TODO: what should these be?
+    let gradient = Gradient::new_mermaid();
+    let peak_decay = 0.99;
+
+    let mut dancing_lights =
+        DancingLights::<8, NUM_CHANNELS, { 8 * NUM_CHANNELS }>::new(gradient, peak_decay);
+
+    // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple channels
+    while let Ok(loudness) = rx_loudness.recv_async().await {
+        dancing_lights.update(loudness);
+
+        todo!("do something with dancing_lights.iter(y_offset).copied();")
+    }
+}
+
 /// Prompt the user for their microphone
 #[component]
 pub fn DancingLights() -> impl IntoView {
@@ -163,44 +180,47 @@ pub fn DancingLights() -> impl IntoView {
 
             // TODO: set up more things here. i think we need to spawn a task for channels
 
-            // let (loudness_tx, loudness_rx) = flume::bounded(2);
+            info!("audio activated: {:?}", &media_stream);
 
-            let mic_stream = MicrophoneStream::try_new().unwrap();
+            let (tx_loudness, rx_loudness) = flume::bounded(2);
+
+            let mic_stream =
+                MicrophoneStream::try_new().expect("failed creating microphone stream");
 
             let audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
 
             let sample_rate = mic_stream.sample_rate.0 as f32;
 
             // TODO: a-weighting probably isn't what we want. also, our microphone frequency response is definitely not flat
-            // let weighting = AWeighting::new(sample_rate);
+            let weighting = AWeighting::new(sample_rate);
 
-            // let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
+            let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
 
             // TODO: have multiple scales and compare them. is "scale" the right term?
             // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
             // TODO: I'm never seeing anything in bucket 0
-            // let equal_tempered_scale_builder =
-            //     ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
+            let equal_tempered_scale_builder =
+                ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
 
-            // let audio_f = audio_task(
-            //     mic_stream,
-            //     audio_buffer,
-            //     fft,
-            //     equal_tempered_scale_builder,
-            //     loudness_tx,
-            // );
+            let audio_f = audio_task(
+                mic_stream,
+                audio_buffer,
+                fft,
+                equal_tempered_scale_builder,
+                tx_loudness,
+            );
 
-            // TODO: how do we spawn the audio task? in a worker?
+            let lights_f = lights_task(rx_loudness);
 
-            Ok::<_, String>(format!("under construction. {:?}", &media_stream))
+            // TODO: spawn a worker thread that selects between audio_f and lights_f
+
+            Ok::<_, String>(format!("{:?}", media_stream))
         },
     );
 
-    {
-        move || match once() {
-            None => view! { <div>"Waiting for Audio Input..."</div> }.into_view(),
-            Some(Ok(data)) => view! { <div>{data}</div> }.into_view(),
-            Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
-        }
+    move || match once() {
+        None => view! { <div>"Waiting for Audio Input..."</div> }.into_view(),
+        Some(Ok(data)) => view! { <div>{data}</div> }.into_view(),
+        Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
     }
 }
