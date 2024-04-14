@@ -50,7 +50,7 @@ where
 {
     type Item = RGB8;
 
-    /// https://github.com/smart-leds-rs/ws2812-spi-rs/issues/7
+    /// <https://github.com/smart-leds-rs/ws2812-spi-rs/issues/7>
     fn next(&mut self) -> Option<RGB8> {
         self.iter.next().map(|a| RGB8 {
             r: a.g,

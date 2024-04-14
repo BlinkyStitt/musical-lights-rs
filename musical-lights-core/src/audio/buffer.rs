@@ -41,7 +41,7 @@ impl<const S: usize, const BUF: usize> AudioBuffer<S, BUF> {
     }
 
     /// returns true if the buffer has been filled with enough values
-    /// WARNING! BE CAREFUL COMBINGING THIS WITH [push_samples]. its best to use one or the other or you might not get true/false when you expect!
+    /// WARNING! BE CAREFUL COMBINGING THIS WITH `push_samples`. its best to use one or the other or you might not get true/false when you expect!
     pub fn push_sample(&mut self, sample: f32) -> bool {
         self.count += 1;
 
