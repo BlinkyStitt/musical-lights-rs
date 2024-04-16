@@ -9,16 +9,19 @@ authors = ["Bryan Stitt <bryan@stitthappens.com>"]
 [dependencies]
 musical-lights-core = { path = "../musical-lights-core", features=["log"] }
 
-leptos = { version = "0.6", features = ["csr", "nightly"] }
-leptos_meta = { version = "0.6", features = ["csr", "nightly"] }
-leptos_router = { version = "0.6", features = ["csr", "nightly"] }
+console_error_panic_hook = "0.1"
 console_log = "1"
 cpal = { version = "0.15", features = ["wasm-bindgen"] }
 flume = "0.11.0"
+leptos = { version = "0.6", features = ["csr", "nightly"] }
+leptos_meta = { version = "0.6", features = ["csr", "nightly"] }
+leptos_router = { version = "0.6", features = ["csr", "nightly"] }
 log = "0.4"
-console_error_panic_hook = "0.1"
+wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.42"
-web-sys = { version = "0.3", features = ["console", "AudioContext", "Document", "MediaDevices", "MediaStream", "MediaStreamConstraints", "Navigator", "Window"] }
+web-sys = { version = "0.3", features = ["console", "AudioContext", "AudioDestinationNode", "AudioWorklet", "AudioWorkletNode", "AudioWorkletNodeOptions", "BlobPropertyBag", "Document", "MediaDevices", "MediaStream", "MediaStreamConstraints", "Navigator", "Window"] }
+js-sys = "0.3.69"
+terrors = "0.3.0"
 
 # utils
 # strum = { version = "0.25", features = ["derive", "strum_macros"] }
@@ -26,7 +29,6 @@ web-sys = { version = "0.3", features = ["console", "AudioContext", "Document", 
 
 
 [dev-dependencies]
-wasm-bindgen = "0.2"
 wasm-bindgen-test = "0.3"
 
 [profile.release]

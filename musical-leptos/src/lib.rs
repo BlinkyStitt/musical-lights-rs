@@ -2,9 +2,10 @@ use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
 
-// Modules
 mod components;
+mod dependent_module;
 mod pages;
+mod wasm_audio;
 
 // Top-Level pages
 use crate::pages::home::Home;
@@ -20,7 +21,7 @@ pub fn App() -> impl IntoView {
         <Html lang="en" dir="ltr" attr:data-theme="light"/>
 
         // sets the document title
-        <Title text="Welcome to Leptos CSR"/>
+        <Title text="Musical Leptos CSR"/>
 
         // injects metadata in the <head> of the page
         <Meta charset="UTF-8"/>

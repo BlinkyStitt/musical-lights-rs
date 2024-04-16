@@ -1067,11 +1067,13 @@ dependencies = [
  "console_log",
  "cpal",
  "flume",
+ "js-sys",
  "leptos",
  "leptos_meta",
  "leptos_router",
  "log",
  "musical-lights-core",
+ "terrors",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
@@ -1765,6 +1767,12 @@ dependencies = [
  "quote",
  "syn 2.0.41",
 ]
+
+[[package]]
+name = "terrors"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5cf7ea47fef0cef7fcdeea0fe2585c66f4334c0d0250a8e77d01a8a46d89fd6"
 
 [[package]]
 name = "thiserror"
