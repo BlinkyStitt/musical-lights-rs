@@ -1,4 +1,5 @@
 use js_sys::{Array, JsString};
+use log::info;
 use wasm_bindgen::prelude::*;
 use web_sys::{Blob, BlobPropertyBag, Url};
 
@@ -20,17 +21,18 @@ pub fn on_the_fly(code: &str) -> Result<String, JsValue> {
     // Generate the import of the bindgen ES module, assuming `--target web`.
 
     // TODO: get the EncoderDecoderTogether from <https://github.com/anonyco/FastestSmallestTextEncoderDecoder>.
-    // TODO: this is wrong. figure out how to do this correctly (Error: audio_ctx error: JsValue(SyntaxError: unexpected token: identifier ))
+    // TODO: this doesn't seem to work. we still get TextDecoder not found
     let header = format!(
-        "import {{TextEncoder, TextDecoder}} from '{}';\nimport init, * as bindgen from '{}';\n\n",
-        wasm_bindgen::link_to!(module = "/src/EncoderDecoderTogether.min.js"),
+        "{}\n\nimport init, * as bindgen from '{}';\n\n",
+        include_str!("./audio_polyfill.js"),
         IMPORT_META.url(),
     );
 
-    let header = format!(
-        "import init, * as bindgen from '{}';\n\n",
-        IMPORT_META.url(),
-    );
+    // // TODO: why doesn't the above polyfill work?!
+    // let header = format!(
+    //     "import init, * as bindgen from '{}';\n\n",
+    //     IMPORT_META.url(),
+    // );
 
     Url::create_object_url_with_blob(&Blob::new_with_str_sequence_and_options(
         &Array::of2(&JsValue::from(header.as_str()), &JsValue::from(code)),

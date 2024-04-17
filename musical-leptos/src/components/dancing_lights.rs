@@ -9,7 +9,7 @@ use musical_lights_core::{
     windows::HanningWindow,
 };
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::{AudioContext, MediaStream, MediaStreamConstraints};
+use web_sys::{AudioContext, HtmlAudioElement, MediaStream, MediaStreamConstraints};
 
 use crate::wasm_audio::wasm_audio;
 
@@ -41,39 +41,60 @@ async fn load_media_stream() -> Result<MediaStream, JsValue> {
 /// Prompt the user for their microphone
 #[component]
 pub fn DancingLights() -> impl IntoView {
-    let once = create_resource(
-        || (),
-        |_| async move {
-            let media_stream = load_media_stream()
-                .await
-                .map_err(|x| format!("media stream error: {:?}", x))?;
+    // TODO: do this on button click
+    let (listen, set_listen) = create_signal(0);
 
-            let media_stream_id = media_stream.id();
+    // TODO: this is wrong. this runs immediatly, not on first click. why?
+    let start_listening = create_resource(listen, |x| async move {
+        if x == 0 {
+            return Ok(None);
+        }
 
-            info!("active media stream: {:?}", media_stream_id);
+        let media_stream = load_media_stream()
+            .await
+            .map_err(|x| format!("media stream error: {:?}", x))?;
 
-            let audio_ctx = wasm_audio(Box::new(move |buf| {
+        let media_stream_id = media_stream.id();
+
+        info!("active media stream: {:?}", media_stream_id);
+
+        let audio_ctx = wasm_audio(
+            &media_stream,
+            Box::new(move |buf| {
                 // TODO: actually process it
                 info!("audio buffer: {:?}", buf);
                 true
-            }))
-            .await
-            .map_err(|x| format!("audio_ctx error: {:?}", x))?;
+            }),
+        )
+        .await
+        .map_err(|x| format!("audio_ctx error: {:?}", x))?;
 
-            info!("audio context: {:?}", audio_ctx);
+        info!("audio context: {:?}", audio_ctx);
 
-            // TODO: do we need this?
-            let promise = audio_ctx.resume().unwrap();
-            let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+        // TODO: do we need this?
+        let promise = audio_ctx.resume().unwrap();
+        let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
 
-            Ok::<_, String>(media_stream_id)
-        },
-    );
+        Ok::<_, String>(Some(media_stream_id))
+    });
 
-    // TODO: i think we have error handling elsewhere. use it
-    move || match once() {
-        None => view! { <div>"Waiting for Audio Input..."</div> }.into_view(),
-        Some(Ok(media_stream_id)) => view! { <div>{media_stream_id}</div> }.into_view(),
-        Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
+    view! {
+        // TODO: i think we have an error handler helper elsewhere
+        { move || match start_listening() {
+            None | Some(Ok(None)) => view! {
+                <button
+                    on:click= move |_| {
+                        set_listen(1)
+
+                        // TODO: hide this button?
+                    }
+                >
+                    Start Listening
+                </button>
+            }.into_view(),
+            Some(Ok(Some(media_stream_id))) => view! { <button>Now listening to {media_stream_id}</button> }.into_view(),
+            Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
+        }}
+
     }
 }
