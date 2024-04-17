@@ -55,7 +55,15 @@ To develop your Leptos CSR project, running
 trunk serve --port 3000 --open
 ```
 
-will open your app in your default browser at `http://localhost:3000`.
+will open your app in your default browser at <http://localhost:3000>.
+
+Or with SSL:
+
+```sh
+trunk serve --tls-key-path ./localhost.key --tls-cert-path localhost.crt --open --port 8080
+```
+
+will open your app in your default browser at <https://127.0.0.1:8080/>.
 
 
 ## Deploying your Leptos CSR project
