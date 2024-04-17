@@ -11,7 +11,6 @@ musical-lights-core = { path = "../musical-lights-core", features=["log"] }
 
 console_error_panic_hook = "0.1"
 console_log = "1"
-cpal = { version = "0.15", features = ["wasm-bindgen"] }
 flume = "0.11.0"
 leptos = { version = "0.6", features = ["csr", "nightly"] }
 leptos_meta = { version = "0.6", features = ["csr", "nightly"] }
@@ -19,7 +18,7 @@ leptos_router = { version = "0.6", features = ["csr", "nightly"] }
 log = "0.4"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.42"
-web-sys = { version = "0.3", features = ["console", "AudioContext", "AudioDestinationNode", "AudioWorklet", "AudioWorkletNode", "AudioWorkletNodeOptions", "BlobPropertyBag", "Document", "MediaDevices", "MediaStream", "MediaStreamConstraints", "Navigator", "Window"] }
+web-sys = { version = "0.3", features = ["console", "AudioContext", "AudioDestinationNode", "AudioWorklet", "AudioWorkletNode", "AudioWorkletNodeOptions", "BaseAudioContext", "BlobPropertyBag", "Document", "MediaDevices", "MediaStream", "MediaStreamConstraints", "Navigator", "TextDecoder", "Window"] }
 js-sys = "0.3.69"
 terrors = "0.3.0"
 
