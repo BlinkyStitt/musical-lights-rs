@@ -7,7 +7,8 @@ class WasmProcessor extends AudioWorkletProcessor {
         console.log("module:", module);
         console.log("handle:", handle);
 
-        // TODO: use processor options to create an actual wasm thing
+        // // TODO: use processor options to create an actual wasm thing
+        // // TODO: this currently fails because TextDecoder is not available inside an AudioWorklet
         // bindgen.initSync(module);
         // this.processor = bindgen.WasmAudioProcessor.unpack(handle);
     }
@@ -17,7 +18,7 @@ class WasmProcessor extends AudioWorkletProcessor {
 
         return true;
 
-        // return this.processor.process(outputs[0][0]);
+        // return this.processor.process(inputs[0][0]);
     }
 }
 

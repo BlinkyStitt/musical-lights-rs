@@ -92,8 +92,6 @@
     };
     globalThis.TextDecoder = TextDecoder;
     if (!window["TextDecoder"]) window["TextDecoder"] = TextDecoder;
-
-    console.log("complete");
 })(
     typeof globalThis == "" + void 0
         ? typeof global == "" + void 0

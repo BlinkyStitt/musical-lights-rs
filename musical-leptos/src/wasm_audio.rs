@@ -16,6 +16,7 @@ pub struct WasmAudioProcessor(WasmAudioProcessorFn);
 #[wasm_bindgen]
 impl WasmAudioProcessor {
     pub fn process(&mut self, buf: &mut [f32]) -> bool {
+        // TODO: instead of calling an arbitrary function, should we write something more specific here?
         self.0(buf)
     }
     pub fn pack(self) -> usize {

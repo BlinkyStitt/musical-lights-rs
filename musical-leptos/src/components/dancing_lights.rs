@@ -62,7 +62,10 @@ pub fn DancingLights() -> impl IntoView {
             &media_stream,
             Box::new(move |buf| {
                 // TODO: actually process it
-                info!("audio buffer: {:?}", buf);
+                let sum: f32 = buf.iter().sum();
+
+                info!("audio sum: {:?}", sum);
+
                 true
             }),
         )
