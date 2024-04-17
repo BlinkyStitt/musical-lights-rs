@@ -1,7 +1,3 @@
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    SampleRate, Stream,
-};
 use leptos::*;
 use musical_lights_core::{
     audio::{
@@ -66,7 +62,9 @@ pub fn DancingLights() -> impl IntoView {
 
             info!("audio context: {:?}", audio_ctx);
 
-            // TODO: we probably need to call `audio_ctx.resume()` somewhere
+            // TODO: do we need this?
+            let promise = audio_ctx.resume().unwrap();
+            let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
 
             Ok::<_, String>(media_stream_id)
         },

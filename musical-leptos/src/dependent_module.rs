@@ -18,6 +18,15 @@ extern "C" {
 
 pub fn on_the_fly(code: &str) -> Result<String, JsValue> {
     // Generate the import of the bindgen ES module, assuming `--target web`.
+
+    // TODO: get the EncoderDecoderTogether from <https://github.com/anonyco/FastestSmallestTextEncoderDecoder>.
+    // TODO: this is wrong. figure out how to do this correctly (Error: audio_ctx error: JsValue(SyntaxError: unexpected token: identifier ))
+    let header = format!(
+        "import {{TextEncoder, TextDecoder}} from '{}';\nimport init, * as bindgen from '{}';\n\n",
+        wasm_bindgen::link_to!(module = "/src/EncoderDecoderTogether.min.js"),
+        IMPORT_META.url(),
+    );
+
     let header = format!(
         "import init, * as bindgen from '{}';\n\n",
         IMPORT_META.url(),

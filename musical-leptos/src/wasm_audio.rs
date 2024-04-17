@@ -1,5 +1,7 @@
 use crate::dependent_module;
 
+use log::debug;
+use log::info;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
@@ -29,11 +31,19 @@ impl WasmAudioProcessor {
 // playback starts reliably on all browsers.
 pub async fn wasm_audio(process: WasmAudioProcessorFn) -> Result<AudioContext, JsValue> {
     let ctx = AudioContext::new()?;
+
     prepare_wasm_audio(&ctx).await?;
 
-    // TODO: set the node. i get a "memory cannot be copied" error
-    // let node = wasm_audio_node(&ctx, process)?;
-    // node.connect_with_audio_node(&ctx.destination())?;
+    info!("audio context: {:?}", ctx);
+
+    // TODO: set the node. i get a "memory cannot be cloned" error even after setting what i thought were the necessary headers
+    let node = wasm_audio_node(&ctx, process)?;
+
+    info!("audio node 1: {:?}", node);
+
+    node.connect_with_audio_node(&ctx.destination())?;
+
+    info!("audio node 2: {:?}", node);
 
     Ok(ctx)
 }
@@ -45,15 +55,20 @@ pub fn wasm_audio_node(
     ctx: &AudioContext,
     process: WasmAudioProcessorFn,
 ) -> Result<AudioWorkletNode, JsValue> {
-    AudioWorkletNode::new_with_options(
-        ctx,
-        "WasmProcessor",
-        AudioWorkletNodeOptions::new().processor_options(Some(&js_sys::Array::of3(
-            &wasm_bindgen::module(),
-            &wasm_bindgen::memory(),
-            &WasmAudioProcessor(process).pack().into(),
-        ))),
-    )
+    let mut audio_worklet_node = AudioWorkletNodeOptions::new();
+
+    // TODO: options include memory and thats causing issues
+    let options = audio_worklet_node.processor_options(Some(&js_sys::Array::of2(
+        &wasm_bindgen::module(),
+        &WasmAudioProcessor(process).pack().into(),
+    )));
+    debug!("options: {:?}", options);
+
+    // TODO: this should be "newWithOptions" so that we can pass the wasm through
+    let node = AudioWorkletNode::new_with_options(ctx, "WasmProcessor", options)?;
+    info!("node: {:?}", node);
+
+    Ok(node)
 }
 
 pub async fn prepare_wasm_audio(ctx: &AudioContext) -> Result<(), JsValue> {
