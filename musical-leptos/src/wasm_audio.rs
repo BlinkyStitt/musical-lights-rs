@@ -16,7 +16,7 @@ pub struct WasmAudioProcessor(WasmAudioProcessorFn);
 #[wasm_bindgen]
 impl WasmAudioProcessor {
     pub fn process(&mut self, buf: &mut [f32]) -> bool {
-        // TODO: instead of calling an arbitrary function, should we write something more specific here?
+        // TODO: instead of calling an arbitrary function, should we write a specific impl that does our audio processing?
         self.0(buf)
     }
     pub fn pack(self) -> usize {
@@ -39,13 +39,9 @@ pub async fn wasm_audio(
 
     prepare_wasm_audio(&ctx).await?;
 
-    info!("audio context: {:?}", ctx);
+    debug!("audio context: {:?}", ctx);
 
-    // TODO: i think this should take the MediaStream as input. otherwise we aren't actually connecting them!
-    // TODO: just do a ctx.createOscillator() while testing?
     let input = ctx.create_media_stream_source(media_stream).unwrap();
-
-    // TODO: don't we need to connect to the input somehow?
 
     let worklet = wasm_audio_worklet(&ctx, process)?;
 
@@ -53,8 +49,8 @@ pub async fn wasm_audio(
 
     worklet.connect_with_audio_node(&ctx.destination())?;
 
-    info!("audio input: {:?}", input);
-    info!("audio node: {:?}", worklet);
+    debug!("audio input: {:?}", input);
+    debug!("audio node: {:?}", worklet);
 
     Ok(ctx)
 }
@@ -76,7 +72,7 @@ pub fn wasm_audio_worklet(
     debug!("options: {:?}", options);
 
     let node = AudioWorkletNode::new_with_options(ctx, "WasmProcessor", options)?;
-    info!("node: {:?}", node);
+    debug!("node: {:?}", node);
 
     Ok(node)
 }

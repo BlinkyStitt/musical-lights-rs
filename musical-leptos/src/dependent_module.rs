@@ -25,6 +25,7 @@ pub fn on_the_fly(code: &str) -> Result<String, JsValue> {
     let header = format!(
         "{}\n\nimport init, * as bindgen from '{}';\n\n",
         include_str!("./audio_polyfill.js"),
+        // wasm_bindgen::link_to!(module = "/src/audio_polyfill.js"),
         IMPORT_META.url(),
     );
 
