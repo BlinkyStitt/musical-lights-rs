@@ -37,19 +37,10 @@ jobs:
           components: clippy, rustfmt
 
       - name: Add WASM target
-        run: rustup target add wasm32-unknown-unknown
-
-      - name: lint
-        run: cargo clippy & cargo fmt
-
-
-      # If using tailwind...
-      # - name: Download and install tailwindcss binary
-      #   run: npm install -D tailwindcss && npx tailwindcss -i <INPUT/PATH.css> -o <OUTPUT/PATH.css>  # run tailwind
-
+        run: cd musical-leptos && rustup target add wasm32-unknown-unknown
 
       - name: Download and install Trunk binary
-        run: wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.18.4/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+        run: cd musical-leptos && wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.18.4/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
 
       - name: Build with Trunk
         # "${GITHUB_REPOSITORY#*/}" evaluates into the name of the repository
@@ -57,15 +48,7 @@ jobs:
         # this is necessary for github pages where the site is deployed to username.github.io/repo_name and all files must be requested
         # relatively as favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
         # will obviously return error 404 not found.
-        run: cd musical-leptos && ../trunk build --release --public-url "${GITHUB_REPOSITORY#*/}"
-
-
-      # Deploy to gh-pages branch
-      # - name: Deploy 🚀
-      #   uses: JamesIves/github-pages-deploy-action@v4
-      #   with:
-      #     folder: dist
-
+        run: cd musical-leptos && ./trunk build --release --public-url "${GITHUB_REPOSITORY#*/}"
 
       # Deploy with Github Static Pages
 
