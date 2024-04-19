@@ -34,7 +34,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         let frequency_resolution = sample_rate_hz / 2.0 / (IN as f32);
         info!("frequency resolution = {}", frequency_resolution);
 
-        let e = find_e(OUT as u16, min_bin as u16, max_bin as u16).unwrap();
+        let e = find_e(OUT as u32, min_bin as u32, max_bin as u32).unwrap();
         info!("E = {}", e);
 
         // TODO: use end_bins instead of map? less RAM but more complicated code
@@ -81,7 +81,8 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN>
 
 /// Find E through brute force calculations
 /// <https://forum.pjrc.com/threads/32677-Is-there-a-logarithmic-function-for-FFT-bin-selection-for-any-given-of-bands?p=133842&viewfull=1#post133842>
-fn find_e(bands: u16, min_bin: u16, max_bin: u16) -> Option<f32> {
+/// TODO: this is giving too large of values. something went wrong
+fn find_e(bands: u32, min_bin: u32, max_bin: u32) -> Option<f32> {
     let mut increment = 0.1;
     let mut e_test = 1.0;
 
@@ -92,7 +93,7 @@ fn find_e(bands: u16, min_bin: u16, max_bin: u16) -> Option<f32> {
         for b in 0..bands {
             let n = e_test.powi(b as i32);
             // round up
-            let d = n.ceil() as u16;
+            let d = n.ceil() as u32;
             count += d;
         }
 
