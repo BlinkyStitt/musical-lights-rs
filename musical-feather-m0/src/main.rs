@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 #[cfg(not(feature = "use_semihosting"))]
 use panic_halt as _;
@@ -11,11 +12,8 @@ use panic_semihosting as _;
 use feather_m0 as bsp;
 
 use bsp::hal::clock::GenericClockController;
-use bsp::hal::delay::Delay;
-use bsp::hal::gpio::{AnyPin, Pin};
-use bsp::hal::prelude::*;
 use bsp::pac::{CorePeripherals, Peripherals};
-use bsp::{entry, pin_alias};
+use bsp::{pin_alias};
 use embassy_executor::Spawner;
 use log::{debug, info};
 // use embassy_time::Timer;
@@ -29,14 +27,14 @@ const SAMPLE_BUFFER: usize = 2048;
 const FFT_BINS: usize = SAMPLE_BUFFER / 2;
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(_spawner: Spawner) {
     // TODO: configure log (or better, use defmt)
 
     info!("hello, world!");
 
     let mut peripherals = Peripherals::take().unwrap();
     let core = CorePeripherals::take().unwrap();
-    let mut clocks = GenericClockController::with_external_32kosc(
+    let clocks = GenericClockController::with_external_32kosc(
         peripherals.GCLK,
         &mut peripherals.PM,
         &mut peripherals.SYSCTRL,

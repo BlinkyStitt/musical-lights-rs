@@ -2,19 +2,20 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
 use embassy_stm32::{
     adc::{Adc, SampleTime, VREF_CALIB_MV},
-    gpio::{AnyPin, Level, Output, Speed},
+    gpio::{Level, Output, Speed},
     peripherals::{ADC1, PA0},
 };
-use embassy_time::{Delay, Timer};
+use embassy_time::{Timer};
 use musical_lights_core::logging::info;
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::task]
-pub async fn blink_task(mut led: Output<'static, AnyPin>) {
+pub async fn blink_task(mut led: Output<'static>) {
     loop {
         info!("high");
         led.set_high();
@@ -29,7 +30,7 @@ pub async fn blink_task(mut led: Output<'static, AnyPin>) {
 #[embassy_executor::task]
 async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0) {
     // TODO: i kind of wish i'd ordered the i2s mic
-    let mut adc = Adc::new(mic_adc, &mut Delay);
+    let mut adc = Adc::new(mic_adc);
 
     // TODO: what resolution?
     let adc_resolution = 12;
@@ -40,8 +41,8 @@ async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0) {
 
     // 100 mHz processor
     // TODO: how long should we sample?
-    adc.set_sample_time(SampleTime::Cycles144);
-    adc.set_resolution(embassy_stm32::adc::Resolution::TwelveBit);
+    adc.set_sample_time(SampleTime::CYCLES144);
+    adc.set_resolution(embassy_stm32::adc::Resolution::BITS12);
 
     // // TODO: i think we should be able to use this instead of adc_resolution.
     // let mut vrefint = adc.enable_vrefint();
@@ -100,7 +101,7 @@ async fn main(spawner: Spawner) {
 
     info!("Hello World!");
 
-    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low).degrade();
+    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
     let mic_adc = p.ADC1;
     let mic_pin = p.PA0;
 

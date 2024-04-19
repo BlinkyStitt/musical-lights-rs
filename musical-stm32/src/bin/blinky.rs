@@ -2,15 +2,16 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
-use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
+use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_time::Timer;
 use musical_lights_core::logging::info;
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::task]
-async fn blink_task(mut led: Output<'static, AnyPin>) {
+async fn blink_task(mut led: Output<'static>) {
     loop {
         info!("high");
         led.set_high();
@@ -38,7 +39,7 @@ async fn main(spawner: Spawner) {
     info!("Hello World!");
 
     // set up pins
-    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low).degrade();
+    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
     // spawn the tasks
     spawner.must_spawn(blink_task(onboard_led));

@@ -1,15 +1,16 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 use core::iter::repeat;
 
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
 use embassy_stm32::adc::{Adc, SampleTime};
-use embassy_stm32::gpio::{AnyPin, Level, Output, Speed};
+use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::peripherals::{
-    ADC1, DMA1_CH3, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
+    ADC1, DMA1_CH4, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
 };
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
@@ -17,7 +18,7 @@ use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_stm32::Config;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
-use embassy_time::{Delay, Timer};
+use embassy_time::{Timer};
 use itertools::repeat_n;
 use micromath::F32Ext;
 use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights, Gradient};
@@ -52,7 +53,7 @@ const MATRIX_BUFFER: usize = MATRIX_N * 12;
 // const VREFINT_CALIBRATED: u16 = 1230;
 
 #[embassy_executor::task]
-pub async fn blink_task(mut led: Output<'static, AnyPin>) {
+pub async fn blink_task(mut led: Output<'static>) {
     loop {
         debug!("high");
         led.set_high();
@@ -73,7 +74,7 @@ async fn mic_task(
     // vrefint_calibrated: u16,
 ) {
     // TODO: i kind of wish i'd ordered the i2s mic
-    let mut adc = Adc::new(mic_adc, &mut Delay);
+    let mut adc = Adc::new(mic_adc);
 
     // TODO: what resolution?
     let adc_resolution = 12;
@@ -82,9 +83,9 @@ async fn mic_task(
 
     // 100 mHz processor
     // TODO: how long should we sample?
-    adc.set_sample_time(SampleTime::Cycles3);
+    adc.set_sample_time(SampleTime::CYCLES3);
     // TODO: impl From<u8> for Resolution? or maybe have "bits" and "range" functions on Resolution
-    adc.set_resolution(embassy_stm32::adc::Resolution::TwelveBit);
+    adc.set_resolution(embassy_stm32::adc::Resolution::BITS12);
 
     // // TODO: i think we should be able to use this instead of adc_resolution.
     // let mut vrefint = adc.enable_vrefint();
@@ -170,7 +171,7 @@ async fn fft_task(
     }
 }
 
-pub type LedWriter<'a> = ws2812_async::Ws2812<Spi<'a, SPI1, DMA2_CH2, DMA2_CH0>, { MATRIX_N * 12 }>;
+// pub type LedWriter<'a> = ws2812_async::Ws2812<Spi<'a, SPI1, DMA2_CH2, DMA2_CH0>, { MATRIX_N * 12 }>;
 
 pub fn color_corrected_matrix<I>(iter: I) -> impl Iterator<Item = RGB8>
 where
@@ -185,11 +186,9 @@ where
 async fn light_task(
     left_mosi: PB5,
     left_peri: SPI1,
-    left_rxdma: DMA2_CH0,
     left_txdma: DMA2_CH2,
     right_mosi: PB15,
     right_peri: SPI2,
-    right_rxmda: DMA1_CH3,
     right_txdma: DMA1_CH4,
     loudness_rx: Receiver<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16>,
 ) {
@@ -199,9 +198,9 @@ async fn light_task(
     spi_config.frequency = mhz(38) / 10u32; // 3.8MHz
     spi_config.mode = embassy_stm32::spi::MODE_0;
 
-    let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, left_rxdma, spi_config);
+    let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, spi_config);
     let spi_right =
-        Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, right_rxmda, spi_config);
+        Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, spi_config);
 
     let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
     let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
@@ -326,10 +325,10 @@ async fn main(spawner: Spawner) {
     let right_mosi = p.PB15;
 
     // TODO: What channels? NoDMA for receiver?
-    let left_rxdma = p.DMA2_CH0;
+    // let left_rxdma = p.DMA2_CH0;
     let left_txdma = p.DMA2_CH2;
 
-    let right_rxdma = p.DMA1_CH3;
+    // let right_rxdma = p.DMA1_CH3;
     let right_txdma = p.DMA1_CH4;
 
     // // start the watchdog
@@ -337,7 +336,7 @@ async fn main(spawner: Spawner) {
     // spawner.must_spawn(watchdog_task(wdg));
 
     // set up pins
-    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low).degrade();
+    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
     let mic_adc = p.ADC1;
     let mic_pin = p.PA0;
@@ -366,11 +365,9 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(light_task(
         left_mosi,
         left_peri,
-        left_rxdma,
         left_txdma,
         right_mosi,
         right_peri,
-        right_rxdma,
         right_txdma,
         loudness_rx,
     ));

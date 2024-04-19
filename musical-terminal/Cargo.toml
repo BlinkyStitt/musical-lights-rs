@@ -18,6 +18,4 @@ log = { version = "0.4.20", features = ["std"] }
 musical-lights-core = { path = "../musical-lights-core", features = ["std", "log"] }
 
 [patch.crates-io]
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "e8a832e17715c34377f5dfbe32f8a66ac1c22b45" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }

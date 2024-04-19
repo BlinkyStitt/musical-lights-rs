@@ -10,9 +10,9 @@ resolver = "2"
 default-run = "musical-stm32"
 
 [dependencies]
-circular-buffer = { version = "0.1.6", default-features = false }
+circular-buffer = { version = "0.1.7", default-features = false }
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = "0.7.3"
+cortex-m-rt = "0.7.4"
 defmt = "0.3"
 defmt-rtt = "0.4"
 embassy-embedded-hal = "0.1.0"
@@ -22,14 +22,14 @@ embassy-stm32 = { version = "0.1.0", features = ["defmt", "stm32f411ce", "unstab
 embassy-sync = { version = "0.5.0", features = ["defmt"] }
 embassy-time = { version = "0.3", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 enterpolation = { version = "0.2.1", default-features = false, features = ["libm", "linear"] }
-itertools = { version = "0.12.0", default-features = false }
+itertools = { version = "0.12.1", default-features = false }
 micromath = "2.1.0"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = ["libm", "defmt"] }
-palette = { version = "0.7.3", features = ["libm"], default-features = false }
+palette = { version = "0.7.5", features = ["libm"], default-features = false }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 smart-leds = "0.4.0"
 smart-leds-trait = "0.3.0"
-ws2812-async = "0.1.0"
+ws2812-async = "0.2.0"
 
 # TODO: if i end up using these, be sure to set patch.crate-io, too
 #embassy-futures = { version = "0.1.1" }
@@ -42,16 +42,13 @@ ws2812-async = "0.1.0"
 
 [patch.crates-io]
 # TODO: embassy feature on musical-lights-core that handles this?
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb56a884ab4f2bfaf7effb9392706bb8260178" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb56a884ab4f2bfaf7effb9392706bb8260178" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb56a884ab4f2bfaf7effb9392706bb8260178" }
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb56a884ab4f2bfaf7effb9392706bb8260178" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb56a884ab4f2bfaf7effb9392706bb8260178" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "04eb56a884ab4f2bfaf7effb9392706bb8260178" }
-embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "f8c79fee1df1900ee59e90160729edfa16a99b63" }
-
-# upgrade all the deps to get things onto 1.0.0
-ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "bb1004e9f2379a1e7fa072ed453494d3e014ad53" }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
+embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "88f63d412f7285357d9df6cf366d4faf5888a3d4" }
 
 #smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 

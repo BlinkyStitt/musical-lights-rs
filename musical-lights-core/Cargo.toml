@@ -8,7 +8,7 @@ circular-buffer = { version = "0.1.7", default-features = false }
 defmt = { version = "0.3.6", default-features = false, optional = true }
 enterpolation = { version = "0.2.1", default-features = false, features = ["bspline"] }
 log = { version = "*", default-features = false, optional = true }
-microfft = { version = "0.5.1", default-features = false, features = ["size-2048"] }
+microfft = { version = "0.6.0", default-features = false, features = ["size-2048"] }
 micromath = "2.1.0"
 num-complex = { version = "0.4.5", default-features = false }
 palette = { version = "0.7.5", default-features = false }
@@ -21,10 +21,6 @@ smart-leds = "0.4.0"
 
 [dev-dependencies]
 test-log = "0.2.15"
-
-[patch.crates-io]
-# smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
-ws2812-async = { git = "https://github.com/WyseNynja/ws2812-async.git", rev = "9d2a3aa7fa800722e45ad2658feb0e39a6039f80" }
 
 [features]
 

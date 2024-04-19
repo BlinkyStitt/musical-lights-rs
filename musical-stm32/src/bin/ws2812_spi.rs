@@ -2,10 +2,11 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    gpio::{AnyPin, Level, Output, Speed},
+    gpio::{Level, Output, Speed},
     spi::{Config as SpiConfig, Spi},
     time::mhz,
 };
@@ -21,7 +22,7 @@ const MATRIX_N: usize = MATRIX_X as usize * MATRIX_Y as usize;
 const MATRIX_BUFFER: usize = MATRIX_N * 12;
 
 #[embassy_executor::task]
-pub async fn blink_task(mut led: Output<'static, AnyPin>) {
+pub async fn blink_task(mut led: Output<'static>) {
     loop {
         info!("high");
         led.set_high();
@@ -41,7 +42,7 @@ async fn main(spawner: Spawner) {
 
     info!("Hello World!");
 
-    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low).degrade();
+    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
     // start an async task in the background so that we can test the async part of the leds actually works properly
     spawner.must_spawn(blink_task(onboard_led));
@@ -54,9 +55,8 @@ async fn main(spawner: Spawner) {
     let spi_peri = p.SPI1;
     let mosi = p.PB5;
     let txdma = p.DMA2_CH2;
-    let rxdma = p.DMA2_CH0;
 
-    let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, rxdma, spi_config);
+    let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, spi_config);
 
     let mut neopixel = ws2812_async::Ws2812::<_, MATRIX_BUFFER>::new(spi);
 
