@@ -49,7 +49,8 @@ jobs:
         # relatively as favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
         # will obviously return error 404 not found.
         # run: cd musical-leptos && ./trunk build --release --public-url "${GITHUB_REPOSITORY#*/}"
-        run: echo "${GITHUB_REPOSITORY#*/}" && cd musical-leptos && ./trunk build --release --public-url "${GITHUB_REPOSITORY#*/}"
+        # run: echo "${GITHUB_REPOSITORY#*/}" && cd musical-leptos && ./trunk build --release --public-url "${GITHUB_REPOSITORY#*/}"
+        run: cd musical-leptos && ./trunk build --release --public-url "musical-lights-rs"
 
       # Deploy with Github Static Pages
 
