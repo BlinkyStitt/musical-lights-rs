@@ -23,10 +23,8 @@ pub fn App() -> impl IntoView {
     view! {
         <Html lang="en" dir="ltr" attr:data-theme="light"/>
 
-        // sets the document title
         <Title text="Musical Leptos CSR"/>
 
-        // injects metadata in the <head> of the page
         <Meta charset="UTF-8"/>
         <Meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
