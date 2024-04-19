@@ -23,7 +23,7 @@ pub fn on_the_fly(code: &str) -> Result<String, JsValue> {
     // TODO: get the EncoderDecoderTogether from <https://github.com/anonyco/FastestSmallestTextEncoderDecoder>.
     // TODO: this doesn't seem to work. we still get TextDecoder not found
     let header = format!(
-        "{}\n\nimport init, * as bindgen from '{}';\n\n",
+        "{}\n\nimport init, * as bindings from '{}';\n\n",
         include_str!("./audio_polyfill.js"),
         // wasm_bindgen::link_to!(module = "/src/audio_polyfill.js"),
         IMPORT_META.url(),
