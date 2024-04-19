@@ -42,11 +42,11 @@ async fn load_media_stream() -> Result<MediaStream, JsValue> {
 #[component]
 pub fn DancingLights() -> impl IntoView {
     // TODO: do this on button click
-    let (listen, set_listen) = create_signal(0);
+    let (listen, set_listen) = create_signal(false);
 
     // TODO: this is wrong. this runs immediatly, not on first click. why?
     let start_listening = create_resource(listen, |x| async move {
-        if x == 0 {
+        if x == false {
             return Ok(None);
         }
 
@@ -87,15 +87,22 @@ pub fn DancingLights() -> impl IntoView {
             None | Some(Ok(None)) => view! {
                 <button
                     on:click= move |_| {
-                        set_listen(1)
-
-                        // TODO: hide this button?
+                        set_listen(true)
                     }
                 >
                     Start Listening
                 </button>
             }.into_view(),
-            Some(Ok(Some(media_stream_id))) => view! { <button>Now listening to {media_stream_id}</button> }.into_view(),
+            Some(Ok(Some(media_stream_id))) => view! {
+                <button
+                    on:click= move |_| {
+                        // set_listen(false)
+
+                        // TODO: set_listen to false. once we figure out how to turn off this media_stream
+                    }
+                >
+                    Now listening to {media_stream_id}
+                </button> }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
         }}
 

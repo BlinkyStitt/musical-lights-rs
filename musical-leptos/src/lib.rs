@@ -8,6 +8,7 @@ mod pages;
 mod wasm_audio;
 
 // Top-Level pages
+use crate::pages::about::About;
 use crate::pages::home::Home;
 use crate::pages::not_found::NotFound;
 
@@ -27,14 +28,17 @@ pub fn App() -> impl IntoView {
         <Meta charset="UTF-8"/>
         <Meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-        // <Router>
-        //     <Routes>
-        //         <Route path="/" view=Home/>
-        //         <Route path="/*" view=NotFound/>
-        //     </Routes>
-        // </Router>
-
-        // TODO: figure out how to get the router working on github pages. i thought public url would do it
-        <Home />
+        <div class="container">
+            <Router>
+                <nav>
+                    <A href="">"Home"</A> - <A href="about">"About"</A>
+                </nav>
+                <Routes>
+                    <Route path="" view=Home />
+                    <Route path="about" view=About />
+                    <Route path="*" view=NotFound />
+                </Routes>
+            </Router>
+        </div>
     }
 }
