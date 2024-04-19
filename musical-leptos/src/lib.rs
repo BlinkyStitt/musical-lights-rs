@@ -14,7 +14,7 @@ use crate::pages::not_found::NotFound;
 
 /// An app router which renders the homepage and handles 404's
 ///
-/// TODO: how do make the base dynamic?
+/// TODO: how do make the base on the router dynamic to work with github pages?
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
@@ -31,13 +31,13 @@ pub fn App() -> impl IntoView {
         <Meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
         <div class="container">
-            <Router base="/musical-lights-rs" fallback=move || NotFound().into_view()>
+            <Router fallback=move || NotFound().into_view()>
                 <nav>
                     <A href="">"Home"</A> - <A href="about">"About"</A>
                 </nav>
                 <Routes>
-                    <Route path="" view=Home />
-                    <Route path="about" view=About />
+                    <Route path="/" view=Home />
+                    <Route path="/about" view=About />
                 </Routes>
             </Router>
         </div>
