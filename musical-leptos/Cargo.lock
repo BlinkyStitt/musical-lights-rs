@@ -872,6 +872,7 @@ dependencies = [
  "leptos_router",
  "log",
  "musical-lights-core",
+ "serde",
  "terrors",
  "wasm-bindgen",
  "wasm-bindgen-futures",

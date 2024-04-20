@@ -22,18 +22,11 @@ pub fn on_the_fly(code: &str) -> Result<String, JsValue> {
 
     // TODO: get the EncoderDecoderTogether from <https://github.com/anonyco/FastestSmallestTextEncoderDecoder>.
     // TODO: this doesn't seem to work. we still get TextDecoder not found
+    // TODO: do we even need this hack anymore?
     let header = format!(
-        "{}\n\nimport init, * as bindings from '{}';\n\n",
-        include_str!("./audio_polyfill.js"),
-        // wasm_bindgen::link_to!(module = "/src/audio_polyfill.js"),
+        "import init, * as bindings from '{}';\n\n",
         IMPORT_META.url(),
     );
-
-    // // TODO: why doesn't the above polyfill work?!
-    // let header = format!(
-    //     "import init, * as bindgen from '{}';\n\n",
-    //     IMPORT_META.url(),
-    // );
 
     Url::create_object_url_with_blob(&Blob::new_with_str_sequence_and_options(
         &Array::of2(&JsValue::from(header.as_str()), &JsValue::from(code)),

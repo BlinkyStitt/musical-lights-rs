@@ -46,7 +46,7 @@ pub fn DancingLights() -> impl IntoView {
 
     // TODO: this is wrong. this runs immediatly, not on first click. why?
     let start_listening = create_resource(listen, |x| async move {
-        if x == false {
+        if !x {
             return Ok(None);
         }
 
@@ -58,25 +58,17 @@ pub fn DancingLights() -> impl IntoView {
 
         info!("active media stream: {:?}", media_stream_id);
 
-        let audio_ctx = wasm_audio(
-            &media_stream,
-            Box::new(move |buf| {
-                // TODO: actually process it
-                let sum: f32 = buf.iter().sum();
-
-                info!("audio sum: {:?}", sum);
-
-                true
-            }),
-        )
-        .await
-        .map_err(|x| format!("audio_ctx error: {:?}", x))?;
+        let audio_ctx = wasm_audio(&media_stream)
+            .await
+            .map_err(|x| format!("audio_ctx error: {:?}", x))?;
 
         info!("audio context: {:?}", audio_ctx);
 
-        // TODO: do we need this?
-        let promise = audio_ctx.resume().unwrap();
-        let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+        // // TODO: do we need this?
+        // let promise = audio_ctx.resume().unwrap();
+        // let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+
+        // TODO: what do we do with the receiver?
 
         Ok::<_, String>(Some(media_stream_id))
     });
