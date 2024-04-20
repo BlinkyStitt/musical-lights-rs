@@ -3,34 +3,33 @@ class MyWasmProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super();
 
+        this.wasmInstance = null;
+
         console.log("options.processorOptions:", options.processorOptions);
 
         let [module, foobar] = options.processorOptions;
 
-        // Fetch, compile, and instantiate the WebAssembly module
-        WebAssembly.instantiateStreaming(module)
-            .then(results => {
-                // `results` is an object with both the module and its instance
-                console.log('WebAssembly module instantiated successfully');
-
-                // Exported functions can now be called
-                const exports = results.instance.exports;
-                // const result = exports.yourExportedFunction();
-                // console.log('Result from your function:', result);
-
-                console.log("exports:", exports);
+        WebAssembly.instantiate(module)
+            .then(obj => {
+                this.wasmInstance = obj.instance;
+                console.log('WASM loaded in worklet');
             })
-            .catch(error => {
-                console.error('Error instantiating WebAssembly module:', error);
-            });
+            .catch(err => console.error('Error instantiating WASM module in worklet:', err));
     }
+
     process(inputs, outputs, parameters) {
-        // TODO: send it over a channel to a regular worker? i'm stumped and just want it working even if it isn't real time
+        if (this.wasmInstance) {
+            // TODO: Call your WASM functions here to process audio. Then send it over this.port.postMessage()
+        } else {
+            let sum = inputs[0][0].reduce((acc, val) => acc + val, 0);
+            console.log("sum:", sum);
+        }
 
-        // TODO: this seems to be ignored
+        // browsers all handle this differently
+        // chrome, return true or it stops immediatly
+        // firefox, return true or it stops when there is no more input
+        // false SHOULD be fine, but 
         return true;
-
-        // return this.processor.process(inputs[0][0]);
     }
 }
 

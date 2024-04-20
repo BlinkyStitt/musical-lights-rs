@@ -41,7 +41,8 @@ pub async fn wasm_audio(media_stream: &MediaStream) -> Result<AudioContext, JsVa
 pub fn wasm_audio_worklet(ctx: &AudioContext) -> Result<AudioWorkletNode, JsValue> {
     let mut audio_worklet_node = AudioWorkletNodeOptions::new();
 
-    // TODO: one example passed wasm_bindgen::memory() here, but I don't think that is needed anymore
+    // TODO: one example passed wasm_bindgen::memory() here, but I don't think that is needed anymore. it also gave errors
+    // TODO: instead of the main module, i think we need a sub-module specifically for audio processing
     let options = audio_worklet_node.processor_options(Some(&js_sys::Array::of2(
         &wasm_bindgen::module(),
         &"foobar".into(),
