@@ -9,6 +9,7 @@ class MyWasmProcessor extends AudioWorkletProcessor {
 
         let [module, foobar] = options.processorOptions;
 
+        // TODO: this is wrong. i think we need a dedicated wasm module for the processor
         WebAssembly.instantiate(module)
             .then(obj => {
                 this.wasmInstance = obj.instance;
