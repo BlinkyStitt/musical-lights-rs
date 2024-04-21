@@ -1,17 +1,20 @@
 use crate::dependent_module;
 
-use log::debug;
-use serde::{Deserialize, Serialize};
-use wasm_bindgen::JsValue;
+use log::{debug, info};
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::MediaStream;
 use web_sys::{AudioContext, AudioWorkletNode, AudioWorkletNodeOptions};
+use web_sys::{MediaStream, MessageEvent};
 
 // Use wasm_audio if you have a single wasm audio processor in your application
 // whose samples should be played directly. Ideally, call wasm_audio based on
 // user interaction. Otherwise, resume the context on user interaction, so
 // playback starts reliably on all browsers.
-pub async fn wasm_audio(media_stream: &MediaStream) -> Result<AudioContext, JsValue> {
+pub async fn wasm_audio(
+    media_stream: &MediaStream,
+    onmessage_callback: Closure<dyn FnMut(MessageEvent)>,
+) -> Result<AudioContext, JsValue> {
     let ctx = AudioContext::new()?;
 
     prepare_wasm_audio(&ctx).await?;
@@ -27,7 +30,14 @@ pub async fn wasm_audio(media_stream: &MediaStream) -> Result<AudioContext, JsVa
 
     worklet.connect_with_audio_node(&ctx.destination())?;
 
-    // TODO: i think we need to do something with worklet.port here to get the handled audio samples out
+    let port = worklet.port().unwrap();
+
+    port.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
+
+    Closure::forget(onmessage_callback);
+
+    // TODO: what should we do with errors?
+    // port.set_onmessageerror(onmessageerror_callback);
 
     debug!("audio input: {:?}", input);
     debug!("audio node: {:?}", worklet);

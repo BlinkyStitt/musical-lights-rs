@@ -1,4 +1,5 @@
 */dist/
+*/pkg/
 */target/
 .DS_Store
 /target/

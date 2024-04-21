@@ -12,4 +12,5 @@ exclude = [
     "musical-leptos-0",
     "musical-stm32",
     "musical-terminal",
+    "musical-wasm",
 ]

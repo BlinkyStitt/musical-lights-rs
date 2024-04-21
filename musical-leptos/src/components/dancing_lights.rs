@@ -9,7 +9,7 @@ use musical_lights_core::{
     windows::HanningWindow,
 };
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::{AudioContext, HtmlAudioElement, MediaStream, MediaStreamConstraints};
+use web_sys::{AudioContext, HtmlAudioElement, MediaStream, MediaStreamConstraints, MessageEvent};
 
 use crate::wasm_audio::wasm_audio;
 
@@ -44,8 +44,10 @@ pub fn DancingLights() -> impl IntoView {
     // TODO: do this on button click
     let (listen, set_listen) = create_signal(false);
 
+    let (audio, set_audio) = create_signal(0.0);
+
     // TODO: this is wrong. this runs immediatly, not on first click. why?
-    let start_listening = create_resource(listen, |x| async move {
+    let start_listening = create_resource(listen, move |x| async move {
         if !x {
             return Ok(None);
         }
@@ -58,13 +60,20 @@ pub fn DancingLights() -> impl IntoView {
 
         info!("active media stream: {:?}", media_stream_id);
 
-        let audio_ctx = wasm_audio(&media_stream)
+        let onmessage_callback = Closure::new(move |x: MessageEvent| {
+            // TODO: this seems fragile. how do we be sure of the data type
+            // TODO: this will actually be a vec of 120 f32s when we are done
+            let data = x.data().as_f64().unwrap();
+            set_audio(data);
+        });
+
+        let audio_ctx = wasm_audio(&media_stream, onmessage_callback)
             .await
             .map_err(|x| format!("audio_ctx error: {:?}", x))?;
 
         info!("audio context: {:?}", audio_ctx);
 
-        // // TODO: do we need this?
+        // // TODO: do we need this? does it need to be spawned?
         // let promise = audio_ctx.resume().unwrap();
         // let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
 
@@ -94,7 +103,10 @@ pub fn DancingLights() -> impl IntoView {
                     }
                 >
                     Now listening to {media_stream_id}
-                </button> }.into_view(),
+                </button>
+
+                <pre>{audio}</pre>
+            }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
         }}
 
