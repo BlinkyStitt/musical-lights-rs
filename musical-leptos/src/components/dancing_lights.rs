@@ -63,7 +63,7 @@ pub fn DancingLights() -> impl IntoView {
         let onmessage_callback = Closure::new(move |x: MessageEvent| {
             // TODO: this seems fragile. how do we be sure of the data type
             // TODO: this will actually be a vec of 120 f32s when we are done
-            let data = x.data().as_f64().unwrap();
+            let data = x.data().as_f64().unwrap().abs();
             set_audio(data);
         });
 
