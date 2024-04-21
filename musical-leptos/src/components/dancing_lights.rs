@@ -44,7 +44,7 @@ pub fn DancingLights() -> impl IntoView {
     // TODO: do this on button click
     let (listen, set_listen) = create_signal(false);
 
-    let (audio, set_audio) = create_signal(0.0);
+    let (audio, set_audio) = create_signal(0);
 
     // TODO: this is wrong. this runs immediatly, not on first click. why?
     let start_listening = create_resource(listen, move |x| async move {
@@ -62,8 +62,9 @@ pub fn DancingLights() -> impl IntoView {
 
         let onmessage_callback = Closure::new(move |x: MessageEvent| {
             // TODO: this seems fragile. how do we be sure of the data type
+            // TODO: actual audio processing
             // TODO: this will actually be a vec of 120 f32s when we are done
-            let data = x.data().as_f64().unwrap().abs();
+            let data = (x.data().as_f64().unwrap().abs() * 10000.0) as u32;
             set_audio(data);
         });
 
