@@ -1,7 +1,9 @@
 use js_sys::Float64Array;
 use leptos::*;
 use musical_lights_core::{
-    audio::{AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, Samples, FFT},
+    audio::{
+        AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, FlatWeighting, Samples, FFT,
+    },
     lights::Gradient,
     logging::{info, trace},
     windows::HanningWindow,
@@ -89,7 +91,7 @@ pub fn DancingLights() -> impl IntoView {
         set_sample_rate(Some(new_sample_rate));
 
         // TODO: is this generic correct?
-        let weighting = AWeighting::new(new_sample_rate);
+        let weighting = FlatWeighting;
 
         let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
 
