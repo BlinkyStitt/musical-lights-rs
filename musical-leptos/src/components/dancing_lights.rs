@@ -48,7 +48,7 @@ pub fn DancingLights() -> impl IntoView {
     let (listen, set_listen) = create_signal(false);
 
     // TODO: i think this needs to be a vec of signals
-    let (audio, set_audio) = create_signal([0.0; NUM_CHANNELS]);
+    let (audio, set_audio) = create_signal(vec![]);
 
     let (sample_rate, set_sample_rate) = create_signal(None);
 
@@ -141,7 +141,17 @@ pub fn DancingLights() -> impl IntoView {
             // let lights_iter = dancing_lights.iter(0).copied();
             // let lights = lights_iter.collect::<Vec<_>>();
 
-            set_audio(loudness.0);
+            // TODO: track recent max. dancing lights already does this for us
+            let found_max = loudness.0.iter().copied().fold(0.0, f32::max);
+
+            // i'm sure this could be more efficient
+            let scaled = loudness
+                .0
+                .iter()
+                .map(|x| ((x / found_max) * 8.0) as u8)
+                .collect::<Vec<_>>();
+
+            set_audio(scaled);
         });
 
         let port = audio_worklet_node.port().unwrap();
@@ -197,7 +207,7 @@ pub fn DancingLights() -> impl IntoView {
 }
 
 /// TODO: i think this should be a component, but references make that unhappy
-pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: f32) -> impl IntoView {
+pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) -> impl IntoView {
     // TODO: pick a color based on the index
 
     let color = gradient.colors[i];
@@ -205,20 +215,20 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: f32)
     // TODO: i'm sure there is a better way
     let color = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
 
-    // let text = match x {
-    //     0 => "        ",
-    //     1 => "M       ",
-    //     2 => "ME      ",
-    //     3 => "MER     ",
-    //     4 => "MERB    ",
-    //     5 => "MERBO   ",
-    //     6 => "MERBOT  ",
-    //     7 => "MERBOTS ",
-    //     8 => "MERBOTS!",
-    //     _ => "ERROR!!!",
-    // };
+    let text = match x {
+        0 => "        ",
+        1 => "M       ",
+        2 => "ME      ",
+        3 => "MER     ",
+        4 => "MERB    ",
+        5 => "MERBO   ",
+        6 => "MERBOT  ",
+        7 => "MERBOTS ",
+        8 => "MERBOTS!",
+        _ => "ERROR!!!",
+    };
 
     view! {
-        <li style={format!("background-color: {}; color: white; width: 200px;", color)}>{x}</li>
+        <li style={format!("background-color: {}; color: white; width: 200px;", color)}>{text}</li>
     }
 }
