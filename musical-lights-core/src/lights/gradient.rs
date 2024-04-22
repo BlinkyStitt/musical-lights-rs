@@ -25,6 +25,7 @@ impl<C: Mix<Scalar = f32>> Merge<f32> for CustomColor<C> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Gradient<const N: usize> {
     /// TODO: colors should probably be hsluv and convert later. then its easier to modify brightness and shift the color. but this is easier for now
     pub colors: [RGB8; N],
