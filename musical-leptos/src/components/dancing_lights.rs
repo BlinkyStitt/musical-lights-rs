@@ -1,3 +1,4 @@
+use js_sys::Float64Array;
 use leptos::*;
 use musical_lights_core::{
     audio::{
@@ -38,13 +39,38 @@ async fn load_media_stream() -> Result<MediaStream, JsValue> {
     Ok(stream)
 }
 
+// #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+// struct AudioOutput {
+//     signal: ReadSignal<f32>
+// }
+
+/// TODO: this should be done in the audio worklet, but its easier to put here for now
+struct DancingLightsProcessor {
+    signal: WriteSignal<Vec<f32>>,
+}
+
+impl DancingLightsProcessor {
+    fn new(signal: WriteSignal<Vec<f32>>) -> Self {
+        Self { signal }
+    }
+
+    fn process(&self, inputs: Vec<f32>) {
+        // TODO: do some audio processing on the inputs to turn it into 120 outputs
+        // TODO: instead of hard coding 120, use a generic
+
+        // self.signal(inputs);
+        info!("inputs: {:?}", inputs);
+    }
+}
+
 /// Prompt the user for their microphone
 #[component]
 pub fn DancingLights() -> impl IntoView {
     // TODO: do this on button click
     let (listen, set_listen) = create_signal(false);
 
-    let (audio, set_audio) = create_signal(0);
+    // TODO: this needs to be a vec of signals
+    let (audio, set_audio) = create_signal(vec![]);
 
     // TODO: this is wrong. this runs immediatly, not on first click. why?
     let start_listening = create_resource(listen, move |x| async move {
@@ -62,9 +88,17 @@ pub fn DancingLights() -> impl IntoView {
 
         let onmessage_callback = Closure::new(move |x: MessageEvent| {
             // TODO: this seems fragile. how do we be sure of the data type
+            let data = x.data();
+
+            let data = Float64Array::new(&data);
+
+            let data = data.to_vec();
+
             // TODO: actual audio processing
             // TODO: this will actually be a vec of 120 f32s when we are done
-            let data = (x.data().as_f64().unwrap().abs() * 10000.0) as u32;
+
+            trace!("data: {:#?}", data);
+
             set_audio(data);
         });
 
@@ -106,10 +140,30 @@ pub fn DancingLights() -> impl IntoView {
                     Now listening to {media_stream_id}
                 </button>
 
-                <pre>{audio}</pre>
+                <ol>
+                    // <For
+                    //     each={move || audio.get().into_iter().enumerate()}
+                    //     key=|(i, _val)| *i
+                    //     let:data
+                    // >
+                    //     <li>{data.1}</li>
+                    // </For>
+                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(i, x)).collect_view()}
+                </ol>
             }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
         }}
 
+    }
+}
+
+/// TODO: i think this should be a component
+pub fn audio_list_item(i: usize, x: f64) -> impl IntoView {
+    // TODO: pick a color based on the index
+
+    let x = (x * 10000.0) as u64;
+
+    view! {
+        <li>{x}</li>
     }
 }

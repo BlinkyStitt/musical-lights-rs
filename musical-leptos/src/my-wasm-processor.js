@@ -1,12 +1,10 @@
-// TODO: should we have a minimal shim here? maybe fetch and instantiate a second wasm app here?
-
 class MyWasmProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super();
 
         this.wasmInstance = null;
 
-        console.log("options.processorOptions:", options.processorOptions);
+        // console.log("options.processorOptions:", options.processorOptions);
 
         let [module, foobar] = options.processorOptions;
 
@@ -23,10 +21,8 @@ class MyWasmProcessor extends AudioWorkletProcessor {
         if (this.wasmInstance) {
             // TODO: Call your WASM functions here to process audio. Then send it over this.port.postMessage()
         } else {
-            let sum = inputs[0][0].reduce((acc, val) => acc + val, 0);
-            // console.log("sum:", sum);
-
-            this.port.postMessage(sum);
+            // TODO: don't post here. we want to do this in a dedicated wasm instance instead
+            this.port.postMessage(inputs[0][0]);
         }
 
         // browsers all handle this differently
