@@ -6,6 +6,8 @@ pub fn About() -> impl IntoView {
     view! {
         <h1>Musical Lights</h1>
 
+        <p>UnderConstruction.gif</p>
+
         <p>This website is the latest Rust/WASM version of my musical-lights projects.</p>
 
         <h2>Old Arduino Code</h2>

@@ -26,6 +26,8 @@ pub fn Home() -> impl IntoView {
             <div class="container">
                 <h1>"Musical Lights"</h1>
 
+                <p>UnderConstruction.gif</p>
+
                 <Button/>
 
                 <DancingLights/>
