@@ -50,3 +50,9 @@ button {
   text-align: center;
   margin: 2rem;
 }
+
+#dancinglights {
+  column-width: 200px;
+  column-gap: 50px;
+  column-count: 6;
+}

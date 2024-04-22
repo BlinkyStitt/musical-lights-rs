@@ -189,9 +189,9 @@ pub fn DancingLights() -> impl IntoView {
                     Now listening to {media_stream_id}
                 </button>
 
-                <p>Sample Rate: {sample_rate}</p>
+                // <p>Sample Rate: {sample_rate}</p>
 
-                <ol>
+                <ol id="dancinglights">
                     // TODO: change audio to be a vec of signals and then use a For
                     // <For
                     //     each={move || audio.get().into_iter().enumerate()}
@@ -231,7 +231,8 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) 
         _ => "ERROR!!!",
     };
 
+    // TODO: show the frequency on hover
     view! {
-        <li style={format!("background-color: {}; color: white; width: 200px;", color)}>{text}</li>
+        <li style={format!("background-color: {}; color: white; width: 120px;", color)}>{text}</li>
     }
 }
