@@ -1,5 +1,4 @@
 use js_sys::{Array, JsString};
-use log::info;
 use wasm_bindgen::prelude::*;
 use web_sys::{Blob, BlobPropertyBag, Url};
 

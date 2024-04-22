@@ -10,6 +10,7 @@ enterpolation = { version = "0.2.1", default-features = false, features = ["bspl
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.6.0", default-features = false, features = ["size-2048"] }
 micromath = "2.1.0"
+num = { version = "0.4.2", default-features = false }
 num-complex = { version = "0.4.5", default-features = false }
 palette = { version = "0.7.5", default-features = false }
 smart-leds = "0.4.0"
@@ -28,5 +29,5 @@ test-log = "0.2.15"
 
 default = ["libm", "defmt"]
 defmt = ["dep:defmt"]
-libm = ["palette/libm", "enterpolation/libm", "num-complex/libm"]
-std = ["log?/std", "microfft/std", "num-complex/std", "palette/std", "enterpolation/std"]
+libm = ["palette/libm", "enterpolation/libm", "num/libm", "num-complex/libm"]
+std = ["log?/std", "microfft/std", "num/std", "num-complex/std", "palette/std", "enterpolation/std"]

@@ -1,25 +1,28 @@
 use js_sys::Float64Array;
 use leptos::*;
 use musical_lights_core::{
-    audio::{
-        AWeighting, AggregatedAmplitudes, AggregatedAmplitudesBuilder, AudioBuffer,
-        BarkScaleBuilder, ExponentialScaleBuilder, Samples, FFT,
-    },
-    lights::{DancingLights, Gradient},
-    logging::{error, info, trace},
+    audio::{AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, Samples, FFT},
+    lights::Gradient,
+    logging::{info, trace},
     windows::HanningWindow,
 };
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::{AudioContext, HtmlAudioElement, MediaStream, MediaStreamConstraints, MessageEvent};
+use web_sys::{MediaStream, MediaStreamConstraints, MessageEvent};
 
 use crate::wasm_audio::wasm_audio;
 
-const MIC_SAMPLES: usize = 512;
+/// TODO: this was 512. i think we probably want that still. but web defaults to 128 so this is simplest
+const MIC_SAMPLES: usize = 128;
 const FFT_INPUTS: usize = 2048;
-const NUM_CHANNELS: usize = 120;
+/// TODO: i don't like this name
+/// 24 to match the Bark Scale
+const NUM_CHANNELS: usize = 24;
+
+// const AUDIO_Y: usize = 9;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
+/// Prompt the user for their microphone
 async fn load_media_stream() -> Result<MediaStream, JsValue> {
     let navigator = window().navigator();
 
@@ -39,38 +42,21 @@ async fn load_media_stream() -> Result<MediaStream, JsValue> {
     Ok(stream)
 }
 
-// #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-// struct AudioOutput {
-//     signal: ReadSignal<f32>
-// }
-
-/// TODO: this should be done in the audio worklet, but its easier to put here for now
-struct DancingLightsProcessor {
-    signal: WriteSignal<Vec<f32>>,
-}
-
-impl DancingLightsProcessor {
-    fn new(signal: WriteSignal<Vec<f32>>) -> Self {
-        Self { signal }
-    }
-
-    fn process(&self, inputs: Vec<f32>) {
-        // TODO: do some audio processing on the inputs to turn it into 120 outputs
-        // TODO: instead of hard coding 120, use a generic
-
-        // self.signal(inputs);
-        info!("inputs: {:?}", inputs);
-    }
-}
-
-/// Prompt the user for their microphone
 #[component]
 pub fn DancingLights() -> impl IntoView {
     // TODO: do this on button click
     let (listen, set_listen) = create_signal(false);
 
-    // TODO: this needs to be a vec of signals
-    let (audio, set_audio) = create_signal(vec![]);
+    // TODO: i think this needs to be a vec of signals
+    let (audio, set_audio) = create_signal([0.0; NUM_CHANNELS]);
+
+    let (sample_rate, set_sample_rate) = create_signal(None);
+
+    // TODO: change this to match the size of the light outputs
+    let gradient = Gradient::<NUM_CHANNELS>::new_mermaid();
+
+    // // TODO: make this a signal so the user can change it?
+    // let peak_decay = 0.99;
 
     // TODO: this is wrong. this runs immediatly, not on first click. why?
     let start_listening = create_resource(listen, move |x| async move {
@@ -84,7 +70,45 @@ pub fn DancingLights() -> impl IntoView {
 
         let media_stream_id = media_stream.id();
 
+        // // TODO: do we need this? does it or something on it need to be spawned?
+        // // TODO: how do we tell this to close?
+        // let promise = audio_ctx.resume().unwrap();
+        // let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+
         info!("active media stream: {:?}", media_stream_id);
+
+        let (audio_ctx, audio_worklet_node) = wasm_audio(&media_stream)
+            .await
+            .map_err(|x| format!("audio_ctx error: {:?}", x))?;
+
+        info!("audio context: {:?}", audio_ctx);
+
+        let new_sample_rate = audio_ctx.sample_rate();
+
+        // TODO: is combining signals like this okay?
+        set_sample_rate(Some(new_sample_rate));
+
+        // TODO: is this generic correct?
+        let weighting = AWeighting::new(new_sample_rate);
+
+        let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
+
+        let fft = FFT::<FFT_INPUTS, FFT_OUTPUTS>::new_with_window_and_weighting::<
+            HanningWindow<FFT_INPUTS>,
+            _,
+        >(weighting);
+
+        // let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_CHANNELS>::new(
+        //     0.0,
+        //     20_000.0,
+        //     new_sample_rate,
+        // );
+        let scale_builder = BarkScaleBuilder::new(new_sample_rate);
+
+        // let mut dancing_lights =
+        //     DancingLights::<AUDIO_Y, NUM_CHANNELS, { AUDIO_Y * NUM_CHANNELS }>::new(
+        //         gradient, peak_decay,
+        //     );
 
         let onmessage_callback = Closure::new(move |x: MessageEvent| {
             // TODO: this seems fragile. how do we be sure of the data type
@@ -94,25 +118,37 @@ pub fn DancingLights() -> impl IntoView {
 
             let data = data.to_vec();
 
+            trace!("raw inputs: {:#?}", data);
+
+            let samples: [f64; MIC_SAMPLES] = data.try_into().unwrap();
+
+            // our fft code wants f32, but js gives us f64
+            let samples = samples.map(|x| x as f32);
+
             // TODO: actual audio processing
             // TODO: this will actually be a vec of 120 f32s when we are done
+            audio_buffer.push_samples(Samples(samples));
 
-            trace!("data: {:#?}", data);
+            // TODO: throttle this
+            let buffered = audio_buffer.samples();
 
-            set_audio(data);
+            let amplitudes = fft.weighted_amplitudes(buffered);
+
+            let loudness = scale_builder.build(amplitudes).0;
+
+            // // TODO: use something like this?
+            // dancing_lights.update(loudness);
+            // let lights_iter = dancing_lights.iter(0).copied();
+            // let lights = lights_iter.collect::<Vec<_>>();
+
+            set_audio(loudness.0);
         });
 
-        let audio_ctx = wasm_audio(&media_stream, onmessage_callback)
-            .await
-            .map_err(|x| format!("audio_ctx error: {:?}", x))?;
+        let port = audio_worklet_node.port().unwrap();
 
-        info!("audio context: {:?}", audio_ctx);
+        port.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
 
-        // // TODO: do we need this? does it need to be spawned?
-        // let promise = audio_ctx.resume().unwrap();
-        // let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
-
-        // TODO: what do we do with the receiver?
+        Closure::forget(onmessage_callback);
 
         Ok::<_, String>(Some(media_stream_id))
     });
@@ -140,7 +176,10 @@ pub fn DancingLights() -> impl IntoView {
                     Now listening to {media_stream_id}
                 </button>
 
+                <p>Sample Rate: {sample_rate}</p>
+
                 <ol>
+                    // TODO: change audio to be a vec of signals and then use a For
                     // <For
                     //     each={move || audio.get().into_iter().enumerate()}
                     //     key=|(i, _val)| *i
@@ -148,7 +187,7 @@ pub fn DancingLights() -> impl IntoView {
                     // >
                     //     <li>{data.1}</li>
                     // </For>
-                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(i, x)).collect_view()}
+                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&gradient, i, x)).collect_view()}
                 </ol>
             }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
@@ -157,13 +196,29 @@ pub fn DancingLights() -> impl IntoView {
     }
 }
 
-/// TODO: i think this should be a component
-pub fn audio_list_item(i: usize, x: f64) -> impl IntoView {
+/// TODO: i think this should be a component, but references make that unhappy
+pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: f32) -> impl IntoView {
     // TODO: pick a color based on the index
 
-    let x = (x * 10000.0) as u64;
+    let color = gradient.colors[i];
+
+    // TODO: i'm sure there is a better way
+    let color = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
+
+    // let text = match x {
+    //     0 => "        ",
+    //     1 => "M       ",
+    //     2 => "ME      ",
+    //     3 => "MER     ",
+    //     4 => "MERB    ",
+    //     5 => "MERBO   ",
+    //     6 => "MERBOT  ",
+    //     7 => "MERBOTS ",
+    //     8 => "MERBOTS!",
+    //     _ => "ERROR!!!",
+    // };
 
     view! {
-        <li>{x}</li>
+        <li style={format!("color: {};", color)}>{x}</li>
     }
 }

@@ -21,6 +21,7 @@ terrors = "0.3.0"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.42"
 web-sys = { version = "0.3", features = ["console", "AudioContext", "AudioContextOptions", "AudioDestinationNode", "AudioWorklet", "AudioWorkletNode", "AudioWorkletNodeOptions", "BaseAudioContext", "BlobPropertyBag", "Document", "MediaDevices", "MediaStream", "MediaStreamConstraints", "MediaStreamAudioSourceNode", "MessagePort", "Navigator", "TextDecoder", "Window"] }
+num = "0.4.2"
 
 #leptos_workers = "0.2.1"
 #serde = { version = "1.0.198", default-features = false, features = ["derive"] }
