@@ -31,8 +31,8 @@ pub fn App() -> impl IntoView {
 
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://blink.stitthappens.com" />
-        <meta property="og:site_name" content="Stitt Happens">
-        <meta property="og:locale" content="en_US">
+        <meta property="og:site_name" content="Stitt Happens" />
+        <meta property="og:locale" content="en_US" />
 
         <div class="container">
             <Router fallback=move || NotFound().into_view()>
