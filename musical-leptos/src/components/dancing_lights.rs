@@ -219,6 +219,6 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: f32)
     // };
 
     view! {
-        <li style={format!("color: {};", color)}>{x}</li>
+        <li style={format!("background-color: {}; color: white; width: 200px;", color)}>{x}</li>
     }
 }
