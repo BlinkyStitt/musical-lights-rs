@@ -2,7 +2,8 @@ use js_sys::Float64Array;
 use leptos::*;
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, FlatWeighting, Samples, FFT,
+        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleBuilder, FlatWeighting, Samples,
+        FFT,
     },
     lights::Gradient,
     logging::{info, trace},
@@ -18,7 +19,7 @@ const MIC_SAMPLES: usize = 128;
 const FFT_INPUTS: usize = 2048;
 /// TODO: i don't like this name
 /// 24 to match the Bark Scale
-const NUM_CHANNELS: usize = 24;
+const NUM_CHANNELS: usize = 120;
 
 // const AUDIO_Y: usize = 9;
 
@@ -100,12 +101,12 @@ pub fn DancingLights() -> impl IntoView {
             _,
         >(weighting);
 
-        // let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_CHANNELS>::new(
-        //     0.0,
-        //     20_000.0,
-        //     new_sample_rate,
-        // );
-        let scale_builder = BarkScaleBuilder::new(new_sample_rate);
+        let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_CHANNELS>::new(
+            0.0,
+            20_000.0,
+            new_sample_rate,
+        );
+        // let scale_builder = BarkScaleBuilder::new(new_sample_rate);
 
         // let mut dancing_lights =
         //     DancingLights::<AUDIO_Y, NUM_CHANNELS, { AUDIO_Y * NUM_CHANNELS }>::new(
