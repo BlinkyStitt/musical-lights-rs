@@ -19,6 +19,7 @@ pub fn About() -> impl IntoView {
             <li><a href="https://www.youtube.com/watch?v=A6t1pDLEqTk">Simple LED Strip</a></li>
             <li><a href="https://www.youtube.com/watch?v=ELDt1dZbY2g">Musical Hat 120 and EL Backpack</a></li>
             <li><a href="https://twitter.com/BlinkyStitt/status/1160077236013166597">Musical Hat 512</a></li>
+            <li><a href="https://www.youtube.com/live/AweudehId5Q?si=L2YLegHnOBYSixC2&t=5157">Merbots at Chewbacchus 2024</a></li>
         </ol>
 
         <h2>Links</h2>
