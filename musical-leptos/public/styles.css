@@ -52,7 +52,10 @@ button {
 }
 
 #dancinglights {
-  column-width: 200px;
-  column-gap: 50px;
-  column-count: 6;
+  column-width: 12ch;
+  column-gap: 2ch;
+  column-count: 8;
+  min-height: 100vh;
+  margin-left: 2ch;
+  margin-right: 2ch;
 }
