@@ -12,6 +12,8 @@ Rust code for making lights blink to music.
 - Splines and Gradients
 - Gamma correction
 - Level shifters
+- wasm_bindgen
+- reactive signals
 
 ## Core
 
