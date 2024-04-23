@@ -26,7 +26,8 @@ pub fn About() -> impl IntoView {
 
         <ul>
             <li><a href="https://twitter.com/BlinkyStitt/">BlinkyStitt @ Twitter</a></li>
-            <li><a href="https://github.com/BlinkyStitt/musical-lights-rs">GitHub for this Repo</a></li>
+            <li><a href="https://warpcast.com/flashprofits.eth">FlashProfits.eth @ Farcaster</a></li>
+            <li><a href="https://github.com/BlinkyStitt/musical-lights-rs/tree/main/musical-leptos">GitHub repository for this Website</a></li>
         </ul>
     }
 }
