@@ -4,6 +4,7 @@ Rust code for making lights blink to music.
 
 ## Reading
 
+- [The Rust Book](https://doc.rust-lang.org/book/)
 - Hanning and other window functions
 - FFT
 - A-weighting, ISO-226:2023, and other equal-level-loudness contours
