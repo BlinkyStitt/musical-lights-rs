@@ -191,7 +191,7 @@ pub fn DancingLights() -> impl IntoView {
 
                 // <p>Sample Rate: {sample_rate}</p>
 
-                <ol id="dancinglights">
+                <div id="dancinglights">
                     // TODO: change audio to be a vec of signals and then use a For
                     // <For
                     //     each={move || audio.get().into_iter().enumerate()}
@@ -201,7 +201,7 @@ pub fn DancingLights() -> impl IntoView {
                     //     <li>{data.1}</li>
                     // </For>
                     {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&gradient, i, x)).collect_view()}
-                </ol>
+                </div>
             }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
         }}
@@ -219,20 +219,20 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) 
     let color = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
 
     let text = match x {
-        0 => "        ",
-        1 => "M       ",
-        2 => "ME      ",
-        3 => "MER     ",
-        4 => "MERB    ",
-        5 => "MERBO   ",
-        6 => "MERBOT  ",
+        0 => "_",
+        1 => "M",
+        2 => "ME",
+        3 => "MER",
+        4 => "MERB",
+        5 => "MERBO",
+        6 => "MERBOT",
         7 => "MERBOTS ",
         8 => "MERBOTS!",
-        _ => "ERROR!!!",
+        _ => "ERROR!!!!",
     };
 
     // TODO: show the frequency on hover
     view! {
-        <li style={format!("background-color: {}; color: white; width: 120px;", color)}>{text}</li>
+        <div style={format!("background-color: {}; color: white;", color)}>{text}</div>
     }
 }
