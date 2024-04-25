@@ -70,9 +70,7 @@ pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
 
     info!("linsrgb: {:?}", rgb);
 
-    if !rgb.is_within_bounds() {
-        debug!("rgb is out of bounds! {:?}", rgb);
-    }
+    debug_assert!(rgb.is_within_bounds(), "rgb is out of bounds! {:?}", rgb);
 
     let rgb: LinSrgb<u8> = rgb.into_format();
 
