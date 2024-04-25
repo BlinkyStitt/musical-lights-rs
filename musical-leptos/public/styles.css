@@ -55,7 +55,7 @@ button {
   column-width: 12ch;
   column-gap: 2ch;
   column-count: 8;
-  min-height: 100vh;
   margin-left: 2ch;
   margin-right: 2ch;
+  min-height: 80vh;
 }

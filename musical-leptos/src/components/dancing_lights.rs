@@ -176,21 +176,18 @@ pub fn DancingLights() -> impl IntoView {
                         set_listen(true)
                     }
                 >
-                    Start Listening
+                    Start Dancing (Microphone Access Required)
                 </button>
             }.into_view(),
             Some(Ok(Some(media_stream_id))) => view! {
                 <button
                     on:click= move |_| {
                         // set_listen(false)
-
-                        // TODO: set_listen to false. once we figure out how to turn off this media_stream
+                        info!("todo: figure out how to turn off the media stream");
                     }
                 >
-                    Now listening to {media_stream_id}
+                    Now Listening
                 </button>
-
-                // <p>Sample Rate: {sample_rate}</p>
 
                 <div id="dancinglights">
                     // TODO: change audio to be a vec of signals and then use a For
@@ -203,6 +200,10 @@ pub fn DancingLights() -> impl IntoView {
                     // </For>
                     {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&gradient, i, x)).collect_view()}
                 </div>
+
+                <p>Input ID: { media_stream_id }</p>
+
+                <p>Sample Rate:{ sample_rate }Hz</p>
             }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
         }}
