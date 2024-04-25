@@ -220,7 +220,7 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) 
     let color = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
 
     let text = match x {
-        0 => "_",
+        0 => "󠀠",
         1 => "M",
         2 => "ME",
         3 => "MER",
