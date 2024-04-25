@@ -1,7 +1,7 @@
 //! TODO: `brightness_video` and `gamma_video` that doesn't dim lower than 1
 
 use core::{iter::Take, marker::PhantomData};
-use log::{debug, info};
+use log::{debug, info, warn};
 use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, LinSrgb};
 use smart_leds::{brightness as brightness_iter, gamma, Brightness, Gamma, RGB8};
 
@@ -68,11 +68,13 @@ pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
 
     let rgb: LinSrgb<f32> = color.adapt_into();
 
+    let rgb: LinSrgb<u8> = rgb.into_format();
+
     info!("linsrgb: {:?}", rgb);
 
-    debug_assert!(rgb.is_within_bounds(), "rgb is out of bounds! {:?}", rgb);
-
-    let rgb: LinSrgb<u8> = rgb.into_format();
+    if !rgb.is_within_bounds() {
+        warn!("rgb is out of bounds! {:?}", rgb);
+    }
 
     // // TODO: how to debug log the hue?
     // debug!(
