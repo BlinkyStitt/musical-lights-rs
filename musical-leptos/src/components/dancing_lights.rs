@@ -213,11 +213,9 @@ pub fn DancingLights() -> impl IntoView {
 
 /// TODO: i think this should be a component, but references make that unhappy
 pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) -> impl IntoView {
-    // TODO: pick a color based on the index
-
     let color = gradient.colors[i];
 
-    // TODO: i'm sure there is a better way
+    // TODO: i'm sure there is a better way to do this
     let color = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
 
     let text = match x {
@@ -230,7 +228,10 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) 
         6 => "MERBOT",
         7 => "MERBOTS ",
         8 => "MERBOTS!",
-        _ => "ERROR!!!!",
+        _ => {
+            warn!("unexpected length for #{}! {}", i, x);
+            "ERROR!!!!"
+        }
     };
 
     // TODO: show the frequency on hover
