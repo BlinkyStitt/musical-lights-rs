@@ -1,5 +1,6 @@
 use enterpolation::{
     bspline::{BSpline, BorderBuffer},
+    linear::Linear,
     Curve, Equidistant, Merge,
 };
 use palette::{white_point, Hsluv, Mix};
@@ -42,6 +43,7 @@ impl<const N: usize> Gradient<N> {
         Self { colors }
     }
 
+    // TODO: put this behind a feature?
     pub fn new_mermaid() -> Self {
         let spline = mermaid_spline();
 
@@ -50,8 +52,20 @@ impl<const N: usize> Gradient<N> {
         Self::new(color_iter)
     }
 
-    pub fn new_rainbow() -> Self {
-        todo!();
+    // TODO: put this behind a feature?
+    pub fn new_rainbow(saturation: f32, luminance: f32) -> Self {
+        // TODO: interpolate the correct number of colors in Hsluv space. then convert to RGB8 with convert_color function
+        let lin = Linear::builder()
+            .elements([0.0, 255.0])
+            .knots([0.0, 255.0])
+            .build()
+            .unwrap();
+
+        let color_iter = lin
+            .take(N)
+            .map(|x| convert_color(Hsluv::new(x, saturation, luminance)).into());
+
+        Self::new(color_iter)
     }
 
     // /// TODO: i don't think this is right. need to read more examples and write some tests

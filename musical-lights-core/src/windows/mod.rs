@@ -1,6 +1,9 @@
+mod flat;
 mod hanning;
 
 use crate::logging::debug;
+
+pub use flat::FlatWindow;
 pub use hanning::HanningWindow;
 
 pub trait Window<const N: usize> {

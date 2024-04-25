@@ -1,6 +1,7 @@
 //! TODO: `brightness_video` and `gamma_video` that doesn't dim lower than 1
 
 use core::{iter::Take, marker::PhantomData};
+use log::{debug, info};
 use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, LinSrgb};
 use smart_leds::{brightness as brightness_iter, gamma, Brightness, Gamma, RGB8};
 
@@ -63,9 +64,15 @@ where
 /// TODO: generic input color (and whitepoint)
 /// TODO: linear srgb or no? i have no idea what i am doing
 pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
+    info!("hsluv color: {:?}", color);
+
     let rgb: LinSrgb<f32> = color.adapt_into();
 
-    debug_assert!(rgb.is_within_bounds());
+    info!("linsrgb: {:?}", rgb);
+
+    if !rgb.is_within_bounds() {
+        debug!("rgb is out of bounds! {:?}", rgb);
+    }
 
     let rgb: LinSrgb<u8> = rgb.into_format();
 
