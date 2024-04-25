@@ -3,8 +3,8 @@ use leptos::*;
 use log::warn;
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleBuilder, FlatWeighting,
-        PeakScaledBuilder, Samples, FFT,
+        AggregatedAmplitudesBuilder, AudioBuffer, DownResistanceBuilder, ExponentialScaleBuilder,
+        FlatWeighting, PeakScaledBuilder, Samples, FFT,
     },
     lights::Gradient,
     logging::{info, trace},
@@ -52,7 +52,7 @@ pub fn DancingLights() -> impl IntoView {
     let (listen, set_listen) = create_signal(false);
 
     // TODO: i think this needs to be a vec of signals
-    let (audio, set_audio) = create_signal(vec![]);
+    let (audio, set_audio) = create_signal([0.0; NUM_CHANNELS]);
 
     let (sample_rate, set_sample_rate) = create_signal(None);
 
@@ -70,6 +70,8 @@ pub fn DancingLights() -> impl IntoView {
         }
 
         let mut peak_scaled_builder = PeakScaledBuilder::new(0.99);
+
+        let mut down_resistance_builder = DownResistanceBuilder::<NUM_CHANNELS>::new(0.004);
 
         let media_stream = load_media_stream()
             .await
@@ -141,12 +143,16 @@ pub fn DancingLights() -> impl IntoView {
 
             let amplitudes = fft.weighted_amplitudes(buffered);
 
-            let mut loudness = scale_builder.build(amplitudes).0;
+            let mut visual_loudness = scale_builder.build(amplitudes).0 .0;
 
             // loudness is now set to go from 0.0 to 1.0
-            peak_scaled_builder.scale(&mut loudness.0);
+            // the quietest bins are pushed to 0 and the loudest to 1
+            peak_scaled_builder.scale(&mut visual_loudness);
 
-            set_audio(loudness.0.to_vec());
+            // as usual, i don't love the name of the name of this variable
+            down_resistance_builder.update(&mut visual_loudness);
+
+            set_audio(visual_loudness);
         });
 
         let port = audio_worklet_node.port().unwrap();
