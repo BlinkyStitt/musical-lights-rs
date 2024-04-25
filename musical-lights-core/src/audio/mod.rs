@@ -27,6 +27,6 @@ pub use buffer::AudioBuffer;
 pub use decibels::Decibels;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
 pub use fft::{bin_to_frequency, frequency_to_bin, FFT};
-pub use peak_scaled::PeakScaled;
+pub use peak_scaled::PeakScaledBuilder;
 pub use samples::{Samples, WindowedSamples};
 pub use weighting::{AWeighting, FlatWeighting, Weighting};

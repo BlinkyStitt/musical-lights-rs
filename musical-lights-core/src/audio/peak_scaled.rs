@@ -1,10 +1,10 @@
-pub struct PeakScaled {
+pub struct PeakScaledBuilder {
     pub max: f32,
     pub decay_per_tick: f32,
     pub min: f32,
 }
 
-impl PeakScaled {
+impl PeakScaledBuilder {
     pub fn new(decay_per_tick: f32) -> Self {
         Self {
             max: f32::MIN,
@@ -13,7 +13,7 @@ impl PeakScaled {
         }
     }
 
-    // update min and max for the full range, then scale the values
+    /// update min and max for the full range, then scale the values at `x`
     pub fn scale(&mut self, x: &mut [f32]) {
         let mut new_min = self.min;
         let mut new_max = self.max;
@@ -38,7 +38,8 @@ impl PeakScaled {
         self.max = new_max - self.decay_per_tick;
     }
 
-    /// be sure to call [update] for the full rangefirst!
+    /// only call this through [scale]! this makes sure min and max are correct
+    #[inline]
     fn scale_one(&self, x: f32) -> f32 {
         (x - self.min) / (self.max - self.min)
     }

@@ -1,13 +1,14 @@
 use js_sys::Float64Array;
 use leptos::*;
+use log::warn;
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleBuilder, FlatWeighting, Samples,
-        FFT,
+        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleBuilder, FlatWeighting,
+        PeakScaledBuilder, Samples, FFT,
     },
     lights::Gradient,
     logging::{info, trace},
-    windows::HanningWindow,
+    windows::FlatWindow,
 };
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{MediaStream, MediaStreamConstraints, MessageEvent};
@@ -68,6 +69,8 @@ pub fn DancingLights() -> impl IntoView {
             return Ok(None);
         }
 
+        let mut peak_scaled_builder = PeakScaledBuilder::new(0.99);
+
         let media_stream = load_media_stream()
             .await
             .map_err(|x| format!("media stream error: {:?}", x))?;
@@ -98,7 +101,7 @@ pub fn DancingLights() -> impl IntoView {
         let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
 
         let fft = FFT::<FFT_INPUTS, FFT_OUTPUTS>::new_with_window_and_weighting::<
-            HanningWindow<FFT_INPUTS>,
+            FlatWindow<FFT_INPUTS>,
             _,
         >(weighting);
 
@@ -138,24 +141,12 @@ pub fn DancingLights() -> impl IntoView {
 
             let amplitudes = fft.weighted_amplitudes(buffered);
 
-            let loudness = scale_builder.build(amplitudes).0;
+            let mut loudness = scale_builder.build(amplitudes).0;
 
-            // // TODO: use something like this?
-            // dancing_lights.update(loudness);
-            // let lights_iter = dancing_lights.iter(0).copied();
-            // let lights = lights_iter.collect::<Vec<_>>();
+            // loudness is now set to go from 0.0 to 1.0
+            peak_scaled_builder.scale(&mut loudness.0);
 
-            // TODO: track recent max. dancing lights already does this for us
-            let found_max = loudness.0.iter().copied().fold(0.0, f32::max);
-
-            // i'm sure this could be more efficient
-            let scaled = loudness
-                .0
-                .iter()
-                .map(|x| ((x / found_max) * 8.0) as u8)
-                .collect::<Vec<_>>();
-
-            set_audio(scaled);
+            set_audio(loudness.0.to_vec());
         });
 
         let port = audio_worklet_node.port().unwrap();
@@ -180,14 +171,14 @@ pub fn DancingLights() -> impl IntoView {
                 </button>
             }.into_view(),
             Some(Ok(Some(media_stream_id))) => view! {
-                <button
-                    on:click= move |_| {
-                        // set_listen(false)
-                        info!("todo: figure out how to turn off the media stream");
-                    }
-                >
-                    Now Listening
-                </button>
+                // <button
+                //     on:click= move |_| {
+                //         // set_listen(false)
+                //         info!("todo: figure out how to turn off the media stream");
+                //     }
+                // >
+                //     Now Listening
+                // </button>
 
                 <div id="dancinglights">
                     // TODO: change audio to be a vec of signals and then use a For
@@ -198,12 +189,12 @@ pub fn DancingLights() -> impl IntoView {
                     // >
                     //     <li>{data.1}</li>
                     // </For>
-                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&gradient, i, x)).collect_view()}
+                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&gradient, i, (x * 8.0) as u8)).collect_view()}
                 </div>
 
                 <p>Input ID: { media_stream_id }</p>
 
-                <p>Sample Rate:{ sample_rate }Hz</p>
+                <p>Sample Rate: { sample_rate }Hz</p>
             }.into_view(),
             Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
         }}
