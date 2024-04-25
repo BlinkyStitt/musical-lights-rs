@@ -56,7 +56,8 @@ pub fn DancingLights() -> impl IntoView {
     let (sample_rate, set_sample_rate) = create_signal(None);
 
     // TODO: change this to match the size of the light outputs
-    let gradient = Gradient::<NUM_CHANNELS>::new_mermaid();
+    // let gradient = Gradient::<NUM_CHANNELS>::new_mermaid();
+    let gradient = Gradient::<NUM_CHANNELS>::new_rainbow(100.0, 70.0);
 
     // // TODO: make this a signal so the user can change it?
     // let peak_decay = 0.99;
