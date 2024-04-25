@@ -8,6 +8,7 @@ mod amplitudes;
 mod bark_scale;
 mod buffer;
 mod decibels;
+mod down_resistance_builder;
 mod exponential_scale;
 mod fft;
 mod peak_scaled;
@@ -25,6 +26,7 @@ pub use amplitudes::{
 pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
 pub use buffer::AudioBuffer;
 pub use decibels::Decibels;
+pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
 pub use fft::{bin_to_frequency, frequency_to_bin, FFT};
 pub use peak_scaled::PeakScaledBuilder;
