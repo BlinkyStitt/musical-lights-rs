@@ -77,7 +77,7 @@ pub fn DancingLights() -> impl IntoView {
 
         let mut peak_scaled_builder = PeakScaledBuilder::new(0.99);
 
-        let mut down_resistance_builder = DownResistanceBuilder::<NUM_CHANNELS>::new(0.004);
+        let mut down_resistance_builder = DownResistanceBuilder::<NUM_CHANNELS>::new(0.005);
 
         let media_stream = load_media_stream()
             .await
@@ -151,11 +151,11 @@ pub fn DancingLights() -> impl IntoView {
 
             let mut visual_loudness = scale_builder.build(amplitudes).0 .0;
 
-            // loudness is now set to go from 0.0 to 1.0
-            // the quietest bins are pushed to 0 and the loudest to 1
+            // TODO: use log somehow here?
+
+            // peak_scaled_builder pushes the quietest bins to 0 and the loudest to 1
             peak_scaled_builder.scale(&mut visual_loudness);
 
-            // as usual, i don't love the name of the name of this variable
             down_resistance_builder.update(&mut visual_loudness);
 
             set_audio(visual_loudness);
