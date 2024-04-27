@@ -60,6 +60,12 @@ pub fn DancingLights() -> impl IntoView {
     // TODO: use a signal for this so that we can change it real time
     let gradient = Gradient::<NUM_CHANNELS>::new_rainbow(100.0, 70.0);
 
+    let colors: Vec<_> = gradient
+        .colors
+        .iter()
+        .map(|x| format!("#{:02X}{:02X}{:02X}", x.r, x.g, x.b))
+        .collect();
+
     // // TODO: make this a signal so the user can change it?
     // let peak_decay = 0.99;
 
@@ -195,7 +201,7 @@ pub fn DancingLights() -> impl IntoView {
                     // >
                     //     <li>{data.1}</li>
                     // </For>
-                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&gradient, i, (x * 8.0) as u8)).collect_view()}
+                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&colors[i], (x * 8.0) as u8)).collect_view()}
                 </div>
 
                 <p>Input ID: { media_stream_id }</p>
@@ -209,12 +215,7 @@ pub fn DancingLights() -> impl IntoView {
 }
 
 /// TODO: i think this should be a component, but references make that unhappy
-pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) -> impl IntoView {
-    let color = gradient.colors[i];
-
-    // TODO: i'm sure there is a better way to do this
-    let color = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
-
+pub fn audio_list_item(color: &str, x: u8) -> impl IntoView {
     let text = match x {
         0 => "󠀠",
         1 => "M",
@@ -226,7 +227,8 @@ pub fn audio_list_item<const N: usize>(gradient: &Gradient<N>, i: usize, x: u8) 
         7 => "MERBOTS ",
         8 => "MERBOTS!",
         _ => {
-            warn!("unexpected length for #{}! {}", i, x);
+            // TODO: we used to have the index here. i think we want that back
+            warn!("unexpected length for {}! {}", color, x);
             "ERROR!!!!"
         }
     };
