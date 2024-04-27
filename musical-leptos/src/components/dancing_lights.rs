@@ -22,9 +22,9 @@ const FFT_INPUTS: usize = 2048;
 /// bark scale has 24 bands, but we want more
 const NUM_BANDS: usize = 120;
 
-/// TODO: this range is way too wide
+/// TODO: 0-20kHz is way too wide
 const MIN_FREQ: f32 = 0.0;
-const MAX_FREQ: f32 = 20_000.0;
+const MAX_FREQ: f32 = 12_000.0;
 
 /// maximum rate at which the visual loudness can decrease
 const DOWN_RATE: f32 = 0.0045;
