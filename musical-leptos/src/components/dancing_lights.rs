@@ -15,14 +15,19 @@ use web_sys::{MediaStream, MediaStreamConstraints, MessageEvent};
 
 use crate::wasm_audio::wasm_audio;
 
-/// TODO: this was 512. i think we probably want that still. but web defaults to 128 so this is simplest
+/// TODO: most things i've tested have given 512 samples at a time, but browsers give 128. this should probably not be a const
 const MIC_SAMPLES: usize = 128;
 const FFT_INPUTS: usize = 2048;
-/// TODO: i don't like this name
-/// 24 to match the Bark Scale
-const NUM_CHANNELS: usize = 120;
 
-// const AUDIO_Y: usize = 9;
+/// bark scale has 24 bands, but we want more
+const NUM_BANDS: usize = 120;
+
+/// TODO: this range is way too wide
+const MIN_FREQ: f32 = 0.0;
+const MAX_FREQ: f32 = 20_000.0;
+
+/// maximum rate at which the visual loudness can decrease
+const DOWN_RATE: f32 = 0.0045;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
@@ -52,13 +57,13 @@ pub fn DancingLights() -> impl IntoView {
     let (listen, set_listen) = create_signal(false);
 
     // TODO: i think this needs to be a vec of signals
-    let (audio, set_audio) = create_signal([0.0; NUM_CHANNELS]);
+    let (audio, set_audio) = create_signal([0.0; NUM_BANDS]);
 
     let (sample_rate, set_sample_rate) = create_signal(None);
 
     // let gradient = Gradient::<NUM_CHANNELS>::new_mermaid();
     // TODO: use a signal for this so that we can change it real time
-    let gradient = Gradient::<NUM_CHANNELS>::new_rainbow(100.0, 70.0);
+    let gradient = Gradient::<NUM_BANDS>::new_rainbow(100.0, 75.0);
 
     let colors: Vec<_> = gradient
         .colors
@@ -77,7 +82,7 @@ pub fn DancingLights() -> impl IntoView {
 
         let mut peak_scaled_builder = PeakScaledBuilder::new(0.99);
 
-        let mut down_resistance_builder = DownResistanceBuilder::<NUM_CHANNELS>::new(0.005);
+        let mut down_resistance_builder = DownResistanceBuilder::<NUM_BANDS>::new(DOWN_RATE);
 
         let media_stream = load_media_stream()
             .await
@@ -113,9 +118,9 @@ pub fn DancingLights() -> impl IntoView {
             _,
         >(weighting);
 
-        let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_CHANNELS>::new(
-            0.0,
-            20_000.0,
+        let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_BANDS>::new(
+            MIN_FREQ,
+            MAX_FREQ,
             new_sample_rate,
         );
         // let scale_builder = BarkScaleBuilder::new(new_sample_rate);
