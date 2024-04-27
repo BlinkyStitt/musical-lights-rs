@@ -8,7 +8,7 @@ use musical_lights_core::{
     },
     lights::Gradient,
     logging::{info, trace},
-    windows::FlatWindow,
+    windows::HanningWindow,
 };
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{MediaStream, MediaStreamConstraints, MessageEvent};
@@ -56,8 +56,8 @@ pub fn DancingLights() -> impl IntoView {
 
     let (sample_rate, set_sample_rate) = create_signal(None);
 
-    // TODO: change this to match the size of the light outputs
     // let gradient = Gradient::<NUM_CHANNELS>::new_mermaid();
+    // TODO: use a signal for this so that we can change it real time
     let gradient = Gradient::<NUM_CHANNELS>::new_rainbow(100.0, 70.0);
 
     // // TODO: make this a signal so the user can change it?
@@ -97,13 +97,13 @@ pub fn DancingLights() -> impl IntoView {
         // TODO: is combining signals like this okay?
         set_sample_rate(Some(new_sample_rate));
 
-        // TODO: is this generic correct?
+        // TODO: what weighting?
         let weighting = FlatWeighting;
 
         let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
 
         let fft = FFT::<FFT_INPUTS, FFT_OUTPUTS>::new_with_window_and_weighting::<
-            FlatWindow<FFT_INPUTS>,
+            HanningWindow<FFT_INPUTS>,
             _,
         >(weighting);
 
