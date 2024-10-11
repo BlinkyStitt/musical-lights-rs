@@ -54,7 +54,7 @@ button {
 #dancinglights {
   column-width: 12ch;
   column-gap: 2ch;
-  column-count: 8;
+  column-count: 6;
   margin-left: 2ch;
   margin-right: 2ch;
   min-height: 80vh;
