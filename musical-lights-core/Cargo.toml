@@ -4,15 +4,15 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-circular-buffer = { version = "0.1.7", default-features = false }
-defmt = { version = "0.3.6", default-features = false, optional = true }
+circular-buffer = { version = "0.1.9", default-features = false }
+defmt = { version = "0.3.8", default-features = false, optional = true }
 enterpolation = { version = "0.2.1", default-features = false, features = ["bspline", "linear"] }
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.6.0", default-features = false, features = ["size-2048"] }
 micromath = "2.1.0"
-num = { version = "0.4.2", default-features = false }
-num-complex = { version = "0.4.5", default-features = false }
-palette = { version = "0.7.5", default-features = false }
+num = { version = "0.4.3", default-features = false }
+num-complex = { version = "0.4.6", default-features = false }
+palette = { version = "0.7.6", default-features = false }
 smart-leds = "0.4.0"
 
 # # TODO: use these?
@@ -21,7 +21,7 @@ smart-leds = "0.4.0"
 # cichlid = { version = "0.2.1", features = ["no-std"] }
 
 [dev-dependencies]
-test-log = "0.2.15"
+test-log = "0.2.16"
 
 [features]
 

@@ -3,7 +3,7 @@ use leptos::*;
 use log::warn;
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, DownResistanceBuilder, ExponentialScaleBuilder,
+        AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, DownResistanceBuilder, ExponentialScaleBuilder,
         FlatWeighting, PeakScaledBuilder, Samples, FFT,
     },
     lights::Gradient,
@@ -19,12 +19,12 @@ use crate::wasm_audio::wasm_audio;
 const MIC_SAMPLES: usize = 128;
 const FFT_INPUTS: usize = 2048;
 
-/// bark scale has 24 bands, but we want more
-const NUM_BANDS: usize = 120;
+/// bark scale has 24 bands, but we want more for the exponential
+const NUM_BANDS: usize = 24;
 
-/// TODO: 0-20kHz is way too wide
-const MIN_FREQ: f32 = 0.0;
-const MAX_FREQ: f32 = 12_000.0;
+// /// TODO: 0-20kHz is way too wide
+// const MIN_FREQ: f32 = 0.0;
+// const MAX_FREQ: f32 = 12_000.0;
 
 /// maximum rate at which the visual loudness can decrease
 const DOWN_RATE: f32 = 0.0045;
@@ -118,12 +118,12 @@ pub fn DancingLights() -> impl IntoView {
             _,
         >(weighting);
 
-        let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_BANDS>::new(
-            MIN_FREQ,
-            MAX_FREQ,
-            new_sample_rate,
-        );
-        // let scale_builder = BarkScaleBuilder::new(new_sample_rate);
+        // let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_BANDS>::new(
+        //     MIN_FREQ,
+        //     MAX_FREQ,
+        //     new_sample_rate,
+        // );
+        let scale_builder = BarkScaleBuilder::new(new_sample_rate);
 
         // let mut dancing_lights =
         //     DancingLights::<AUDIO_Y, NUM_CHANNELS, { AUDIO_Y * NUM_CHANNELS }>::new(
