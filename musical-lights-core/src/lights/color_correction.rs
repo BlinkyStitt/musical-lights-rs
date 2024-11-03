@@ -64,16 +64,19 @@ where
 /// TODO: generic input color (and whitepoint)
 /// TODO: linear srgb or no? i have no idea what i am doing
 pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
-    info!("hsluv color: {:?}", color);
+    // TODO: this used to have a debug format, but it was removed
+    // info!("hsluv color: {:?}", color);
 
     let rgb: LinSrgb<f32> = color.adapt_into();
 
     let rgb: LinSrgb<u8> = rgb.into_format();
 
-    info!("linsrgb: {:?}", rgb);
+    // TODO: this used to have a debug format, but it was removed
+    // info!("linsrgb: {:?}", rgb);
 
     if !rgb.is_within_bounds() {
-        warn!("rgb is out of bounds! {:?}", rgb);
+        // warn!("rgb is out of bounds! {:?}", rgb);
+        warn!("rgb is out of bounds!");
     }
 
     // // TODO: how to debug log the hue?

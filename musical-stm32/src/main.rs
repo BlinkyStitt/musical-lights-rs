@@ -27,7 +27,7 @@ use musical_lights_core::{
         AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
         ExponentialScaleBuilder, FFT,
     },
-    logging::{debug, info, trace},
+    logging::{debug, info, trace, warn},
     remap,
     windows::HanningWindow,
 };
@@ -95,13 +95,13 @@ async fn mic_task(
     // // TODO: do we care about the temperature?
     // // TODO: shut down if hot?
     // let mut temperature = adc.enable_temperature();
-    // let temp_sample = adc.read(&mut temperature).await;
+    // let temp_sample = adc.blocking_read(&mut temperature).await;
     // info!("temp: {}", temp_sample);
 
     loop {
-        // let vref = adc.read(&mut vrefint);
+        // let vref = adc.blocking_read(&mut vrefint);
 
-        let sample = adc.read(&mut mic_pin);
+        let sample = adc.blocking_read(&mut mic_pin);
 
         // trace!("mic u16: {}", sample);
 

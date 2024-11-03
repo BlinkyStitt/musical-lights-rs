@@ -11,7 +11,7 @@ use embassy_stm32::{
     peripherals::{ADC1, PA0},
 };
 use embassy_time::{Timer};
-use musical_lights_core::logging::info;
+use musical_lights_core::logging::{info, warn};
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::task]
@@ -30,6 +30,7 @@ pub async fn blink_task(mut led: Output<'static>) {
 #[embassy_executor::task]
 async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0) {
     // TODO: i kind of wish i'd ordered the i2s mic
+    // TODO: `into_ring_buffered`?
     let mut adc = Adc::new(mic_adc);
 
     // TODO: what resolution?
@@ -57,15 +58,17 @@ async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0) {
     // // TODO: do we care about the temperature?
     // // TODO: shut down if hot?
     // let mut temperature = adc.enable_temperature();
-    // let temp_sample = adc.read(&mut temperature);
+    // let temp_sample = adc.blocking_read(&mut temperature);
     // info!("temp: {}", temp_sample);
 
     const MIC_DC_OFFSET_V: f32 = MIC_DC_OFFSET_MV as f32 / 1000.0;
     const VREF_CALIB_V: f32 = VREF_CALIB_MV as f32 / 1000.0;
 
     loop {
-        // let vref = adc.read(&mut vrefint);
-        let sample = adc.read(&mut mic_pin);
+        // let vref = adc.blocking_read(&mut vrefint);
+        let sample = adc.blocking_read(&mut mic_pin);
+        warn!("todo: real adc sample");
+        let sample = 0.0;
 
         // info!("vref raw: {}; mic raw: {}", vref, sample);
 

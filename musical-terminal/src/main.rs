@@ -1,4 +1,5 @@
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 mod audio;
 
@@ -38,6 +39,8 @@ async fn audio_task(
         let amplitudes = fft.weighted_amplitudes(samples);
 
         let loudness = scale_builder.build(amplitudes).0;
+
+        // TODO: decibels
 
         // TODO: shazam
         // TODO: beat detection

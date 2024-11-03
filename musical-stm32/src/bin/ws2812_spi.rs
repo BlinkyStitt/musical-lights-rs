@@ -120,7 +120,7 @@ async fn main(spawner: Spawner) {
     info!("all tasks started");
 }
 
-/// https://github.com/smart-leds-rs/ws2812-spi-rs/issues/7
+/// <https://github.com/smart-leds-rs/ws2812-spi-rs/issues/7>
 pub struct RbgToGrb<I> {
     iter: I,
 }

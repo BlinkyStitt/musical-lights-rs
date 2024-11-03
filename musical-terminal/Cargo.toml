@@ -6,16 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.79"
-cpal = "0.15.2"
-critical-section = { version = "1.1", features = ["std"] }
-embassy-executor = { version = "0.4.0", features = ["arch-std", "executor-thread", "integrated-timers", "log", "nightly"] }
-embassy-sync = { version = "0.5.0", features = ["log", "std"] }
-embassy-time = { version = "0.2.0", features = ["log", "std"] }
-env_logger = "0.10.1"
-flume = "0.11.0"
-log = { version = "0.4.20", features = ["std"] }
+anyhow = "1.0.92"
+cpal = "0.15.3"
+critical-section = { version = "1.2", features = ["std"] }
+embassy-executor = { version = "0.6.1", features = ["arch-std", "executor-thread", "log", "nightly"] }
+embassy-sync = { version = "0.6.0", features = ["log", "std"] }
+embassy-time = { version = "0.3.2", features = ["log", "std"] }
+env_logger = "0.11.5"
+flume = "0.11.1"
+log = { version = "0.4.22", features = ["std"] }
 musical-lights-core = { path = "../musical-lights-core", features = ["std", "log"] }
-
-[patch.crates-io]
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "00708d8c2793bf8c59624ec92a6895e2a3a7f586" }
