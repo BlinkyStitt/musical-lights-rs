@@ -3,8 +3,9 @@ use leptos::*;
 use log::warn;
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, DownResistanceBuilder, ExponentialScaleBuilder,
-        FlatWeighting, PeakScaledBuilder, Samples, FFT,
+        AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, Decibels,
+        DownResistanceBuilder, ExponentialScaleBuilder, FlatWeighting, PeakScaledBuilder, Samples,
+        FFT,
     },
     lights::Gradient,
     logging::{info, trace},
@@ -154,16 +155,17 @@ pub fn DancingLights() -> impl IntoView {
 
             let amplitudes = fft.weighted_amplitudes(buffered);
 
-            let mut visual_loudness = scale_builder.build(amplitudes).0 .0;
+            let visual_loudness = scale_builder.build(amplitudes).0;
 
-            // TODO: use log somehow here?
+            let visual_loudness_db = Decibels::from_aggregated_amplitudes(visual_loudness);
 
             // peak_scaled_builder pushes the quietest bins to 0 and the loudest to 1
-            peak_scaled_builder.scale(&mut visual_loudness);
+            let mut scaled_loudness = visual_loudness_db.0;
+            peak_scaled_builder.scale(&mut scaled_loudness);
 
-            down_resistance_builder.update(&mut visual_loudness);
+            down_resistance_builder.update(&mut scaled_loudness);
 
-            set_audio(visual_loudness);
+            set_audio(scaled_loudness);
         });
 
         let port = audio_worklet_node.port().unwrap();

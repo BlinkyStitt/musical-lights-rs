@@ -8,7 +8,7 @@ use super::amplitudes::{AggregatedAmplitudes, Amplitudes};
 pub struct Decibels<const N: usize>(pub [f32; N]);
 
 impl<const B: usize> Decibels<B> {
-    fn from_floats(mut x: [f32; B]) -> Self {
+    pub fn from_floats(mut x: [f32; B]) -> Self {
         for i in x.iter_mut() {
             // TODO: is abs needed? aren't these always positive already?
             debug_assert!(*i >= 0.0);

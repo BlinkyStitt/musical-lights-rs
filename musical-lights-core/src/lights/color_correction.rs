@@ -1,6 +1,6 @@
 //! TODO: `brightness_video` and `gamma_video` that doesn't dim lower than 1
 
-use crate::logging::{info, warn};
+use crate::logging::warn;
 use core::{iter::Take, marker::PhantomData};
 use palette::{chromatic_adaptation::AdaptInto, white_point, Hsluv, IsWithinBounds, LinSrgb};
 use smart_leds::{brightness as brightness_iter, gamma, Brightness, Gamma, RGB8};
