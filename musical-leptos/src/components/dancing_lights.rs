@@ -141,31 +141,33 @@ pub fn DancingLights() -> impl IntoView {
 
             trace!("raw inputs: {:#?}", data);
 
-            let samples: [f64; MIC_SAMPLES] = data.try_into().unwrap();
+            let samples_results: Result<[f64; MIC_SAMPLES], _> = data.try_into();
 
-            // our fft code wants f32, but js gives us f64
-            let samples = samples.map(|x| x as f32);
+            if let Ok(samples) = samples_results {
+                // our fft code wants f32, but js gives us f64
+                let samples = samples.map(|x| x as f32);
 
-            // TODO: actual audio processing
-            // TODO: this will actually be a vec of 120 f32s when we are done
-            audio_buffer.push_samples(Samples(samples));
+                // TODO: actual audio processing
+                // TODO: this will actually be a vec of 120 f32s when we are done
+                audio_buffer.push_samples(Samples(samples));
 
-            // TODO: throttle this
-            let buffered = audio_buffer.samples();
+                // TODO: throttle this
+                let buffered = audio_buffer.samples();
 
-            let amplitudes = fft.weighted_amplitudes(buffered);
+                let amplitudes = fft.weighted_amplitudes(buffered);
 
-            let visual_loudness = scale_builder.build(amplitudes).0;
+                let visual_loudness = scale_builder.build(amplitudes).0;
 
-            let visual_loudness_db = Decibels::from_aggregated_amplitudes(visual_loudness);
+                let visual_loudness_db = Decibels::from_aggregated_amplitudes(visual_loudness);
 
-            // peak_scaled_builder pushes the quietest bins to 0 and the loudest to 1
-            let mut scaled_loudness = visual_loudness_db.0;
-            peak_scaled_builder.scale(&mut scaled_loudness);
+                // peak_scaled_builder pushes the quietest bins to 0 and the loudest to 1
+                let mut scaled_loudness = visual_loudness_db.0;
+                peak_scaled_builder.scale(&mut scaled_loudness);
 
-            down_resistance_builder.update(&mut scaled_loudness);
+                down_resistance_builder.update(&mut scaled_loudness);
 
-            set_audio(scaled_loudness);
+                set_audio(scaled_loudness);
+            }
         });
 
         let port = audio_worklet_node.port().unwrap();
