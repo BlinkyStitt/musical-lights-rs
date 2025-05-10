@@ -18,7 +18,6 @@ use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
 use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
-use musical_adafruit_sparkle::wheel;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -48,20 +47,18 @@ async fn blink_onboard_neopixel_rmt(
     rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
     pin: AnyPin,
 ) {
-    // We use one of the RMT channels to instantiate a `SmartLedsAdapter` which can
-    // be used directly with all `smart_led` implementations
+    // there is only 1 onboard neopixel
+    // TODO: why can't we use the NUM_ONBOARD_NEOPIXELS const here? that's sad
     let rmt_buffer = smartLedBuffer!(1);
 
     let mut led = SmartLedsAdapter::new(rmt_channel, pin, rmt_buffer);
-
     let mut color = Hsv {
         hue: 0,
         sat: 255,
         val: 255,
     };
-    let mut data;
-
-    let mut tick = Ticker::every(Duration::from_millis(20));
+    let mut data: [_; NUM_ONBOARD_NEOPIXELS];
+    let mut ticker = Ticker::every(Duration::from_millis(20));
 
     loop {
         // Iterate over the rainbow!
@@ -79,7 +76,7 @@ async fn blink_onboard_neopixel_rmt(
             led.write(brightness(gamma(data.iter().cloned()), 10))
                 .unwrap();
 
-            tick.next().await;
+            ticker.next().await;
         }
     }
 }
@@ -92,28 +89,40 @@ async fn blink_onboard_neopixel_spi(spi: SPI2, pin: AnyPin, dma: Spi2DmaChannel)
     // config.phase = Phase::CaptureOnFirstTransition;
     // config.polarity = Polarity::IdleLow;
 
-    // TODO: why can't this use SPI0 or SPI1?
+    // TODO: why can't this use SPI0 or SPI1? do we want DMA?
     let spi = Spi::new(spi, config)
         .unwrap()
         .with_mosi(pin)
         // .with_dma(dma)
         .into_async();
 
-    let mut ws: Ws2812<_, Grb, { 12 * NUM_ONBOARD_NEOPIXELS }> = Ws2812::new(spi);
-
-    let mut data = [RGB8::default(); NUM_ONBOARD_NEOPIXELS];
+    let mut led: Ws2812<_, Grb, { 12 * NUM_ONBOARD_NEOPIXELS }> = Ws2812::new(spi);
+    let mut color = Hsv {
+        hue: 0,
+        sat: 255,
+        val: 255,
+    };
+    let mut ticker = Ticker::every(Duration::from_millis(20));
+    let mut data: [_; NUM_ONBOARD_NEOPIXELS];
 
     loop {
-        for j in 0..(256 * 5) {
-            (0..NUM_ONBOARD_NEOPIXELS).for_each(|i| {
-                data[i] = wheel(
-                    (((i * 256) as u16 / NUM_ONBOARD_NEOPIXELS as u16 + j as u16) & 255) as u8,
-                );
-            });
+        // Iterate over the rainbow!
+        for hue in 0..=255 {
+            color.hue = hue;
 
-            ws.write(brightness(data.iter().cloned(), 16)).await.ok();
+            // Convert from the HSV color space (where we can easily transition from one
+            // color to the other) to the RGB color space that we can then send to the LED
+            data = [hsv2rgb(color)];
 
-            Timer::after(Duration::from_millis(20)).await;
+            // When sending to the LED, we do a gamma correction first (see smart_leds
+            // documentation for details) and then limit the brightness to 10 out of 255 so
+            // that the output it's not too bright.
+            // TODO: fastled had cool dithering. can we use that here?
+            led.write(brightness(gamma(data.iter().cloned()), 10))
+                .await
+                .unwrap();
+
+            ticker.next().await;
         }
     }
 }
@@ -237,7 +246,7 @@ async fn main(spawner: Spawner) {
     //     peripherals.DMA_SPI2,
     // );
 
-    // TODO: 80Hz is cargo culted. need to find the docs for this
+    // TODO: 80MHz is cargo culted. need to find the docs for this
     // Async depends on <https://github.com/esp-rs/esp-hal-community/pull/6>
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
     // .into_async();
