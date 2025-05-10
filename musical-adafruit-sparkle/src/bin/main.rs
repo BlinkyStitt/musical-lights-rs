@@ -20,7 +20,7 @@ use esp_backtrace as _;
 
 extern crate alloc;
 
-const I2S_BYTES: usize = 4096;
+const I2S_BYTES: usize = 4092;
 
 #[embassy_executor::task]
 async fn blink(pin: AnyPin) {
@@ -40,7 +40,7 @@ async fn blink(pin: AnyPin) {
 async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: what size should these be?
     // TODO: the example has these flipped. we should fix the docs
-    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES);
+    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(4 * I2S_BYTES, 0);
 
     let i2s = I2s::new(
         i2s,
@@ -51,7 +51,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         rx_descriptors,
         tx_descriptors,
     )
-    // .with_mclk(pin) // TODO: do we need this pin?
+    // .with_mclk(mclk) // TODO: do we need this pin?
     .into_async();
 
     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
@@ -145,41 +145,6 @@ async fn main(spawner: Spawner) {
         i2s_mic_data.degrade(),
     );
 
-    // let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES);
-
-    // let i2s = I2s::new(
-    //     i2s_mic,
-    //     Standard::Philips,
-    //     DataFormat::Data16Channel16,
-    //     Rate::from_hz(44100),
-    //     i2s_mic_dma,
-    //     rx_descriptors,
-    //     tx_descriptors,
-    // )
-    // // .with_mclk(peripherals.GPIO4)
-    // .into_async();
-
-    // let i2s_rx = i2s
-    //     .i2s_rx
-    //     .with_ws(i2s_mic_ws)
-    //     .with_bclk(i2s_mic_bclk)
-    //     .with_din(i2s_mic_data)
-    //     .build();
-
-    // let mut transfer = i2s_rx
-    //     .read_dma_circular_async(rx_buffer)
-    //     .expect("No dma read");
-
-    // // wifi
-    // // Note you cannot read analog inputs on ADC2 once WiFi has started, as it is shared with the WiFi hardware
-    // let timer1 = TimerGroup::new(peripherals.TIMG0);
-    // let _init = esp_wifi::init(
-    //     timer1.timer0,
-    //     esp_hal::rng::Rng::new(peripherals.RNG),
-    //     peripherals.RADIO_CLK,
-    // )
-    // .unwrap();
-
     // Spawn some tasks
     // TODO: what should core 1 do?
     spawner.spawn(blink_f).unwrap();
@@ -188,7 +153,7 @@ async fn main(spawner: Spawner) {
     // TODO: what should the main loop do?
     loop {
         info!("Hello world!");
-        Timer::after(Duration::from_secs(10)).await;
+        Timer::after(Duration::from_secs(1)).await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin
