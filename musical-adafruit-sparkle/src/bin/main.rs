@@ -1,11 +1,12 @@
 #![no_std]
 #![no_main]
 
-use esp_hal::clock::CpuClock;
+use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::{clock::CpuClock, gpio::AnyPin};
 
- use esp_println as _;
- use defmt::info;
+use defmt::info;
+use esp_println as _;
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
@@ -14,10 +15,24 @@ use esp_backtrace as _;
 
 extern crate alloc;
 
+#[embassy_executor::task]
+async fn blink(pin: AnyPin) {
+    let config = OutputConfig::default();
+
+    let mut led = Output::new(pin, Level::Low, config);
+
+    loop {
+        // Timekeeping is globally available, no need to mess with hardware timers.
+        led.set_high();
+        Timer::after_millis(150).await;
+        led.set_low();
+        Timer::after_millis(150).await;
+    }
+}
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
     // generator version: 0.3.1
-
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
@@ -37,8 +52,12 @@ async fn main(spawner: Spawner) {
     )
     .unwrap();
 
-    // TODO: Spawn some tasks
-    let _ = spawner;
+    // Spawn some tasks
+    spawner.spawn(blink(peripherals.GPIO4.degrade())).unwrap();
+
+    // TODO: what should the main loop do?
+
+    // TODO: what should core 1 do?
 
     loop {
         info!("Hello world!");
