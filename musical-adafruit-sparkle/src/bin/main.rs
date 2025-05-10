@@ -1,3 +1,4 @@
+#![feature(type_alias_impl_trait)]
 #![no_std]
 #![no_main]
 
@@ -10,6 +11,7 @@ use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::peripherals::{I2S0, SPI2};
+use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
@@ -166,6 +168,11 @@ async fn main(spawner: Spawner) {
     // the ir received is connected to ADC1
     let ir_receiver = peripherals.GPIO32;
 
+    // // TODO: use the rmt peripherial to set timings for the neopixels
+    // let rmt = Rmt::new(peripherals.RMT, Rate::from_hz(1_000))
+    //     .expect("initializing rmt")
+    //     .into_async();
+
     //
     // end pretty names for all the pins
     //
@@ -186,6 +193,7 @@ async fn main(spawner: Spawner) {
     );
 
     // read from the i2s mic
+    // TODO: how should we send the data to another task to be processed?
     let i2s_mic_f = i2s_mic_task(
         i2s_mic,
         i2s_mic_dma,
