@@ -2,7 +2,7 @@
 #![no_std]
 #![no_main]
 
-use defmt::{info, warn};
+use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
@@ -10,7 +10,7 @@ use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel};
 use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::peripherals::{I2S0, RMT, SPI2};
+use esp_hal::peripherals::{I2S0, SPI2};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
@@ -21,7 +21,7 @@ use esp_println as _;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
-    SmartLedsWrite, SmartLedsWriteAsync, RGB8,
+    SmartLedsWrite, SmartLedsWriteAsync,
 };
 use ws2812_async::{Grb, Ws2812};
 
@@ -176,6 +176,8 @@ async fn main(spawner: Spawner) {
 
     // TODO: watchdog?
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
+
+    // TODO: how do we configure the logger? i want timestamps
 
     let peripherals = esp_hal::init(config);
 
