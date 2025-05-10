@@ -1,41 +1,74 @@
 #![no_std]
 #![no_main]
 
-use esp_hal::dma::I2s0DmaChannel;
+use defmt::{info, warn};
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
+use esp_backtrace as _;
+use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel};
 use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::peripherals::I2S0;
+use esp_hal::peripherals::{I2S0, SPI2};
+use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
-
-use defmt::{info, warn};
 use esp_println as _;
-
-use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
-
-use esp_backtrace as _;
+use musical_adafruit_sparkle::wheel;
+use smart_leds::{brightness, SmartLedsWriteAsync, RGB8};
+use ws2812_async::{Grb, Ws2812};
 
 extern crate alloc;
 
 const I2S_BYTES: usize = 4092;
+const NUM_ONBOARD_NEOPIXELS: usize = 1;
 
 #[embassy_executor::task]
 async fn blink(pin: AnyPin) {
-    let config = OutputConfig::default();
-
-    let mut led = Output::new(pin, Level::Low, config);
+    let mut led = Output::new(pin, Level::Low, OutputConfig::default());
 
     loop {
-        // Timekeeping is globally available, no need to mess with hardware timers.
         led.toggle();
         Timer::after_millis(200).await;
     }
 }
 
-/// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work with embassy though
+/// TODO: how should we control the onboard neopixel? we need to use SPI
+#[embassy_executor::task]
+async fn blink_onboard_neopixel(spi: SPI2, pin: AnyPin, dma: Spi2DmaChannel) {
+    let config = Config::default().with_frequency(Rate::from_hz(3_800_000));
+
+    // config.phase = Phase::CaptureOnFirstTransition;
+    // config.polarity = Polarity::IdleLow;
+
+    // TODO: why can't this use SPI0 or SPI1?
+    let spi = Spi::new(spi, config)
+        .unwrap()
+        .with_mosi(pin)
+        // .with_dma(dma)
+        .into_async();
+
+    let mut ws: Ws2812<_, Grb, { 12 * NUM_ONBOARD_NEOPIXELS }> = Ws2812::new(spi);
+
+    let mut data = [RGB8::default(); NUM_ONBOARD_NEOPIXELS];
+
+    loop {
+        for j in 0..(256 * 5) {
+            (0..NUM_ONBOARD_NEOPIXELS).for_each(|i| {
+                data[i] = wheel(
+                    (((i * 256) as u16 / NUM_ONBOARD_NEOPIXELS as u16 + j as u16) & 255) as u8,
+                );
+            });
+
+            ws.write(brightness(data.iter().cloned(), 16)).await.ok();
+
+            Timer::after(Duration::from_millis(20)).await;
+        }
+    }
+}
+
+/// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
 #[embassy_executor::task]
 async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: what size should these be?
@@ -105,6 +138,7 @@ async fn main(spawner: Spawner) {
     let neopixel_ext1 = peripherals.GPIO21;
     let neopixel_ext2 = peripherals.GPIO22;
     let neopixel_ext3 = peripherals.GPIO19;
+    // you can also use the "output5v" as a fourth neopixel line
 
     // Connect to the RX pin found on a breakout or device.
     let uart_tx = peripherals.GPIO9;
@@ -112,6 +146,7 @@ async fn main(spawner: Spawner) {
     // Connect to the TX pin found on a breakout or device
     let uart_rx = peripherals.GPIO10;
 
+    // This is a 5V level shifted output only! You can use it as another LED strip pin
     let output5v = peripherals.GPIO23;
 
     let whatever = peripherals.GPIO18;
@@ -143,6 +178,13 @@ async fn main(spawner: Spawner) {
     // blink the onboard LED
     let blink_f = blink(red_led.degrade());
 
+    // blink the onboard neopixel
+    let blink_neopixel_f = blink_onboard_neopixel(
+        peripherals.SPI2,
+        neopixel_int.degrade(),
+        peripherals.DMA_SPI2,
+    );
+
     // read from the i2s mic
     let i2s_mic_f = i2s_mic_task(
         i2s_mic,
@@ -154,6 +196,7 @@ async fn main(spawner: Spawner) {
 
     // Start the tasks on core 0
     spawner.spawn(blink_f).unwrap();
+    spawner.spawn(blink_neopixel_f).unwrap();
     spawner.spawn(i2s_mic_f).unwrap();
 
     // TODO: what should we spawn on core 1?
