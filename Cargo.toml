@@ -7,6 +7,7 @@ members = [
 ]
 
 exclude = [
+    "musical-adafruit-sparkle",
     "musical-feather-m0",
     "musical-leptos",
     "musical-leptos-0",
