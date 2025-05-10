@@ -49,13 +49,17 @@ The "core" library can be used on any platform. It does not use the std library 
 
 ## STM32
 
+Setup:
+
     ```bash
-    rustup target add thumbv7m-none-eabihf
+    rustup target add thumbv7em-none-eabihf
     ```
 
     ```bash
     cargo install cargo-hf2
     ```
+
+Being careful about how the stm32 is powered, plug it into your computer's USB port. Then:
 
     ```bash
     cd musical-stm32

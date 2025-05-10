@@ -7,10 +7,10 @@ use core::iter::repeat;
 
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
-use embassy_stm32::adc::{Adc, SampleTime};
+use embassy_stm32::adc::{resolution_to_max_count, Adc, SampleTime, Sequence, VREF_CALIB_MV};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::peripherals::{
-    ADC1, DMA1_CH4, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
+    ADC1, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
 };
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
@@ -18,14 +18,13 @@ use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_stm32::Config;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
-use embassy_time::{Timer};
+use embassy_time::Timer;
 use itertools::repeat_n;
-use micromath::F32Ext;
 use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
         AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
-        ExponentialScaleBuilder, FFT,
+        ExponentialScaleBuilder, Samples, FFT,
     },
     logging::{debug, info, trace, warn},
     remap,
@@ -49,6 +48,12 @@ const MATRIX_N: usize = MATRIX_X * MATRIX_Y;
 
 const MATRIX_BUFFER: usize = MATRIX_N * 12;
 
+// this is printed on the mic board. it should probably be config
+const MIC_DC_OFFSET_MV: u32 = 1250;
+
+const MIC_DC_OFFSET_V: f32 = MIC_DC_OFFSET_MV as f32 / 1000.0;
+const VREF_CALIB_V: f32 = VREF_CALIB_MV as f32 / 1000.0;
+
 // const VREF_NOMINAL: u16 = 3300;
 // const VREFINT_CALIBRATED: u16 = 1230;
 
@@ -69,63 +74,85 @@ pub async fn blink_task(mut led: Output<'static>) {
 async fn mic_task(
     mic_adc: ADC1,
     mut mic_pin: PA0,
-    tx: Sender<'static, ThreadModeRawMutex, f32, MIC_SAMPLES>,
+    tx: Sender<'static, ThreadModeRawMutex, Samples<MIC_SAMPLES>, 16>,
     // vref_nominal: u16,
     // vrefint_calibrated: u16,
+    mic_dma: DMA2_CH0,
 ) {
     // TODO: i kind of wish i'd ordered the i2s mic
     let mut adc = Adc::new(mic_adc);
 
+    // TODO: do we need to set the sample time here? we set it on the ring buffered adc later
+    adc.set_sample_time(SampleTime::CYCLES144);
+
     // TODO: what resolution?
-    let adc_resolution = 12;
+    let adc_resolution = embassy_stm32::adc::Resolution::BITS12;
 
-    let range = 2.0f32.powi(adc_resolution) - 1.0;
+    adc.set_resolution(adc_resolution);
+    let full_range = resolution_to_max_count(adc_resolution) as f32;
 
-    // 100 mHz processor
-    // TODO: how long should we sample?
-    adc.set_sample_time(SampleTime::CYCLES3);
-    // TODO: impl From<u8> for Resolution? or maybe have "bits" and "range" functions on Resolution
-    adc.set_resolution(embassy_stm32::adc::Resolution::BITS12);
-
-    // // TODO: i think we should be able to use this instead of adc_resolution.
     // let mut vrefint = adc.enable_vrefint();
+    // // TODO: i think we need to read this in the loop. but it isn't on the ring_buffered_adc. hmm.
+    // // TODO: async read?
+    // let vref = adc.blocking_read(&mut vrefint);
 
-    // TODO: how do we get the calibrated value out of this? I think it is 1230, but I'm not sure
+    let mut adc_dma_buf = [0u16; MIC_SAMPLES * 2];
+    let mut ring_buffered_adc = adc.into_ring_buffered(mic_dma, &mut adc_dma_buf);
 
-    // // TODO: do we care about the temperature?
-    // // TODO: shut down if hot?
-    // let mut temperature = adc.enable_temperature();
-    // let temp_sample = adc.blocking_read(&mut temperature).await;
-    // info!("temp: {}", temp_sample);
+    // 100 mHz processor. but what is the adc clock?
+    // TODO: how long should we sample? one example had CYCLES144, another had CYCLES112
+    ring_buffered_adc.set_sample_sequence(Sequence::One, &mut mic_pin, SampleTime::CYCLES144);
 
+    let mut measurements = [0u16; MIC_SAMPLES];
+    let mut modified = [0f32; MIC_SAMPLES];
     loop {
-        // let vref = adc.blocking_read(&mut vrefint);
+        match ring_buffered_adc.read(&mut measurements).await {
+            Ok(_) => {
+                debug!("adc1 raw: {}", measurements);
 
-        let sample = adc.blocking_read(&mut mic_pin);
+                for (i, measurement) in measurements.iter().enumerate() {
+                    // TODO: figure out what below is right and what is wrong
+                    // TODO: scale 0-4095 to millivolts. use vref to get rid of any bias. subcract dc offset. convert to float for the fft. fft wants 0 centered data
 
-        // trace!("mic u16: {}", sample);
+                    // // max voltage should be ~2.  to make fft happy, subtract 1 to 0 center.
+                    // // TODO: this would probably be better with less floats, but maybe its fine
+                    // // TODO: use VREF_DEFAULT_MV?
+                    let sample_mv =
+                        *measurement as f32 / full_range * VREF_CALIB_V - MIC_DC_OFFSET_V - 1000.0;
 
-        // scale 0-4095 to millivolts
-        // TODO: is this right? it worked on the discovery board, but .value() isn't available on the blackpill
-        // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
+                    // TODO: there is no subtracting the dc offset in this...
+                    // let sample_mv = (sample * vrefint.value() as u32 / vref as u32) * 3300 / 4095;
 
-        // 0-centered. i don't think is totally correct. we shlould be converting to voltage
-        let sample = remap(sample as f32, 0.0, range, -1.0, 1.0);
+                    // let sample_mv = (sample as u32 * VREFINT_VALUE / vref as u32) * VREF_CALIB_MV / full_range;
+                    // info!("mic: {}", sample_mv);
 
-        // trace!("mic f32: {}", sample);
+                    // let sample_mv = sample_mv.saturating_sub(MIC_DC_OFFSET);
+                    // trace!("mic mv: {}", sample_mv);
 
-        tx.send(sample).await;
+                    let sample_scaled = remap(sample_mv as f32, 0.0, full_range, -1.0, 1.0);
+                    // let sample_scaled = sample_mv as f32 / MIC_VPP;
 
-        // TODO: how accurate is this timer? we would probably do better with a smarter cheap and reading samples over i2s or spi
-        // 44.1kHz = 22,676 nanoseconds
-        // TODO: maybe we should do a blocking delay and then a yield every 512 samples? this needs to be accurate or the frequencies won't be correct
-        Timer::after_nanos(22_676).await;
+                    // TODO: i think vref should be included here, but
+                    // let sample = sample as f32 / range * 3.3;
+
+                    modified[i] = sample_scaled;
+                }
+
+                debug!("adc1 scaled mv: {}", modified);
+
+                tx.send(Samples(modified)).await;
+            }
+            Err(e) => {
+                warn!("Error: {:?}", e);
+                // DMA overrun, next call to `read` restarts ADC.
+            }
+        }
     }
 }
 
 #[embassy_executor::task]
 async fn fft_task(
-    mic_rx: Receiver<'static, ThreadModeRawMutex, f32, MIC_SAMPLES>,
+    mic_rx: Receiver<'static, ThreadModeRawMutex, Samples<MIC_SAMPLES>, 16>,
     loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
@@ -148,26 +175,22 @@ async fn fft_task(
     // let scale_builder = BarkScaleBuilder::new(SAMPLE_RATE);
 
     loop {
-        let sample = mic_rx.receive().await;
+        // every `MIC_SAMPLES` samples (probably 512), do an FFT
+        let samples = mic_rx.receive().await;
 
-        // let millivolts = convert_to_millivolts(sample, vrefint_sample);
-        // trace!("mic: {} mV", millivolts);
+        audio_buffer.push_samples(samples);
 
-        if audio_buffer.push_sample(sample) {
-            // every `MIC_SAMPLES` samples (probably 512), do an FFT
-            let samples = audio_buffer.samples();
+        let samples = audio_buffer.samples();
 
-            let amplitudes = fft.weighted_amplitudes(samples);
+        let amplitudes = fft.weighted_amplitudes(samples);
 
-            let loudness = scale_builder.build(amplitudes);
+        let loudness = scale_builder.build(amplitudes);
 
-            // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
+        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
+        // TODO: shazam
+        // TODO: beat detection
 
-            // TODO: shazam
-            // TODO: beat detection
-
-            loudness_tx.send(loudness).await;
-        }
+        loudness_tx.send(loudness).await;
     }
 }
 
@@ -199,8 +222,7 @@ async fn light_task(
     spi_config.mode = embassy_stm32::spi::MODE_0;
 
     let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, spi_config);
-    let spi_right =
-        Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, spi_config);
+    let spi_right = Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, spi_config);
 
     let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
     let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
@@ -245,6 +267,7 @@ async fn light_task(
 
     Timer::after_secs(2).await;
 
+    // TODO: get this from config? allow updating it?
     let gradient = Gradient::new_mermaid();
 
     // TODO: setup seems to crash the program. blocking code must not be done correctly :(
@@ -301,6 +324,28 @@ async fn watchdog_task(mut wdg: IndependentWatchdog<'static, IWDG>) {
 async fn main(spawner: Spawner) {
     // default clocks: 0.000000 DEBUG rcc: Clocks { sys: Hertz(16000000), pclk1: Hertz(16000000), pclk1_tim: Hertz(16000000), pclk2: Hertz(16000000), pclk2_tim: Hertz(16000000), hclk1: Hertz(16000000), hclk2: Hertz(16000000), hclk3: Hertz(16000000), plli2s1_q: None, plli2s1_r: None, pll1_q: None, rtc: Some(Hertz(32000)) }
     let peripheral_config = Config::default();
+
+    /*
+    On reset the 16 MHz internal RC oscillator is selected as the default CPU clock. The
+    16 MHz internal RC oscillator is factory-trimmed to offer 1% accuracy at 25 °C. The
+    application can then select as system clock either the RC oscillator or an external 4-26 MHz
+    clock source. This clock can be monitored for failure. If a failure is detected, the system
+    automatically switches back to the internal RC oscillator and a software interrupt is
+    generated (if enabled). This clock source is input to a PLL thus allowing to increase the
+    frequency up to 100 MHz. Similarly, full interrupt management of the PLL clock entry is
+    available when necessary (for example if an indirectly used external oscillator fails).
+    Several prescalers allow the configuration of the two AHB buses, the high-speed APB
+    (APB2) and the low-speed APB (APB1) domains. The maximum frequency of the two AHB
+    DS10314 Rev 8 21/151
+    STM32F411xC STM32F411xE Functional overview
+    57
+    buses is 100 MHz while the maximum frequency of the high-speed APB domains is
+    100 MHz. The maximum allowed frequency of the low-speed APB domain is 50 MHz.
+    The devices embed a dedicated PLL (PLLI2S), which allows to achieve audio class
+    performance. In this case, the I2S master clock can generate all standard sampling
+    frequencies from 8 kHz to 192 kHz.
+     */
+
     // TODO: configure system clock to be faster
     // TODO: configure adc to be faster, too
     // TODO: this board is simlar <https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs>, but our board works differently
@@ -331,23 +376,26 @@ async fn main(spawner: Spawner) {
     // let right_rxdma = p.DMA1_CH3;
     let right_txdma = p.DMA1_CH4;
 
-    // // start the watchdog
+    let mic_adc = p.ADC1;
+    let mic_pin = p.PA0;
+
+    // // start the watchdog. make this configurable. we want it in case the lights crash
     // let wdg = IndependentWatchdog::new(p.IWDG, 5_000_000);
     // spawner.must_spawn(watchdog_task(wdg));
 
     // set up pins
     let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
-    let mic_adc = p.ADC1;
-    let mic_pin = p.PA0;
-
     // TODO: pin_alias?
 
     // channel for mic samples -> FFT
     // TODO: what size channel? need to measure high water mark
-    static MIC_CHANNEL: Channel<ThreadModeRawMutex, f32, 512> = Channel::new();
+    static MIC_CHANNEL: Channel<ThreadModeRawMutex, Samples<MIC_SAMPLES>, 16> = Channel::new();
     let mic_tx = MIC_CHANNEL.sender();
     let mic_rx = MIC_CHANNEL.receiver();
+
+    // TODO: what DMA and channel? i just picked this randomly, but we need to read the datasheet
+    let mic_dma = p.DMA2_CH0;
 
     // channel for FFT -> LEDs
     // TODO: what size channel? need to measure high water mark
@@ -379,7 +427,7 @@ async fn main(spawner: Spawner) {
     Timer::after_secs(3).await;
     debug!("spawning tasks part 2");
 
-    spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx));
+    spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx, mic_dma));
 
     info!("all tasks started");
 }

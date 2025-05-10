@@ -83,6 +83,8 @@ pub fn DancingLights() -> impl IntoView {
 
         let mut peak_scaled_builder = PeakScaledBuilder::new(0.99);
 
+        let mut fixed_scale_builder = FixedScaleBuilder::new(85.0);
+
         let mut down_resistance_builder = DownResistanceBuilder::<NUM_BANDS>::new(DOWN_RATE);
 
         let media_stream = load_media_stream()
