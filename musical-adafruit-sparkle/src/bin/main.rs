@@ -58,7 +58,7 @@ async fn blink_onboard_neopixel_rmt(
         val: 255,
     };
     let mut data: [_; NUM_ONBOARD_NEOPIXELS];
-    let mut ticker = Ticker::every(Duration::from_millis(20));
+    let mut ticker = Ticker::every(Duration::from_millis(10));
 
     loop {
         // Iterate over the rainbow!
@@ -102,7 +102,7 @@ async fn blink_onboard_neopixel_spi(spi: SPI2, pin: AnyPin, dma: Spi2DmaChannel)
         sat: 255,
         val: 255,
     };
-    let mut ticker = Ticker::every(Duration::from_millis(20));
+    let mut ticker = Ticker::every(Duration::from_millis(10));
     let mut data: [_; NUM_ONBOARD_NEOPIXELS];
 
     loop {
@@ -152,7 +152,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         .read_dma_circular_async(rx_buffer)
         .expect("failed reading i2s dma circular");
 
-    let mut rcv = [0u8; 5000];
+    let mut rcv = [0u8; I2S_BYTES];
 
     loop {
         let avail = transfer
