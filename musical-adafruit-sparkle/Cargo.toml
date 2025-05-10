@@ -8,8 +8,8 @@ name = "musical-adafruit-sparkle"
 path = "./src/bin/main.rs"
 
 [dependencies]
-defmt = "0.3.100"
-embassy-net = { version = "0.6.0", features = [
+defmt = "1.0.1"
+embassy-net = { version = "0.7.0", features = [
   "dhcpv4",
   "medium-ethernet",
   "tcp",
@@ -67,9 +67,11 @@ heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 ws2812-async = "0.3.0"
 smart-leds = "0.4.0"
+esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", branch = "main", version = "0.14.0", features = ["defmt", "esp32"] }
 
-# TODO: i'd like to use this rmt driver, but it requires esp-idf-sys. need to retry the template
-# ws2812-esp32-rmt-driver = { version = "0.12.0", features = ["alloc", "smart-leds-trait"], default-features = false }
+# TODO: this is incompatible with the current esp-hal version (1.0.0-beta.0). its on main, but not released yet
+# TODO: i think its only a blocking method of writing though. so i don't know if we want it. maybe its okay if we keep it on core 1?
+# esp-hal-smartled = { version = "*", features = ["esp32"] }
 
 [profile.dev]
 # Rust debug is too slow.

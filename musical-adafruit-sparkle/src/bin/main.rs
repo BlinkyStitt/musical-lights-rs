@@ -4,21 +4,26 @@
 
 use defmt::{info, warn};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
 use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel};
 use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::peripherals::{I2S0, SPI2};
+use esp_hal::peripherals::{I2S0, RMT, SPI2};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
+use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
 use musical_adafruit_sparkle::wheel;
-use smart_leds::{brightness, SmartLedsWriteAsync, RGB8};
+use smart_leds::{
+    brightness, gamma,
+    hsv::{hsv2rgb, Hsv},
+    SmartLedsWrite, SmartLedsWriteAsync, RGB8,
+};
 use ws2812_async::{Grb, Ws2812};
 
 extern crate alloc;
@@ -26,19 +31,62 @@ extern crate alloc;
 const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 
+/// TODO: should this function take an ourput or a pin?
 #[embassy_executor::task]
 async fn blink(pin: AnyPin) {
     let mut led = Output::new(pin, Level::Low, OutputConfig::default());
+    let mut ticker = Ticker::every(Duration::from_millis(200));
 
     loop {
         led.toggle();
-        Timer::after_millis(200).await;
+        ticker.next().await;
     }
 }
 
-/// TODO: how should we control the onboard neopixel? we need to use SPI
 #[embassy_executor::task]
-async fn blink_onboard_neopixel(spi: SPI2, pin: AnyPin, dma: Spi2DmaChannel) {
+async fn blink_onboard_neopixel_rmt(
+    rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
+    pin: AnyPin,
+) {
+    // We use one of the RMT channels to instantiate a `SmartLedsAdapter` which can
+    // be used directly with all `smart_led` implementations
+    let rmt_buffer = smartLedBuffer!(1);
+
+    let mut led = SmartLedsAdapter::new(rmt_channel, pin, rmt_buffer);
+
+    let mut color = Hsv {
+        hue: 0,
+        sat: 255,
+        val: 255,
+    };
+    let mut data;
+
+    let mut tick = Ticker::every(Duration::from_millis(20));
+
+    loop {
+        // Iterate over the rainbow!
+        for hue in 0..=255 {
+            color.hue = hue;
+
+            // Convert from the HSV color space (where we can easily transition from one
+            // color to the other) to the RGB color space that we can then send to the LED
+            data = [hsv2rgb(color)];
+
+            // When sending to the LED, we do a gamma correction first (see smart_leds
+            // documentation for details) and then limit the brightness to 10 out of 255 so
+            // that the output it's not too bright.
+            // TODO: fastled had cool dithering. can we use that here?
+            led.write(brightness(gamma(data.iter().cloned()), 10))
+                .unwrap();
+
+            tick.next().await;
+        }
+    }
+}
+
+/// TODO: use spi or rmt?
+#[embassy_executor::task]
+async fn blink_onboard_neopixel_spi(spi: SPI2, pin: AnyPin, dma: Spi2DmaChannel) {
     let config = Config::default().with_frequency(Rate::from_hz(3_800_000));
 
     // config.phase = Phase::CaptureOnFirstTransition;
@@ -117,7 +165,9 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
 async fn main(spawner: Spawner) {
     // generator version: 0.3.1
 
+    // TODO: watchdog?
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
+
     let peripherals = esp_hal::init(config);
 
     // TODO: what size should this be? do we actually need this much?
@@ -135,7 +185,7 @@ async fn main(spawner: Spawner) {
     let i2s_mic_ws = peripherals.GPIO33;
     let i2s_mic_bclk = peripherals.GPIO26;
 
-    let neopixel_int = peripherals.GPIO2;
+    let neopixel_builtin = peripherals.GPIO2;
 
     let neopixel_ext1 = peripherals.GPIO21;
     let neopixel_ext2 = peripherals.GPIO22;
@@ -168,11 +218,6 @@ async fn main(spawner: Spawner) {
     // the ir received is connected to ADC1
     let ir_receiver = peripherals.GPIO32;
 
-    // // TODO: use the rmt peripherial to set timings for the neopixels
-    // let rmt = Rmt::new(peripherals.RMT, Rate::from_hz(1_000))
-    //     .expect("initializing rmt")
-    //     .into_async();
-
     //
     // end pretty names for all the pins
     //
@@ -186,11 +231,18 @@ async fn main(spawner: Spawner) {
     let blink_f = blink(red_led.degrade());
 
     // blink the onboard neopixel
-    let blink_neopixel_f = blink_onboard_neopixel(
-        peripherals.SPI2,
-        neopixel_int.degrade(),
-        peripherals.DMA_SPI2,
-    );
+    // let blink_neopixel_f = blink_onboard_neopixel_spi(
+    //     peripherals.SPI2,
+    //     neopixel_builtin.degrade(),
+    //     peripherals.DMA_SPI2,
+    // );
+
+    // TODO: 80Hz is cargo culted. need to find the docs for this
+    // Async depends on <https://github.com/esp-rs/esp-hal-community/pull/6>
+    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
+    // .into_async();
+
+    let blink_neopixel_f = blink_onboard_neopixel_rmt(rmt.channel0, neopixel_builtin.degrade());
 
     // read from the i2s mic
     // TODO: how should we send the data to another task to be processed?
