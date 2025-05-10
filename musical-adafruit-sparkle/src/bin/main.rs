@@ -2,13 +2,13 @@
 #![no_main]
 
 use esp_hal::dma::I2s0DmaChannel;
+use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::peripherals::I2S0;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
-use esp_hal::{dma_buffers, dma_circular_buffers};
 
 use defmt::{info, warn};
 use esp_println as _;
@@ -19,6 +19,8 @@ use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
 
 extern crate alloc;
+
+const I2S_BYTES: usize = 4096;
 
 #[embassy_executor::task]
 async fn blink(pin: AnyPin) {
@@ -37,7 +39,8 @@ async fn blink(pin: AnyPin) {
 #[embassy_executor::task]
 async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: what size should these be?
-    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(0, 4 * 4096);
+    // TODO: the example has these flipped. we should fix the docs
+    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES);
 
     let i2s = I2s::new(
         i2s,
@@ -48,12 +51,10 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         rx_descriptors,
         tx_descriptors,
     )
+    // .with_mclk(pin) // TODO: do we need this pin?
     .into_async();
 
     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
-
-    warn!("i2s_rx is broken. something wrong with the dma setup");
-    return;
 
     let mut transfer = i2s_rx
         .read_dma_circular_async(rx_buffer)
@@ -126,6 +127,7 @@ async fn main(spawner: Spawner) {
     // the ir received is connected to ADC1
     let ir_receiver = peripherals.GPIO32;
 
+    // TODO: does the timer group need to be "new_async"? I found some example code that works like that
     let timer0 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timer0.timer0);
 
@@ -143,15 +145,40 @@ async fn main(spawner: Spawner) {
         i2s_mic_data.degrade(),
     );
 
-    // wifi
-    // Note you cannot read analog inputs on ADC2 once WiFi has started, as it is shared with the WiFi hardware
-    let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let _init = esp_wifi::init(
-        timer1.timer0,
-        esp_hal::rng::Rng::new(peripherals.RNG),
-        peripherals.RADIO_CLK,
-    )
-    .unwrap();
+    // let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES);
+
+    // let i2s = I2s::new(
+    //     i2s_mic,
+    //     Standard::Philips,
+    //     DataFormat::Data16Channel16,
+    //     Rate::from_hz(44100),
+    //     i2s_mic_dma,
+    //     rx_descriptors,
+    //     tx_descriptors,
+    // )
+    // // .with_mclk(peripherals.GPIO4)
+    // .into_async();
+
+    // let i2s_rx = i2s
+    //     .i2s_rx
+    //     .with_ws(i2s_mic_ws)
+    //     .with_bclk(i2s_mic_bclk)
+    //     .with_din(i2s_mic_data)
+    //     .build();
+
+    // let mut transfer = i2s_rx
+    //     .read_dma_circular_async(rx_buffer)
+    //     .expect("No dma read");
+
+    // // wifi
+    // // Note you cannot read analog inputs on ADC2 once WiFi has started, as it is shared with the WiFi hardware
+    // let timer1 = TimerGroup::new(peripherals.TIMG0);
+    // let _init = esp_wifi::init(
+    //     timer1.timer0,
+    //     esp_hal::rng::Rng::new(peripherals.RNG),
+    //     peripherals.RADIO_CLK,
+    // )
+    // .unwrap();
 
     // Spawn some tasks
     // TODO: what should core 1 do?
