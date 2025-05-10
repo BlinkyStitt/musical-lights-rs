@@ -1,0 +1,31 @@
+[package]
+name = "musical-adafruit-sparkle-idf"
+version = "0.1.0"
+authors = ["Bryan Stitt <bryan@stitthappens.com>"]
+edition = "2021"
+resolver = "2"
+rust-version = "1.77"
+
+[[bin]]
+name = "musical-adafruit-sparkle-idf"
+harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true    # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+default = []
+
+experimental = ["esp-idf-svc/experimental"]
+
+[dependencies]
+log = "0.4"
+embassy-time = {version = "0.4", features = ["generic-queue-8"]}
+esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
+
+[build-dependencies]
+embuild = "0.33"
