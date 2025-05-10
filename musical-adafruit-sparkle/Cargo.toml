@@ -8,7 +8,7 @@ name = "musical-adafruit-sparkle"
 path = "./src/bin/main.rs"
 
 [dependencies]
-defmt = "0.3.10"
+defmt = "0.3.100"
 embassy-net = { version = "0.6.0", features = [
   "dhcpv4",
   "medium-ethernet",
@@ -29,7 +29,7 @@ esp-hal = { version = "1.0.0-beta.0", features = [
   "esp32",
   "unstable",
 ] }
-esp-println = { version = "0.13.0", features = ["defmt-espflash", "esp32"] }
+esp-println = { version = "0.13.1", features = ["defmt-espflash", "esp32"] }
 smoltcp = { version = "0.12.0", default-features = false, features = [
   "medium-ethernet",
   "multicast",
@@ -65,6 +65,8 @@ esp-wifi = { version = "0.13.0", features = [
 ] }
 heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
+ws2812-async = "0.3.0"
+smart-leds = "0.4.0"
 
 [profile.dev]
 # Rust debug is too slow.
