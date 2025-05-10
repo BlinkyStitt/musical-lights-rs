@@ -85,8 +85,12 @@ async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
+    // TODO: what size should this be? do we actually need this much?
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
+    //
+    // pretty names for all the pins
+    //
     let red_led = peripherals.GPIO4;
 
     let i2s_mic = peripherals.I2S0;
@@ -127,16 +131,19 @@ async fn main(spawner: Spawner) {
     // the ir received is connected to ADC1
     let ir_receiver = peripherals.GPIO32;
 
-    // TODO: does the timer group need to be "new_async"? I found some example code that works like that
+    //
+    // end pretty names for all the pins
+    //
+
+    // initialize embassy
     let timer0 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timer0.timer0);
-
     info!("Embassy initialized!");
 
-    // blink
+    // blink the onboard LED
     let blink_f = blink(red_led.degrade());
 
-    // i2s mic
+    // read from the i2s mic
     let i2s_mic_f = i2s_mic_task(
         i2s_mic,
         i2s_mic_dma,
@@ -145,10 +152,11 @@ async fn main(spawner: Spawner) {
         i2s_mic_data.degrade(),
     );
 
-    // Spawn some tasks
-    // TODO: what should core 1 do?
+    // Start the tasks on core 0
     spawner.spawn(blink_f).unwrap();
     spawner.spawn(i2s_mic_f).unwrap();
+
+    // TODO: what should we spawn on core 1?
 
     // TODO: what should the main loop do?
     loop {
