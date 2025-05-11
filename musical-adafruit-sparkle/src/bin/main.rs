@@ -1,3 +1,5 @@
+//! TODO: i think the executor tasks should take the specific pins/peripherials. then it should call a generic function that takes AnyPin
+
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 #![no_std]
@@ -7,15 +9,15 @@
 
 use alloc::boxed::Box;
 use alloc::vec;
-use defmt::info;
+use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
-use esp_hal::dma::I2s0DmaChannel;
+use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel};
 use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::peripherals::I2S0;
+use esp_hal::peripherals::{I2S0, SPI2};
 use esp_hal::rmt::Rmt;
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
@@ -151,12 +153,19 @@ async fn blink_fibonacci256_neopixel_rmt(
     }
 }
 
+#[embassy_executor::task]
+async fn radio_task(spi: SPI2, dma: Spi2DmaChannel) {
+    let mut radio = sx1262::Device::new(spi);
+
+    warn!("what should the radio loop do?");
+}
+
 /// The ICS-43434 incorporates a high-pass filter to remove DC and low frequency components.
 /// This high pass filter has a −3 dB corner frequency of 24 Hz and does not scale with the sampling rate.
 ///
 /// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
 #[embassy_executor::task]
-async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
+async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: how do we get this to be in the external ram?
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
     let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(I2S_BUFFER_SIZE, 0);
@@ -289,13 +298,15 @@ async fn main(spawner: Spawner) {
 
     // read from the i2s mic
     // TODO: how should we send the data to another task to be processed?
-    let i2s_mic_f = i2s_mic_task(
+    let i2s_mic_f = mic_task(
         i2s_mic,
         i2s_mic_dma,
         i2s_mic_bclk.degrade(),
         i2s_mic_ws.degrade(),
         i2s_mic_data.degrade(),
     );
+
+    let radio_f = radio_task(peripherals.SPI2, peripherals.DMA_SPI2);
 
     // Start the tasks on core 0
     spawner
@@ -305,6 +316,7 @@ async fn main(spawner: Spawner) {
         .spawn(blink_fibonacci_f)
         .expect("spawned blink_fibonacci");
     spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
+    spawner.spawn(radio_f).expect("spawned radio");
 
     // TODO: what should we spawn on core 1?
 

@@ -68,6 +68,7 @@ esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", br
   "defmt",
   "esp32",
 ] }
+sx1262 = { version = "0.2.1", features = ["defmt"] }
 
 # TODO: this is incompatible with the current esp-hal version (1.0.0-beta.0). its on main, but not released yet
 # TODO: i think its only a blocking method of writing though. so i don't know if we want it. maybe its okay if we keep it on core 1?

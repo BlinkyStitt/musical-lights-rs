@@ -1050,6 +1050,7 @@ dependencies = [
  "smart-leds",
  "smoltcp",
  "static_cell",
+ "sx1262",
  "ws2812-async",
 ]
 
@@ -1217,6 +1218,28 @@ name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+
+[[package]]
+name = "regiface"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82fd57d3380ba7969d69c16dbd6132700573b2cc4740b6ca3f59ff8d927b04e0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "regiface-macros",
+]
+
+[[package]]
+name = "regiface-macros"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e24cb5b14e574b1f2ab517062181b2ff287c93a56366a87c5f41b99e88aaaa04"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
 
 [[package]]
 name = "rgb"
@@ -1410,6 +1433,19 @@ dependencies = [
  "quote",
  "rustversion",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "sx1262"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14e98433c13ddffb4bd3e9bd82eb08c5205534cb3b124417a3f2722a6d36bc88"
+dependencies = [
+ "bitflags 2.9.0",
+ "defmt 0.3.100",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "regiface",
 ]
 
 [[package]]
