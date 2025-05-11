@@ -136,7 +136,7 @@ async fn blink_fibonacci256_neopixel_rmt(
                             .enumerate()
                             .take(NUM_FIBONACCI_NEOPIXELS)
                             .map(|(i, mut x)| {
-                                x.hue = x.hue.wrapping_sub((i / 2) as u8);
+                                x.hue = x.hue.wrapping_add((i / 2) as u8);
                                 hsv2rgb(x)
                             }),
                     ),
