@@ -2,6 +2,8 @@
 #![feature(impl_trait_in_assoc_type)]
 #![no_std]
 #![no_main]
+// these warnings are annoying during initial dev. these things will be used soon
+#![allow(unused_imports, unused)]
 
 use alloc::boxed::Box;
 use alloc::vec;
@@ -60,7 +62,7 @@ async fn blink_fibonacci256_neopixel_rmt(
     // let mut onboard_data: [RGB8; NUM_ONBOARD_NEOPIXELS];
     // let mut fibonacci_data: [_; NUM_FIBONACCI_NEOPIXELS];
 
-    let mut onboard_data: Box<[RGB8]> = vec![RGB8::default()].into_boxed_slice();
+    let mut onboard_data: Box<[RGB8]> = Box::new([RGB8::default()]);
 
     // 60 fps
     // TODO: i think we might want to just tie to the microphone output. might as well go at that rate
@@ -78,6 +80,7 @@ async fn blink_fibonacci256_neopixel_rmt(
             // Convert from the HSV color space (where we can easily transition from one
             // color to the other) to the RGB color space that we can then send to the LED
             // TODO: increment the hue by 1 for every pixel
+            // TODO: support palletes
             onboard_data[0] = hsv2rgb(g_color);
             // fibonacci_data = [color; NUM_FIBONACCI_NEOPIXELS];
 
@@ -88,23 +91,30 @@ async fn blink_fibonacci256_neopixel_rmt(
             // TODO: don't just change the color. use a fade effect to go from one color to the next
             // TODO: global brightness value that can change based on the capacitive touch sensor
             onboard_leds
-                .write(brightness(gamma(onboard_data.iter().cloned()), 10))
+                .write(brightness(gamma(onboard_data.iter().copied()), 10))
                 .expect("onboard_leds write failed");
 
             fibonacci_leds
                 .write(brightness(
                     gamma(
-                        onboard_data
+                        [g_color]
                             .iter()
                             .cycle()
+                            .copied()
+                            .enumerate()
                             .take(NUM_FIBONACCI_NEOPIXELS)
-                            .cloned(),
+                            .map(|(i, mut x)| {
+                                x.hue = x.hue.wrapping_add((i / 3) as u8);
+                                hsv2rgb(x)
+                            }),
                     ),
                     25,
                 ))
                 .expect("fibonacci_leds write failed");
 
             ticker.next().await;
+
+            // TODO: log the framerate
         }
     }
 }
@@ -126,7 +136,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         rx_descriptors,
         tx_descriptors,
     )
-    // .with_mclk(mclk) // TODO: do we need this pin?
+    // .with_mclk(mclk) // TODO: do we need this pin? its the master clock output pin.
     .into_async();
 
     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
@@ -135,7 +145,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         .read_dma_circular_async(rx_buffer)
         .expect("failed reading i2s dma circular");
 
-    let mut rcv: Box<[u8]> = vec![0u8; I2S_BYTES].into_boxed_slice();
+    let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BYTES]);
 
     loop {
         let avail = transfer
