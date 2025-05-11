@@ -235,8 +235,8 @@ async fn main(spawner: Spawner) {
     // TODO: blink all the neopixels together
 
     // TODO: 80MHz is cargo culted. need to find the docs for this
-    // Async depends on <https://github.com/esp-rs/esp-hal-community/pull/6>
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
+    // // TODO: Async depends on <https://github.com/esp-rs/esp-hal-community/pull/6>
     // .into_async();
 
     let blink_fibonacci_f = blink_fibonacci256_neopixel_rmt(
