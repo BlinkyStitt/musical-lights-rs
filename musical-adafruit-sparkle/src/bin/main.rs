@@ -1,4 +1,5 @@
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 #![no_std]
 #![no_main]
 
@@ -6,13 +7,13 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
-use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel};
+use esp_hal::dma::I2s0DmaChannel;
 use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::peripherals::{I2S0, SPI2};
+use esp_hal::peripherals::I2S0;
 use esp_hal::rmt::Rmt;
-use esp_hal::spi::master::{Config, Spi};
+// use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
@@ -29,146 +30,126 @@ extern crate alloc;
 
 const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
+const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
-/// TODO: should this function take an ourput or a pin?
+/// TODO: maybe one task should blink both. that way we can share the hue without locking. and they will both definitely both use the same gHue.
 #[embassy_executor::task]
-async fn blink(pin: AnyPin) {
-    let mut led = Output::new(pin, Level::Low, OutputConfig::default());
-    let mut ticker = Ticker::every(Duration::from_millis(200));
-
-    loop {
-        led.toggle();
-        ticker.next().await;
-    }
-}
-
-#[embassy_executor::task]
-async fn blink_onboard_neopixel_rmt(
-    rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
-    pin: AnyPin,
+async fn blink_fibonacci256_neopixel_rmt(
+    onboard_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
+    onboard_pin: AnyPin,
+    fibonacci_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 1>,
+    fibonacci_pin: AnyPin,
 ) {
     // there is only 1 onboard neopixel
     // TODO: why can't we use the NUM_ONBOARD_NEOPIXELS const here? that's sad
-    let rmt_buffer = smartLedBuffer!(1);
+    let onboard_rmt_buffer: [u32; NUM_ONBOARD_NEOPIXELS * 24 + 1] = smartLedBuffer!(1);
+    let fibonacci_rmt_buffer: [u32; NUM_FIBONACCI_NEOPIXELS * 24 + 1] = smartLedBuffer!(256);
 
-    let mut led = SmartLedsAdapter::new(rmt_channel, pin, rmt_buffer);
-    let mut color = Hsv {
+    let mut onboard_leds =
+        SmartLedsAdapter::new(onboard_rmt_channel, onboard_pin, onboard_rmt_buffer);
+    let mut fibonacci_leds =
+        SmartLedsAdapter::new(fibonacci_rmt_channel, fibonacci_pin, fibonacci_rmt_buffer);
+
+    let mut g_color = Hsv {
         hue: 0,
         sat: 255,
         val: 255,
     };
-    let mut data: [_; NUM_ONBOARD_NEOPIXELS];
-    let mut ticker = Ticker::every(Duration::from_millis(10));
+
+    // TODO: make these static mut with #[link_section = ".ext_ram.bss"]  ?
+    let mut onboard_data: [_; NUM_ONBOARD_NEOPIXELS];
+    // let mut fibonacci_data: [_; NUM_FIBONACCI_NEOPIXELS];
+
+    let mut ticker = Ticker::every(Duration::from_millis(20));
 
     loop {
+        // TODO: display the current g_color on the onboard neopixel for debugging
+
         // Iterate over the rainbow!
         for hue in 0..=255 {
-            color.hue = hue;
+            info!("hue: {}", hue);
+
+            g_color.hue = hue;
 
             // Convert from the HSV color space (where we can easily transition from one
             // color to the other) to the RGB color space that we can then send to the LED
-            data = [hsv2rgb(color)];
+            let color = hsv2rgb(g_color);
+
+            // TODO: increment the hue by 1 for every pixel
+            onboard_data = [color; NUM_ONBOARD_NEOPIXELS];
+            // fibonacci_data = [color; NUM_FIBONACCI_NEOPIXELS];
 
             // When sending to the LED, we do a gamma correction first (see smart_leds
             // documentation for details) and then limit the brightness to 10 out of 255 so
             // that the output it's not too bright.
             // TODO: fastled had cool dithering. can we use that here?
-            led.write(brightness(gamma(data.iter().cloned()), 10))
-                .unwrap();
+            // TODO: don't just change the color. use a fade effect to go from one color to the next
+            // TODO: global brightness value that can change based on the capacitive touch sensor
+            onboard_leds
+                .write(brightness(gamma(onboard_data.iter().cloned()), 10))
+                .expect("onboard_leds write failed");
+
+            fibonacci_leds
+                .write(brightness(
+                    gamma(
+                        onboard_data
+                            .iter()
+                            .cycle()
+                            .take(NUM_FIBONACCI_NEOPIXELS)
+                            .cloned(),
+                    ),
+                    16,
+                ))
+                .expect("fibonacci_leds write failed");
 
             ticker.next().await;
         }
     }
 }
 
-/// TODO: use spi or rmt?
-#[embassy_executor::task]
-async fn blink_onboard_neopixel_spi(spi: SPI2, pin: AnyPin, dma: Spi2DmaChannel) {
-    let config = Config::default().with_frequency(Rate::from_hz(3_800_000));
+// /// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
+// #[embassy_executor::task]
+// async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
+//     // TODO: what size should these be?
+//     // TODO: the example has these flipped. we should fix the docs
+//     let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES, 0);
 
-    // config.phase = Phase::CaptureOnFirstTransition;
-    // config.polarity = Polarity::IdleLow;
+//     let i2s = I2s::new(
+//         i2s,
+//         Standard::Philips,
+//         DataFormat::Data16Channel16,
+//         Rate::from_hz(44100),
+//         dma,
+//         rx_descriptors,
+//         tx_descriptors,
+//     )
+//     // .with_mclk(mclk) // TODO: do we need this pin?
+//     .into_async();
 
-    // TODO: why can't this use SPI0 or SPI1? do we want DMA?
-    let spi = Spi::new(spi, config)
-        .unwrap()
-        .with_mosi(pin)
-        // .with_dma(dma)
-        .into_async();
+//     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
 
-    let mut led: Ws2812<_, Grb, { 12 * NUM_ONBOARD_NEOPIXELS }> = Ws2812::new(spi);
-    let mut color = Hsv {
-        hue: 0,
-        sat: 255,
-        val: 255,
-    };
-    let mut ticker = Ticker::every(Duration::from_millis(10));
-    let mut data: [_; NUM_ONBOARD_NEOPIXELS];
+//     let mut transfer = i2s_rx
+//         .read_dma_circular_async(rx_buffer)
+//         .expect("failed reading i2s dma circular");
 
-    loop {
-        // Iterate over the rainbow!
-        for hue in 0..=255 {
-            color.hue = hue;
+//     // TODO: put this in allocated memory
+//     let mut rcv = [0u8; I2S_BYTES];
 
-            // Convert from the HSV color space (where we can easily transition from one
-            // color to the other) to the RGB color space that we can then send to the LED
-            data = [hsv2rgb(color)];
+//     loop {
+//         let avail = transfer
+//             .available()
+//             .await
+//             .expect("i2s mic transfer available failed");
 
-            // When sending to the LED, we do a gamma correction first (see smart_leds
-            // documentation for details) and then limit the brightness to 10 out of 255 so
-            // that the output it's not too bright.
-            // TODO: fastled had cool dithering. can we use that here?
-            led.write(brightness(gamma(data.iter().cloned()), 10))
-                .await
-                .unwrap();
+//         transfer
+//             .pop(&mut rcv[..avail])
+//             .await
+//             .expect("i2s mic transfer pop failed");
 
-            ticker.next().await;
-        }
-    }
-}
-
-/// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
-#[embassy_executor::task]
-async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
-    // TODO: what size should these be?
-    // TODO: the example has these flipped. we should fix the docs
-    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(4 * I2S_BYTES, 0);
-
-    let i2s = I2s::new(
-        i2s,
-        Standard::Philips,
-        DataFormat::Data16Channel16,
-        Rate::from_hz(44100),
-        dma,
-        rx_descriptors,
-        tx_descriptors,
-    )
-    // .with_mclk(mclk) // TODO: do we need this pin?
-    .into_async();
-
-    let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
-
-    let mut transfer = i2s_rx
-        .read_dma_circular_async(rx_buffer)
-        .expect("failed reading i2s dma circular");
-
-    let mut rcv = [0u8; I2S_BYTES];
-
-    loop {
-        let avail = transfer
-            .available()
-            .await
-            .expect("i2s mic transfer available failed");
-
-        transfer
-            .pop(&mut rcv[..avail])
-            .await
-            .expect("i2s mic transfer pop failed");
-
-        // TODO: do something with the received data
-        info!("Received {} bytes", avail);
-    }
-}
+//         // TODO: do something with the received data
+//         info!("Received {} bytes", avail);
+//     }
+// }
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -238,44 +219,47 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
-    // blink the onboard LED
-    let blink_f = blink(red_led.degrade());
-
     // blink the onboard neopixel
-    // let blink_neopixel_f = blink_onboard_neopixel_spi(
-    //     peripherals.SPI2,
-    //     neopixel_builtin.degrade(),
-    //     peripherals.DMA_SPI2,
-    // );
+    // TODO: blink all the neopixels together
 
     // TODO: 80MHz is cargo culted. need to find the docs for this
     // Async depends on <https://github.com/esp-rs/esp-hal-community/pull/6>
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
     // .into_async();
 
-    let blink_neopixel_f = blink_onboard_neopixel_rmt(rmt.channel0, neopixel_builtin.degrade());
-
-    // read from the i2s mic
-    // TODO: how should we send the data to another task to be processed?
-    let i2s_mic_f = i2s_mic_task(
-        i2s_mic,
-        i2s_mic_dma,
-        i2s_mic_bclk.degrade(),
-        i2s_mic_ws.degrade(),
-        i2s_mic_data.degrade(),
+    let blink_fibonacci_f = blink_fibonacci256_neopixel_rmt(
+        rmt.channel0,
+        neopixel_builtin.degrade(),
+        rmt.channel1,
+        neopixel_ext2.degrade(),
     );
 
+    // // read from the i2s mic
+    // // TODO: how should we send the data to another task to be processed?
+    // let i2s_mic_f = i2s_mic_task(
+    //     i2s_mic,
+    //     i2s_mic_dma,
+    //     i2s_mic_bclk.degrade(),
+    //     i2s_mic_ws.degrade(),
+    //     i2s_mic_data.degrade(),
+    // );
+
     // Start the tasks on core 0
-    spawner.spawn(blink_f).unwrap();
-    spawner.spawn(blink_neopixel_f).unwrap();
-    spawner.spawn(i2s_mic_f).unwrap();
+    spawner
+        .spawn(blink_fibonacci_f)
+        .expect("spawned blink_fibonacci");
+    // spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
 
     // TODO: what should we spawn on core 1?
 
     // TODO: what should the main loop do?
+    let mut red_led = Output::new(red_led, Level::Low, OutputConfig::default());
+    let mut red_led_ticker = Ticker::every(Duration::from_millis(1_000));
+
     loop {
         info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
+        red_led.toggle();
+        red_led_ticker.next().await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin

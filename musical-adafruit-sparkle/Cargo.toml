@@ -48,10 +48,7 @@ bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5
   "macros",
 ] }
 critical-section = "1.2.0"
-embassy-executor = { version = "0.7.0", features = [
-  "defmt",
-  "task-arena-size-20480",
-] }
+embassy-executor = { version = "0.7.0", features = ["defmt", "nightly"] }
 embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
 esp-hal-embassy = { version = "0.7.0", features = ["esp32"] }
 esp-wifi = { version = "0.13.0", features = [
@@ -67,7 +64,10 @@ heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 ws2812-async = "0.3.0"
 smart-leds = "0.4.0"
-esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", branch = "main", version = "0.14.0", features = ["defmt", "esp32"] }
+esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", branch = "main", version = "0.14.0", features = [
+  "defmt",
+  "esp32",
+] }
 
 # TODO: this is incompatible with the current esp-hal version (1.0.0-beta.0). its on main, but not released yet
 # TODO: i think its only a blocking method of writing though. so i don't know if we want it. maybe its okay if we keep it on core 1?
@@ -76,7 +76,7 @@ esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", br
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
-opt-level = "s"
+opt-level = "z"
 
 [profile.release]
 codegen-units = 1        # LLVM can perform better optimizations using a single thread
@@ -84,5 +84,5 @@ debug = 2
 debug-assertions = false
 incremental = false
 lto = 'fat'
-opt-level = 's'
+opt-level = 'z'
 overflow-checks = false
