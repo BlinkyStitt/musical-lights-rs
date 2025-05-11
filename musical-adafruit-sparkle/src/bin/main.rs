@@ -37,6 +37,12 @@ const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
+const ONBOARD_BRIGHTNESS: u8 = 10;
+
+/// 10% brightness is 25 out of 255. this is arbitrary
+/// TODO: we have 5 Amps max. 256 leds at 20mA is 5.12A. max white is 60mA. limit to 82/255 to be extra cautious. these are bright even then.
+const FIBONACCI_BRIGHTNESS: u8 = 25;
+
 /// TODO: what size should these be?
 const I2S_BUFFER_SIZE: usize = 3 * I2S_BYTES;
 
@@ -69,7 +75,7 @@ async fn blink_fibonacci256_neopixel_rmt(
     let mut fibonacci_leds =
         SmartLedsAdapter::new(fibonacci_rmt_channel, fibonacci_pin, fibonacci_rmt_buffer);
 
-    let mut g_color = Hsv {
+    let mut base_hsv = Hsv {
         hue: 0,
         sat: 255,
         val: 255,
@@ -79,13 +85,16 @@ async fn blink_fibonacci256_neopixel_rmt(
     // let mut onboard_data: [RGB8; NUM_ONBOARD_NEOPIXELS];
     // let mut fibonacci_data: [_; NUM_FIBONACCI_NEOPIXELS];
 
-    let mut onboard_data: [RGB8; 1] = [RGB8::default(); NUM_ONBOARD_NEOPIXELS];
+    let mut base_rgb: [RGB8; 1] = [RGB8::default(); NUM_ONBOARD_NEOPIXELS];
 
     // TODO: i think we might want to just tie to the microphone output. might as well go at that rate
     let mut ticker = Ticker::every(Duration::from_nanos(1_000_000_000 / FPS));
 
     // TODO: only track fps in debug mode. make this a feature flag
     let mut fps = FpsTracker::new();
+
+    // // TODO: how do we have this be a compile time check?
+    // assert!(FIBONACCI_BRIGHTNESS < 81);
 
     loop {
         // loop over the full range of hues
@@ -94,13 +103,13 @@ async fn blink_fibonacci256_neopixel_rmt(
 
             info!("hue: {}", hue);
 
-            g_color.hue = hue;
+            base_hsv.hue = hue;
 
             // Convert from the HSV color space (where we can easily transition from one
             // color to the other) to the RGB color space that we can then send to the LED
             // TODO: increment the hue by 1 for every pixel
             // TODO: support palletes
-            onboard_data[0] = hsv2rgb(g_color);
+            base_rgb[0] = hsv2rgb(base_hsv);
 
             // When sending to the LED, we do a gamma correction first (see smart_leds
             // documentation for details) and then limit the brightness to 10 out of 255 so
@@ -109,24 +118,29 @@ async fn blink_fibonacci256_neopixel_rmt(
             // TODO: don't just change the color. use a fade effect to go from one color to the next
             // TODO: global brightness value that can change based on the capacitive touch sensor
             onboard_leds
-                .write(brightness(gamma(onboard_data.iter().copied()), 10))
+                .write(brightness(
+                    gamma(base_rgb.iter().copied()),
+                    ONBOARD_BRIGHTNESS,
+                ))
                 .expect("onboard_leds write failed");
 
+            // TODO: lots of different ways to do patterns here. this is just a simple color wheel that looks nice enough.
+            // TODO: make it easy to remap the locations to indices. the layout is a nice spiral, but for a clock i need it by x/y
             fibonacci_leds
                 .write(brightness(
                     gamma(
-                        [g_color]
+                        [base_hsv]
                             .iter()
                             .cycle()
                             .copied()
                             .enumerate()
                             .take(NUM_FIBONACCI_NEOPIXELS)
                             .map(|(i, mut x)| {
-                                x.hue = x.hue.wrapping_add((i / 3) as u8);
+                                x.hue = x.hue.wrapping_sub((i / 2) as u8);
                                 hsv2rgb(x)
                             }),
                     ),
-                    25,
+                    FIBONACCI_BRIGHTNESS,
                 ))
                 .expect("fibonacci_leds write failed");
 
@@ -147,6 +161,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
     let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(I2S_BUFFER_SIZE, 0);
 
+    // TODO: low power mode on the i2s?
     let i2s = I2s::new(
         i2s,
         Standard::Philips,
