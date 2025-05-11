@@ -62,7 +62,9 @@ async fn blink_fibonacci256_neopixel_rmt(
 
     let mut onboard_data: Box<[RGB8]> = vec![RGB8::default()].into_boxed_slice();
 
-    let mut ticker = Ticker::every(Duration::from_millis(20));
+    // 60 fps
+    // TODO: i think we might want to just tie to the microphone output. might as well go at that rate
+    let mut ticker = Ticker::every(Duration::from_micros(16_666));
 
     loop {
         // TODO: display the current g_color on the onboard neopixel for debugging
