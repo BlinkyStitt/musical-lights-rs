@@ -73,10 +73,8 @@ async fn blink_fibonacci256_neopixel_rmt(
 
             // Convert from the HSV color space (where we can easily transition from one
             // color to the other) to the RGB color space that we can then send to the LED
-            let color = hsv2rgb(g_color);
-
             // TODO: increment the hue by 1 for every pixel
-            onboard_data = [color; NUM_ONBOARD_NEOPIXELS];
+            onboard_data = [hsv2rgb(g_color); NUM_ONBOARD_NEOPIXELS];
             // fibonacci_data = [color; NUM_FIBONACCI_NEOPIXELS];
 
             // When sending to the LED, we do a gamma correction first (see smart_leds
@@ -98,7 +96,7 @@ async fn blink_fibonacci256_neopixel_rmt(
                             .take(NUM_FIBONACCI_NEOPIXELS)
                             .cloned(),
                     ),
-                    16,
+                    25,
                 ))
                 .expect("fibonacci_leds write failed");
 
@@ -107,49 +105,49 @@ async fn blink_fibonacci256_neopixel_rmt(
     }
 }
 
-// /// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
-// #[embassy_executor::task]
-// async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
-//     // TODO: what size should these be?
-//     // TODO: the example has these flipped. we should fix the docs
-//     let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES, 0);
+/// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
+#[embassy_executor::task]
+async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
+    // TODO: what size should these be?
+    // TODO: the example has these flipped. we should fix the docs
+    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES, 0);
 
-//     let i2s = I2s::new(
-//         i2s,
-//         Standard::Philips,
-//         DataFormat::Data16Channel16,
-//         Rate::from_hz(44100),
-//         dma,
-//         rx_descriptors,
-//         tx_descriptors,
-//     )
-//     // .with_mclk(mclk) // TODO: do we need this pin?
-//     .into_async();
+    let i2s = I2s::new(
+        i2s,
+        Standard::Philips,
+        DataFormat::Data16Channel16,
+        Rate::from_hz(44100),
+        dma,
+        rx_descriptors,
+        tx_descriptors,
+    )
+    // .with_mclk(mclk) // TODO: do we need this pin?
+    .into_async();
 
-//     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
+    let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
 
-//     let mut transfer = i2s_rx
-//         .read_dma_circular_async(rx_buffer)
-//         .expect("failed reading i2s dma circular");
+    let mut transfer = i2s_rx
+        .read_dma_circular_async(rx_buffer)
+        .expect("failed reading i2s dma circular");
 
-//     // TODO: put this in allocated memory
-//     let mut rcv = [0u8; I2S_BYTES];
+    // TODO: put this in allocated memory
+    let mut rcv = [0u8; I2S_BYTES];
 
-//     loop {
-//         let avail = transfer
-//             .available()
-//             .await
-//             .expect("i2s mic transfer available failed");
+    loop {
+        let avail = transfer
+            .available()
+            .await
+            .expect("i2s mic transfer available failed");
 
-//         transfer
-//             .pop(&mut rcv[..avail])
-//             .await
-//             .expect("i2s mic transfer pop failed");
+        transfer
+            .pop(&mut rcv[..avail])
+            .await
+            .expect("i2s mic transfer pop failed");
 
-//         // TODO: do something with the received data
-//         info!("Received {} bytes", avail);
-//     }
-// }
+        // TODO: do something with the received data
+        info!("Received {} bytes", avail);
+    }
+}
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
