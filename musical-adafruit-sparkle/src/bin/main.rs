@@ -133,7 +133,6 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         .read_dma_circular_async(rx_buffer)
         .expect("failed reading i2s dma circular");
 
-    // TODO: put this in allocated memory
     let mut rcv: Box<[u8]> = vec![0u8; I2S_BYTES].into_boxed_slice();
 
     loop {
