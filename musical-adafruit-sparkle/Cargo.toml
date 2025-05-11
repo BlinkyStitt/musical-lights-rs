@@ -76,7 +76,7 @@ esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", br
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
-opt-level = "z"
+opt-level = "s"
 
 [profile.release]
 codegen-units = 1        # LLVM can perform better optimizations using a single thread
@@ -84,5 +84,5 @@ debug = 2
 debug-assertions = false
 incremental = false
 lto = 'fat'
-opt-level = 'z'
+opt-level = 's'
 overflow-checks = false
