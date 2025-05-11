@@ -23,6 +23,7 @@ use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
 use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
+use musical_adafruit_sparkle::fps::FpsTracker;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -31,11 +32,27 @@ use smart_leds::{
 
 extern crate alloc;
 
+const FPS: u64 = 60;
 const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
-/// TODO: maybe one task should blink both. that way we can share the hue without locking. and they will both definitely both use the same gHue.
+/// TODO: what size should these be?
+const I2S_BUFFER_SIZE: usize = 3 * I2S_BYTES;
+
+#[embassy_executor::task]
+async fn blink_onboard(led: AnyPin) {
+    let mut led = Output::new(led, Level::Low, OutputConfig::default());
+    let mut ticker = Ticker::every(Duration::from_secs(1));
+
+    loop {
+        info!("Hello world!");
+        led.toggle();
+        ticker.next().await;
+    }
+}
+
+/// blink the onboard neopixel and the fibonacci neopixels
 #[embassy_executor::task]
 async fn blink_fibonacci256_neopixel_rmt(
     onboard_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
@@ -62,17 +79,19 @@ async fn blink_fibonacci256_neopixel_rmt(
     // let mut onboard_data: [RGB8; NUM_ONBOARD_NEOPIXELS];
     // let mut fibonacci_data: [_; NUM_FIBONACCI_NEOPIXELS];
 
-    let mut onboard_data: Box<[RGB8]> = Box::new([RGB8::default()]);
+    let mut onboard_data: [RGB8; 1] = [RGB8::default(); NUM_ONBOARD_NEOPIXELS];
 
-    // 60 fps
     // TODO: i think we might want to just tie to the microphone output. might as well go at that rate
-    let mut ticker = Ticker::every(Duration::from_micros(16_666));
+    let mut ticker = Ticker::every(Duration::from_nanos(1_000_000_000 / FPS));
+
+    // TODO: only track fps in debug mode. make this a feature flag
+    let mut fps = FpsTracker::new();
 
     loop {
-        // TODO: display the current g_color on the onboard neopixel for debugging
-
-        // Iterate over the rainbow!
+        // loop over the full range of hues
         for hue in 0..=255 {
+            fps.tick();
+
             info!("hue: {}", hue);
 
             g_color.hue = hue;
@@ -82,7 +101,6 @@ async fn blink_fibonacci256_neopixel_rmt(
             // TODO: increment the hue by 1 for every pixel
             // TODO: support palletes
             onboard_data[0] = hsv2rgb(g_color);
-            // fibonacci_data = [color; NUM_FIBONACCI_NEOPIXELS];
 
             // When sending to the LED, we do a gamma correction first (see smart_leds
             // documentation for details) and then limit the brightness to 10 out of 255 so
@@ -119,19 +137,21 @@ async fn blink_fibonacci256_neopixel_rmt(
     }
 }
 
+/// The ICS-43434 incorporates a high-pass filter to remove DC and low frequency components.
+/// This high pass filter has a −3 dB corner frequency of 24 Hz and does not scale with the sampling rate.
+///
 /// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
 #[embassy_executor::task]
 async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
-    // TODO: what size should these be?
-    // TODO: the example has these flipped. we should fix the docs
     // TODO: how do we get this to be in the external ram?
-    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(3 * I2S_BYTES, 0);
+    // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
+    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(I2S_BUFFER_SIZE, 0);
 
     let i2s = I2s::new(
         i2s,
         Standard::Philips,
-        DataFormat::Data16Channel16,
-        Rate::from_hz(44100),
+        DataFormat::Data32Channel32,
+        Rate::from_hz(48_000),
         dma,
         rx_descriptors,
         tx_descriptors,
@@ -145,6 +165,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         .read_dma_circular_async(rx_buffer)
         .expect("failed reading i2s dma circular");
 
+    // TODO: should this be I2S_BYTES, or I2S_BUFFER_SIZE?
     let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BYTES]);
 
     loop {
@@ -153,13 +174,19 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
             .await
             .expect("i2s mic transfer available failed");
 
+        // TODO: does this need to be larger?
+        assert!(avail <= I2S_BYTES);
+
         transfer
             .pop(&mut rcv[..avail])
             .await
             .expect("i2s mic transfer pop failed");
 
+        // TODO: do something real with the data.
+        let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
+
         // TODO: do something with the received data
-        info!("Received {} bytes", avail);
+        info!("Received {} bytes: {}", avail, sum);
     }
 }
 
@@ -231,8 +258,7 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
-    // blink the onboard neopixel
-    // TODO: blink all the neopixels together
+    let blink_onboard_f = blink_onboard(boot_button.degrade());
 
     // TODO: 80MHz is cargo culted. need to find the docs for this
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
@@ -258,21 +284,16 @@ async fn main(spawner: Spawner) {
 
     // Start the tasks on core 0
     spawner
+        .spawn(blink_onboard_f)
+        .expect("spawned blink onboard");
+    spawner
         .spawn(blink_fibonacci_f)
         .expect("spawned blink_fibonacci");
     spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
 
     // TODO: what should we spawn on core 1?
 
-    // TODO: what should the main loop do?
-    let mut red_led = Output::new(red_led, Level::Low, OutputConfig::default());
-    let mut red_led_ticker = Ticker::every(Duration::from_millis(1_000));
-
-    loop {
-        info!("Hello world!");
-        red_led.toggle();
-        red_led_ticker.next().await;
-    }
+    // TODO: should there be a main loop here? i think cpu monitoring sounds interesting
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin
 }
