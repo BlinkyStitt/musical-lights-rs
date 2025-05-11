@@ -3,9 +3,11 @@
 #![no_std]
 #![no_main]
 
+use alloc::boxed::Box;
+use alloc::vec;
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Ticker, Timer};
+use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
 use esp_hal::dma::I2s0DmaChannel;
 use esp_hal::dma_buffers;
@@ -22,9 +24,8 @@ use esp_println as _;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
-    SmartLedsWrite, SmartLedsWriteAsync,
+    SmartLedsWrite, RGB8,
 };
-use ws2812_async::{Grb, Ws2812};
 
 extern crate alloc;
 
@@ -40,7 +41,6 @@ async fn blink_fibonacci256_neopixel_rmt(
     fibonacci_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 1>,
     fibonacci_pin: AnyPin,
 ) {
-    // there is only 1 onboard neopixel
     // TODO: why can't we use the NUM_ONBOARD_NEOPIXELS const here? that's sad
     let onboard_rmt_buffer: [u32; NUM_ONBOARD_NEOPIXELS * 24 + 1] = smartLedBuffer!(1);
     let fibonacci_rmt_buffer: [u32; NUM_FIBONACCI_NEOPIXELS * 24 + 1] = smartLedBuffer!(256);
@@ -57,8 +57,10 @@ async fn blink_fibonacci256_neopixel_rmt(
     };
 
     // TODO: make these static mut with #[link_section = ".ext_ram.bss"]  ?
-    let mut onboard_data: [_; NUM_ONBOARD_NEOPIXELS];
+    // let mut onboard_data: [RGB8; NUM_ONBOARD_NEOPIXELS];
     // let mut fibonacci_data: [_; NUM_FIBONACCI_NEOPIXELS];
+
+    let mut onboard_data: Box<[RGB8]> = vec![RGB8::default()].into_boxed_slice();
 
     let mut ticker = Ticker::every(Duration::from_millis(20));
 
@@ -74,7 +76,7 @@ async fn blink_fibonacci256_neopixel_rmt(
             // Convert from the HSV color space (where we can easily transition from one
             // color to the other) to the RGB color space that we can then send to the LED
             // TODO: increment the hue by 1 for every pixel
-            onboard_data = [hsv2rgb(g_color); NUM_ONBOARD_NEOPIXELS];
+            onboard_data[0] = hsv2rgb(g_color);
             // fibonacci_data = [color; NUM_FIBONACCI_NEOPIXELS];
 
             // When sending to the LED, we do a gamma correction first (see smart_leds
@@ -110,7 +112,8 @@ async fn blink_fibonacci256_neopixel_rmt(
 async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: what size should these be?
     // TODO: the example has these flipped. we should fix the docs
-    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(2 * I2S_BYTES, 0);
+    // TODO: how do we get this to be in the external ram?
+    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(3 * I2S_BYTES, 0);
 
     let i2s = I2s::new(
         i2s,
@@ -131,7 +134,7 @@ async fn i2s_mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, 
         .expect("failed reading i2s dma circular");
 
     // TODO: put this in allocated memory
-    let mut rcv = [0u8; I2S_BYTES];
+    let mut rcv: Box<[u8]> = vec![0u8; I2S_BYTES].into_boxed_slice();
 
     loop {
         let avail = transfer
@@ -232,21 +235,21 @@ async fn main(spawner: Spawner) {
         neopixel_ext2.degrade(),
     );
 
-    // // read from the i2s mic
-    // // TODO: how should we send the data to another task to be processed?
-    // let i2s_mic_f = i2s_mic_task(
-    //     i2s_mic,
-    //     i2s_mic_dma,
-    //     i2s_mic_bclk.degrade(),
-    //     i2s_mic_ws.degrade(),
-    //     i2s_mic_data.degrade(),
-    // );
+    // read from the i2s mic
+    // TODO: how should we send the data to another task to be processed?
+    let i2s_mic_f = i2s_mic_task(
+        i2s_mic,
+        i2s_mic_dma,
+        i2s_mic_bclk.degrade(),
+        i2s_mic_ws.degrade(),
+        i2s_mic_data.degrade(),
+    );
 
     // Start the tasks on core 0
     spawner
         .spawn(blink_fibonacci_f)
         .expect("spawned blink_fibonacci");
-    // spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
+    spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
 
     // TODO: what should we spawn on core 1?
 
