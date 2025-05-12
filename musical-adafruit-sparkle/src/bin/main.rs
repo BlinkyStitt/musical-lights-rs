@@ -11,14 +11,14 @@ use alloc::boxed::Box;
 use alloc::vec;
 use defmt::{info, warn};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Ticker};
+use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
 use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel};
-use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
+use esp_hal::{dma_circular_buffers, dma_circular_descriptors};
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
@@ -190,7 +190,11 @@ async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
 async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: how do we get this to be in the external ram?
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
-    let (rx_buffer, rx_descriptors, _, tx_descriptors) = dma_buffers!(I2S_BUFFER_SIZE, 0);
+    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
+        dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
+
+    // TODO: create the circular discriptors and the buffers indipendently because we want them to be in the external ram
+    // let (rx_descriptors, _, tx_descriptors) = dma_circular_descriptors!(I2S_BUFFER_SIZE, 0);
 
     // TODO: low power mode on the i2s?
     let i2s = I2s::new(
@@ -212,27 +216,36 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
         .expect("failed reading i2s dma circular");
 
     // TODO: should this be I2S_BYTES, or I2S_BUFFER_SIZE?
-    let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BYTES]);
+    // TODO: some example code had 5000 here. i don't know why it would need to be 4 bytes larger?
+    let mut rcv: Box<[u8]> = Box::new([0u8; 5000]);
 
     loop {
-        let avail = transfer
-            .available()
-            .await
-            .expect("i2s mic transfer available failed");
+        match transfer.available().await {
+            Ok(mut avail) => {
+                // TODO: read this in chunks. we want to store it in a circular buffer
+                if (avail > rcv.len()) {
+                    warn!("dropping some of the bytes");
+                    avail = rcv.len();
+                }
 
-        // TODO: does this need to be larger?
-        assert!(avail <= I2S_BYTES);
+                transfer
+                    .pop(&mut rcv[..avail])
+                    .await
+                    .expect("i2s mic transfer pop failed");
 
-        transfer
-            .pop(&mut rcv[..avail])
-            .await
-            .expect("i2s mic transfer pop failed");
+                // TODO: do something real with the data.
+                let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
 
-        // TODO: do something real with the data.
-        let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
-
-        // TODO: do something with the received data
-        info!("Received {} bytes: {}", avail, sum);
+                // TODO: do something with the received data
+                info!("Received {} bytes: {}", avail, sum);
+            }
+            Err(e) => {
+                defmt::error!("Error receiving i2s data: {:?}", e);
+                // TODO: how do we reset? raising an error panics and it doesn't reset
+                // TODO: once we start error, i just keep getting "late"
+                Timer::after_millis(100).await;
+            }
+        }
     }
 }
 
