@@ -13,11 +13,11 @@ use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker};
 use esp_backtrace as _;
-use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel};
+use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel};
 use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::peripherals::{I2S0, SPI2};
+use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
@@ -25,6 +25,7 @@ use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
 use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
+use lsm9ds1::interface::{I2cInterface, SpiInterface};
 use musical_adafruit_sparkle::fps::FpsTracker;
 use smart_leds::{
     brightness, gamma,
@@ -76,6 +77,8 @@ async fn blink_fibonacci256_neopixel_rmt(
         SmartLedsAdapter::new(onboard_rmt_channel, onboard_pin, onboard_rmt_buffer);
     let mut fibonacci_leds =
         SmartLedsAdapter::new(fibonacci_rmt_channel, fibonacci_pin, fibonacci_rmt_buffer);
+
+    // TODO: everything under this should be in a separate function
 
     let mut base_hsv = Hsv {
         hue: 0,
@@ -154,10 +157,29 @@ async fn blink_fibonacci256_neopixel_rmt(
 }
 
 #[embassy_executor::task]
-async fn radio_task(spi: SPI2, dma: Spi2DmaChannel) {
+async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
     let mut radio = sx1262::Device::new(spi);
 
+    // TODO: everything under this should be in a separate function
     warn!("what should the radio loop do?");
+}
+
+// TODO: are we sure want I2C0 and not I2C1?
+#[embassy_executor::task]
+async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
+    // TODO: need to upgrade this library to use embedded-hal 1.0
+    // TODO: need to upgrade this library to support the magnetometer over i2c
+    // let spi_interface = SpiInterface::init(spi, ag_cs, m_cs);
+    let i2c_interface = I2cInterface::init(
+        i2c,
+        lsm9ds1::interface::i2c::AgAddress::_1,
+        lsm9ds1::interface::i2c::MagAddress::_1,
+    );
+
+    // TODO: have an interrupt?
+
+    // TODO: everything under this should be in a separate function
+    warn!("what should the accelerometer loop do?");
 }
 
 /// The ICS-43434 incorporates a high-pass filter to remove DC and low frequency components.
@@ -231,6 +253,12 @@ async fn main(spawner: Spawner) {
     //
     // pretty names for all the pins
     //
+
+    // SPI0 is entirely dedicated to the flash cache the ESP32 uses to map the SPI flash device it is connected to into memory.
+    let _ = peripherals.SPI0;
+    // SPI1 is connected to the same hardware lines as SPI0 and is used to write to the flash chip.
+    let _ = peripherals.SPI1;
+
     let red_led = peripherals.GPIO4;
 
     let i2s_mic = peripherals.I2S0;
@@ -258,7 +286,8 @@ async fn main(spawner: Spawner) {
 
     let whatever = peripherals.GPIO18;
 
-    let cap_touch_jst = peripherals.GPIO27;
+    // This does NOT work if you use wifi
+    let _cap_touch_jst = peripherals.GPIO27;
 
     // This JST SH 4-pin STEMMA QT connector breaks out I2C (SCL, SDA, 3.3V, GND)
     let i2c_scl = peripherals.GPIO13;
@@ -308,6 +337,11 @@ async fn main(spawner: Spawner) {
 
     let radio_f = radio_task(peripherals.SPI2, peripherals.DMA_SPI2);
 
+    // TODO: should the accelerometer use SPI or I2C?
+    // TODO: the lsm9ds1 crate docs say they don't support the i2c magnetometer. also, i've heard that i2c is bad and spi is better from smart people
+    let accelerometer_f =
+        accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
+
     // Start the tasks on core 0
     spawner
         .spawn(blink_onboard_f)
@@ -317,6 +351,9 @@ async fn main(spawner: Spawner) {
         .expect("spawned blink_fibonacci");
     spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
     spawner.spawn(radio_f).expect("spawned radio");
+    spawner
+        .spawn(accelerometer_f)
+        .expect("spawned accelerometer");
 
     // TODO: what should we spawn on core 1?
 

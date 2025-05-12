@@ -1007,6 +1007,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
+name = "lsm9ds1"
+version = "0.1.0"
+source = "git+https://github.com/BlinkyStitt/lsm9ds1#747e7fc4458de3e0a7efd1ca923d6e450e711a1e"
+dependencies = [
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "managed"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1047,6 +1055,7 @@ dependencies = [
  "esp-println",
  "esp-wifi",
  "heapless",
+ "lsm9ds1",
  "smart-leds",
  "smoltcp",
  "static_cell",
