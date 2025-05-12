@@ -9,12 +9,13 @@
 
 use alloc::boxed::Box;
 use alloc::vec;
-use defmt::{info, warn};
+use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
 use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel};
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
+use esp_hal::i2c::master::I2c;
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
@@ -37,7 +38,7 @@ use smart_leds::{
 extern crate alloc;
 
 /// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
-const FPS: u64 = 60;
+const FPS: u64 = 30;
 /// TODO: why is this 4092? the docs say 4092 and 4096 gets weirds results. but why? what am I missing about i2s?
 const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
@@ -176,15 +177,40 @@ async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
     // TODO: do we need to upgrade this library to support the magnetometer over i2c
     // TODO: what frequency?
     // let spi = Spi::new(spi, Config::default().with_frequency(frequency::Mhz(8)));
-
     // let spi_interface = SpiInterface::init(spi, ag_cs, m_cs);
+
+    // TODO: what frequency?
+    // TODO: support async i2c?
+    let i2c = I2c::new(i2c, Default::default())
+        .expect("failed to create i2c")
+        .with_scl(scl)
+        .with_sda(sda);
+
     let i2c_interface = I2cInterface::init(
         i2c,
         lsm9ds1::interface::i2c::AgAddress::_1,
         lsm9ds1::interface::i2c::MagAddress::_1,
     );
 
+    let mut lsm = lsm9ds1::LSM9DS1Init {
+        accel: Default::default(),
+        gyro: Default::default(),
+        mag: Default::default(),
+    }
+    .with_interface(i2c_interface);
+
     // TODO: have an interrupt?
+
+    // TODO: how should we handle errors here? it shouldn't be fatal. we should still get blinkly lights of some kind
+    if let Err(err) = lsm.begin_accel() {
+        error!("failed to begin accelerometer");
+    };
+    if let Err(err) = lsm.begin_gyro() {
+        error!("failed to begin gyro");
+    };
+    if let Err(err) = lsm.begin_mag() {
+        error!("failed to begin magnetometer");
+    };
 
     // TODO: everything under this should be in a separate function
     warn!("what should the accelerometer loop do?");
@@ -206,13 +232,14 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
     // let (rx_descriptors, _, tx_descriptors) = dma_circular_descriptors!(I2S_BUFFER_SIZE, 0);
 
     // TODO: low power mode on the i2s?
+    // TODO: if we want to sample at 48kHz, we probably want this on another core. writing the lights is blocking
     let i2s = I2s::new(
         i2s,
-        Standard::Philips,           // TODO: is this the right standard?
-        DataFormat::Data32Channel32, // TODO: this might be too much data
-        // DataFormat::Data16Channel16,
-        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Standard::Philips, // TODO: is this the right standard?
+        // DataFormat::Data32Channel32, // TODO: this might be too much data
+        DataFormat::Data16Channel16,
+        // Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         dma,
         rx_descriptors,
         tx_descriptors,
@@ -233,7 +260,6 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
     loop {
         match transfer.available().await {
             Ok(mut avail) => {
-                // TODO: read this in chunks. we want to store it in a circular buffer
                 if (avail > rcv.len()) {
                     warn!("dropping some of the bytes");
                     avail = rcv.len();
@@ -244,15 +270,18 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
                     .await
                     .expect("i2s mic transfer pop failed");
 
+                // TODO: read this in chunks. we want to store it in a circular buffer so that we can do a windowing function on it
                 // TODO: do something real with the data.
-                let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
+                // let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
 
                 // TODO: do something with the received data
-                info!("Received {} bytes: {}", avail, sum);
+                info!("Received {} bytes", avail);
             }
             Err(e) => {
-                // TODO: don't panic. reset the transfer
-                panic!("Error receiving data: {:?}", e);
+                error!("Error receiving data");
+
+                // TODO: how do we force a restart?
+                break;
             }
         }
     }
