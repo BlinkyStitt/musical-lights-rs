@@ -38,7 +38,7 @@ use smart_leds::{
 extern crate alloc;
 
 /// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
-const FPS: u64 = 30;
+const FPS: u64 = 60;
 /// TODO: why is this 4092? the docs say 4092 and 4096 gets weirds results. but why? what am I missing about i2s?
 const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
@@ -225,7 +225,8 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
     // TODO: how do we get this to be in the external ram?
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
     // TODO: the example uses dma_buffers, but it feels like circular buffers are the right things to use here
-    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(I2S_BUFFER_SIZE, 0);
+    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
+        dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
 
     // TODO: create the circular discriptors and the buffers indipendently because we want them to be in the external ram
     // let rx_buffer: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);  // TODO: this isn't write, but something like this should work
@@ -235,11 +236,11 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
     // TODO: if we want to sample at 48kHz, we probably want this on another core. writing the lights is blocking
     let i2s = I2s::new(
         i2s,
-        Standard::Philips, // TODO: is this the right standard?
-        // DataFormat::Data32Channel32, // TODO: this might be too much data
-        DataFormat::Data16Channel16,
-        // Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Standard::Philips,           // TODO: is this the right standard?
+        DataFormat::Data32Channel32, // TODO: this might be too much data
+        // DataFormat::Data16Channel16,
+        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         dma,
         rx_descriptors,
         tx_descriptors,
@@ -255,16 +256,11 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
 
     // TODO: should this be I2S_BYTES, or I2S_BUFFER_SIZE?
     // TODO: some example code had 5000 here. i don't know why it would need to be 4 bytes larger?
-    let mut rcv: Box<[u8]> = Box::new([0u8; 5000]);
+    let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);
 
     loop {
         match transfer.available().await {
             Ok(mut avail) => {
-                if (avail > rcv.len()) {
-                    warn!("dropping some of the bytes");
-                    avail = rcv.len();
-                }
-
                 transfer
                     .pop(&mut rcv[..avail])
                     .await
@@ -394,12 +390,6 @@ async fn main(spawner: Spawner) {
         accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
 
     // Start the tasks on core 0
-    spawner
-        .spawn(blink_onboard_f)
-        .expect("spawned blink onboard");
-    spawner
-        .spawn(blink_fibonacci_f)
-        .expect("spawned blink_fibonacci");
     spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
     spawner.spawn(radio_f).expect("spawned radio");
     spawner
@@ -407,6 +397,13 @@ async fn main(spawner: Spawner) {
         .expect("spawned accelerometer");
 
     // TODO: what should we spawn on core 1?
+    // TODO: move the neopixels to core 1 because they have blocking timing on things
+    spawner
+        .spawn(blink_onboard_f)
+        .expect("spawned blink onboard");
+    spawner
+        .spawn(blink_fibonacci_f)
+        .expect("spawned blink_fibonacci");
 
     // TODO: should there be a main loop here? i think cpu monitoring sounds interesting
 
