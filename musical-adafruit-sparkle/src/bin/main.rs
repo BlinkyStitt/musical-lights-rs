@@ -18,7 +18,8 @@ use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
-use esp_hal::{dma_circular_buffers, dma_circular_descriptors};
+use esp_hal::spi::master::{Config, Spi};
+use esp_hal::{dma_buffers, dma_circular_buffers, dma_circular_descriptors};
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
@@ -35,7 +36,9 @@ use smart_leds::{
 
 extern crate alloc;
 
+/// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
 const FPS: u64 = 60;
+/// TODO: why is this 4092? the docs say 4092 and 4096 gets weirds results. but why? what am I missing about i2s?
 const I2S_BYTES: usize = 4092;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
@@ -47,6 +50,8 @@ const ONBOARD_BRIGHTNESS: u8 = 10;
 const FIBONACCI_BRIGHTNESS: u8 = 25;
 
 /// TODO: what size should these be?
+/// TODO: I'm sometimes seeing "late" errors. i think this is because the buffer is too small. but i thought a circular buffer would keep it working
+/// TODO: i can't make it bigger than this because the esp32 is too small. need to get this into external ram
 const I2S_BUFFER_SIZE: usize = 3 * I2S_BYTES;
 
 #[embassy_executor::task]
@@ -164,11 +169,14 @@ async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
     warn!("what should the radio loop do?");
 }
 
-// TODO: are we sure want I2C0 and not I2C1?
+// TODO: are we sure want I2C0 and not I2C1? or even SPI?
 #[embassy_executor::task]
 async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
-    // TODO: need to upgrade this library to use embedded-hal 1.0
-    // TODO: need to upgrade this library to support the magnetometer over i2c
+    // async fn accelerometer_task(spi: SPI3, ag_cs: AnyPin, m_cs: AnyPin) {
+    // TODO: do we need to upgrade this library to support the magnetometer over i2c
+    // TODO: what frequency?
+    // let spi = Spi::new(spi, Config::default().with_frequency(frequency::Mhz(8)));
+
     // let spi_interface = SpiInterface::init(spi, ag_cs, m_cs);
     let i2c_interface = I2cInterface::init(
         i2c,
@@ -190,18 +198,21 @@ async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
 async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
     // TODO: how do we get this to be in the external ram?
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
-    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-        dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
+    // TODO: the example uses dma_buffers, but it feels like circular buffers are the right things to use here
+    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(I2S_BUFFER_SIZE, 0);
 
     // TODO: create the circular discriptors and the buffers indipendently because we want them to be in the external ram
+    // let rx_buffer: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);  // TODO: this isn't write, but something like this should work
     // let (rx_descriptors, _, tx_descriptors) = dma_circular_descriptors!(I2S_BUFFER_SIZE, 0);
 
     // TODO: low power mode on the i2s?
     let i2s = I2s::new(
         i2s,
-        Standard::Philips,
-        DataFormat::Data32Channel32,
-        Rate::from_hz(48_000),
+        Standard::Philips,           // TODO: is this the right standard?
+        DataFormat::Data32Channel32, // TODO: this might be too much data
+        // DataFormat::Data16Channel16,
+        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         dma,
         rx_descriptors,
         tx_descriptors,
@@ -240,10 +251,8 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
                 info!("Received {} bytes: {}", avail, sum);
             }
             Err(e) => {
-                defmt::error!("Error receiving i2s data: {:?}", e);
-                // TODO: how do we reset? raising an error panics and it doesn't reset
-                // TODO: once we start error, i just keep getting "late"
-                Timer::after_millis(100).await;
+                // TODO: don't panic. reset the transfer
+                panic!("Error receiving data: {:?}", e);
             }
         }
     }
