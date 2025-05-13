@@ -20,14 +20,17 @@ use esp_hal::dma::{AnyI2sDmaChannel, I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChan
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
+use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::system::{CpuControl, Stack};
+use esp_hal::timer::AnyTimer;
 use esp_hal::{
     dma_buffers, dma_circular_buffers, dma_circular_buffers_chunk_size, dma_circular_descriptors,
     dma_rx_stream_buffer,
 };
+use lsm9ds1::accel;
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
@@ -165,7 +168,15 @@ async fn blink_fibonacci256_neopixel_rmt(
 }
 
 #[embassy_executor::task]
+async fn sensor_task(spi: SPI2, dma: Spi2DmaChannel, i2c: I2C0, scl: AnyPin, sda: AnyPin) {
+    let radio_f = radio_task(spi, dma);
+    let accelerometer_f = accelerometer_task(i2c, scl, sda);
+
+    // TODO: how do we join these two tasks?
+}
+
 async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
+    // TODO: hmm. i think my interface is actually a tx/rx interface. i need to check the docs
     let mut radio = sx1262::Device::new(spi);
 
     // TODO: everything under this should be in a separate function
@@ -173,7 +184,6 @@ async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
 }
 
 // TODO: are we sure want I2C0 and not I2C1? or even SPI?
-#[embassy_executor::task]
 async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
     // async fn accelerometer_task(spi: SPI3, ag_cs: AnyPin, m_cs: AnyPin) {
     // TODO: do we need to upgrade this library to support the magnetometer over i2c
@@ -354,11 +364,17 @@ async fn main(spawner: Spawner) {
     //
 
     // initialize embassy
-    let timer0 = TimerGroup::new(peripherals.TIMG1);
-    esp_hal_embassy::init(timer0.timer0);
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    let timer0: AnyTimer = timg0.timer0.into();
+
+    let timg1 = TimerGroup::new(peripherals.TIMG1);
+    let timer1: AnyTimer = timg1.timer0.into();
+
+    esp_hal_embassy::init([timer0, timer1]);
     info!("Embassy initialized!");
 
     let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
+    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
 
     // TODO: 80MHz is cargo culted. need to find the docs for this
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
@@ -384,12 +400,20 @@ async fn main(spawner: Spawner) {
         i2s_mic_data.degrade(),
     );
 
-    let radio_f = radio_task(peripherals.SPI2, peripherals.DMA_SPI2);
+    // let radio_f = radio_task(peripherals.SPI2, peripherals.DMA_SPI2);
 
-    // TODO: should the accelerometer use SPI or I2C?
-    // TODO: the lsm9ds1 crate docs say they don't support the i2c magnetometer. also, i've heard that i2c is bad and spi is better from smart people
-    let accelerometer_f =
-        accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
+    let sensor_f = sensor_task(
+        peripherals.SPI2,
+        peripherals.DMA_SPI2,
+        peripherals.I2C0,
+        i2c_scl.degrade(),
+        i2c_sda.degrade(),
+    );
+
+    // // TODO: should the accelerometer use SPI or I2C?
+    // // TODO: the lsm9ds1 crate docs say they don't support the i2c magnetometer. also, i've heard that i2c is bad and spi is better from smart people
+    // let accelerometer_f =
+    //     accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
 
     // TODO: start the blink task on core 1 since its blocking and neopixels are time sensitive
     spawner
@@ -398,10 +422,15 @@ async fn main(spawner: Spawner) {
 
     // Start the tasks on core 0
     spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
-    spawner.spawn(radio_f).expect("spawned radio");
-    spawner
-        .spawn(accelerometer_f)
-        .expect("spawned accelerometer");
+    spawner.spawn(sensor_f).expect("spawned sensors");
+
+    // TODO: try putting the i2s on a high priority core
+
+    // // TODO: the program is locking up when we add more spawned functions. the mix of async and blocking is probably to blame
+    // spawner.spawn(radio_f).expect("spawned radio");
+    // spawner
+    //     .spawn(accelerometer_f)
+    //     .expect("spawned accelerometer");
 
     // TODO: should there be a main loop here? i think cpu monitoring sounds interesting
 
