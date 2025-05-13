@@ -265,8 +265,8 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
         Standard::Philips, // TODO: is this the right standard?
         // DataFormat::Data32Channel32, // TODO: this might be too much data
         DataFormat::Data16Channel16,
-        // Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         // Rate::from_hz(16_000),
         dma,
         rx_descriptors,
@@ -304,9 +304,9 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
                 info!("{} bytes", avail);
             }
             Err(e) => {
-                panic!("Error receiving data");
+                // TODO: how do we force a restart? can we just make a new transfer?
+                panic!("Error receiving data: {:?}", e);
 
-                // TODO: how do we force a restart?
                 break;
             }
         }
