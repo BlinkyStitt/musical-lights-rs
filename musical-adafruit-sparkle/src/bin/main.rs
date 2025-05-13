@@ -12,19 +12,21 @@ use alloc::vec;
 use core::ptr::addr_of_mut;
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
+use embassy_futures::join::join;
 use embassy_futures::{join, yield_now};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
 use esp_hal::dma::{AnyI2sDmaChannel, I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel, CHUNK_SIZE};
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
-use esp_hal::i2c::master::I2c;
+use esp_hal::i2c::master::{AnyI2c, I2c};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::interrupt::Priority;
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
+use esp_hal::spi::AnySpi;
 use esp_hal::system::{CpuControl, Stack};
 use esp_hal::timer::AnyTimer;
 use esp_hal::{
@@ -168,15 +170,17 @@ async fn blink_fibonacci256_neopixel_rmt(
     }
 }
 
+/// lower priority sensors get grouped together here
+/// embassy is a "fair" executor, but we need i2s to be read really quickly because we have a small DMA buffer for it
 #[embassy_executor::task]
 async fn sensor_task(spi: SPI2, dma: Spi2DmaChannel, i2c: I2C0, scl: AnyPin, sda: AnyPin) {
-    let radio_f = radio_task(spi, dma);
-    let accelerometer_f = accelerometer_task(i2c, scl, sda);
+    let radio_f = radio_subtask(spi.into(), dma);
+    let accelerometer_f = accelerometer_subtask(i2c.into(), scl, sda);
 
-    // join(radio_f, accelerometer_f).await;
+    join(radio_f, accelerometer_f).await;
 }
 
-async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
+async fn radio_subtask(spi: AnySpi, _dma: Spi2DmaChannel) {
     // TODO: hmm. i think my interface is actually a tx/rx interface. i need to check the docs
     let mut radio = sx1262::Device::new(spi);
 
@@ -185,7 +189,7 @@ async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
 }
 
 // TODO: are we sure want I2C0 and not I2C1? or even SPI?
-async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
+async fn accelerometer_subtask(i2c: AnyI2c, scl: AnyPin, sda: AnyPin) {
     // async fn accelerometer_task(spi: SPI3, ag_cs: AnyPin, m_cs: AnyPin) {
     // TODO: do we need to upgrade this library to support the magnetometer over i2c
     // TODO: what frequency?
@@ -401,8 +405,8 @@ async fn main(low_prio_spawner: Spawner) {
         i2s_mic_data.degrade(),
     );
 
-    // let radio_f = radio_task(peripherals.SPI2, peripherals.DMA_SPI2);
-
+    // TODO: should the accelerometer use SPI or I2C?
+    // TODO: the lsm9ds1 crate docs say they don't support the i2c magnetometer. also, i've heard that i2c is bad and spi is better from smart people
     let sensor_f = sensor_task(
         peripherals.SPI2,
         peripherals.DMA_SPI2,
@@ -411,11 +415,7 @@ async fn main(low_prio_spawner: Spawner) {
         i2c_sda.degrade(),
     );
 
-    // // TODO: should the accelerometer use SPI or I2C?
-    // // TODO: the lsm9ds1 crate docs say they don't support the i2c magnetometer. also, i've heard that i2c is bad and spi is better from smart people
-    // let accelerometer_f =
-    //     accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
-
+    // TODO: this just hangs. something isn't write. probably the wrong software interrupt
     // static EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
     // let executor = InterruptExecutor::new(sw_ints.software_interrupt2);
     // let high_priority_executor = EXECUTOR.init(executor);
