@@ -102,7 +102,7 @@ async fn blink_fibonacci256_neopixel_rmt(
     let mut ticker = Ticker::every(Duration::from_nanos(1_000_000_000 / FPS));
 
     // TODO: only track fps in debug mode. make this a feature flag
-    let mut fps = FpsTracker::new();
+    // let mut fps = FpsTracker::new();
 
     // // TODO: how do we have this be a compile time check?
     // assert!(FIBONACCI_BRIGHTNESS < 81);
@@ -110,7 +110,7 @@ async fn blink_fibonacci256_neopixel_rmt(
     loop {
         // loop over the full range of hues
         for hue in 0..=255 {
-            fps.tick();
+            // fps.tick();
 
             info!("hue: {}", hue);
 
@@ -156,8 +156,6 @@ async fn blink_fibonacci256_neopixel_rmt(
                 .expect("fibonacci_leds write failed");
 
             ticker.next().await;
-
-            // TODO: log the framerate
         }
     }
 }
