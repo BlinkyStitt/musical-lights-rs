@@ -9,22 +9,30 @@
 
 use alloc::boxed::Box;
 use alloc::vec;
+use core::ptr::addr_of_mut;
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
+use embassy_futures::yield_now;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
-use esp_hal::dma::{I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel};
+use esp_hal::dma::{AnyI2sDmaChannel, I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel, CHUNK_SIZE};
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
-use esp_hal::{dma_buffers, dma_circular_buffers, dma_circular_descriptors};
+use esp_hal::system::{CpuControl, Stack};
+use esp_hal::{
+    dma_buffers, dma_circular_buffers, dma_circular_buffers_chunk_size, dma_circular_descriptors,
+    dma_rx_stream_buffer,
+};
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
+use esp_hal_embassy::Executor;
 use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
 use lsm9ds1::interface::{I2cInterface, SpiInterface};
@@ -34,13 +42,12 @@ use smart_leds::{
     hsv::{hsv2rgb, Hsv},
     SmartLedsWrite, RGB8,
 };
+use static_cell::StaticCell;
 
 extern crate alloc;
 
 /// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
-const FPS: u64 = 60;
-/// TODO: why is this 4092? the docs say 4092 and 4096 gets weirds results. but why? what am I missing about i2s?
-const I2S_BYTES: usize = 4092;
+const FPS: u64 = 30;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
@@ -53,19 +60,8 @@ const FIBONACCI_BRIGHTNESS: u8 = 25;
 /// TODO: what size should these be?
 /// TODO: I'm sometimes seeing "late" errors. i think this is because the buffer is too small. but i thought a circular buffer would keep it working
 /// TODO: i can't make it bigger than this because the esp32 is too small. need to get this into external ram
-const I2S_BUFFER_SIZE: usize = 3 * I2S_BYTES;
-
-#[embassy_executor::task]
-async fn blink_onboard(led: AnyPin) {
-    let mut led = Output::new(led, Level::Low, OutputConfig::default());
-    let mut ticker = Ticker::every(Duration::from_secs(1));
-
-    loop {
-        info!("Hello world!");
-        led.toggle();
-        ticker.next().await;
-    }
-}
+/// TODO: i think this needs to be 4. the examples all use 4 and i'm getting weird hangs when i don't read fast enough
+const I2S_BUFFER_SIZE: usize = CHUNK_SIZE * 3;
 
 /// blink the onboard neopixel and the fibonacci neopixels
 #[embassy_executor::task]
@@ -93,10 +89,8 @@ async fn blink_fibonacci256_neopixel_rmt(
     };
 
     // TODO: make these static mut with #[link_section = ".ext_ram.bss"]  ?
-    // let mut onboard_data: [RGB8; NUM_ONBOARD_NEOPIXELS];
-    // let mut fibonacci_data: [_; NUM_FIBONACCI_NEOPIXELS];
-
-    let mut base_rgb: [RGB8; 1] = [RGB8::default(); NUM_ONBOARD_NEOPIXELS];
+    let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
+    let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
     // TODO: i think we might want to just tie to the microphone output. might as well go at that rate
     let mut ticker = Ticker::every(Duration::from_nanos(1_000_000_000 / FPS));
@@ -120,40 +114,50 @@ async fn blink_fibonacci256_neopixel_rmt(
             // color to the other) to the RGB color space that we can then send to the LED
             // TODO: increment the hue by 1 for every pixel
             // TODO: support palletes
-            base_rgb[0] = hsv2rgb(base_hsv);
-
-            // When sending to the LED, we do a gamma correction first (see smart_leds
-            // documentation for details) and then limit the brightness to 10 out of 255 so
-            // that the output it's not too bright.
-            // TODO: fastled had cool dithering. can we use that here?
-            // TODO: don't just change the color. use a fade effect to go from one color to the next
-            // TODO: global brightness value that can change based on the capacitive touch sensor
-            onboard_leds
-                .write(brightness(
-                    gamma(base_rgb.iter().copied()),
-                    ONBOARD_BRIGHTNESS,
-                ))
-                .expect("onboard_leds write failed");
+            onboard_data[0] = hsv2rgb(base_hsv);
 
             // TODO: lots of different ways to do patterns here. this is just a simple color wheel that looks nice enough.
             // TODO: make it easy to remap the locations to indices. the layout is a nice spiral, but for a clock i need it by x/y
-            fibonacci_leds
-                .write(brightness(
-                    gamma(
-                        [base_hsv]
-                            .iter()
-                            .cycle()
-                            .copied()
-                            .enumerate()
-                            .take(NUM_FIBONACCI_NEOPIXELS)
-                            .map(|(i, mut x)| {
-                                x.hue = x.hue.wrapping_add((i / 2) as u8);
-                                hsv2rgb(x)
-                            }),
-                    ),
-                    FIBONACCI_BRIGHTNESS,
-                ))
-                .expect("fibonacci_leds write failed");
+            // TODO: call a function that applies a chosen pattern and pallete to the data. use base_hsv as a starting color
+            // TODO: don't just change the color. use a fade effect to go from one color to the next
+            // TODO: fastled had cool dithering. can we use that here? or use it earlier?
+            fibonacci_data.iter_mut().enumerate().map(|(i, mut x)| {
+                let mut x = base_hsv;
+                x.hue = x.hue.wrapping_add((i / 2) as u8);
+                hsv2rgb(x)
+            });
+
+            yield_now().await;
+
+            // TODO: do i need to disable interrupts here?
+            critical_section::with(|x| {
+                // When sending to the LED, we do a gamma correction first (see smart_leds
+                // documentation for details) and then limit the brightness so
+                // that the output it's not too bright.
+                // TODO: is this the right gamma correction?
+                // TODO: global brightness value that can change based on the capacitive touch sensor
+                // TODO: should we do hsv2rgb here instead of in the loop above? would make a lot of patterns easier
+                onboard_leds
+                    .write(brightness(
+                        gamma(onboard_data.iter().copied()),
+                        ONBOARD_BRIGHTNESS,
+                    ))
+                    .expect("onboard_leds write failed");
+            });
+
+            // TODO: i think i need to preprocess the data. that way the iterator runs as fast as possible. its blocking while writing time sensitive data. don't do that
+            // TODO: yield now?
+
+            yield_now().await;
+
+            critical_section::with(|x| {
+                fibonacci_leds
+                    .write(brightness(
+                        gamma(fibonacci_data.iter().copied()),
+                        FIBONACCI_BRIGHTNESS,
+                    ))
+                    .expect("fibonacci_leds write failed");
+            });
 
             ticker.next().await;
         }
@@ -220,25 +224,22 @@ async fn accelerometer_task(i2c: I2C0, scl: AnyPin, sda: AnyPin) {
 /// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
 #[embassy_executor::task]
 async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
-    // TODO: how do we get this to be in the external ram?
+    // TODO: the esp32-s3 can put the dma on external ram, but i don't think the esp32 can
+    // <https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/spi_loopback_dma_psram.rs>
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
     // TODO: the example uses dma_buffers, but it feels like circular buffers are the right things to use here
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
         dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
 
-    // TODO: create the circular discriptors and the buffers indipendently because we want them to be in the external ram
-    // let rx_buffer: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);  // TODO: this isn't write, but something like this should work
-    // let (rx_descriptors, _, tx_descriptors) = dma_circular_descriptors!(I2S_BUFFER_SIZE, 0);
-
     // TODO: low power mode on the i2s?
     // TODO: if we want to sample at 48kHz, we probably want this on another core. writing the lights is blocking
     let i2s = I2s::new(
         i2s,
-        Standard::Philips,           // TODO: is this the right standard?
-        DataFormat::Data32Channel32, // TODO: this might be too much data
-        // DataFormat::Data16Channel16,
-        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Standard::Philips, // TODO: is this the right standard?
+        // DataFormat::Data32Channel32, // TODO: this might be too much data
+        DataFormat::Data16Channel16,
+        // Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         dma,
         rx_descriptors,
         tx_descriptors,
@@ -248,6 +249,7 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
 
     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
 
+    // TODO: maybe we don't want a circular buffer. maybe we want to read with one shots?
     let mut transfer = i2s_rx
         .read_dma_circular_async(rx_buffer)
         .expect("failed reading i2s dma circular");
@@ -269,7 +271,7 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
                 // let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
 
                 // TODO: do something with the received data
-                info!("Received {} bytes", avail);
+                info!("{} bytes", avail);
             }
             Err(e) => {
                 error!("Error receiving data");
@@ -356,13 +358,15 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
-    let blink_onboard_f = blink_onboard(boot_button.degrade());
+    let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
 
     // TODO: 80MHz is cargo culted. need to find the docs for this
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
     // // TODO: Async depends on <https://github.com/esp-rs/esp-hal-community/pull/6>
     // .into_async();
 
+    // TODO: start the blink task on core 1 since its blocking and neopixels are time sensitive
+    // TODO: we don't have enough RAM to run this on core 1 though
     let blink_fibonacci_f = blink_fibonacci256_neopixel_rmt(
         rmt.channel0,
         neopixel_builtin.degrade(),
@@ -387,21 +391,17 @@ async fn main(spawner: Spawner) {
     let accelerometer_f =
         accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
 
+    // TODO: start the blink task on core 1 since its blocking and neopixels are time sensitive
+    spawner
+        .spawn(blink_fibonacci_f)
+        .expect("spawned blink fibonacci");
+
     // Start the tasks on core 0
     spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
     spawner.spawn(radio_f).expect("spawned radio");
     spawner
         .spawn(accelerometer_f)
         .expect("spawned accelerometer");
-
-    // TODO: what should we spawn on core 1?
-    // TODO: move the neopixels to core 1 because they have blocking timing on things
-    spawner
-        .spawn(blink_onboard_f)
-        .expect("spawned blink onboard");
-    spawner
-        .spawn(blink_fibonacci_f)
-        .expect("spawned blink_fibonacci");
 
     // TODO: should there be a main loop here? i think cpu monitoring sounds interesting
 
