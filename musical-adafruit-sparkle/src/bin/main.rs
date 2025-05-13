@@ -12,7 +12,7 @@ use alloc::vec;
 use core::ptr::addr_of_mut;
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::yield_now;
+use embassy_futures::{join, yield_now};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
@@ -21,6 +21,7 @@ use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::interrupt::software::SoftwareInterruptControl;
+use esp_hal::interrupt::Priority;
 use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
@@ -35,7 +36,7 @@ use lsm9ds1::accel;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
-use esp_hal_embassy::Executor;
+use esp_hal_embassy::{Executor, InterruptExecutor};
 use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
 use lsm9ds1::interface::{I2cInterface, SpiInterface};
@@ -50,7 +51,7 @@ use static_cell::StaticCell;
 extern crate alloc;
 
 /// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
-const FPS: u64 = 30;
+const FPS: u64 = 100;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
@@ -172,7 +173,7 @@ async fn sensor_task(spi: SPI2, dma: Spi2DmaChannel, i2c: I2C0, scl: AnyPin, sda
     let radio_f = radio_task(spi, dma);
     let accelerometer_f = accelerometer_task(i2c, scl, sda);
 
-    // TODO: how do we join these two tasks?
+    // join(radio_f, accelerometer_f).await;
 }
 
 async fn radio_task(spi: SPI2, _dma: Spi2DmaChannel) {
@@ -294,7 +295,7 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
 }
 
 #[esp_hal_embassy::main]
-async fn main(spawner: Spawner) {
+async fn main(low_prio_spawner: Spawner) {
     // generator version: 0.3.1
 
     // TODO: watchdog?
@@ -415,16 +416,19 @@ async fn main(spawner: Spawner) {
     // let accelerometer_f =
     //     accelerometer_task(peripherals.I2C0, i2c_scl.degrade(), i2c_sda.degrade());
 
+    // static EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+    // let executor = InterruptExecutor::new(sw_ints.software_interrupt2);
+    // let high_priority_executor = EXECUTOR.init(executor);
+
+    // TODO: try putting the i2s on the high priority spawner? or should the lights be on the high priority spawner?
+    // let high_priority_spawner = high_priority_executor.start(Priority::Priority3);
+
     // TODO: start the blink task on core 1 since its blocking and neopixels are time sensitive
-    spawner
-        .spawn(blink_fibonacci_f)
-        .expect("spawned blink fibonacci");
+    low_prio_spawner.must_spawn(blink_fibonacci_f);
 
     // Start the tasks on core 0
-    spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
-    spawner.spawn(sensor_f).expect("spawned sensors");
-
-    // TODO: try putting the i2s on a high priority core
+    low_prio_spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
+    low_prio_spawner.spawn(sensor_f).expect("spawned sensors");
 
     // // TODO: the program is locking up when we add more spawned functions. the mix of async and blocking is probably to blame
     // spawner.spawn(radio_f).expect("spawned radio");
