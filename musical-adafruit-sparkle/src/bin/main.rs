@@ -53,7 +53,7 @@ use static_cell::StaticCell;
 extern crate alloc;
 
 /// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
-const FPS: u64 = 100;
+const FPS: u64 = 30;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
@@ -154,6 +154,7 @@ async fn blink_fibonacci256_neopixel_rmt(
             // TODO: i think i need to preprocess the data. that way the iterator runs as fast as possible. its blocking while writing time sensitive data. don't do that
             // TODO: yield now?
 
+            yield_now().await;
             yield_now().await;
 
             critical_section::with(|x| {
@@ -427,14 +428,9 @@ async fn main(low_prio_spawner: Spawner) {
     low_prio_spawner.must_spawn(blink_fibonacci_f);
 
     // Start the tasks on core 0
-    low_prio_spawner.spawn(i2s_mic_f).expect("spawned i2s mic");
-    low_prio_spawner.spawn(sensor_f).expect("spawned sensors");
-
-    // // TODO: the program is locking up when we add more spawned functions. the mix of async and blocking is probably to blame
-    // spawner.spawn(radio_f).expect("spawned radio");
-    // spawner
-    //     .spawn(accelerometer_f)
-    //     .expect("spawned accelerometer");
+    // TODO: the program is locking up when we add more spawned functions. the mix of async and blocking is probably to blame
+    low_prio_spawner.must_spawn(i2s_mic_f);
+    low_prio_spawner.must_spawn(sensor_f);
 
     // TODO: should there be a main loop here? i think cpu monitoring sounds interesting
 
