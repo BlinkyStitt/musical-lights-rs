@@ -53,7 +53,7 @@ use static_cell::StaticCell;
 extern crate alloc;
 
 /// TODO: how fast? lets see how fast the hardware can go. we don't want to give anyone a headache or seizure though!
-const FPS: u64 = 30;
+const FPS: u64 = 90;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
@@ -67,7 +67,7 @@ const FIBONACCI_BRIGHTNESS: u8 = 25;
 /// TODO: I'm sometimes seeing "late" errors. i think this is because the buffer is too small. but i thought a circular buffer would keep it working
 /// TODO: i can't make it bigger than this because the esp32 is too small. need to get this into external ram
 /// TODO: i think this needs to be 4. the examples all use 4 and i'm getting weird hangs when i don't read fast enough
-const I2S_BUFFER_SIZE: usize = CHUNK_SIZE * 3;
+// const I2S_BUFFER_SIZE: usize = CHUNK_SIZE * 3;
 
 /// blink the onboard neopixel and the fibonacci neopixels
 #[embassy_executor::task]
@@ -234,6 +234,12 @@ async fn accelerometer_subtask(i2c: AnyI2c, scl: AnyPin, sda: AnyPin) {
     warn!("what should the accelerometer loop do?");
 }
 
+const BYTES_PER_SAMPLE: usize = core::mem::size_of::<u32>();
+const FFT_LEN: usize = 512;
+const I2S_CHUNK_SIZE: usize = FFT_LEN * BYTES_PER_SAMPLE;
+const BUFFERS_IN_RING: usize = 3;
+const I2S_BUFFER_SIZE: usize = CHUNK_SIZE * BUFFERS_IN_RING; // 8192 B
+
 /// The ICS-43434 incorporates a high-pass filter to remove DC and low frequency components.
 /// This high pass filter has a −3 dB corner frequency of 24 Hz and does not scale with the sampling rate.
 ///
@@ -244,8 +250,13 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
     // <https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/spi_loopback_dma_psram.rs>
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
     // TODO: the example uses dma_buffers, but it feels like circular buffers are the right things to use here
+    // TODO: how do we make the buffer chunk size smaller? i think that would work better. we need it to be an amount that fits in the fft cleanly
+    // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
+    //     dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
+
+    // TODO: i don't understand how to make the chunk size smaller
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-        dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
+        dma_circular_buffers_chunk_size!(I2S_BUFFER_SIZE, 0, CHUNK_SIZE);
 
     // TODO: low power mode on the i2s?
     // TODO: if we want to sample at 48kHz, we probably want this on another core. writing the lights is blocking
@@ -256,12 +267,15 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
         DataFormat::Data16Channel16,
         // Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        // Rate::from_hz(16_000),
         dma,
         rx_descriptors,
         tx_descriptors,
     )
     // .with_mclk(mclk) // TODO: do we need this pin? its the master clock output pin.
     .into_async();
+
+    // TODO: set an interrupt handler?
 
     let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
 
@@ -271,7 +285,7 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
         .expect("failed reading i2s dma circular");
 
     // TODO: should this be I2S_BYTES, or I2S_BUFFER_SIZE?
-    // TODO: some example code had 5000 here. i don't know why it would need to be 4 bytes larger?
+    // TODO: some example code had 5000 here. i don't know why it would need to be larger?
     let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);
 
     loop {
@@ -290,7 +304,7 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
                 info!("{} bytes", avail);
             }
             Err(e) => {
-                error!("Error receiving data");
+                panic!("Error receiving data");
 
                 // TODO: how do we force a restart?
                 break;
