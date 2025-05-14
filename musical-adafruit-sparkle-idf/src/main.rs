@@ -79,34 +79,33 @@ fn main() -> eyre::Result<()> {
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_handle = thread::spawn(move || {
-        if let Err(err) = blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external) {
-            // TODO: how should we handle errors?
-            error!("Error in blink neopixels task: {err}");
-            panic!("Blink neopixels task failed");
-        };
+        blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external).inspect_err(|err| {
+            error!("Error in blink_neopixels_task: {err}");
+        })
     });
 
     let mic_handle = thread::spawn(move || {
-        if let Err(err) = mic_task(
+        mic_task(
             peripherals.i2s0,
             pins.gpio25,
             pins.gpio26,
             pins.gpio27,
             audio_sample_tx,
-        ) {
+        )
+        .inspect_err(|err| {
             error!("Error in mic task: {err}");
-            panic!("Mic task failed");
-        };
+        })
     });
 
-    // TODO: thread for monitoring ram/cpu/etc
+    // TODO: debug-only thread for monitoring ram/cpu/etc?
 
     // TODO: an error on the second handle won't show until the first finishes.
+    // TODO: is there a "select" that returns the first one that finishes?
     // we want to pass errors around don't we? maybe we should use async tasks instead?
-    mic_handle.join().expect("mic thread panicked");
+    mic_handle.join().expect("mic thread panicked")?;
     blink_neopixels_handle
         .join()
-        .expect("neopixel thread panicked");
+        .expect("neopixel thread panicked")?;
 
     Ok(())
 }
