@@ -61,7 +61,7 @@ fn main() -> eyre::Result<()> {
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
 
     // TODO: instead of RMT, lets use SPI. that can use DMA and so should be faster
-    let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio4)?;
+    let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio22)?;
 
     let (audio_sample_tx, audio_sample_rx) = flume::bounded::<()>(4);
 
