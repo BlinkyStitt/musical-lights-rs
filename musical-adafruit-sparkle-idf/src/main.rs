@@ -1,6 +1,8 @@
 #![feature(future_join)]
 #![feature(type_alias_impl_trait)]
 
+mod fps;
+
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
@@ -10,7 +12,6 @@ use esp_idf_svc::{
             I2sDriver, I2S0,
         },
         prelude::Peripherals,
-        task::block_on,
     },
     timer::EspTaskTimerService,
 };
@@ -26,12 +27,14 @@ use std::thread::{self, sleep};
 use std::time::Duration;
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
+use fps::FpsTracker;
+
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
-const FPS_FIBONACCI_NEOPIXELS: u64 = 60;
+/// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
+const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 const FFT_SIZE: usize = 4096;
-const BUFFER_FRAMES: usize = 32;
 
 fn main() -> eyre::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -76,9 +79,10 @@ fn main() -> eyre::Result<()> {
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_handle = thread::spawn(move || {
-        // TODO: how should we handle errors?
         if let Err(err) = blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external) {
-            panic!("Error in blink neopixels task: {err}");
+            // TODO: how should we handle errors?
+            error!("Error in blink neopixels task: {err}");
+            panic!("Blink neopixels task failed");
         };
     });
 
@@ -90,7 +94,8 @@ fn main() -> eyre::Result<()> {
             pins.gpio27,
             audio_sample_tx,
         ) {
-            panic!("Error in mic task: {err}");
+            error!("Error in mic task: {err}");
+            panic!("Mic task failed");
         };
     });
 
@@ -98,8 +103,10 @@ fn main() -> eyre::Result<()> {
 
     // TODO: an error on the second handle won't show until the first finishes.
     // we want to pass errors around don't we? maybe we should use async tasks instead?
-    mic_handle.join().unwrap();
-    blink_neopixels_handle.join().unwrap();
+    mic_handle.join().expect("mic thread panicked");
+    blink_neopixels_handle
+        .join()
+        .expect("neopixel thread panicked");
 
     Ok(())
 }
@@ -118,6 +125,8 @@ fn blink_neopixels_task(
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
+    let mut fps = FpsTracker::new();
+
     loop {
         info!("Hue: {hue}");
 
@@ -127,8 +136,10 @@ fn blink_neopixels_task(
             val: 255,
         };
 
+        // TODO: gamme correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
+        // TODO: do a real pattern here
         for (i, x) in fibonacci_data.iter_mut().enumerate() {
             let mut new = base_hsv;
 
@@ -139,6 +150,8 @@ fn blink_neopixels_task(
 
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
+
+        fps.tick();
 
         sleep(Duration::from_nanos(
             1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
@@ -174,7 +187,7 @@ fn mic_task(
     loop {
         // TODO: what should the timeout be?!?!
         // TODO: do we want async here? i wasn't sure what to set for the timeout on the sync read
-        let bytes_read = i2s_driver.read(i2s_buffer.as_mut_slice(), 10)?;
+        let bytes_read = i2s_driver.read(i2s_buffer.as_mut_slice(), 4)?;
 
         info!("Read {bytes_read} bytes from I2S mic");
 
