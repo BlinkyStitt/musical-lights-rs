@@ -4,14 +4,18 @@
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
-        gpio::{AnyInputPin, AnyOutputPin, InputPin, OutputPin},
-        i2s::I2S0,
+        gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
+        i2s::{
+            config::{DataBitWidth, StdConfig},
+            I2sDriver, I2S0,
+        },
         prelude::Peripherals,
+        task::block_on,
     },
     timer::EspTaskTimerService,
 };
 use esp_idf_sys::{esp_get_free_heap_size, esp_random};
-use log::info;
+use log::{error, info};
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -19,15 +23,17 @@ use smart_leds::{
 };
 use smart_leds_trait::SmartLedsWrite;
 use std::thread::{self, sleep};
-use std::{thread::yield_now, time::Duration};
+use std::time::Duration;
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
-const I2S_BUFFER_SIZE: usize = 4092 * 12;
-const FPS: u64 = 90;
+const FPS_FIBONACCI_NEOPIXELS: u64 = 60;
+const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
+const FFT_SIZE: usize = 4096;
+const BUFFER_FRAMES: usize = 32;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> eyre::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_svc::sys::link_patches();
@@ -39,14 +45,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let peripherals = Peripherals::take()?;
     let pins = peripherals.pins;
+
+    // TODO: use this for anything?
     let sysloop = EspSystemEventLoop::take();
+
+    // TODO: use timer service instead of std sleep?
     let timer_service = EspTaskTimerService::new()?;
 
-    // TODO: VSPI for the external neopixels
-    // TODO: HSPI for the sensors
-
-    // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-    //     dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
+    // TODO: VSPI for the external neopixels?
+    // TODO: HSPI for the sensors?
 
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
 
@@ -61,37 +68,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: do we need two cores? how do we set them up?
 
     let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
+    // let free_psram = unsafe { esp_psram_get_size() } / 1024;
 
     // TODO: log this every 60 seconds?
     info!("Free memory: {free_memory}KB");
+    // info!("Free psram: {free_psram}KB");
 
-    // TODO: do these move across cores automatically? how do we spawn on a specific core?
+    // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_handle = thread::spawn(move || {
         // TODO: how should we handle errors?
-        blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external).unwrap();
+        if let Err(err) = blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external) {
+            panic!("Error in blink neopixels task: {err}");
+        };
     });
 
     let mic_handle = thread::spawn(move || {
-        mic_task(
+        if let Err(err) = mic_task(
             peripherals.i2s0,
-            pins.gpio25.downgrade_output(),
-            pins.gpio26.downgrade_output(),
-            pins.gpio27.downgrade_input(),
+            pins.gpio25,
+            pins.gpio26,
+            pins.gpio27,
             audio_sample_tx,
-        )
-        .unwrap();
+        ) {
+            panic!("Error in mic task: {err}");
+        };
     });
 
-    // TODO: this isn't very good. an error on the second child won't show until the first exits.
+    // TODO: thread for monitoring ram/cpu/etc
+
+    // TODO: an error on the second handle won't show until the first finishes.
     // we want to pass errors around don't we? maybe we should use async tasks instead?
-    blink_neopixels_handle.join().unwrap();
     mic_handle.join().unwrap();
-
-    // // TODO: block on the futures joined together
-    // let (x, y) = block_on(join!(blink_neopixels_f, mic_f));
-
-    // x?;
-    // y?;
+    blink_neopixels_handle.join().unwrap();
 
     Ok(())
 }
@@ -100,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
     // TODO: initialize the wifi/bluetooth to get a true random number
@@ -121,19 +129,20 @@ fn blink_neopixels_task(
 
         onboard_data[0] = hsv2rgb(base_hsv);
 
-        // TODO: iterator?
         for (i, x) in fibonacci_data.iter_mut().enumerate() {
-            let mut y = base_hsv;
+            let mut new = base_hsv;
 
-            y.hue = y.hue.wrapping_add((i / 2) as u8);
+            new.hue = new.hue.wrapping_add((i / 2) as u8);
 
-            *x = hsv2rgb(y);
+            *x = hsv2rgb(new);
         }
 
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
-        sleep(Duration::from_nanos(1_000_000_000 / FPS));
+        sleep(Duration::from_nanos(
+            1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
+        ));
 
         hue = hue.wrapping_add(1);
     }
@@ -141,71 +150,35 @@ fn blink_neopixels_task(
 
 fn mic_task(
     i2s: I2S0, /*dma: I2s0DmaChannel, */
-    bclk: AnyOutputPin,
-    ws: AnyOutputPin,
-    din: AnyInputPin,
+    bclk: Gpio25,
+    ws: Gpio26,
+    din: Gpio27,
     audio_sample_tx: flume::Sender<()>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: the esp32-s3 can put the dma on external ram, but i don't think the esp32 can
-    // <https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/spi_loopback_dma_psram.rs>
-    // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
-    // TODO: the example uses dma_buffers, but it feels like circular buffers are the right things to use here
-    // TODO: how do we make the buffer chunk size smaller? i think that would work better. we need it to be an amount that fits in the fft cleanly
-    // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-    //     dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
+) -> eyre::Result<()> {
+    info!("Start I2S mic!");
 
-    // TODO: i don't understand how to make the chunk size smaller
-    // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-    //     dma_buffer!(I2S_BUFFER_SIZE, 0, CHUNK_SIZE);
+    // 24 bit audio is padded to 32 bits
+    // TODO: do we want to use 8 or 16 bit audio?
+    let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits32);
 
-    /*
-    // TODO: do we actually want async here? blocking is fine if this uses dma
-    // TODO: low power mode on the i2s?
-    // TODO: if we want to sample at 48kHz, we probably want this on another core. writing the lights is blocking
-    let i2s = I2s::new(
-        i2s,
-        Standard::Philips, // TODO: is this the right standard?
-        // DataFormat::Data32Channel32, // TODO: this might be too much data
-        DataFormat::Data16Channel16,
-        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        // Rate::from_hz(16_000),
-        dma,
-        rx_descriptors,
-        tx_descriptors,
-    )
-    // .with_mclk(mclk) // TODO: do we need this pin? its the master clock output pin.
-    // .into_async();
+    // TODO: do we want the mclk pin?
+    let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
-    // TODO: set an interrupt handler?
+    i2s_driver.rx_enable()?;
 
-    let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
+    // TODO: what size should this buffer be? i'm really not sure what this data even looks like
+    let mut i2s_buffer = Box::new([0u8; FFT_SIZE * size_of::<u32>()]);
 
-    // TODO: maybe we don't want a circular buffer. maybe we want to read with one shots?
-    let mut transfer = i2s_rx
-        .read_dma_circular_async(rx_buffer)
-        .expect("failed reading i2s dma circular");
-
-    // TODO: should this be I2S_BYTES, or I2S_BUFFER_SIZE?
-    // TODO: some example code had 5000 here. i don't know why it would need to be larger?
-    let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);
-    let mut avail = 0;
+    info!("I2S mic driver created");
 
     loop {
-        avail = transfer.available().await?;
+        // TODO: what should the timeout be?!?!
+        // TODO: do we want async here? i wasn't sure what to set for the timeout on the sync read
+        let bytes_read = i2s_driver.read(i2s_buffer.as_mut_slice(), 10)?;
 
-        transfer
-            .pop(&mut rcv[..avail])
-            .await
-            .expect("i2s mic transfer pop failed");
+        info!("Read {bytes_read} bytes from I2S mic");
 
-        // TODO: read this in chunks. we want to store it in a circular buffer so that we can do a windowing function on it
-        // TODO: do something real with the data.
-        // let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
-
-        // TODO: do something with the received data
-        info!("{} bytes", avail);
+        // TODO: actually do something with the audio samples. probably just process them here, but maybe use flume to another core
+        // audio_sample_tx.send(())?;
     }
-     */
-    Ok(())
 }
