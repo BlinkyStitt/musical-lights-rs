@@ -125,6 +125,9 @@ fn blink_neopixels_task(
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
+    // TODO: for onboard, we should display red, then green, then blue, then white
+    // TODO: for fibonacci, we should display
+
     let mut fps = FpsTracker::new();
 
     loop {
