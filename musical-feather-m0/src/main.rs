@@ -13,7 +13,7 @@ use feather_m0 as bsp;
 
 use bsp::hal::clock::GenericClockController;
 use bsp::pac::{CorePeripherals, Peripherals};
-use bsp::{pin_alias};
+use bsp::pin_alias;
 use embassy_executor::Spawner;
 use log::{debug, info};
 // use embassy_time::Timer;
@@ -35,12 +35,12 @@ async fn main(_spawner: Spawner) {
     let mut peripherals = Peripherals::take().unwrap();
     let core = CorePeripherals::take().unwrap();
     let clocks = GenericClockController::with_external_32kosc(
-        peripherals.GCLK,
-        &mut peripherals.PM,
-        &mut peripherals.SYSCTRL,
-        &mut peripherals.NVMCTRL,
+        peripherals.gclk,
+        &mut peripherals.pm,
+        &mut peripherals.sysctrl,
+        &mut peripherals.nvmctrl,
     );
-    let pins = bsp::Pins::new(peripherals.PORT);
+    let pins = bsp::Pins::new(peripherals.port);
     let red_led: bsp::RedLed = pin_alias!(pins.red_led).into();
     // let mut delay = Delay::new(core.SYST, &mut clocks);
 

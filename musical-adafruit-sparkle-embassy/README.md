@@ -16,6 +16,7 @@ These crates might come in handy:
 - https://crates.io/crates/smart_led_effects
 - https://github.com/esp-rs/esp-hal-community/tree/main/esp-hal-buzzer
 - https://docs.rs/dither/latest/dither/
+- https://lib.rs/crates/defmt-or-log
 
 Crates to find:
 
@@ -46,3 +47,5 @@ Fastled would use a "clockless" spi setting. is that what the rust library is do
 Fastled 3.9.2 can "overlock" the ws2812
 
 The 4 [fibonnaci256](https://www.evilgeniuslabs.org/fibonacci256) panels that i have are ws2812b color_order=grb
+
+<https://randomnerdtutorials.com/esp32-spi-communication-arduino/>
