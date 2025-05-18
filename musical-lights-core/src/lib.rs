@@ -9,6 +9,7 @@ pub mod config;
 pub mod gps;
 pub mod lights;
 pub mod logging;
+pub mod message;
 pub mod orientation;
 pub mod radio;
 pub mod sd;

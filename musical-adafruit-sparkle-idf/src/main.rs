@@ -25,6 +25,8 @@ use smart_leds::{
 use smart_leds_trait::SmartLedsWrite;
 use std::thread::{self, sleep};
 use std::time::Duration;
+
+// TODO: maybe use the spi driver instead? i'm not sure. rmt should be good. theres 8 channels and we only have 4 5v outputs. so lets stick with rmt for now
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 use fps::FpsTracker;
@@ -49,7 +51,7 @@ fn main() -> eyre::Result<()> {
     let peripherals = Peripherals::take()?;
     let pins = peripherals.pins;
 
-    // TODO: use this for anything?
+    // TODO: use this for anything? <https://github.com/esp-rs/esp-idf-svc/blob/master/examples/eventloop.rs>
     let sysloop = EspSystemEventLoop::take();
 
     // TODO: use timer service instead of std sleep?

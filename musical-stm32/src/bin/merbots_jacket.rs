@@ -7,31 +7,32 @@ use core::iter::repeat;
 
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
-use embassy_stm32::adc::{resolution_to_max_count, Adc, SampleTime, Sequence, VREF_CALIB_MV};
+use embassy_stm32::Config;
+use embassy_stm32::adc::{Adc, SampleTime, Sequence, VREF_CALIB_MV, resolution_to_max_count};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::peripherals::{
-    ADC1, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB15, PB5, SPI1, SPI2,
+    ADC1, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB5, PB15, SPI1, SPI2,
 };
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::mhz;
 use embassy_stm32::wdg::IndependentWatchdog;
-use embassy_stm32::Config;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::Timer;
 use itertools::repeat_n;
-use musical_lights_core::lights::{color_correction, color_order::GRB, DancingLights, Gradient};
+use musical_lights_core::lights::{DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
         AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
-        ExponentialScaleBuilder, Samples, FFT,
+        ExponentialScaleBuilder, FFT, Samples,
     },
     logging::{debug, info, trace, warn},
     remap,
     windows::HanningWindow,
 };
 use smart_leds::colors::{BLACK, BLUE, RED};
-use smart_leds::RGB8;
+use smart_leds::{RGB8, SmartLedsWriteAsync, brightness, gamma};
+use ws2812_async::{Grb, Ws2812};
 use {defmt_rtt as _, panic_probe as _};
 
 const MIC_SAMPLES: usize = 512;
@@ -196,13 +197,6 @@ async fn fft_task(
 
 // pub type LedWriter<'a> = ws2812_async::Ws2812<Spi<'a, SPI1, DMA2_CH2, DMA2_CH0>, { MATRIX_N * 12 }>;
 
-pub fn color_corrected_matrix<I>(iter: I) -> impl Iterator<Item = RGB8>
-where
-    I: Iterator<Item = RGB8>,
-{
-    color_correction::<GRB, I>(iter, 32, MATRIX_N)
-}
-
 // TODO: i think we don't actually want decibels. we want relative values to the most recently heard loud sound
 #[allow(clippy::too_many_arguments)]
 #[embassy_executor::task]
@@ -224,8 +218,8 @@ async fn light_task(
     let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, spi_config);
     let spi_right = Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, spi_config);
 
-    let mut led_left = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_left);
-    let mut led_right = ws2812_async::Ws2812::<_, { MATRIX_BUFFER }>::new(spi_right);
+    let mut led_left = Ws2812::<_, Grb, { MATRIX_BUFFER }>::new(spi_left);
+    let mut led_right = Ws2812::<_, Grb, { MATRIX_BUFFER }>::new(spi_right);
 
     // do a test pattern that makes it easy to tell if RGB is set up correctly and the panels on are on the correct sides
     const TEST_PATTERN: [RGB8; 16] = [
@@ -257,8 +251,8 @@ async fn light_task(
     };
 
     // do a test pattern and then fill one panel with red and the other with blue. this makes it easy to tell if they got plugged in correctly
-    let test_left_f = led_left.write(color_corrected_matrix(test_iter(BLUE)));
-    let test_right_f = led_right.write(color_corrected_matrix(test_iter(RED)));
+    let test_left_f = led_left.write(gamma(test_iter(BLUE)));
+    let test_right_f = led_right.write(gamma(test_iter(RED)));
 
     let (left, right) = join(test_left_f, test_right_f).await;
 
@@ -293,8 +287,8 @@ async fn light_task(
         let right_iter = dancing_lights.iter(y_offset).copied();
 
         // TODO: don't just repeat. use gradient instead!
-        let fill_left_f = led_left.write(color_corrected_matrix(left_iter));
-        let fill_right_f = led_right.write(color_corrected_matrix(right_iter));
+        let fill_left_f = led_left.write(brightness(gamma(left_iter), 32));
+        let fill_right_f = led_right.write(brightness(gamma(right_iter), 32));
 
         let (left, right) = join(fill_left_f, fill_right_f).await;
 

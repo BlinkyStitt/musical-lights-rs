@@ -7,7 +7,7 @@ repository = "https://github.com/WyseNynja/musical-lights-rs"
 readme = "README.md"
 edition = "2024"
 resolver = "2"
-default-run = "musical-stm32"
+default-run = "sensors_for_sparkle"
 
 [dependencies]
 circular-buffer = { version = "1.1.0", default-features = false }

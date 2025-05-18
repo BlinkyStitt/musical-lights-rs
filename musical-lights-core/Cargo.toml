@@ -5,11 +5,13 @@ edition = "2024"
 
 [dependencies]
 circular-buffer = { version = "1.1.0", default-features = false }
+crc = "3.3.0"
 defmt = { version = "1.0.1", default-features = false, optional = true }
 enterpolation = { version = "0.3.0", default-features = false, features = [
     "bspline",
     "linear",
 ] }
+heapless = "0.8.0"
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.6.0", default-features = false, features = [
     "size-2048",
@@ -18,6 +20,8 @@ micromath = "2.1.0"
 num = { version = "0.4.3", default-features = false }
 num-complex = { version = "0.4.6", default-features = false }
 palette = { version = "0.7.6", default-features = false }
+postcard = { version = "1.1.1", features = ["use-crc"] }
+serde = { version = "1.0.219", default-features = false }
 smart-leds = "0.4.0"
 
 # # TODO: use these?
@@ -33,13 +37,24 @@ test-log = "0.2.17"
 # TODO: defmt should be optional. both defmt and log should be additive!
 
 default = ["libm", "defmt"]
-defmt = ["dep:defmt"]
+
+alloc = [
+    "circular-buffer/alloc",
+    "defmt/alloc",
+    "num/alloc",
+    "palette/alloc",
+    "postcard/alloc",
+    "serde/alloc",
+]
+defmt = ["dep:defmt", "postcard/use-defmt", "heapless/defmt-03"]
 libm = ["palette/libm", "enterpolation/libm", "num/libm", "num-complex/libm"]
 std = [
+    "enterpolation/std",
     "log?/std",
     "microfft/std",
-    "num/std",
     "num-complex/std",
+    "num/std",
     "palette/std",
-    "enterpolation/std",
+    "postcard/use-std",
+    "serde/std",
 ]

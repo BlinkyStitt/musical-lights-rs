@@ -58,7 +58,7 @@ async fn main(spawner: Spawner) {
 
     let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, spi_config);
 
-    let mut neopixel = ws2812_async::Ws2812::<_, MATRIX_BUFFER>::new(spi);
+    let mut neopixel = ws2812_async::Ws2812::<_, ws2812_async::Grb, MATRIX_BUFFER>::new(spi);
 
     static BLANK: [RGB8; MATRIX_N] = [RGB8::new(0, 0, 0); MATRIX_N];
 
