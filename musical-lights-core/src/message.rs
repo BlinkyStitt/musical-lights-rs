@@ -4,6 +4,8 @@
 // use postcard::ser_flavors::crc::to_slice_u8;
 // use postcard::ser_flavors::{Cobs, Slice};
 // use postcard::serialize_with_flavor;
+use postcard::de_flavors;
+use postcard::ser_flavors;
 use serde::{Deserialize, Serialize};
 
 // // TODO: rewrite this so we only get one Vec. or maybe have different functions?
@@ -28,27 +30,48 @@ pub enum Message {
 // TODO: keep the buffer in a thread local
 // TODO: where do we get digest from?
 
-/*
-pub fn serialize_durable_message<'a, const MAX_FRAME: usize>(
-    message: &Message,
-    buf: &'a mut [u8; MAX_FRAME],
-) -> Result<Vec<u8, MAX_FRAME>, postcard::Error> {
-    // TODO: need crc flavor, too
-    let flavor = Cobs::try_new(Slice::new(buf))?;
+/// TODO: i have no idea which algo to pick. theres so many
+/// TODO: take this as an argument?
+pub const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_IBM_SDLC);
 
-    // let digest = Digest::<'_, MAX_FRAME>;
+/// TODO: is writing to a buffer like this good? should we have a std version that returns a Vec?
+/// TODO: <https://github.com/jamesmunns/postcard/issues/117#issuecomment-2888769291>
+pub fn durable_serialize<T>(message: &T, buf: &mut [u8], output: &mut [u8]) -> eyre::Result<usize>
+where
+    T: Serialize,
+{
+    let slice = ser_flavors::Slice::new(buf);
 
-    // let checksummed = to_slice_u8(message, buf, digest)?;
+    let digest = CRC.digest();
 
-    // serialize_with_flavor(message, flavor)
+    // TODO: i thought a cobs_flavor be what we want here, but thats not working
+    let crc_flavor = ser_flavors::crc::CrcModifier::new(slice, digest);
 
-    todo!();
+    let intermediate = postcard::serialize_with_flavor(message, crc_flavor)?;
+
+    let size = cobs::encode(intermediate, output);
+
+    Ok(size)
 }
 
-pub fn deserialize_durable_message(data: &[u8]) -> Result<Message, postcard::Error> {
-    // let flavor = DeCrc16::new(DeCobs::new(data));
-    // from_flavored_bytes(flavor)
+pub fn durable_deserialize<'a, T>(data: &'a mut [u8]) -> eyre::Result<T>
+where
+    T: Deserialize<'a>,
+{
+    // TODO: use the cobs flavor?
+    // TODO: decode in place or some other decoder?
+    cobs::decode_in_place(data)?;
 
-    todo!();
+    let slice = de_flavors::Slice::new(data);
+
+    let digest = CRC.digest();
+    let crc_flavor = de_flavors::crc::CrcModifier::new(slice, digest);
+
+    let mut deserializer = postcard::Deserializer::from_flavor(crc_flavor);
+
+    let message = T::deserialize(&mut deserializer)?;
+
+    // TODO: do we care about the remainder? i think that would mean we got some extra bytes! we need to put that into the data buffer, right?
+
+    Ok(message)
 }
- */
