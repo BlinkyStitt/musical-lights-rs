@@ -1,7 +1,5 @@
 //! todo: theres lots of options for serialization. postcard looks easy to use. benchmark things if it even matters for our use case
 /// TODO: support Read and embedded-io::Read and Async variants
-use std::io::Read;
-
 use defmt::error;
 use defmt::warn;
 use postcard::accumulator::CobsAccumulator;
@@ -18,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::compass::Coordinate;
 use crate::compass::Magnetometer;
+use crate::errors::MyResult;
 use crate::gps::GpsTime;
 use crate::orientation::Orientation;
 
@@ -54,7 +53,7 @@ pub fn serialize_with_crc_and_cobs<T>(
     value: &T,
     crc_buf: &mut [u8],
     output: &mut [u8],
-) -> eyre::Result<usize>
+) -> MyResult<usize>
 where
     T: Serialize,
 {
@@ -69,7 +68,7 @@ where
 }
 
 /// this drops any extra data, so be careful how you use this!
-fn deserialize_with_crc<T>(data: &[u8]) -> eyre::Result<T>
+fn deserialize_with_crc<T>(data: &[u8]) -> MyResult<T>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -83,7 +82,7 @@ where
 /// a hopefully durable deserialze.
 /// this reverses `serialize_with_crc_and_cobs`.
 /// you probbaly want something more like the `example_deserialize_loop`
-pub fn deserialize_with_cobs_and_crc<T>(data: &mut [u8]) -> eyre::Result<T>
+pub fn deserialize_with_cobs_and_crc<T>(data: &mut [u8]) -> MyResult<T>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -92,6 +91,7 @@ where
     deserialize_with_crc(&data[..size])
 }
 
+/*
 /// TODO: where does this code belong? how should we handle the items? send them on a channel?
 /// TODO: read should be either from std or from embedded-io
 /// TODO: What about async io?
@@ -153,6 +153,7 @@ where
     }
     Ok(())
 }
+*/
 
 // // TODO: make this optional
 // pub async fn example_deserialize_loop_async<
