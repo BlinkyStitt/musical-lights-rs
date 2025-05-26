@@ -6,8 +6,12 @@
 #![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
-use embassy_stm32::{gpio::{Level, Output, Speed}, usart::BufferedUart};
-use embassy_sync::channel::Channel;
+use embassy_stm32::{
+    bind_interrupts,
+    gpio::{Level, Output, Speed},
+    peripherals,
+    usart::{self, BufferedUart, Config},
+};
 use embassy_time::Timer;
 use musical_lights_core::logging::info;
 use {defmt_rtt as _, panic_probe as _};
@@ -25,6 +29,17 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
+// TODO: what tasks do we need?
+// - read gps data
+// - read accelerometer data
+// - read magnetometer data
+// - read radio data
+// - send radio data
+
+bind_interrupts!(struct Irqs {
+    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
+});
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // // TODO: i think we might want non-default clocks: https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs
@@ -38,16 +53,37 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(peripheral_config);
 
+    // TODO: these pins are probably wrong. check the pin diagram
+    let tx1_pin = p.PB6; // USART1 TX pin
+    let rx1_pin = p.PB7; // USART1 RX pin
+
+    // TODO: what size do these need to be?
+    let mut tx1_buf = [0u8; 32];
+    let mut rx1_buf = [0u8; 32];
+
+    let tx1_config = Config::default();
+
     info!("Hello World!");
 
-    // set up pins
+    // set up devices
     let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
-    BufferedUart::new(p.USART1, p.)
+    // TODO: why don't we need to specify any dma channels here?
+    // TODO: buffered or ring buffered?
+    let uart_1 = BufferedUart::new(
+        p.USART1,
+        Irqs,
+        rx1_pin,
+        tx1_pin,
+        &mut tx1_buf,
+        &mut rx1_buf,
+        tx1_config,
+    )
+    .expect("failed to create UART1");
 
-    // setup pins for Radio, GPS, Accelerometer, and maybe some other sensors
+    let (uart1_tx, uart1_rx) = uart_1.split();
 
-    // TODO: set up UART for communication with the adafruit sparkle
+    // TODO: wait here for the other side's uart to be ready?
 
     // spawn the tasks
     spawner.must_spawn(blink_task(onboard_led));
