@@ -122,6 +122,7 @@ mod tests {
     use super::ExponentialScaleBuilder;
     use crate::logging::info;
 
+    /// TODO: this is old code. i'm still not positive its what a musician would recommend, but its from the teensy forums. think more about this
     #[test_log::test]
     fn test_e() {
         let small_builder = ExponentialScaleBuilder::<512, 8>::new(20.0, 20_000.0, 44_100.0);

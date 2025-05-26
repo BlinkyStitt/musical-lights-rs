@@ -971,7 +971,19 @@ dependencies = [
  "embedded-io 0.6.1",
  "heapless 0.7.17",
  "paste",
+ "postcard-derive",
  "serde",
+]
+
+[[package]]
+name = "postcard-derive"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0239fa9c1d225d4b7eb69925c25c5e082307a141e470573fbbe3a817ce6a7a37"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
