@@ -1,13 +1,21 @@
 /// TODO: better names?
 /// Imagine holding a phone in front of you and the names here should all make sense
+use postcard::experimental::max_size::MaxSize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]
 pub enum Orientation {
     Up,
     Down,
     /// in old code this was "ORIENTED_USB_DOWN"
+    /// TODO: i don't like this name since the latest screen is a circle
     LandscapeLeft,
     /// in old code this was "ORIENTED_USB_UP"
+    /// TODO: i don't like this name since the latest screen is a circle
     LandscapeRight,
+    /// TODO: i don't like this name since the latest screen is a circle
     PortraitUp,
+    /// TODO: i don't like this name since the latest screen is a circle
     PortraitUpsideDown,
 }
 

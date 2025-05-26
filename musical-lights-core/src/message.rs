@@ -16,15 +16,25 @@ use postcard::de_flavors;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
+use crate::compass::Coordinate;
+use crate::compass::Magnetometer;
+use crate::gps::GpsTime;
+use crate::orientation::Orientation;
+
+/// TODO: peer ids should be a pubkey
+#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]
+pub struct PeerId(u8);
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, MaxSize)]
 pub enum Message {
-    Compass,
-    GpsTime,
-    Orientation,
-    PeerPosition,
+    GpsTime(GpsTime),
+    Magnetometer(Magnetometer),
+    Orientation(Orientation),
+    /// TODO: should these be batched up?
+    PeerCoordinate(PeerId, Coordinate),
     Ping(u8),
     Pong(u8),
-    SelfPosition,
+    SelfCoordinate(Coordinate),
 }
 
 // TODO: keep the buffer in a thread local
@@ -42,7 +52,7 @@ pub const CRC: crc::Crc<CrcWidth> = crc::Crc::<CrcWidth>::new(&crc::CRC_16_IBM_S
 /// NOTE: this does not include the sentinel value, so be careful with how you send this?
 pub fn serialize_with_crc_and_cobs<T>(
     value: &T,
-    buf: &mut [u8],
+    crc_buf: &mut [u8],
     output: &mut [u8],
 ) -> eyre::Result<usize>
 where
@@ -50,7 +60,7 @@ where
 {
     let digest = CRC.digest();
 
-    let intermediate = postcard::ser_flavors::crc::to_slice_u16(value, buf, digest)?;
+    let intermediate = postcard::ser_flavors::crc::to_slice_u16(value, crc_buf, digest)?;
 
     // TODO: use max_encoding_length(source_len) to make sure the buffers are the right size? encode panics if they aren't
     let size = cobs::try_encode(intermediate, output)?;
@@ -183,13 +193,14 @@ mod tests {
 
         // encode the message into output
         // TODO: do we need a buffer? can we use the output as buf?
-        let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS];
-        let mut output = [0u8; MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS];
+        let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
+        let mut output = [0u8; Message::POSTCARD_MAX_SIZE];
 
         let message = Message::Ping(42);
 
         println!("message: {message:?}");
 
+        println!("MESSAGE_MAX_SIZE: {}", Message::POSTCARD_MAX_SIZE);
         println!("MESSAGE_MAX_SIZE_WITH_CRC: {MESSAGE_MAX_SIZE_WITH_CRC}");
         println!("MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS: {MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS}");
 
@@ -201,6 +212,7 @@ mod tests {
 
         println!("encoded: {sized_output:?}");
 
+        // TODO: don't we need a sentinel byte here?
         let deserialized_message: Message = deserialize_with_cobs_and_crc(sized_output).unwrap();
 
         assert_eq!(deserialized_message, message);

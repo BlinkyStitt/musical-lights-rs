@@ -2,14 +2,18 @@
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
 use micromath::F32Ext;
+use postcard::experimental::max_size::MaxSize;
+use serde::{Deserialize, Serialize};
 
 // /// Degrees to Radians
 // const DEG2RAD: f32 = 0.017453292;
 // const RAD2DEG: f32 = 1.0 / DEG2RAD;
-// in meters
+
+/// in meters
 pub const EARTH_RADIUS: f32 = 6371000.0;
 
 /// we don't have std, so we don't have PI
+/// TODO: use std if we do have it?
 #[allow(clippy::approx_constant)]
 const PI: f32 = 3.141_592_7;
 
@@ -22,7 +26,8 @@ pub struct Course {
     pub magnetic_bearing: f32,
 }
 
-// TODO: should these be
+// TODO: should these be in the Gps Module instead?
+#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Coordinate {
     /// latitude
     pub lat: f32,
@@ -30,10 +35,11 @@ pub struct Coordinate {
     pub lon: f32,
 }
 
-impl From<(f32, f32)> for Coordinate {
-    fn from(x: (f32, f32)) -> Self {
-        Self { lat: x.0, lon: x.1 }
-    }
+#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
+pub struct Magnetometer {
+    pub x_gauss: f32,
+    pub y_gauss: f32,
+    pub z_gauss: f32,
 }
 
 impl Course {
@@ -183,11 +189,12 @@ impl Course {
     */
 }
 
-impl From<(Coordinate, Coordinate, f32)> for Course {
-    fn from((from, to, magnetic_declination): (Coordinate, Coordinate, f32)) -> Self {
-        Self::spherical_law_of_cosines(from, to, magnetic_declination)
-    }
-}
+// /// TODO: i don't actually like this. deprecate this
+// impl From<(Coordinate, Coordinate, f32)> for Course {
+//     fn from((from, to, magnetic_declination): (Coordinate, Coordinate, f32)) -> Self {
+//         Self::spherical_law_of_cosines(from, to, magnetic_declination)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
