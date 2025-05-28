@@ -7,6 +7,7 @@ pub mod battery;
 pub mod compass;
 pub mod config;
 pub mod errors;
+pub mod fps;
 pub mod gps;
 pub mod lights;
 pub mod logging;

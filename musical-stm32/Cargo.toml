@@ -50,6 +50,7 @@ micromath = "2.1.0"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "libm",
     "defmt",
+    "embassy",
 ] }
 palette = { version = "0.7.6", features = ["libm"], default-features = false }
 panic-probe = { version = "1.0", features = ["print-defmt"] }

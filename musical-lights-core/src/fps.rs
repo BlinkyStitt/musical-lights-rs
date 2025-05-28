@@ -1,9 +1,14 @@
-use embassy_time::Instant;
-use log::info;
+use crate::logging::info;
+
+#[cfg(feature = "std")]
+use std::time::{Duration, Instant};
+
+#[cfg(all(not(feature = "std"), feature = "embassy"))]
+use embassy_time::{Duration, Instant};
 
 pub struct FpsTracker {
     last: Instant,
-    count: u32,
+    count: u64,
 }
 
 impl Default for FpsTracker {
@@ -25,10 +30,12 @@ impl FpsTracker {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last);
 
-        if elapsed.as_millis() >= 1000 {
-            let fps = self.count;
+        if elapsed >= Duration::from_secs(1) {
+            let fps = self.count * 1_000u64 / elapsed.as_millis();
+
             self.count = 0;
             self.last = now;
+
             info!("FPS: {}", fps);
         }
     }

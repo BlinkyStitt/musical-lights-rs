@@ -5,15 +5,24 @@
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts,
     gpio::{Level, Output, Speed},
+    pac::Interrupt::SPI2,
     peripherals,
+    spi::{self, Spi},
+    time::Hertz,
     usart::{self, BufferedUart, Config},
+};
+use embassy_sync::{
+    blocking_mutex::{CriticalSectionMutex, raw::CriticalSectionRawMutex},
+    mutex::Mutex,
 };
 use embassy_time::Timer;
 use musical_lights_core::logging::info;
+use musical_lights_core::message::MESSAGE_BAUD_RATE;
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::task]
@@ -38,6 +47,7 @@ async fn blink_task(mut led: Output<'static>) {
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
+    USART2 => usart::BufferedInterruptHandler<peripherals::USART2>;
 });
 
 #[embassy_executor::main]
@@ -58,32 +68,69 @@ async fn main(spawner: Spawner) {
     let rx1_pin = p.PB7; // USART1 RX pin
 
     // TODO: what size do these need to be?
-    let mut tx1_buf = [0u8; 32];
-    let mut rx1_buf = [0u8; 32];
+    let mut tx_sparkle_buf = [0u8; 256];
+    let mut rx_sparkle_buf = [0u8; 256];
 
-    let tx1_config = Config::default();
+    let mut tx_gps_buf = [0u8; 256];
+    let mut rx_gps_buf = [0u8; 256];
 
     info!("Hello World!");
 
     // set up devices
     let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
-    // TODO: why don't we need to specify any dma channels here?
-    // TODO: buffered or ring buffered?
-    let uart_1 = BufferedUart::new(
+    let mut uart_sparkle_config = Config::default();
+    uart_sparkle_config.baudrate = MESSAGE_BAUD_RATE; // this baud rate needs to match the sparkle's baud rate
+
+    let uart_sparkle = BufferedUart::new(
         p.USART1,
         Irqs,
         rx1_pin,
         tx1_pin,
-        &mut tx1_buf,
-        &mut rx1_buf,
-        tx1_config,
+        &mut tx_sparkle_buf,
+        &mut rx_sparkle_buf,
+        uart_sparkle_config,
     )
-    .expect("failed to create UART1");
+    .expect("failed to create UART1 for sparkle");
 
-    let (uart1_tx, uart1_rx) = uart_1.split();
+    let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
 
-    // TODO: wait here for the other side's uart to be ready?
+    let mut uart_gps_config = Config::default();
+    uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
+
+    let uart_gps = BufferedUart::new(
+        p.USART2,
+        Irqs,
+        p.PA3, // USART2 TX pin
+        p.PA2, // USART2 RX pin
+        &mut tx_gps_buf,
+        &mut rx_gps_buf,
+        uart_gps_config,
+    )
+    .expect("failed to create UART2 for gps");
+
+    // TODO: do we actually want to split this? i think it will probably be easier to sent then wait on the receiver, but maybe not
+    let (uart_gps_tx, uart_gps_rx) = uart_gps.split();
+
+    let mut spi_config = spi::Config::default();
+    // TODO: what frequency?
+    spi_config.frequency = Hertz(1_000_000);
+
+    // TODO: what pins? any other spi things? maybe multiple spi_bus so we can do dma for two things at once?
+    let spi_cs_accel_gyro = p.PA8;
+    let spi_cs_magnetometer = p.PA9;
+
+    let spi_bus = Mutex::<CriticalSectionRawMutex, _>::new(Spi::new(
+        p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA2_CH2, p.DMA2_CH0, spi_config,
+    ));
+
+    // TODO: do we care about interrupts for these? having it respond quickly to changes will probably be a good idea. but that can come later. polling is fine for now
+    let spi_accel_gyro = SpiDevice::new(&spi_bus, spi_cs_accel_gyro);
+    let spi_magnetometer = SpiDevice::new(&spi_bus, spi_cs_magnetometer);
+
+    // TODO: capacitive touch for controlling the brightness and other things
+
+    // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 
     // spawn the tasks
     spawner.must_spawn(blink_task(onboard_led));

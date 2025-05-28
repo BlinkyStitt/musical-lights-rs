@@ -1,15 +1,12 @@
 //! todo: theres lots of options for serialization. postcard looks easy to use. benchmark things if it even matters for our use case
 /// TODO: support Read and embedded-io::Read and Async variants
-use defmt::error;
-use defmt::warn;
-use postcard::accumulator::CobsAccumulator;
-use postcard::accumulator::FeedResult;
+// use postcard::accumulator::CobsAccumulator;
+// use postcard::accumulator::FeedResult;
 // use postcard::de_flavors::{Crc16 as DeCrc16, De as DeCobs};
-// TODO: need the crc flavor
 // use postcard::ser_flavors::crc::to_slice_u8;
 // use postcard::ser_flavors::{Cobs, Slice};
 // use postcard::serialize_with_flavor;
-use heapless::Vec;
+// use heapless::Vec;
 use postcard::de_flavors;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
@@ -19,6 +16,9 @@ use crate::compass::Magnetometer;
 use crate::errors::MyResult;
 use crate::gps::GpsTime;
 use crate::orientation::Orientation;
+// use crate::logging::{error, warn};
+
+pub const MESSAGE_BAUD_RATE: u32 = 115_200;
 
 /// TODO: peer ids should be a pubkey
 #[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]

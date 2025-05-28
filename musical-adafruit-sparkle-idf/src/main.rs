@@ -1,22 +1,26 @@
 #![feature(future_join)]
 #![feature(type_alias_impl_trait)]
 
-mod fps;
-
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
+        delay::Delay,
         gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
         i2s::{
             config::{DataBitWidth, StdConfig},
             I2sDriver, I2S0,
         },
         prelude::Peripherals,
+        uart::{config::Config, UartDriver},
+        units::Hertz,
     },
+    nvs::EspDefaultNvsPartition,
     timer::EspTaskTimerService,
 };
 use esp_idf_sys::{esp_get_free_heap_size, esp_random};
 use log::{error, info};
+use musical_lights_core::fps::FpsTracker;
+use musical_lights_core::message::MESSAGE_BAUD_RATE;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -28,8 +32,6 @@ use std::time::Duration;
 
 // TODO: maybe use the spi driver instead? i'm not sure. rmt should be good. theres 8 channels and we only have 4 5v outputs. so lets stick with rmt for now
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
-
-use fps::FpsTracker;
 
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
@@ -57,27 +59,35 @@ fn main() -> eyre::Result<()> {
     // TODO: use timer service instead of std sleep?
     let timer_service = EspTaskTimerService::new()?;
 
-    // TODO: VSPI for the external neopixels?
-    // TODO: HSPI for the sensors?
+    // TODO: do something with nvs. like set up signing keys
+    let nvs = EspDefaultNvsPartition::take()?;
+
+    // TODO: set up bluetooth or wifi. not sure what to do with them. but they give us a true rng
 
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
-
-    // TODO: instead of RMT, lets use SPI. that can use DMA and so should be faster
     let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio22)?;
 
     let (audio_sample_tx, audio_sample_rx) = flume::bounded::<()>(4);
+
+    // TODO: this baud rate needs to match the sensory board
+    let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
+
+    let uart1: UartDriver = UartDriver::new(
+        peripherals.uart1,
+        pins.gpio9,
+        pins.gpio10,
+        Option::<AnyIOPin>::None,
+        Option::<AnyIOPin>::None,
+        &uart1_config,
+    )?;
+
+    // you need `into_split` and not `split` so that the halves can be sent to different threads
+    let (uart1_tx_driver, uart1_rx_driver) = uart1.into_split();
 
     // create all the futures
     // let blink_neopixels_f = blink_neopixels_task(&mut neopixel_onboard);
 
     // TODO: do we need two cores? how do we set them up?
-
-    let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
-    // let free_psram = unsafe { esp_psram_get_size() } / 1024;
-
-    // TODO: log this every 60 seconds?
-    info!("Free memory: {free_memory}KB");
-    // info!("Free psram: {free_psram}KB");
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_handle = thread::spawn(move || {
@@ -86,6 +96,29 @@ fn main() -> eyre::Result<()> {
         })
     });
 
+    // TODO: wait for a ping from the sensor board?
+
+    let sensor_rx_handle = thread::spawn(move || {
+        // TODO: wait for data from the sensor board. try not to lock
+        uart1_rx_driver;
+
+        Ok::<_, eyre::Report>(())
+    });
+
+    let sensor_tx_handle = thread::spawn(move || {
+        // TODO: send data to the sensor board. try not to lock
+        uart1_tx_driver;
+
+        Ok::<_, eyre::Report>(())
+    });
+
+    let fft_handle = thread::spawn(move || {
+        audio_sample_rx;
+
+        Ok::<_, eyre::Report>(())
+    });
+
+    //
     let mic_handle = thread::spawn(move || {
         mic_task(
             peripherals.i2s0,
@@ -101,13 +134,49 @@ fn main() -> eyre::Result<()> {
 
     // TODO: debug-only thread for monitoring ram/cpu/etc?
 
-    // TODO: an error on the second handle won't show until the first finishes.
-    // TODO: is there a "select" that returns the first one that finishes?
-    // we want to pass errors around don't we? maybe we should use async tasks instead?
-    mic_handle.join().expect("mic thread panicked")?;
-    blink_neopixels_handle
-        .join()
-        .expect("neopixel thread panicked")?;
+    let mut handles = [
+        Some(blink_neopixels_handle),
+        Some(fft_handle),
+        Some(mic_handle),
+        Some(sensor_rx_handle),
+        Some(sensor_tx_handle),
+    ];
+
+    // TODO: i don't really like this, but it works for now
+    let mut num_taken = 0;
+    let main_loop_delay = Delay::new(1_000_000);
+    loop {
+        for x in &mut handles {
+            // TODO: why is take_if not available? it seems like it was working but rust analyzer was definitely confused
+            if x.as_ref().is_some_and(|v| v.is_finished()) {
+                x.take()
+                    .expect("x was Some")
+                    .join()
+                    .expect("thread panicked")?;
+
+                num_taken += 1;
+            }
+        }
+
+        // log free memory every 60 seconds. only do this if we are in debug mode
+        let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
+        info!("Free memory: {free_memory}KB");
+
+        if num_taken == handles.len() {
+            // TODO: this is actually unexpected. think more about this
+            info!("All threads finished successfully!");
+            break;
+        } else {
+            info!(
+                "Waiting for {}/{} threads to finish...",
+                handles.len() - num_taken,
+                handles.len()
+            );
+        }
+
+        // TODO: is this a good way to delay? it seems like theres a bunch of ways to set up timers/delays
+        main_loop_delay.delay_ms(1_000);
+    }
 
     Ok(())
 }
@@ -119,9 +188,10 @@ fn blink_neopixels_task(
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
-    // TODO: initialize the wifi/bluetooth to get a true random number
+    // TODO: initialize the wifi/bluetooth to get a true random number. though it looks like with the esp32, we can't use i2s and the rng.
+    // TODO: so we should set up the rng, get a true random number, then use that to seed a software rng like wyhash or chacha
     // TODO: initial hue from the gps' time so that the compasses are always in perfect sync
-    let mut hue = unsafe { esp_random() } as u8;
+    let mut g_hue = unsafe { esp_random() } as u8;
 
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
@@ -132,10 +202,11 @@ fn blink_neopixels_task(
     let mut fps = FpsTracker::new();
 
     loop {
-        info!("Hue: {hue}");
+        info!("Hue: {g_hue}");
 
+        // TODO: Hsl instead of Hsv?
         let base_hsv = Hsv {
-            hue,
+            hue: g_hue,
             sat: 255,
             val: 255,
         };
@@ -152,7 +223,12 @@ fn blink_neopixels_task(
             *x = hsv2rgb(new);
         }
 
+        // TODO: reading these from a buffer is probably better than doing any calculations in the iter. that takes more memory, but it works well
+        // TODO: check that the gamma correction is what we need for our leds
+        // TODO: dithering
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
+
+        // TODO: brightness should be from the config
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
         fps.tick();
@@ -161,7 +237,7 @@ fn blink_neopixels_task(
             1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
         ));
 
-        hue = hue.wrapping_add(1);
+        g_hue = g_hue.wrapping_add(1);
     }
 }
 
