@@ -10,19 +10,21 @@ use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts,
     gpio::{Level, Output, Speed},
-    pac::Interrupt::SPI2,
     peripherals,
     spi::{self, Spi},
     time::Hertz,
-    usart::{self, BufferedUart, Config},
+    usart::{self, BufferedUart, BufferedUartTx, Config},
 };
 use embassy_sync::{
     blocking_mutex::{CriticalSectionMutex, raw::CriticalSectionRawMutex},
+    channel::Channel,
     mutex::Mutex,
 };
 use embassy_time::Timer;
-use musical_lights_core::logging::info;
-use musical_lights_core::message::MESSAGE_BAUD_RATE;
+use embedded_io_async::Write;
+use musical_lights_core::message::{MESSAGE_BAUD_RATE, Message};
+use musical_lights_core::{logging::info, message::serialize_with_crc_and_cobs};
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::task]
@@ -35,6 +37,31 @@ async fn blink_task(mut led: Output<'static>) {
         info!("low");
         led.set_low();
         Timer::after_millis(1000).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn uart_to_sparkle_task(
+    channel: embassy_sync::channel::Receiver<'static, CriticalSectionRawMutex, Message, 8>,
+    mut uart_tx: BufferedUartTx<'static>,
+) {
+    // TODO: how long should these buffers be?
+    let mut crc_buffer = [0u8; 256];
+    let mut output_buffer = [0u8; 256];
+
+    loop {
+        let message = channel.receive().await;
+        info!("sending message to sparkle: {:?}", message);
+
+        let encoded_len =
+            serialize_with_crc_and_cobs(&message, &mut crc_buffer, &mut output_buffer)
+                .expect("failed to serialize message for sparkle");
+
+        // this double buffering seems wrong, but the docs seem to say that the regular UartTx
+        uart_tx
+            .write_all(&output_buffer[..encoded_len])
+            .await
+            .expect("failed to write to sparkle uart");
     }
 }
 
@@ -63,21 +90,31 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(peripheral_config);
 
+    let onboard_led = p.PC13;
+
     // TODO: these pins are probably wrong. check the pin diagram
     let tx1_pin = p.PB6; // USART1 TX pin
     let rx1_pin = p.PB7; // USART1 RX pin
 
-    // TODO: what size do these need to be?
-    let mut tx_sparkle_buf = [0u8; 256];
-    let mut rx_sparkle_buf = [0u8; 256];
+    // TODO: what pins? any other spi things? maybe multiple spi_bus so we can do dma for two things at once?
+    let spi_cs_accel_gyro = p.PA8;
+    let spi_cs_magnetometer = p.PA9;
 
-    let mut tx_gps_buf = [0u8; 256];
-    let mut rx_gps_buf = [0u8; 256];
+    // TODO: is this the right thing to do in embedded code? examples don't do this but it seems necessary
+    static TX_SPARKLE_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+    static RX_SPARKLE_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+    static TX_GPS_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+    static RX_GPS_BUF: StaticCell<[u8; 256]> = StaticCell::new();
+
+    let tx_sparkle_buf = TX_SPARKLE_BUF.init([0u8; 256]);
+    let rx_sparkle_buf = RX_SPARKLE_BUF.init([0u8; 256]);
+    let tx_gps_buf = TX_GPS_BUF.init([0u8; 256]);
+    let rx_gps_buf = RX_GPS_BUF.init([0u8; 256]);
 
     info!("Hello World!");
 
     // set up devices
-    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
+    let onboard_led = Output::new(onboard_led, Level::High, Speed::Low);
 
     let mut uart_sparkle_config = Config::default();
     uart_sparkle_config.baudrate = MESSAGE_BAUD_RATE; // this baud rate needs to match the sparkle's baud rate
@@ -87,13 +124,32 @@ async fn main(spawner: Spawner) {
         Irqs,
         rx1_pin,
         tx1_pin,
-        &mut tx_sparkle_buf,
-        &mut rx_sparkle_buf,
+        tx_sparkle_buf,
+        rx_sparkle_buf,
         uart_sparkle_config,
     )
     .expect("failed to create UART1 for sparkle");
 
     let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
+
+    // TODO: what size?
+    // TODO: is this mutex right? Thread mode or Critical Section RawMutex?
+    // TODO: do we want a zero copy channel?
+    static SPARKLE_CHANNEL: Channel<CriticalSectionRawMutex, Message, 8> = Channel::new();
+
+    let sparkle_sender: embassy_sync::channel::Sender<
+        'static,
+        CriticalSectionRawMutex,
+        Message,
+        8,
+    > = SPARKLE_CHANNEL.sender();
+
+    let sparkle_receiver: embassy_sync::channel::Receiver<
+        'static,
+        CriticalSectionRawMutex,
+        Message,
+        8,
+    > = SPARKLE_CHANNEL.receiver();
 
     let mut uart_gps_config = Config::default();
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
@@ -103,8 +159,8 @@ async fn main(spawner: Spawner) {
         Irqs,
         p.PA3, // USART2 TX pin
         p.PA2, // USART2 RX pin
-        &mut tx_gps_buf,
-        &mut rx_gps_buf,
+        tx_gps_buf,
+        rx_gps_buf,
         uart_gps_config,
     )
     .expect("failed to create UART2 for gps");
@@ -116,10 +172,6 @@ async fn main(spawner: Spawner) {
     // TODO: what frequency?
     spi_config.frequency = Hertz(1_000_000);
 
-    // TODO: what pins? any other spi things? maybe multiple spi_bus so we can do dma for two things at once?
-    let spi_cs_accel_gyro = p.PA8;
-    let spi_cs_magnetometer = p.PA9;
-
     let spi_bus = Mutex::<CriticalSectionRawMutex, _>::new(Spi::new(
         p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA2_CH2, p.DMA2_CH0, spi_config,
     ));
@@ -128,12 +180,13 @@ async fn main(spawner: Spawner) {
     let spi_accel_gyro = SpiDevice::new(&spi_bus, spi_cs_accel_gyro);
     let spi_magnetometer = SpiDevice::new(&spi_bus, spi_cs_magnetometer);
 
-    // TODO: capacitive touch for controlling the brightness and other things
+    // TODO: capacitive touch for controlling the brightness and other things?
 
     // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 
     // spawn the tasks
     spawner.must_spawn(blink_task(onboard_led));
+    spawner.must_spawn(uart_to_sparkle_task(sparkle_receiver, uart_sparkle_tx));
 
     // TODO: spawn the tasks for the sensors
     // TODO: spawn the task for the uart

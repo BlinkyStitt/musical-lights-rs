@@ -41,6 +41,7 @@ embassy-time = { version = "0.4", features = [
     "defmt-timestamp-uptime",
     "tick-hz-32_768",
 ] }
+embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
 enterpolation = { version = "0.3.0", default-features = false, features = [
     "libm",
     "linear",
@@ -56,6 +57,7 @@ palette = { version = "0.7.6", features = ["libm"], default-features = false }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 smart-leds = "0.4.0"
 smart-leds-trait = "0.3.1"
+static_cell = { version = "2.1.0", features = ["nightly"] }
 ws2812-async = "0.3.0"
 
 # TODO: if i end up using these, be sure to set patch.crate-io, too

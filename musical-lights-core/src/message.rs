@@ -21,10 +21,10 @@ use crate::orientation::Orientation;
 pub const MESSAGE_BAUD_RATE: u32 = 115_200;
 
 /// TODO: peer ids should be a pubkey
-#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq, defmt::Format)]
 pub struct PeerId(u8);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, MaxSize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, MaxSize, defmt::Format)]
 pub enum Message {
     GpsTime(GpsTime),
     Magnetometer(Magnetometer),
@@ -64,7 +64,11 @@ where
     // TODO: use max_encoding_length(source_len) to make sure the buffers are the right size? encode panics if they aren't
     let size = cobs::try_encode(intermediate, output)?;
 
-    Ok(size)
+    // try_encode doesn't include the sentinel byte, so we need to add it manually
+    // TODO: is this right?
+    output[size] = 0;
+
+    Ok(size + 1)
 }
 
 /// this drops any extra data, so be careful how you use this!

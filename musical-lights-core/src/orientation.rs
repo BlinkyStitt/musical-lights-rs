@@ -3,7 +3,8 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]
+/// TODO: defmt should be optional!
+#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq, defmt::Format)]
 pub enum Orientation {
     Up,
     Down,
