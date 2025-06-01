@@ -10,22 +10,48 @@ use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts,
     gpio::{Level, Output, Speed},
-    peripherals,
+    mode::Async,
+    peripherals::{self, PA8, PA9},
     spi::{self, Spi},
     time::Hertz,
-    usart::{self, BufferedUart, BufferedUartTx, Config},
+    usart::{self, Config, Uart, UartTx},
 };
-use embassy_sync::{
-    blocking_mutex::{CriticalSectionMutex, raw::CriticalSectionRawMutex},
-    channel::Channel,
-    mutex::Mutex,
-};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex};
 use embassy_time::Timer;
 use embedded_io_async::Write;
-use musical_lights_core::message::{MESSAGE_BAUD_RATE, Message};
+use musical_lights_core::message::{MESSAGE_BAUD_RATE, Message, PeerId};
 use musical_lights_core::{logging::info, message::serialize_with_crc_and_cobs};
-use static_cell::StaticCell;
+use static_cell::{StaticCell, make_static};
 use {defmt_rtt as _, panic_probe as _};
+
+/// TODO: is this size right? how many messages do we expect to send at once?
+const MESSAGE_CHANNEL_SIZE: usize = 8;
+
+type AccelCs = PA8;
+type MagnetCs = PA9;
+type MyRawMutex = CriticalSectionRawMutex;
+
+pub type MySpi = Spi<'static, Async>;
+pub type MySpiBus = Mutex<MyRawMutex, MySpi>;
+pub type MySpiDevice<CS> = SpiDevice<'static, MyRawMutex, MySpi, CS>;
+
+pub type AccelDevice = MySpiDevice<AccelCs>;
+pub type MagnetDevice = MySpiDevice<MagnetCs>;
+
+pub type MyChannel<T, const S: usize> = Channel<MyRawMutex, T, S>;
+pub type MySender<T, const S: usize> = embassy_sync::channel::Sender<'static, MyRawMutex, T, S>;
+pub type MyReceiver<T, const S: usize> = embassy_sync::channel::Receiver<'static, MyRawMutex, T, S>;
+
+pub type MyMessageChannel = MyChannel<Message, MESSAGE_CHANNEL_SIZE>;
+pub type MyMessageSender = MySender<Message, MESSAGE_CHANNEL_SIZE>;
+pub type MyMessageReceiver = MyReceiver<Message, MESSAGE_CHANNEL_SIZE>;
+
+bind_interrupts!(struct Irqs {
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
+    USART2 => usart::InterruptHandler<peripherals::USART2>;
+    // TODO: bind for the accelerometer/magnetometer. it has data ready and programmable ones
+    // TODO: bind for the SPI?
+});
 
 #[embassy_executor::task]
 async fn blink_task(mut led: Output<'static>) {
@@ -40,11 +66,9 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
+/// read from a channel and send to the sparkle via UART
 #[embassy_executor::task]
-async fn uart_to_sparkle_task(
-    channel: embassy_sync::channel::Receiver<'static, CriticalSectionRawMutex, Message, 8>,
-    mut uart_tx: BufferedUartTx<'static>,
-) {
+async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart_tx: UartTx<'static, Async>) {
     // TODO: how long should these buffers be?
     let mut crc_buffer = [0u8; 256];
     let mut output_buffer = [0u8; 256];
@@ -52,6 +76,8 @@ async fn uart_to_sparkle_task(
     loop {
         let message = channel.receive().await;
         info!("sending message to sparkle: {:?}", message);
+
+        // TODO: save the mssage to some local state? that way we can resend someone's locations?
 
         let encoded_len =
             serialize_with_crc_and_cobs(&message, &mut crc_buffer, &mut output_buffer)
@@ -65,17 +91,31 @@ async fn uart_to_sparkle_task(
     }
 }
 
-// TODO: what tasks do we need?
-// - read gps data
-// - read accelerometer data
-// - read magnetometer data
-// - read radio data
-// - send radio data
+#[embassy_executor::task]
+async fn read_gps_task(gps: (), mut channel: MyMessageSender) {
+    todo!();
+}
 
-bind_interrupts!(struct Irqs {
-    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
-    USART2 => usart::BufferedInterruptHandler<peripherals::USART2>;
-});
+#[embassy_executor::task]
+async fn read_accelerometer_task(accel: AccelDevice, mut channel: MyMessageSender) {
+    todo!();
+}
+
+#[embassy_executor::task]
+async fn read_magnetometer_task(magnet: MagnetDevice, mut channel: MyMessageSender) {
+    todo!();
+}
+
+#[embassy_executor::task]
+async fn read_radio_task(radio: (), mut channel: MyMessageSender) {
+    todo!();
+}
+
+/// this should maybe have a different channel type that has types specifically for the radio messages
+#[embassy_executor::task]
+async fn send_radio_task(radio: (), mut channel: MyMessageReceiver) {
+    todo!();
+}
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -90,77 +130,39 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(peripheral_config);
 
-    let onboard_led = p.PC13;
-
-    // TODO: these pins are probably wrong. check the pin diagram
-    let tx1_pin = p.PB6; // USART1 TX pin
-    let rx1_pin = p.PB7; // USART1 RX pin
-
-    // TODO: what pins? any other spi things? maybe multiple spi_bus so we can do dma for two things at once?
-    let spi_cs_accel_gyro = p.PA8;
-    let spi_cs_magnetometer = p.PA9;
-
-    // TODO: is this the right thing to do in embedded code? examples don't do this but it seems necessary
-    static TX_SPARKLE_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-    static RX_SPARKLE_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-    static TX_GPS_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-    static RX_GPS_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-
-    let tx_sparkle_buf = TX_SPARKLE_BUF.init([0u8; 256]);
-    let rx_sparkle_buf = RX_SPARKLE_BUF.init([0u8; 256]);
-    let tx_gps_buf = TX_GPS_BUF.init([0u8; 256]);
-    let rx_gps_buf = RX_GPS_BUF.init([0u8; 256]);
-
     info!("Hello World!");
 
     // set up devices
-    let onboard_led = Output::new(onboard_led, Level::High, Speed::Low);
+    let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
     let mut uart_sparkle_config = Config::default();
     uart_sparkle_config.baudrate = MESSAGE_BAUD_RATE; // this baud rate needs to match the sparkle's baud rate
 
-    let uart_sparkle = BufferedUart::new(
+    // TODO: check the pin diagram!
+    let uart_sparkle = Uart::new(
         p.USART1,
+        p.PA10,
+        p.PB6,
         Irqs,
-        rx1_pin,
-        tx1_pin,
-        tx_sparkle_buf,
-        rx_sparkle_buf,
+        p.DMA2_CH7, // TODO: what channel?
+        p.DMA2_CH5, // TODO: what channel?
         uart_sparkle_config,
     )
     .expect("failed to create UART1 for sparkle");
 
     let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
 
-    // TODO: what size?
-    // TODO: is this mutex right? Thread mode or Critical Section RawMutex?
-    // TODO: do we want a zero copy channel?
-    static SPARKLE_CHANNEL: Channel<CriticalSectionRawMutex, Message, 8> = Channel::new();
-
-    let sparkle_sender: embassy_sync::channel::Sender<
-        'static,
-        CriticalSectionRawMutex,
-        Message,
-        8,
-    > = SPARKLE_CHANNEL.sender();
-
-    let sparkle_receiver: embassy_sync::channel::Receiver<
-        'static,
-        CriticalSectionRawMutex,
-        Message,
-        8,
-    > = SPARKLE_CHANNEL.receiver();
-
     let mut uart_gps_config = Config::default();
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
 
-    let uart_gps = BufferedUart::new(
+    // TODO: check the pin diagram!
+    let uart_gps = Uart::new(
         p.USART2,
+        p.PA3,
+        p.PA2,
         Irqs,
-        p.PA3, // USART2 TX pin
-        p.PA2, // USART2 RX pin
-        tx_gps_buf,
-        rx_gps_buf,
+        p.DMA1_CH6,
+        p.DMA1_CH7,
         uart_gps_config,
     )
     .expect("failed to create UART2 for gps");
@@ -172,24 +174,45 @@ async fn main(spawner: Spawner) {
     // TODO: what frequency?
     spi_config.frequency = Hertz(1_000_000);
 
-    let spi_bus = Mutex::<CriticalSectionRawMutex, _>::new(Spi::new(
+    let spi: MySpi = Spi::new(
         p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA2_CH2, p.DMA2_CH0, spi_config,
-    ));
+    );
 
-    // TODO: do we care about interrupts for these? having it respond quickly to changes will probably be a good idea. but that can come later. polling is fine for now
-    let spi_accel_gyro = SpiDevice::new(&spi_bus, spi_cs_accel_gyro);
-    let spi_magnetometer = SpiDevice::new(&spi_bus, spi_cs_magnetometer);
+    static SPI_BUS: StaticCell<MySpiBus> = StaticCell::new();
+    let spi_bus = SPI_BUS.init(Mutex::new(spi));
+
+    let spi_accel_gyro: AccelDevice = SpiDevice::new(spi_bus, p.PA8);
+    let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, p.PA9);
 
     // TODO: capacitive touch for controlling the brightness and other things?
 
     // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 
+    // set up channels so that the tasks can communicate
+
+    static TO_SPARKLE_CHANNEL: MyMessageChannel = Channel::new();
+    static TO_RADIO_CHANNEL: MyMessageChannel = Channel::new();
+
     // spawn the tasks
     spawner.must_spawn(blink_task(onboard_led));
-    spawner.must_spawn(uart_to_sparkle_task(sparkle_receiver, uart_sparkle_tx));
+    spawner.must_spawn(send_to_sparkle_task(
+        TO_SPARKLE_CHANNEL.receiver(),
+        uart_sparkle_tx,
+    ));
+
+    spawner.must_spawn(read_gps_task((), TO_SPARKLE_CHANNEL.sender()));
+    spawner.must_spawn(read_accelerometer_task(
+        spi_accel_gyro,
+        TO_SPARKLE_CHANNEL.sender(),
+    ));
+    spawner.must_spawn(read_magnetometer_task(
+        spi_magnetometer,
+        TO_SPARKLE_CHANNEL.sender(),
+    ));
+    spawner.must_spawn(read_radio_task((), TO_SPARKLE_CHANNEL.sender()));
+    spawner.must_spawn(send_radio_task((), TO_RADIO_CHANNEL.receiver()));
 
     // TODO: spawn the tasks for the sensors
-    // TODO: spawn the task for the uart
 
     info!("all tasks started");
 }

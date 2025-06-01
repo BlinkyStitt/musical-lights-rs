@@ -29,14 +29,11 @@ pub enum Message {
     GpsTime(GpsTime),
     Magnetometer(Magnetometer),
     Orientation(Orientation),
-    /// TODO: should these be batched up?
+    /// TODO: should these be batched up? should they be signed by the peer? signing can come later
     PeerCoordinate(PeerId, Coordinate),
-    Ping(u8),
-    Pong(u8),
     SelfCoordinate(Coordinate),
 }
 
-// TODO: keep the buffer in a thread local
 // TODO: where do we get digest from?
 
 pub type CrcWidth = u16;
