@@ -9,9 +9,10 @@ use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts,
-    gpio::{Level, Output, Speed},
+    exti::ExtiInput,
+    gpio::{self, Level, Output, Speed},
     mode::Async,
-    peripherals::{self, PA8, PA9},
+    peripherals::{self},
     spi::{self, Spi},
     time::Hertz,
     usart::{self, Config, Uart, UartTx},
@@ -19,24 +20,23 @@ use embassy_stm32::{
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex};
 use embassy_time::Timer;
 use embedded_io_async::Write;
-use musical_lights_core::message::{MESSAGE_BAUD_RATE, Message, PeerId};
+use lsm9ds1::{LSM9DS1, interface::SpiInterface};
+use musical_lights_core::message::{MESSAGE_BAUD_RATE, Message};
 use musical_lights_core::{logging::info, message::serialize_with_crc_and_cobs};
-use static_cell::{StaticCell, make_static};
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 /// TODO: is this size right? how many messages do we expect to send at once?
 const MESSAGE_CHANNEL_SIZE: usize = 8;
 
-type AccelCs = PA8;
-type MagnetCs = PA9;
 type MyRawMutex = CriticalSectionRawMutex;
 
 pub type MySpi = Spi<'static, Async>;
 pub type MySpiBus = Mutex<MyRawMutex, MySpi>;
 pub type MySpiDevice<CS> = SpiDevice<'static, MyRawMutex, MySpi, CS>;
 
-pub type AccelDevice = MySpiDevice<AccelCs>;
-pub type MagnetDevice = MySpiDevice<MagnetCs>;
+pub type AccelDevice = MySpiDevice<Output<'static>>;
+pub type MagnetDevice = MySpiDevice<Output<'static>>;
 
 pub type MyChannel<T, const S: usize> = Channel<MyRawMutex, T, S>;
 pub type MySender<T, const S: usize> = embassy_sync::channel::Sender<'static, MyRawMutex, T, S>;
@@ -97,13 +97,17 @@ async fn read_gps_task(gps: (), mut channel: MyMessageSender) {
 }
 
 #[embassy_executor::task]
-async fn read_accelerometer_task(accel: AccelDevice, mut channel: MyMessageSender) {
-    todo!();
-}
-
-#[embassy_executor::task]
-async fn read_magnetometer_task(magnet: MagnetDevice, mut channel: MyMessageSender) {
-    todo!();
+async fn read_lsm9ds1_task(
+    lsm9ds1: LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>,
+    // TODO: theres two interrupts here, possible too
+    mut accel_gyro_data_ready: ExtiInput<'static>,
+    mut magnet_interrupt: ExtiInput<'static>,
+    mut channel: MyMessageSender,
+) {
+    loop {
+        accel_gyro_data_ready.wait_for_rising_edge().await;
+        todo!();
+    }
 }
 
 #[embassy_executor::task]
@@ -181,8 +185,23 @@ async fn main(spawner: Spawner) {
     static SPI_BUS: StaticCell<MySpiBus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
-    let spi_accel_gyro: AccelDevice = SpiDevice::new(spi_bus, p.PA8);
-    let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, p.PA9);
+    let spi_ag_cs = Output::new(p.PA8, Level::High, Speed::Low);
+    let spi_m_cs = Output::new(p.PA9, Level::High, Speed::Low);
+
+    let spi_accel_gyro: AccelDevice = SpiDevice::new(spi_bus, spi_ag_cs);
+    let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, spi_m_cs);
+
+    let spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
+    // TODO: we probably some non-default settings. maybe some interrupt configurations
+    let lsm9ds1 = lsm9ds1::LSM9DS1Init {
+        ..Default::default()
+    }
+    .with_interface(spi_interface);
+
+    // TODO: not sure about this pull mode. or these pins. but i think this is close
+    // TODO: accel/gyro has 2 interrupts. maybe use those
+    let spi_accel_gyro_drdy = ExtiInput::new(p.PA11, p.EXTI11, gpio::Pull::Down);
+    let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down);
 
     // TODO: capacitive touch for controlling the brightness and other things?
 
@@ -201,12 +220,10 @@ async fn main(spawner: Spawner) {
     ));
 
     spawner.must_spawn(read_gps_task((), TO_SPARKLE_CHANNEL.sender()));
-    spawner.must_spawn(read_accelerometer_task(
-        spi_accel_gyro,
-        TO_SPARKLE_CHANNEL.sender(),
-    ));
-    spawner.must_spawn(read_magnetometer_task(
-        spi_magnetometer,
+    spawner.must_spawn(read_lsm9ds1_task(
+        lsm9ds1,
+        spi_accel_gyro_drdy,
+        spi_magnetometer_int,
         TO_SPARKLE_CHANNEL.sender(),
     ));
     spawner.must_spawn(read_radio_task((), TO_SPARKLE_CHANNEL.sender()));

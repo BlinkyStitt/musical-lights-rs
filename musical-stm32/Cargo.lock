@@ -681,6 +681,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lsm9ds1"
+version = "0.1.0"
+source = "git+https://github.com/BlinkyStitt/lsm9ds1.git#e7e229769f1ee2a02fa28756da6dbefc341bdcb4"
+dependencies = [
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "microfft"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,6 +747,7 @@ dependencies = [
  "embedded-io-async",
  "enterpolation",
  "itertools",
+ "lsm9ds1",
  "micromath",
  "musical-lights-core",
  "palette",

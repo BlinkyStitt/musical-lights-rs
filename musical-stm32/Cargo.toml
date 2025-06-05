@@ -47,6 +47,7 @@ enterpolation = { version = "0.3.0", default-features = false, features = [
     "linear",
 ] }
 itertools = { version = "0.14.0", default-features = false }
+lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1.git" }
 micromath = "2.1.0"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "libm",
