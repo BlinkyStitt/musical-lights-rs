@@ -9,6 +9,8 @@ pub enum MyError {
     CobsDestBufTooSmall(#[from] cobs::DestBufTooSmallError),
     #[error("cobs decode error: {0:?}")]
     CobsDecode(#[from] cobs::DecodeError),
+    // #[error("spi device error: {0:?}")]
+    // SpiDeviceError(#[from] SpiDeviceError<...>),
 }
 
 pub type MyResult<T> = Result<T, MyError>;

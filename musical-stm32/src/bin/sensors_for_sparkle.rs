@@ -1,10 +1,14 @@
 //! sensor board for the adafruit sparkle
 //! this stm32 connects to all the sensors and sends the data across a serial connection to the adafruit sparkle
+//! TODO: unwrap less
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 
+use core::f64::consts::PI;
+
+use ahrs::{Ahrs, Madgwick};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_stm32::{
@@ -21,8 +25,13 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use embassy_time::Timer;
 use embedded_io_async::Write;
 use lsm9ds1::{LSM9DS1, interface::SpiInterface};
-use musical_lights_core::message::{MESSAGE_BAUD_RATE, Message};
+use musical_lights_core::{
+    errors::MyResult,
+    message::{MESSAGE_BAUD_RATE, Message},
+    orientation::Orientation,
+};
 use musical_lights_core::{logging::info, message::serialize_with_crc_and_cobs};
+use nalgebra::Vector3;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -45,6 +54,8 @@ pub type MyReceiver<T, const S: usize> = embassy_sync::channel::Receiver<'static
 pub type MyMessageChannel = MyChannel<Message, MESSAGE_CHANNEL_SIZE>;
 pub type MyMessageSender = MySender<Message, MESSAGE_CHANNEL_SIZE>;
 pub type MyMessageReceiver = MyReceiver<Message, MESSAGE_CHANNEL_SIZE>;
+
+pub type MyLSM9DS1 = LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>;
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::InterruptHandler<peripherals::USART1>;
@@ -98,16 +109,62 @@ async fn read_gps_task(gps: (), mut channel: MyMessageSender) {
 
 #[embassy_executor::task]
 async fn read_lsm9ds1_task(
-    lsm9ds1: LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>,
+    // TODO: add a `split` function to the lsm9ds1 so that we can have two different tasks using it
+    mut lsm9ds1: LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>,
     // TODO: theres two interrupts here, possible too
     mut accel_gyro_data_ready: ExtiInput<'static>,
     mut magnet_interrupt: ExtiInput<'static>,
     mut channel: MyMessageSender,
 ) {
+    // TODO: i can't put an except on these. its saying it can't convert the errors
+    let _ = lsm9ds1.begin_accel().await;
+    let _ = lsm9ds1.begin_gyro().await;
+    let _ = lsm9ds1.begin_mag().await;
+
+    // TODO: configure interrupt pins. i'm not sure what the defaul settings re
+    // TODO: there are 2 accel gyro interrupts too. i'm not sure what the best design is. just get something basic working and you can make it better letter
+
+    let mut ahrs: Madgwick<f64> = Madgwick::default();
+
+    // TODO: how should this loop work? we need to select on multiple interrupts
     loop {
-        accel_gyro_data_ready.wait_for_rising_edge().await;
-        todo!();
+        // TODO: do we want to wait for high or low? not rising edge
+        // the accelerometer and gyro are ready
+        accel_gyro_data_ready.wait_for_high().await;
+        // the magnetometer is ready
+        magnet_interrupt.wait_for_high().await;
+
+        read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
+            .await
+            .expect("using lsm9ds1");
     }
+}
+
+/// TODO: move this to another module
+async fn read_accel_gyro_mag(lsm9ds1: &mut MyLSM9DS1, ahrs: &mut Madgwick<f64>) -> MyResult<()> {
+    // i think that reading the data clears the ready pin
+    let (accel_x, accel_y, accel_z) = lsm9ds1.read_accel().await.unwrap();
+    let (gyro_x, gyro_y, gyro_z) = lsm9ds1.read_gyro().await.unwrap();
+    let (mag_x, mag_y, mag_z) = lsm9ds1.read_mag().await.unwrap();
+
+    // TODO: what should we do now? what do these numbers actually mean?
+    // TODO: apply calibrations!
+
+    // Obtain sensor values from a source
+    let gyroscope = Vector3::new(gyro_x as f64, gyro_y as f64, gyro_z as f64);
+    let accelerometer = Vector3::new(accel_x as f64, accel_y as f64, accel_z as f64);
+    let magnetometer = Vector3::new(mag_x as f64, mag_y as f64, mag_z as f64);
+
+    // Run inputs through AHRS filter (gyroscope must be radians/s)
+    // TODO: return an error instead of unwrapping.
+    let quat = ahrs
+        .update(&(gyroscope * (PI / 180.0)), &accelerometer, &magnetometer)
+        .unwrap();
+    let (roll, pitch, yaw) = quat.euler_angles();
+
+    // TODO: Orientation::from_roll_pitch_yaw(roll, pitch, yaw);
+
+    Ok(())
 }
 
 #[embassy_executor::task]
@@ -154,6 +211,7 @@ async fn main(spawner: Spawner) {
     )
     .expect("failed to create UART1 for sparkle");
 
+    // TODO: do we need the rx side?
     let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
 
     let mut uart_gps_config = Config::default();
@@ -171,7 +229,7 @@ async fn main(spawner: Spawner) {
     )
     .expect("failed to create UART2 for gps");
 
-    // TODO: do we actually want to split this? i think it will probably be easier to sent then wait on the receiver, but maybe not
+    // TODO: do we actually want to split this? we need to fork the adafruit_gps library to work with no_std and embedded-hal-async
     let (uart_gps_tx, uart_gps_rx) = uart_gps.split();
 
     let mut spi_config = spi::Config::default();
@@ -185,6 +243,7 @@ async fn main(spawner: Spawner) {
     static SPI_BUS: StaticCell<MySpiBus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
+    // TODO: default of high or low?
     let spi_ag_cs = Output::new(p.PA8, Level::High, Speed::Low);
     let spi_m_cs = Output::new(p.PA9, Level::High, Speed::Low);
 
@@ -208,7 +267,6 @@ async fn main(spawner: Spawner) {
     // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 
     // set up channels so that the tasks can communicate
-
     static TO_SPARKLE_CHANNEL: MyMessageChannel = Channel::new();
     static TO_RADIO_CHANNEL: MyMessageChannel = Channel::new();
 
@@ -228,8 +286,6 @@ async fn main(spawner: Spawner) {
     ));
     spawner.must_spawn(read_radio_task((), TO_SPARKLE_CHANNEL.sender()));
     spawner.must_spawn(send_radio_task((), TO_RADIO_CHANNEL.receiver()));
-
-    // TODO: spawn the tasks for the sensors
 
     info!("all tasks started");
 }

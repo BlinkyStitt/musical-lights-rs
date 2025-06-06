@@ -10,6 +10,7 @@ resolver = "2"
 default-run = "sensors_for_sparkle"
 
 [dependencies]
+ahrs = { version = "0.7.0", default-features = false }
 circular-buffer = { version = "1.1.0", default-features = false }
 cortex-m = { version = "0.7.7", features = [
     "inline-asm",
@@ -54,6 +55,7 @@ musical-lights-core = { path = "../musical-lights-core", default-features = fals
     "defmt",
     "embassy",
 ] }
+nalgebra = { version = "0.33.2", default-features = false }
 palette = { version = "0.7.6", features = ["libm"], default-features = false }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 smart-leds = "0.4.0"
