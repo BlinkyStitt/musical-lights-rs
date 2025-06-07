@@ -198,7 +198,7 @@ mod tests {
         let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
         let mut output = [0u8; Message::POSTCARD_MAX_SIZE];
 
-        let message = Message::Ping(42);
+        let message = Message::Orientation(Orientation::Up);
 
         println!("message: {message:?}");
 

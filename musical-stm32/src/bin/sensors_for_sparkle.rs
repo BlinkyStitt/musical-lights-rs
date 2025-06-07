@@ -117,9 +117,9 @@ async fn read_lsm9ds1_task(
     mut channel: MyMessageSender,
 ) {
     // TODO: i can't put an except on these. its saying it can't convert the errors
-    let _ = lsm9ds1.begin_accel().await;
-    let _ = lsm9ds1.begin_gyro().await;
-    let _ = lsm9ds1.begin_mag().await;
+    lsm9ds1.begin_accel().await.unwrap();
+    lsm9ds1.begin_gyro().await.unwrap();
+    lsm9ds1.begin_mag().await.unwrap();
 
     // TODO: configure interrupt pins. i'm not sure what the defaul settings re
     // TODO: there are 2 accel gyro interrupts too. i'm not sure what the best design is. just get something basic working and you can make it better letter
@@ -133,6 +133,9 @@ async fn read_lsm9ds1_task(
         accel_gyro_data_ready.wait_for_high().await;
         // the magnetometer is ready
         magnet_interrupt.wait_for_high().await;
+
+        // TODO: accel_gyro_data_ready.clear_interrupt();
+        // TODO: magnet_interrupt.clear_interrupt();
 
         read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await

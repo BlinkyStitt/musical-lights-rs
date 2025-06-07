@@ -31,7 +31,7 @@ impl FpsTracker {
         let elapsed = now.duration_since(self.last);
 
         if elapsed >= Duration::from_secs(1) {
-            let fps = self.count * 1_000u64 / elapsed.as_millis();
+            let fps = self.count * 1_000u64 / elapsed.as_millis() as u64;
 
             self.count = 0;
             self.last = now;
