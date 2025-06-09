@@ -135,8 +135,11 @@ async fn read_lsm9ds1_task(
     // the magnetometer is ready
     magnet_interrupt.wait_for_high().await;
 
-    // this should be the lowest of the update rates on the lsm
-    // TODO: how important is it for the ahrs that we match the sample period?
+    // TODO: check the non-volatile storage to see if this device has been calibrated before, do some calibration setup here
+
+    // this should be the lowest of the update rates on the lsm. how can we check that?
+
+    // TODO: should this just be the same as the framerate? maybe it should be a multiple of the framerate?
     const UPDATE_HZ: u64 = 80;
 
     // TODO: what should beta be? 0.1 was the value in the docs
@@ -147,16 +150,19 @@ async fn read_lsm9ds1_task(
         // 40Hz updates. we should maybe do this dynamically based on how long loaded data actually took?
         Timer::after(Duration::from_micros(1_000_000 / UPDATE_HZ)).await;
 
-        read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
+        let orientation = read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await
             .expect("using lsm9ds1");
     }
 }
 
 /// TODO: move this to another module
-async fn read_accel_gyro_mag(lsm9ds1: &mut MyLSM9DS1, ahrs: &mut Madgwick<f64>) -> MyResult<()> {
+async fn read_accel_gyro_mag(
+    lsm9ds1: &mut MyLSM9DS1,
+    ahrs: &mut Madgwick<f64>,
+) -> MyResult<Orientation> {
     // i think that reading the data clears the ready pin
-    // TODO: read raw and have the ahrs use i16?
+    // TODO: read raw and have the ahrs use i16? i don't think we want that
     let (mag_x, mag_y, mag_z) = lsm9ds1.read_mag().await.unwrap();
     let (accel_x, accel_y, accel_z) = lsm9ds1.read_accel().await.unwrap();
     let (gyro_x, gyro_y, gyro_z) = lsm9ds1.read_gyro().await.unwrap();
@@ -268,10 +274,11 @@ async fn main(spawner: Spawner) {
 
     let spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
     // TODO: these all have slightly different sample rates. i don't love that. just be higher than our framerate?
+    // TODO: we don't actually care about the mag settings unless we are displaying the compass
     let lsm9ds1 = lsm9ds1::LSM9DS1Init {
         accel: AccelSettings {
             sample_rate: accel::ODR::_119Hz,
-            scale: accel::Scale::_2G,
+            scale: accel::Scale::_4G,
             // bandwidth: ???,
             // TODO: what other settings?
             ..Default::default()
@@ -284,7 +291,10 @@ async fn main(spawner: Spawner) {
             ..Default::default()
         },
         mag: MagSettings {
+            // TODO:
             sample_rate: mag::ODR::_80Hz,
+            i2c_mode: mag::I2cMode::Disabled,
+            spi_mode: mag::SpiMode::RW,
             // TODO: what other settings?
             ..Default::default()
         },

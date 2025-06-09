@@ -40,6 +40,7 @@ use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 /// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
+/// TODO: should this match our slowest sensor?
 const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 const FFT_SIZE: usize = 4096;
