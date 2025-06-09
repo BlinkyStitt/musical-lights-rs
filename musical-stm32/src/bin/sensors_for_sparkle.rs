@@ -252,7 +252,7 @@ async fn main(spawner: Spawner) {
     .expect("failed to create UART2 for gps");
 
     // TODO: do we actually want to split this? we need to fork the adafruit_gps library to work with no_std and embedded-hal-async
-    let (uart_gps_tx, uart_gps_rx) = uart_gps.split();
+    // let (uart_gps_tx, uart_gps_rx) = uart_gps.split();
 
     let mut spi_config = spi::Config::default();
     // TODO: what frequency?
@@ -310,11 +310,10 @@ async fn main(spawner: Spawner) {
     }
     .with_interface(lsm9sd1_spi_interface);
 
-    // TODO: capacitive touch for controlling the brightness and other things?
-
     // TODO: device for the radio. it uses SPI
 
     // TODO: any other devices to set up?
+    // TODO: capacitive touch for controlling the brightness and other things?
 
     // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 

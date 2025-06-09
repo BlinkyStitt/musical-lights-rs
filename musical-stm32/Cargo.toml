@@ -64,7 +64,6 @@ static_cell = { version = "2.1.0", features = ["nightly"] }
 ws2812-async = "0.3.0"
 
 # TODO: if i end up using these, be sure to set patch.crate-io, too
-#embassy-futures = { version = "0.1.1" }
 #embassy-usb = { version = "0.1.0", features = ["defmt"] }
 
 # TODO: do i want this?

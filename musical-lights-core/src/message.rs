@@ -31,6 +31,8 @@ pub enum Message {
     Orientation(Orientation),
     /// TODO: should these be batched up? should they be signed by the peer? signing can come later
     PeerCoordinate(PeerId, Coordinate),
+    Ping,
+    Pong,
     SelfCoordinate(Coordinate),
 }
 
