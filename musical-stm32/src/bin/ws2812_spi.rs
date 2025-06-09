@@ -97,22 +97,12 @@ async fn main(spawner: Spawner) {
     // TODO: brightness and gamma correction!
 
     // TODO: loop to rotate this wheel
-    neopixel
-        .write(
-            TEST_PATTERN.iter().copied()
-        )
-        .await
-        .unwrap();
+    neopixel.write(TEST_PATTERN.iter().copied()).await.unwrap();
     Timer::after_secs(3).await;
 
     static FULL_PATTERN: [RGB8; 8 * 32] = [RGB8::new(32, 32, 32); 8 * 32];
 
-    neopixel
-        .write(
-            FULL_PATTERN.iter().copied()
-        )
-        .await
-        .unwrap();
+    neopixel.write(FULL_PATTERN.iter().copied()).await.unwrap();
     Timer::after_secs(3).await;
 
     // TODO: scroll a rainbow instead of full white
