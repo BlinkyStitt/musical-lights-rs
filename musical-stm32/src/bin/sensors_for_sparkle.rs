@@ -130,13 +130,14 @@ async fn read_lsm9ds1_task(
     // TODO: configure interrupt pins. i'm not sure what the defaul settings re
     // TODO: there are 2 accel gyro interrupts too. i'm not sure what the best design is. just get something basic working and you can make it better letter
 
-    // TODO: do we want to wait for high or low? not rising edge
     // the accelerometer and gyro are ready
     accel_gyro_data_ready.wait_for_high().await;
     // the magnetometer is ready
     magnet_interrupt.wait_for_high().await;
 
-    const UPDATE_HZ: u64 = 40;
+    // this should be the lowest of the update rates on the lsm
+    // TODO: how important is it for the ahrs that we match the sample period?
+    const UPDATE_HZ: u64 = 80;
 
     // TODO: what should beta be? 0.1 was the value in the docs
     let mut ahrs: Madgwick<f64> = Madgwick::new(1.0 / UPDATE_HZ as f64, 0.1);
@@ -144,7 +145,7 @@ async fn read_lsm9ds1_task(
     // TODO: how should this loop work? we need to select on multiple interrupts
     loop {
         // 40Hz updates. we should maybe do this dynamically based on how long loaded data actually took?
-        Timer::after(Duration::from_millis(1000 / UPDATE_HZ)).await;
+        Timer::after(Duration::from_micros(1_000_000 / UPDATE_HZ)).await;
 
         read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await
@@ -266,24 +267,24 @@ async fn main(spawner: Spawner) {
     let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, spi_m_cs);
 
     let spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
-    // TODO: these all have slightly different sample rates. i don't love that.
+    // TODO: these all have slightly different sample rates. i don't love that. just be higher than our framerate?
     let lsm9ds1 = lsm9ds1::LSM9DS1Init {
         accel: AccelSettings {
-            sample_rate: accel::ODR::_50Hz,
+            sample_rate: accel::ODR::_119Hz,
             scale: accel::Scale::_2G,
             // bandwidth: ???,
             // TODO: what other settings?
             ..Default::default()
         },
         gyro: GyroSettings {
-            sample_rate: gyro::ODR::_59_5Hz,
+            sample_rate: gyro::ODR::_119Hz,
             scale: gyro::Scale::_245DPS,
             // bandwidth: ???
             // TODO: what other settings?
             ..Default::default()
         },
         mag: MagSettings {
-            sample_rate: mag::ODR::_40Hz,
+            sample_rate: mag::ODR::_80Hz,
             // TODO: what other settings?
             ..Default::default()
         },

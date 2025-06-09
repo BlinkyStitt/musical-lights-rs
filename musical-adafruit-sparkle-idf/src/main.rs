@@ -1,6 +1,7 @@
 #![feature(future_join)]
 #![feature(type_alias_impl_trait)]
 
+use biski64::Biski64Rng;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
@@ -17,10 +18,13 @@ use esp_idf_svc::{
     nvs::EspDefaultNvsPartition,
     timer::EspTaskTimerService,
 };
-use esp_idf_sys::{esp_get_free_heap_size, esp_random};
+use esp_idf_sys::{
+    bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
+};
 use log::{error, info};
 use musical_lights_core::fps::FpsTracker;
 use musical_lights_core::message::MESSAGE_BAUD_RATE;
+use rand::{RngCore, SeedableRng};
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -88,6 +92,22 @@ fn main() -> eyre::Result<()> {
     // let blink_neopixels_f = blink_neopixels_task(&mut neopixel_onboard);
 
     // TODO: do we need two cores? how do we set them up?
+
+    // for using randomness, we could also turn on the bluetooth or wifi modules, but I don't have a use for them currently
+    let seed_high;
+    let seed_low;
+    unsafe {
+        bootloader_random_enable();
+        seed_high = esp_random();
+        seed_low = esp_random();
+        bootloader_random_disable()
+    };
+
+    let seed: u64 = ((seed_high as u64) << 32) | (seed_low as u64);
+
+    // TODO: where should we use this rng?
+    let mut rng_1 = Biski64Rng::from_seed_for_stream(seed, 0, 2);
+    let mut rng_2 = Biski64Rng::from_seed_for_stream(seed, 1, 2);
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_handle = thread::spawn(move || {
@@ -191,13 +211,14 @@ fn blink_neopixels_task(
     // TODO: initialize the wifi/bluetooth to get a true random number. though it looks like with the esp32, we can't use i2s and the rng.
     // TODO: so we should set up the rng, get a true random number, then use that to seed a software rng like wyhash or chacha
     // TODO: initial hue from the gps' time so that the compasses are always in perfect sync
-    let mut g_hue = unsafe { esp_random() } as u8;
+    // TODO: no. don't do this here. we need to read random at the start after we explictly enable it. then we should disable it. use that to seed a PRNG.
+    let mut g_hue = 0;
 
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
-    // TODO: for onboard, we should display red, then green, then blue, then white
-    // TODO: for fibonacci, we should display
+    // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
+    // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
 
     let mut fps = FpsTracker::new();
 

@@ -37,6 +37,8 @@ musical-lights-core = { path = "../musical-lights-core", default-features = fals
     "std", "log"
 ] }
 eyre = "0.6.12"
+biski64 = { version = "0.3.1", default-features = false }
+rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
 
 [build-dependencies]
 embuild = "0.33"

@@ -101,6 +101,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "biski64"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07bae79d1e56ffa41fbe91150bc663245f895effa19a8c10ce7a187d1d39c443"
+dependencies = [
+ "rand_core",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1170,6 +1179,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 name = "musical-adafruit-sparkle-idf"
 version = "0.1.0"
 dependencies = [
+ "biski64",
  "embassy-time",
  "embuild 0.33.0",
  "esp-idf-svc",
@@ -1178,6 +1188,7 @@ dependencies = [
  "flume",
  "log",
  "musical-lights-core",
+ "rand",
  "smart-leds",
  "smart-leds-trait",
  "ws2812-esp32-rmt-driver",
@@ -1493,6 +1504,21 @@ name = "r-efi"
 version = "5.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74765f6d916ee2faa39bc8e68e4f3ed8949b48cccdac59983d287a7cb71ce9c5"
+
+[[package]]
+name = "rand"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fbfd9d094a40bf3ae768db9361049ace4c0e04a4fd6b359518bd7b73a73dd97"
+dependencies = [
+ "rand_core",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 
 [[package]]
 name = "redox_syscall"
