@@ -22,9 +22,15 @@ use embassy_stm32::{
     usart::{self, Config, Uart, UartTx},
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex};
-use embassy_time::Timer;
+use embassy_time::{Duration, Timer};
 use embedded_io_async::Write;
-use lsm9ds1::{LSM9DS1, interface::SpiInterface};
+use lsm9ds1::{
+    LSM9DS1,
+    accel::{self, AccelSettings},
+    gyro::{self, GyroSettings},
+    interface::SpiInterface,
+    mag::{self, MagSettings},
+};
 use musical_lights_core::{
     errors::MyResult,
     message::{MESSAGE_BAUD_RATE, Message},
@@ -124,18 +130,21 @@ async fn read_lsm9ds1_task(
     // TODO: configure interrupt pins. i'm not sure what the defaul settings re
     // TODO: there are 2 accel gyro interrupts too. i'm not sure what the best design is. just get something basic working and you can make it better letter
 
-    let mut ahrs: Madgwick<f64> = Madgwick::default();
+    // TODO: do we want to wait for high or low? not rising edge
+    // the accelerometer and gyro are ready
+    accel_gyro_data_ready.wait_for_high().await;
+    // the magnetometer is ready
+    magnet_interrupt.wait_for_high().await;
+
+    const UPDATE_HZ: u64 = 40;
+
+    // TODO: what should beta be? 0.1 was the value in the docs
+    let mut ahrs: Madgwick<f64> = Madgwick::new(1.0 / UPDATE_HZ as f64, 0.1);
 
     // TODO: how should this loop work? we need to select on multiple interrupts
     loop {
-        // TODO: do we want to wait for high or low? not rising edge
-        // the accelerometer and gyro are ready
-        accel_gyro_data_ready.wait_for_high().await;
-        // the magnetometer is ready
-        magnet_interrupt.wait_for_high().await;
-
-        // TODO: accel_gyro_data_ready.clear_interrupt();
-        // TODO: magnet_interrupt.clear_interrupt();
+        // 40Hz updates. we should maybe do this dynamically based on how long loaded data actually took?
+        Timer::after(Duration::from_millis(1000 / UPDATE_HZ)).await;
 
         read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await
@@ -146,9 +155,10 @@ async fn read_lsm9ds1_task(
 /// TODO: move this to another module
 async fn read_accel_gyro_mag(lsm9ds1: &mut MyLSM9DS1, ahrs: &mut Madgwick<f64>) -> MyResult<()> {
     // i think that reading the data clears the ready pin
+    // TODO: read raw and have the ahrs use i16?
+    let (mag_x, mag_y, mag_z) = lsm9ds1.read_mag().await.unwrap();
     let (accel_x, accel_y, accel_z) = lsm9ds1.read_accel().await.unwrap();
     let (gyro_x, gyro_y, gyro_z) = lsm9ds1.read_gyro().await.unwrap();
-    let (mag_x, mag_y, mag_z) = lsm9ds1.read_mag().await.unwrap();
 
     // TODO: what should we do now? what do these numbers actually mean?
     // TODO: apply calibrations!
@@ -183,6 +193,8 @@ async fn send_radio_task(radio: (), mut channel: MyMessageReceiver) {
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    let peripheral_config = Default::default();
+
     // // TODO: i think we might want non-default clocks: https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs
     // let mut config = Config::default();
     // config.rcc.sysclk = Some(mhz(64));
@@ -190,7 +202,6 @@ async fn main(spawner: Spawner) {
     // config.rcc.pclk1 = Some(mhz(32));
     // config.rcc.pclk2 = Some(mhz(64));
     // config.rcc.adc = Some(AdcClockSource::Pll(Adcpres::DIV1));
-    let peripheral_config = Default::default();
 
     let p = embassy_stm32::init(peripheral_config);
 
@@ -202,14 +213,14 @@ async fn main(spawner: Spawner) {
     let mut uart_sparkle_config = Config::default();
     uart_sparkle_config.baudrate = MESSAGE_BAUD_RATE; // this baud rate needs to match the sparkle's baud rate
 
-    // TODO: check the pin diagram!
+    // TODO: double check the pin diagram!
     let uart_sparkle = Uart::new(
         p.USART1,
         p.PA10,
         p.PB6,
         Irqs,
-        p.DMA2_CH7, // TODO: what channel?
-        p.DMA2_CH5, // TODO: what channel?
+        p.DMA2_CH7,
+        p.DMA2_CH5,
         uart_sparkle_config,
     )
     .expect("failed to create UART1 for sparkle");
@@ -220,7 +231,7 @@ async fn main(spawner: Spawner) {
     let mut uart_gps_config = Config::default();
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
 
-    // TODO: check the pin diagram!
+    // TODO: double check the pin diagram!
     let uart_gps = Uart::new(
         p.USART2,
         p.PA3,
@@ -246,17 +257,36 @@ async fn main(spawner: Spawner) {
     static SPI_BUS: StaticCell<MySpiBus> = StaticCell::new();
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
-    // TODO: default of high or low?
+    // TODO: default of high or low? what speed?
     let spi_ag_cs = Output::new(p.PA8, Level::High, Speed::Low);
     let spi_m_cs = Output::new(p.PA9, Level::High, Speed::Low);
+    // TODO: any more chip selects on the spi?
 
     let spi_accel_gyro: AccelDevice = SpiDevice::new(spi_bus, spi_ag_cs);
     let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, spi_m_cs);
 
     let spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
-    // TODO: we probably some non-default settings. maybe some interrupt configurations
+    // TODO: these all have slightly different sample rates. i don't love that.
     let lsm9ds1 = lsm9ds1::LSM9DS1Init {
-        ..Default::default()
+        accel: AccelSettings {
+            sample_rate: accel::ODR::_50Hz,
+            scale: accel::Scale::_2G,
+            // bandwidth: ???,
+            // TODO: what other settings?
+            ..Default::default()
+        },
+        gyro: GyroSettings {
+            sample_rate: gyro::ODR::_59_5Hz,
+            scale: gyro::Scale::_245DPS,
+            // bandwidth: ???
+            // TODO: what other settings?
+            ..Default::default()
+        },
+        mag: MagSettings {
+            sample_rate: mag::ODR::_40Hz,
+            // TODO: what other settings?
+            ..Default::default()
+        },
     }
     .with_interface(spi_interface);
 
@@ -266,6 +296,8 @@ async fn main(spawner: Spawner) {
     let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down);
 
     // TODO: capacitive touch for controlling the brightness and other things?
+
+    // TODO: any other devices to set up?
 
     // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 
