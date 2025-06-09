@@ -6,7 +6,8 @@
 
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    adc::{resolution_to_max_count, Adc, SampleTime, Sequence, VREF_CALIB_MV},
+    Peri,
+    adc::{Adc, SampleTime, Sequence, VREF_CALIB_MV, resolution_to_max_count},
     gpio::{Level, Output, Speed},
     peripherals::{ADC1, DMA2_CH0, PA0},
 };
@@ -40,7 +41,11 @@ pub async fn blink_task(mut led: Output<'static>) {
 }
 
 #[embassy_executor::task]
-async fn mic_task(mic_adc: ADC1, mut mic_pin: PA0, dma: DMA2_CH0) {
+async fn mic_task(
+    mic_adc: Peri<'static, ADC1>,
+    mut mic_pin: Peri<'static, PA0>,
+    dma: Peri<'static, DMA2_CH0>,
+) {
     // TODO: i kind of wish i'd ordered the i2s mic
     let mut adc = Adc::new(mic_adc);
 

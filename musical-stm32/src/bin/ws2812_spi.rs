@@ -12,7 +12,7 @@ use embassy_stm32::{
 };
 use embassy_time::Timer;
 use musical_lights_core::logging::info;
-use smart_leds_trait::RGB8;
+use smart_leds_trait::{RGB8, SmartLedsWriteAsync};
 use {defmt_rtt as _, panic_probe as _};
 
 const MATRIX_X: u32 = 32;

@@ -36,7 +36,7 @@ embassy-stm32 = { version = "0.2.0", features = [
     "time-driver-any",
     "exti",
 ] }
-embassy-sync = { version = "0.6", features = ["defmt"] }
+embassy-sync = { version = "0.7", features = ["defmt"] }
 embassy-time = { version = "0.4", features = [
     "defmt",
     "defmt-timestamp-uptime",
@@ -72,15 +72,16 @@ ws2812-async = "0.3.0"
 
 [features]
 
-# [patch.crates-io]
+[patch.crates-io]
+# we patch all embassy crates to the current main. this is because they haven't released versions of everything that use the newest embassy-sync
 # TODO: embassy feature on musical-lights-core that handles this?
-# embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "fcbbef01cd3c5292be29b78b674f0593277545e7" }
-# embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "fcbbef01cd3c5292be29b78b674f0593277545e7" }
-# embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "fcbbef01cd3c5292be29b78b674f0593277545e7" }
-# embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "fcbbef01cd3c5292be29b78b674f0593277545e7" }
-# embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "fcbbef01cd3c5292be29b78b674f0593277545e7" }
-# embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "fcbbef01cd3c5292be29b78b674f0593277545e7" }
-#embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "14b1765a36988469b40df41a56edc152a35fdf09" }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
+embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "520945278942c301433c391f63a075227d9e7c84" }
 
 #smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 
