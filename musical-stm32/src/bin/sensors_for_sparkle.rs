@@ -52,6 +52,7 @@ pub type MySpiDevice<CS> = SpiDevice<'static, MyRawMutex, MySpi, CS>;
 
 pub type AccelDevice = MySpiDevice<Output<'static>>;
 pub type MagnetDevice = MySpiDevice<Output<'static>>;
+pub type RadioDevice = MySpiDevice<Output<'static>>;
 
 pub type MyChannel<T, const S: usize> = Channel<MyRawMutex, T, S>;
 pub type MySender<T, const S: usize> = embassy_sync::channel::Sender<'static, MyRawMutex, T, S>;
@@ -265,14 +266,22 @@ async fn main(spawner: Spawner) {
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
     // TODO: default of high or low? what speed?
-    let spi_ag_cs = Output::new(p.PA8, Level::High, Speed::Low);
-    let spi_m_cs = Output::new(p.PA9, Level::High, Speed::Low);
+    let spi_ag_cs = Output::new(p.PA8, Level::High, Speed::VeryHigh);
+    let spi_mag_cs = Output::new(p.PA9, Level::High, Speed::VeryHigh);
+    let spi_radio_cs = Output::new(p.PA14, Level::High, Speed::VeryHigh);
+
     // TODO: any more chip selects on the spi?
+    // TODO: not sure about this pull mode. or these pins. but i think this is close
+    // TODO: accel/gyro has 2 interrupts. maybe use those
+    let spi_accel_gyro_drdy = ExtiInput::new(p.PA11, p.EXTI11, gpio::Pull::Down);
+    let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down);
 
     let spi_accel_gyro: AccelDevice = SpiDevice::new(spi_bus, spi_ag_cs);
-    let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, spi_m_cs);
+    let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, spi_mag_cs);
+    let spi_radio: RadioDevice = SpiDevice::new(spi_bus, spi_radio_cs);
 
-    let spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
+    let lsm9sd1_spi_interface =
+        lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
     // TODO: these all have slightly different sample rates. i don't love that. just be higher than our framerate?
     // TODO: we don't actually care about the mag settings unless we are displaying the compass
     let lsm9ds1 = lsm9ds1::LSM9DS1Init {
@@ -299,14 +308,11 @@ async fn main(spawner: Spawner) {
             ..Default::default()
         },
     }
-    .with_interface(spi_interface);
-
-    // TODO: not sure about this pull mode. or these pins. but i think this is close
-    // TODO: accel/gyro has 2 interrupts. maybe use those
-    let spi_accel_gyro_drdy = ExtiInput::new(p.PA11, p.EXTI11, gpio::Pull::Down);
-    let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down);
+    .with_interface(lsm9sd1_spi_interface);
 
     // TODO: capacitive touch for controlling the brightness and other things?
+
+    // TODO: device for the radio. it uses SPI
 
     // TODO: any other devices to set up?
 
