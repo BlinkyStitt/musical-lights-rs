@@ -88,22 +88,14 @@ async fn blink_task(mut led: Output<'static>) {
 #[embassy_executor::task]
 async fn read_from_sparkle_task(
     mut uart: UartFromSparkle<'static, 256, 256>,
-    to_process: MyMessageSender,
-) {
-    uart.read_loop(|x| to_process.send(x)).await.unwrap();
-}
-
-/// the other tasks read and write from the uart. this actually does things in response to the messages
-#[embassy_executor::task]
-async fn messages_for_sparkle_task(
     send_to_sparkle: MyMessageSender,
-    read_from_sparkle: MyMessageReceiver,
     handleshake_complete: &'static Signal<CriticalSectionRawMutex, bool>,
 ) {
-    loop {
-        match read_from_sparkle.receive().await {
+    uart.read_loop(|x| async {
+        match x {
             Message::Ping => {
                 send_to_sparkle.send(Message::Pong).await;
+                // TODO: ack/syn/synack instead of ping pong?
                 handleshake_complete.signal(true);
             }
             msg => {
@@ -111,7 +103,9 @@ async fn messages_for_sparkle_task(
                 warn!("dropping message: {:?}", msg);
             }
         }
-    }
+    })
+    .await
+    .expect("uart read loop should never exit");
 }
 
 /// read from a channel and send to the sparkle via UART
@@ -356,13 +350,10 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(read_from_sparkle_task(
         uart_sparkle_rx,
         TO_SPARKLE_CHANNEL.sender(),
+        &SPARKLE_READY,
     ));
 
-    // TODO: we don't set this true anymore
     SPARKLE_READY.wait().await;
-
-    // queue a Pong to respond to the Ping. we could just use the uart here, but using the tasks seems better
-    TO_SPARKLE_CHANNEL.send(Message::Pong).await;
 
     // spawn the rest of the tasks. these tasks might send things to the sparkle board
     spawner.must_spawn(read_gps_task((), TO_SPARKLE_CHANNEL.sender()));
