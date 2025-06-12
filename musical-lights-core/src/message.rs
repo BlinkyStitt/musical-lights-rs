@@ -21,10 +21,12 @@ use crate::orientation::Orientation;
 pub const MESSAGE_BAUD_RATE: u32 = 115_200;
 
 /// TODO: peer ids should be a pubkey
-#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq, defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]
 pub struct PeerId(u8);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, MaxSize, defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Serialize, Deserialize, Debug, PartialEq, MaxSize)]
 pub enum Message {
     GpsTime(GpsTime),
     Magnetometer(Magnetometer),
@@ -71,7 +73,7 @@ where
 }
 
 /// this drops any extra data, so be careful how you use this!
-fn deserialize_with_crc<T>(data: &[u8]) -> MyResult<T>
+pub fn deserialize_with_crc<T>(data: &[u8]) -> MyResult<T>
 where
     T: for<'de> Deserialize<'de>,
 {

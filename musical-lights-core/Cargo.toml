@@ -29,6 +29,8 @@ smart-leds = "0.4.0"
 thiserror = { version = "2", default-features = false }
 
 embassy-time = { optional = true, version = "*" }
+nalgebra = { version = "0.33.2", default-features = false }
+ahrs = { version = "0.7.0", default-features = false }
 
 # TODO: these need std
 # eyre = { version = "0.6.12", default-features = false, features = [] }
@@ -67,6 +69,7 @@ libm = [
     "heapless/portable-atomic",
 ]
 std = [
+    "ahrs/std",
     "cobs/use_std",
     "enterpolation/std",
     # "eyre/auto-install",

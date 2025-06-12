@@ -47,6 +47,11 @@ enterpolation = { version = "0.3.0", default-features = false, features = [
     "libm",
     "linear",
 ] }
+heapless = { version = "0.8.0", features = [
+    "defmt-03",
+    "serde",
+    "portable-atomic-critical-section",
+] }
 itertools = { version = "0.14.0", default-features = false }
 lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1.git" }
 micromath = "2.1.0"
@@ -58,10 +63,20 @@ musical-lights-core = { path = "../musical-lights-core", default-features = fals
 nalgebra = { version = "0.33.2", default-features = false }
 palette = { version = "0.7.6", features = ["libm"], default-features = false }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
+postcard = { version = "1.1.1", default-features = false, features = [
+    "heapless",
+    "use-crc",
+    "use-defmt",
+] }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 smart-leds = "0.4.0"
 smart-leds-trait = "0.3.1"
+static_assertions = { version = "1.1.0", features = ["nightly"] }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 ws2812-async = "0.3.0"
+
+# TODO: this works in no_std, but it requires a global allocator!
+# anyhow = { version = "1.0.98", default-features = false }
 
 # TODO: if i end up using these, be sure to set patch.crate-io, too
 #embassy-usb = { version = "0.1.0", features = ["defmt"] }

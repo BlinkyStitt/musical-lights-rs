@@ -6,6 +6,16 @@
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 
+use core::ops::Fn;
+use embassy_stm32::usart::{UartRx, UartTx};
+use embedded_io_async::Write;
+use heapless::Vec;
+use musical_lights_core::{
+    logging::error,
+    message::{deserialize_with_crc, serialize_with_crc_and_cobs},
+};
+use postcard::accumulator::{CobsAccumulator, FeedResult};
+
 use core::f64::consts::PI;
 
 use ahrs::{Ahrs, Madgwick};
@@ -19,11 +29,12 @@ use embassy_stm32::{
     peripherals::{self},
     spi::{self, Spi},
     time::Hertz,
-    usart::{self, Config, Uart, UartTx},
+    usart::{self, Config, Uart},
 };
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex};
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal,
+};
 use embassy_time::{Duration, Timer};
-use embedded_io_async::Write;
 use lsm9ds1::{
     LSM9DS1,
     accel::{self, AccelSettings},
@@ -32,11 +43,12 @@ use lsm9ds1::{
     mag::{self, MagSettings},
 };
 use musical_lights_core::{
-    errors::MyResult,
+    errors::{MyError, MyResult},
+    logging::{info, warn},
     message::{MESSAGE_BAUD_RATE, Message},
     orientation::Orientation,
 };
-use musical_lights_core::{logging::info, message::serialize_with_crc_and_cobs};
+use musical_stm32::sparkle_uart;
 use nalgebra::Vector3;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -84,33 +96,50 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
-/// read from a channel and send to the sparkle via UART
+// #[embassy_executor::task]
+// async fn read_from_sparkle_task(
+//     mut uart: UartFromSparkle<'static, 256, 256>,
+//     to_process: MyMessageSender,
+// ) {
+//     uart.read_loop(|x| to_process.send(x)).await;
+// }
+
+// /// the other tasks read and write from the uart. this actually does things in response to the messages
+// #[embassy_executor::task]
+// async fn messages_for_sparkle_task(
+//     send_to_sparkle: MyMessageSender,
+//     read_from_sparkle: MyMessageReceiver,
+//     handleshake_complete: &'static Signal<CriticalSectionRawMutex, bool>,
+// ) {
+//     loop {
+//         match read_from_sparkle.receive().await {
+//             Message::Ping => {
+//                 send_to_sparkle.send(Message::Pong).await;
+//                 handleshake_complete.signal(true);
+//             }
+//             msg => {
+//                 // TODO: what should we do with the different message types here?
+//                 warn!("dropping message: {:?}", msg);
+//             }
+//         }
+//     }
+// }
+
+// /// read from a channel and send to the sparkle via UART
+// #[embassy_executor::task]
+// async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart: UartToSparkle<'static, 256>) {
+//     loop {
+//         let message = channel.receive().await;
+//         info!("sending message to sparkle: {:?}", message);
+
+//         uart.write(&message)
+//             .await
+//             .expect("failed to write to sparkle uart");
+//     }
+// }
+
 #[embassy_executor::task]
-async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart_tx: UartTx<'static, Async>) {
-    // TODO: how long should these buffers be?
-    let mut crc_buffer = [0u8; 256];
-    let mut output_buffer = [0u8; 256];
-
-    loop {
-        let message = channel.receive().await;
-        info!("sending message to sparkle: {:?}", message);
-
-        // TODO: save the mssage to some local state? that way we can resend someone's locations?
-
-        let encoded_len =
-            serialize_with_crc_and_cobs(&message, &mut crc_buffer, &mut output_buffer)
-                .expect("failed to serialize message for sparkle");
-
-        // this double buffering seems wrong, but the docs seem to say that the regular UartTx
-        uart_tx
-            .write_all(&output_buffer[..encoded_len])
-            .await
-            .expect("failed to write to sparkle uart");
-    }
-}
-
-#[embassy_executor::task]
-async fn read_gps_task(gps: (), mut channel: MyMessageSender) {
+async fn read_gps_task(gps: (), channel: MyMessageSender) {
     todo!();
 }
 
@@ -121,7 +150,7 @@ async fn read_lsm9ds1_task(
     // TODO: theres two interrupts here, possible too
     mut accel_gyro_data_ready: ExtiInput<'static>,
     mut magnet_interrupt: ExtiInput<'static>,
-    mut channel: MyMessageSender,
+    channel: MyMessageSender,
 ) {
     // TODO: i can't put an except on these. its saying it can't convert the errors
     lsm9ds1.begin_accel().await.unwrap();
@@ -146,14 +175,24 @@ async fn read_lsm9ds1_task(
     // TODO: what should beta be? 0.1 was the value in the docs
     let mut ahrs: Madgwick<f64> = Madgwick::new(1.0 / UPDATE_HZ as f64, 0.1);
 
+    let mut last_orientation = Orientation::Unknown;
+
     // TODO: how should this loop work? we need to select on multiple interrupts
     loop {
         // 40Hz updates. we should maybe do this dynamically based on how long loaded data actually took?
         Timer::after(Duration::from_micros(1_000_000 / UPDATE_HZ)).await;
 
-        let orientation = read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
+        let new_orientation = read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await
             .expect("using lsm9ds1");
+
+        if new_orientation == last_orientation {
+            continue;
+        }
+
+        channel.send(Message::Orientation(new_orientation)).await;
+
+        last_orientation = new_orientation;
     }
 }
 
@@ -177,25 +216,16 @@ async fn read_accel_gyro_mag(
     let magnetometer = Vector3::new(mag_x as f64, mag_y as f64, mag_z as f64);
 
     // Run inputs through AHRS filter (gyroscope must be radians/s)
-    // TODO: return an error instead of unwrapping.
+    // an AHRS is probably way overkill for what I'm building right now
     let quat = ahrs
         .update(&(gyroscope * (PI / 180.0)), &accelerometer, &magnetometer)
-        .unwrap();
-    let (roll, pitch, yaw) = quat.euler_angles();
+        .map_err(MyError::Ahrs)?;
 
-    // TODO: Orientation::from_roll_pitch_yaw(roll, pitch, yaw);
-
-    Ok(())
+    Ok(Orientation::from_quat(quat))
 }
 
 #[embassy_executor::task]
-async fn read_radio_task(radio: (), mut channel: MyMessageSender) {
-    todo!();
-}
-
-/// this should maybe have a different channel type that has types specifically for the radio messages
-#[embassy_executor::task]
-async fn send_radio_task(radio: (), mut channel: MyMessageReceiver) {
+async fn radio_task(radio: (), to_sparkle: MyMessageSender, to_radio: MyMessageReceiver) {
     todo!();
 }
 
@@ -233,8 +263,11 @@ async fn main(spawner: Spawner) {
     )
     .expect("failed to create UART1 for sparkle");
 
-    // TODO: do we need the rx side?
     let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
+
+    //     // TODO: What should the buffer sizes be?!
+    //     let uart_sparkle_tx = UartToSparkle::<256>::new(uart_sparkle_tx);
+    //     let uart_sparkle_rx = UartFromSparkle::<256, 256>::new(uart_sparkle_rx);
 
     let mut uart_gps_config = Config::default();
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
@@ -318,16 +351,31 @@ async fn main(spawner: Spawner) {
     // TODO: wait here for a ping from the sparkle before doing anything? or should we just start sending on a schedule?
 
     // set up channels so that the tasks can communicate
+    // TODO: these should really be mpsc channels
     static TO_SPARKLE_CHANNEL: MyMessageChannel = Channel::new();
+    // TODO: these should really be mpsc channels
     static TO_RADIO_CHANNEL: MyMessageChannel = Channel::new();
 
-    // spawn the tasks
-    spawner.must_spawn(blink_task(onboard_led));
-    spawner.must_spawn(send_to_sparkle_task(
-        TO_SPARKLE_CHANNEL.receiver(),
-        uart_sparkle_tx,
-    ));
+    static SPARKLE_READY: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
+    // spawn some of the tasks. not the ones that talk to the sparkle yet
+    spawner.must_spawn(blink_task(onboard_led));
+    //     spawner.must_spawn(send_to_sparkle_task(
+    //         TO_SPARKLE_CHANNEL.receiver(),
+    //         uart_sparkle_tx,
+    //     ));
+    //     spawner.must_spawn(read_from_sparkle_task(
+    //         uart_sparkle_rx,
+    //         TO_SPARKLE_CHANNEL.sender(),
+    //     ));
+
+    // TODO: we don't set this true anymore
+    SPARKLE_READY.wait().await;
+
+    // queue a Pong to respond to the Ping. we could just use the uart here, but using the tasks seems better
+    TO_SPARKLE_CHANNEL.send(Message::Pong).await;
+
+    // spawn the rest of the tasks. these tasks might send things to the sparkle board
     spawner.must_spawn(read_gps_task((), TO_SPARKLE_CHANNEL.sender()));
     spawner.must_spawn(read_lsm9ds1_task(
         lsm9ds1,
@@ -335,8 +383,11 @@ async fn main(spawner: Spawner) {
         spi_magnetometer_int,
         TO_SPARKLE_CHANNEL.sender(),
     ));
-    spawner.must_spawn(read_radio_task((), TO_SPARKLE_CHANNEL.sender()));
-    spawner.must_spawn(send_radio_task((), TO_RADIO_CHANNEL.receiver()));
+    spawner.must_spawn(radio_task(
+        (),
+        TO_SPARKLE_CHANNEL.sender(),
+        TO_RADIO_CHANNEL.receiver(),
+    ));
 
     info!("all tasks started");
 }

@@ -718,6 +718,7 @@ checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
 name = "musical-lights-core"
 version = "1.0.0"
 dependencies = [
+ "ahrs",
  "circular-buffer",
  "cobs 0.3.0",
  "crc",
@@ -729,6 +730,7 @@ dependencies = [
  "heapless 0.8.0",
  "microfft",
  "micromath",
+ "nalgebra",
  "num",
  "num-complex",
  "palette",
@@ -756,6 +758,7 @@ dependencies = [
  "embassy-time",
  "embedded-io-async",
  "enterpolation",
+ "heapless 0.8.0",
  "itertools",
  "lsm9ds1",
  "micromath",
@@ -763,8 +766,11 @@ dependencies = [
  "nalgebra",
  "palette",
  "panic-probe",
+ "postcard",
+ "serde",
  "smart-leds",
  "smart-leds-trait",
+ "static_assertions",
  "static_cell",
  "ws2812-async",
 ]
@@ -916,6 +922,9 @@ name = "portable-atomic"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
+dependencies = [
+ "critical-section",
+]
 
 [[package]]
 name = "postcard"

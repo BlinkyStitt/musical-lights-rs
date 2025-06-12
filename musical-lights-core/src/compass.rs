@@ -17,7 +17,8 @@ pub const EARTH_RADIUS: f32 = 6371000.0;
 #[allow(clippy::approx_constant)]
 const PI: f32 = 3.141_592_7;
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize, defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Course {
     /// in meters
     pub distance: f32,
@@ -28,7 +29,8 @@ pub struct Course {
 }
 
 // TODO: should these be in the Gps Module instead?
-#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize, defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Coordinate {
     /// latitude
     pub lat: f32,
@@ -36,7 +38,8 @@ pub struct Coordinate {
     pub lon: f32,
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize, defmt::Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Magnetometer {
     pub x_gauss: f32,
     pub y_gauss: f32,
