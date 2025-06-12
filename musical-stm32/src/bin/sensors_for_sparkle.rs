@@ -24,6 +24,7 @@ use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal,
 };
 use embassy_time::{Duration, Timer};
+use embedded_alloc::LlffHeap as Heap;
 use lsm9ds1::{
     LSM9DS1,
     accel::{self, AccelSettings},
@@ -41,6 +42,9 @@ use musical_stm32::sparkle_uart::{UartFromSparkle, UartToSparkle};
 use nalgebra::Vector3;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
 
 /// TODO: is this size right? how many messages do we expect to send at once?
 const MESSAGE_CHANNEL_SIZE: usize = 8;
@@ -214,6 +218,15 @@ async fn radio_task(radio: (), to_sparkle: MyMessageSender, to_radio: MyMessageR
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    // Initialize the allocator BEFORE you use it
+    // TODO: do we actually need an allocator? anyhow requires one. i think we should avoid using an allocator if possible
+    {
+        use core::mem::MaybeUninit;
+        const HEAP_SIZE: usize = 1024;
+        static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+        unsafe { HEAP.init(&raw mut HEAP_MEM as usize, HEAP_SIZE) }
+    }
+
     let peripheral_config = Default::default();
 
     // // TODO: i think we might want non-default clocks: https://github.com/embassy-rs/embassy/blob/main/examples/stm32f334/src/bin/adc.rs

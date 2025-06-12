@@ -42,6 +42,7 @@ embassy-time = { version = "0.4", features = [
     "defmt-timestamp-uptime",
     "tick-hz-32_768",
 ] }
+embedded-alloc = "0.6.0"
 embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
 enterpolation = { version = "0.3.0", default-features = false, features = [
     "libm",
@@ -76,7 +77,7 @@ static_cell = { version = "2.1.0", features = ["nightly"] }
 ws2812-async = "0.3.0"
 
 # TODO: this works in no_std, but it requires a global allocator!
-# anyhow = { version = "1.0.98", default-features = false }
+anyhow = { version = "1.0.98", default-features = false }
 
 # TODO: if i end up using these, be sure to set patch.crate-io, too
 #embassy-usb = { version = "0.1.0", features = ["defmt"] }
