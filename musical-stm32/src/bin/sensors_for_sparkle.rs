@@ -6,19 +6,8 @@
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 
-use core::ops::Fn;
-use embassy_stm32::usart::{UartRx, UartTx};
-use embedded_io_async::Write;
-use heapless::Vec;
-use musical_lights_core::{
-    logging::error,
-    message::{deserialize_with_crc, serialize_with_crc_and_cobs},
-};
-use postcard::accumulator::{CobsAccumulator, FeedResult};
-
-use core::f64::consts::PI;
-
 use ahrs::{Ahrs, Madgwick};
+use core::f64::consts::PI;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_stm32::{
@@ -48,7 +37,7 @@ use musical_lights_core::{
     message::{MESSAGE_BAUD_RATE, Message},
     orientation::Orientation,
 };
-use musical_stm32::sparkle_uart;
+use musical_stm32::sparkle_uart::{UartFromSparkle, UartToSparkle};
 use nalgebra::Vector3;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -96,47 +85,47 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
-// #[embassy_executor::task]
-// async fn read_from_sparkle_task(
-//     mut uart: UartFromSparkle<'static, 256, 256>,
-//     to_process: MyMessageSender,
-// ) {
-//     uart.read_loop(|x| to_process.send(x)).await;
-// }
+#[embassy_executor::task]
+async fn read_from_sparkle_task(
+    mut uart: UartFromSparkle<'static, 256, 256>,
+    to_process: MyMessageSender,
+) {
+    uart.read_loop(|x| to_process.send(x)).await.unwrap();
+}
 
-// /// the other tasks read and write from the uart. this actually does things in response to the messages
-// #[embassy_executor::task]
-// async fn messages_for_sparkle_task(
-//     send_to_sparkle: MyMessageSender,
-//     read_from_sparkle: MyMessageReceiver,
-//     handleshake_complete: &'static Signal<CriticalSectionRawMutex, bool>,
-// ) {
-//     loop {
-//         match read_from_sparkle.receive().await {
-//             Message::Ping => {
-//                 send_to_sparkle.send(Message::Pong).await;
-//                 handleshake_complete.signal(true);
-//             }
-//             msg => {
-//                 // TODO: what should we do with the different message types here?
-//                 warn!("dropping message: {:?}", msg);
-//             }
-//         }
-//     }
-// }
+/// the other tasks read and write from the uart. this actually does things in response to the messages
+#[embassy_executor::task]
+async fn messages_for_sparkle_task(
+    send_to_sparkle: MyMessageSender,
+    read_from_sparkle: MyMessageReceiver,
+    handleshake_complete: &'static Signal<CriticalSectionRawMutex, bool>,
+) {
+    loop {
+        match read_from_sparkle.receive().await {
+            Message::Ping => {
+                send_to_sparkle.send(Message::Pong).await;
+                handleshake_complete.signal(true);
+            }
+            msg => {
+                // TODO: what should we do with the different message types here?
+                warn!("dropping message: {:?}", msg);
+            }
+        }
+    }
+}
 
-// /// read from a channel and send to the sparkle via UART
-// #[embassy_executor::task]
-// async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart: UartToSparkle<'static, 256>) {
-//     loop {
-//         let message = channel.receive().await;
-//         info!("sending message to sparkle: {:?}", message);
+/// read from a channel and send to the sparkle via UART
+#[embassy_executor::task]
+async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart: UartToSparkle<'static, 256>) {
+    loop {
+        let message = channel.receive().await;
+        info!("sending message to sparkle: {:?}", message);
 
-//         uart.write(&message)
-//             .await
-//             .expect("failed to write to sparkle uart");
-//     }
-// }
+        uart.write(&message)
+            .await
+            .expect("failed to write to sparkle uart");
+    }
+}
 
 #[embassy_executor::task]
 async fn read_gps_task(gps: (), channel: MyMessageSender) {
@@ -265,9 +254,9 @@ async fn main(spawner: Spawner) {
 
     let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
 
-    //     // TODO: What should the buffer sizes be?!
-    //     let uart_sparkle_tx = UartToSparkle::<256>::new(uart_sparkle_tx);
-    //     let uart_sparkle_rx = UartFromSparkle::<256, 256>::new(uart_sparkle_rx);
+    // TODO: What should the buffer sizes be?!
+    let uart_sparkle_tx = UartToSparkle::<256>::new(uart_sparkle_tx);
+    let uart_sparkle_rx = UartFromSparkle::<256, 256>::new(uart_sparkle_rx);
 
     let mut uart_gps_config = Config::default();
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
@@ -360,14 +349,14 @@ async fn main(spawner: Spawner) {
 
     // spawn some of the tasks. not the ones that talk to the sparkle yet
     spawner.must_spawn(blink_task(onboard_led));
-    //     spawner.must_spawn(send_to_sparkle_task(
-    //         TO_SPARKLE_CHANNEL.receiver(),
-    //         uart_sparkle_tx,
-    //     ));
-    //     spawner.must_spawn(read_from_sparkle_task(
-    //         uart_sparkle_rx,
-    //         TO_SPARKLE_CHANNEL.sender(),
-    //     ));
+    spawner.must_spawn(send_to_sparkle_task(
+        TO_SPARKLE_CHANNEL.receiver(),
+        uart_sparkle_tx,
+    ));
+    spawner.must_spawn(read_from_sparkle_task(
+        uart_sparkle_rx,
+        TO_SPARKLE_CHANNEL.sender(),
+    ));
 
     // TODO: we don't set this true anymore
     SPARKLE_READY.wait().await;
