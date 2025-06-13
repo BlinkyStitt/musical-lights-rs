@@ -42,7 +42,9 @@ embassy-time = { version = "0.4", features = [
     "defmt-timestamp-uptime",
     "tick-hz-32_768",
 ] }
-embedded-alloc = "0.6.0"
+embedded-alloc = { version = "0.6.0", default-features = false, features = [
+    "llff",
+] }
 embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
 enterpolation = { version = "0.3.0", default-features = false, features = [
     "libm",
