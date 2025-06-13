@@ -990,6 +990,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
 dependencies = [
  "hash32 0.3.1",
+ "portable-atomic",
  "serde",
  "stable_deref_trait",
 ]
@@ -1213,8 +1214,10 @@ dependencies = [
  "esp-idf-sys",
  "eyre",
  "flume",
+ "heapless 0.8.0",
  "log",
  "musical-lights-core",
+ "postcard",
  "rand",
  "smart-leds",
  "smart-leds-trait",
@@ -1468,6 +1471,12 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "portable-atomic"
+version = "1.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
 name = "postcard"

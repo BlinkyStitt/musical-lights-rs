@@ -23,7 +23,7 @@ use embassy_stm32::{
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal,
 };
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use embedded_alloc::LlffHeap as Heap;
 use lsm9ds1::{
     LSM9DS1,
@@ -34,6 +34,7 @@ use lsm9ds1::{
 };
 use musical_lights_core::{
     errors::{MyError, MyResult},
+    fps::FpsTracker,
     logging::{info, warn},
     message::{MESSAGE_BAUD_RATE, Message},
     orientation::Orientation,
@@ -164,10 +165,13 @@ async fn read_lsm9ds1_task(
 
     let mut last_orientation = Orientation::Unknown;
 
+    let mut fps = FpsTracker::new("agm");
+
     // TODO: how should this loop work? we need to select on multiple interrupts
     loop {
-        // 40Hz updates. we should maybe do this dynamically based on how long loaded data actually took?
-        Timer::after(Duration::from_micros(1_000_000 / UPDATE_HZ)).await;
+        // TODO: should we instead wait for the ready signal from the slowest sensor?
+        // Timer::after(Duration::from_micros(1_000_000 / UPDATE_HZ)).await;
+        magnet_interrupt.wait_for_high().await;
 
         let new_orientation = read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await
@@ -180,6 +184,8 @@ async fn read_lsm9ds1_task(
         channel.send(Message::Orientation(new_orientation)).await;
 
         last_orientation = new_orientation;
+
+        fps.tick();
     }
 }
 

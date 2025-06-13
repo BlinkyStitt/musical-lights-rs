@@ -105,6 +105,7 @@ pub const fn max_size_with_crc_and_cobs<T: MaxSize>() -> usize {
     cobs::max_encoding_length(max_size_with_crc::<T>())
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

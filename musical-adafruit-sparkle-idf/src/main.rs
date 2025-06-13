@@ -1,11 +1,11 @@
-#![feature(future_join)]
 #![feature(type_alias_impl_trait)]
+
+mod sensor_uart;
 
 use biski64::Biski64Rng;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
-        delay::Delay,
         gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
         i2s::{
             config::{DataBitWidth, StdConfig},
@@ -21,21 +21,31 @@ use esp_idf_svc::{
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
 };
-use log::{debug, error, info};
-use musical_lights_core::fps::FpsTracker;
-use musical_lights_core::message::{deserialize_with_crc, MESSAGE_BAUD_RATE};
-use rand::{RngCore, SeedableRng};
+use flume::Receiver;
+use musical_lights_core::{
+    audio::{parse_i2s_24_bit_to_f32_array, Samples},
+    fps::FpsTracker,
+    logging::{debug, error, info, warn},
+    message::Message,
+    message::MESSAGE_BAUD_RATE,
+};
+use rand::RngCore;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
     RGB8,
 };
 use smart_leds_trait::SmartLedsWrite;
-use std::thread::{self, sleep};
 use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    thread::{self, sleep},
+};
 
 // TODO: maybe use the spi driver instead? i'm not sure. rmt should be good. theres 8 channels and we only have 4 5v outputs. so lets stick with rmt for now
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
+
+use crate::sensor_uart::{UartFromSensors, UartToSensors};
 
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
@@ -44,6 +54,11 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 const FFT_SIZE: usize = 4096;
+
+/// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
+const I2S_U8_BUFFER_SIZE: usize = 4092;
+/// TODO: how do we make this fit cleanly in the fft size?
+const I2S_SAMPLE_SIZE: usize = I2S_U8_BUFFER_SIZE / 4;
 
 fn main() -> eyre::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -72,12 +87,12 @@ fn main() -> eyre::Result<()> {
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
     let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio22)?;
 
-    let (audio_sample_tx, audio_sample_rx) = flume::bounded::<()>(4);
+    let (audio_sample_tx, audio_sample_rx) = flume::bounded(4);
 
     // TODO: this baud rate needs to match the sensory board
     let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
 
-    let uart1: UartDriver = UartDriver::new(
+    let uart_to_sensors: UartDriver = UartDriver::new(
         peripherals.uart1,
         pins.gpio9,
         pins.gpio10,
@@ -87,10 +102,11 @@ fn main() -> eyre::Result<()> {
     )?;
 
     // you need `into_split` and not `split` so that the halves can be sent to different threads
-    let (uart1_tx_driver, uart1_rx_driver) = uart1.into_split();
+    let (uart_to_sensors_tx, uart_to_sensors_rx) = uart_to_sensors.into_split();
 
-    // create all the futures
-    // let blink_neopixels_f = blink_neopixels_task(&mut neopixel_onboard);
+    let uart_to_sensors_rx: UartFromSensors<'_, 256, 256> =
+        UartFromSensors::new(uart_to_sensors_rx);
+    let uart_to_sensors_tx: UartToSensors<'_, 256> = UartToSensors::new(uart_to_sensors_tx);
 
     // TODO: do we need two cores? how do we set them up?
 
@@ -125,24 +141,24 @@ fn main() -> eyre::Result<()> {
 
     // TODO: wait for a ping from the sensor board?
 
-    let sensor_rx_handle = thread::spawn(move || {
-        // TODO: wait for data from the sensor board. try not to lock
-        uart1_rx_driver;
+    static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
-        Ok::<_, eyre::Report>(())
+    let sensor_rx_handle = thread::spawn(move || {
+        sensor_rx_task(uart_to_sensors_rx, &PONG_RECEIVED).inspect_err(|err| {
+            error!("Error in sensor_rx_task: {err}");
+        })
     });
 
     let sensor_tx_handle = thread::spawn(move || {
-        // TODO: send data to the sensor board. try not to lock
-        uart1_tx_driver;
-
-        Ok::<_, eyre::Report>(())
+        sensor_tx_task(uart_to_sensors_tx, &PONG_RECEIVED).inspect_err(|err| {
+            error!("Error in sensor_tx_task: {err}");
+        })
     });
 
     let fft_handle = thread::spawn(move || {
-        audio_sample_rx;
-
-        Ok::<_, eyre::Report>(())
+        fft_task(audio_sample_rx).inspect_err(|err| {
+            error!("Error in fft_task: {err}");
+        })
     });
 
     //
@@ -160,50 +176,28 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: debug-only thread for monitoring ram/cpu/etc?
+    let memory_handle = thread::spawn(move || {
+        loop {
+            // log free memory every 60 seconds. only do this if we are in debug mode
+            let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
+            info!("Free memory: {free_memory}KB");
 
-    let mut handles = [
-        Some(blink_neopixels_handle),
-        Some(fft_handle),
-        Some(mic_handle),
-        Some(sensor_rx_handle),
-        Some(sensor_tx_handle),
-    ];
-
-    // TODO: i don't really like this, but it works for now
-    let mut num_taken = 0;
-    let main_loop_delay = Delay::new(1_000_000);
-    loop {
-        for x in &mut handles {
-            // TODO: why is take_if not available? it seems like it was working but rust analyzer was definitely confused
-            if x.as_ref().is_some_and(|v| v.is_finished()) {
-                x.take()
-                    .expect("x was Some")
-                    .join()
-                    .expect("thread panicked")?;
-
-                num_taken += 1;
-            }
+            sleep(Duration::from_secs(1));
         }
+    });
 
-        // log free memory every 60 seconds. only do this if we are in debug mode
-        let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
-        info!("Free memory: {free_memory}KB");
+    // TODO: do we care about joining handles here? is there an efficient way to join_first? we want to restart if any of these return
+    blink_neopixels_handle.join().unwrap()?;
+    mic_handle.join().unwrap()?;
+    fft_handle.join().unwrap()?;
+    sensor_tx_handle.join().unwrap()?;
+    sensor_rx_handle.join().unwrap()?;
 
-        if num_taken == handles.len() {
-            // TODO: this is actually unexpected. think more about this
-            info!("All threads finished successfully!");
-            break;
-        } else {
-            info!(
-                "Waiting for {}/{} threads to finish...",
-                handles.len() - num_taken,
-                handles.len()
-            );
-        }
+    // TODO: if we get here, should we force a restart?
+    // unsafe { esp_restart() };
 
-        // TODO: is this a good way to delay? it seems like theres a bunch of ways to set up timers/delays
-        main_loop_delay.delay_ms(1_000);
-    }
+    // // this runs forever. it won't ever return. should we have it waiting for errors on a channel?
+    // memory_handle.join().unwrap();
 
     Ok(())
 }
@@ -225,7 +219,7 @@ fn blink_neopixels_task(
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
     // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
 
-    let mut fps = FpsTracker::new();
+    let mut fps = FpsTracker::new("pixel");
 
     loop {
         info!("Hue: {g_hue}");
@@ -257,13 +251,22 @@ fn blink_neopixels_task(
         // TODO: brightness should be from the config
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
-        fps.tick();
-
         sleep(Duration::from_nanos(
             1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
         ));
 
         g_hue = g_hue.wrapping_add(1);
+
+        fps.tick();
+    }
+}
+
+/// TODO: this size is wrong. we don't get 4096 at once. we get some weird amount like 4092 u8s (1023 i32s)
+fn fft_task(audio_sample_rx: Receiver<Samples<I2S_SAMPLE_SIZE>>) -> eyre::Result<()> {
+    loop {
+        let sample = audio_sample_rx.recv()?;
+
+        // TODO: now what? we need to turn these u8 into i32, then turn those into i24
     }
 }
 
@@ -272,32 +275,82 @@ fn mic_task(
     bclk: Gpio25,
     ws: Gpio26,
     din: Gpio27,
-    audio_sample_tx: flume::Sender<()>,
+    audio_sample_tx: flume::Sender<Samples<I2S_SAMPLE_SIZE>>,
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
-    // 24 bit audio is padded to 32 bits
+    // 24 bit audio is padded to 32 bits.
     // TODO: do we want to use 8 or 16 bit audio?
-    let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits32);
+    let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits24);
 
     // TODO: do we want the mclk pin?
+    // TODO: DMA?
     let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
     i2s_driver.rx_enable()?;
 
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
-    let mut i2s_buffer = Box::new([0u8; FFT_SIZE * size_of::<u32>()]);
 
     info!("I2S mic driver created");
 
+    // TODO: what size should this buffer be?
+    let mut i2s_buffer = [0u8; I2S_U8_BUFFER_SIZE];
     loop {
+        // TODO: if its 32 bit, but our buffer is full of u8. how do we do this right?
+
         // TODO: what should the timeout be?!?!
         // TODO: do we want async here? i wasn't sure what to set for the timeout on the sync read
-        let bytes_read = i2s_driver.read(i2s_buffer.as_mut_slice(), 4)?;
+        let bytes_read = i2s_driver.read(&mut i2s_buffer, 4)?;
 
-        info!("Read {bytes_read} bytes from I2S mic");
+        debug!("Read {bytes_read} bytes from I2S mic");
+
+        let sample: [f32; I2S_SAMPLE_SIZE] = parse_i2s_24_bit_to_f32_array(&i2s_buffer);
 
         // TODO: actually do something with the audio samples. probably just process them here, but maybe use flume to another core
-        // audio_sample_tx.send(())?;
+        audio_sample_tx.send(Samples(sample))?;
     }
+}
+
+fn sensor_rx_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
+    mut uart_to_sensors_rx: UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
+    pong_received: &'static AtomicBool,
+) -> eyre::Result<()> {
+    // TODO: actually do things with the different messages. store them in a Mutex<State> or something like that
+    // TODO: no idea what the timeout should be
+    let output_f = |msg| {
+        info!("received msg: {msg:?}");
+
+        match msg {
+            Message::Ping => {
+                // TODO: send a Pong
+            }
+            Message::Pong => {
+                pong_received.store(true, Ordering::SeqCst);
+            }
+            _ => {
+                // TODO: do something for all the message types
+                warn!("dropped message! {:?}", msg);
+            }
+        }
+    };
+
+    uart_to_sensors_rx.read_loop(output_f, 4)?;
+
+    Ok(())
+}
+
+/// TODO: this should take a flume channel of messages
+fn sensor_tx_task<const N: usize>(
+    mut uart_to_sensors_tx: UartToSensors<'static, N>,
+    pong_received: &'static AtomicBool,
+) -> eyre::Result<()> {
+    // TODO: send a ping on an interval until we get a pong. then continue
+    while !pong_received.load(Ordering::SeqCst) {
+        uart_to_sensors_tx.write(&Message::Ping)?;
+        sleep(Duration::from_millis(100));
+    }
+
+    // TODO: listen on a channel to see if we need to send anything more. i don't think we will
+
+    Ok(())
 }

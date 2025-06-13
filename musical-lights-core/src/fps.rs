@@ -7,19 +7,15 @@ use std::time::{Duration, Instant};
 use embassy_time::{Duration, Instant};
 
 pub struct FpsTracker {
+    label: &'static str,
     last: Instant,
     count: u64,
 }
 
-impl Default for FpsTracker {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl FpsTracker {
-    pub fn new() -> Self {
+    pub fn new(label: &'static str) -> Self {
         Self {
+            label,
             last: Instant::now(),
             count: 0,
         }
@@ -36,7 +32,7 @@ impl FpsTracker {
             self.count = 0;
             self.last = now;
 
-            info!("FPS: {}", fps);
+            info!("{} FPS: {}", self.label, fps);
         }
     }
 }
