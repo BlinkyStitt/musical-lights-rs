@@ -81,11 +81,11 @@ async fn blink_task(mut led: Output<'static>) {
     loop {
         info!("high");
         led.set_high();
-        Timer::after_millis(1000).await;
+        Timer::after_millis(200).await;
 
         info!("low");
         led.set_low();
-        Timer::after_millis(1000).await;
+        Timer::after_millis(800).await;
     }
 }
 

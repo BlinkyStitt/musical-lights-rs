@@ -63,7 +63,7 @@ pub async fn blink_task(mut led: Output<'static>) {
     loop {
         debug!("high");
         led.set_high();
-        Timer::after_millis(1000).await;
+        Timer::after_millis(200).await;
 
         debug!("low");
         led.set_low();

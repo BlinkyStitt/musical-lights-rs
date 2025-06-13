@@ -73,15 +73,13 @@ where
 }
 
 /// this drops any extra data, so be careful how you use this!
-pub fn deserialize_with_crc<T>(data: &[u8]) -> MyResult<T>
+pub fn deserialize_with_crc<T>(data: &[u8]) -> postcard::Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
     let digest = CRC.digest();
 
-    let message = de_flavors::crc::from_bytes_u16(data, digest)?;
-
-    Ok(message)
+    de_flavors::crc::from_bytes_u16(data, digest)
 }
 
 /// a hopefully durable deserialze.
@@ -93,89 +91,10 @@ where
 {
     let size = cobs::decode_in_place(data)?;
 
-    deserialize_with_crc(&data[..size])
+    let message = deserialize_with_crc(&data[..size])?;
+
+    Ok(message)
 }
-
-/*
-/// TODO: where does this code belong? how should we handle the items? send them on a channel?
-/// TODO: read should be either from std or from embedded-io
-/// TODO: What about async io?
-/// TODO: RAW_BUF_BYTES needs to be large enough to hold at least one encoded T. i', not sure how to enforce that at compile time
-pub fn example_deserialize_loop<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize, R, T>(
-    mut input: R,
-    outputs: flume::Sender<T>,
-) -> eyre::Result<()>
-where
-    R: Read,
-    T: for<'de> Deserialize<'de>,
-{
-    // TODO: how should we make this work, and what should the asserts be?
-    // const _: () = assert!(RAW_BUF_BYTES > 0, "RAW_BUF_BYTES must be greater than 0");
-    // const RAW_BUF_BYTES: usize = max_size_with_crc_and_cobs::<T>();
-    // const _: () = assert!(RAW_BUF_BYTES * 3 == COB_BUF_BYTES);
-
-    // TODO: what size do these buffers need to be?
-    let mut raw_buf = [0u8; RAW_BUF_BYTES];
-    let mut cobs_buf = CobsAccumulator::<COB_BUF_BYTES>::new();
-
-    // TODO: buffered read until we get a zero byte. thats the end delimeter for the cobs encoded messages
-    while let Ok(ct) = input.read(&mut raw_buf) {
-        if ct == 0 {
-            // Finished reading input
-            break;
-        }
-
-        let mut window = &raw_buf[..ct];
-
-        'cobs: while !window.is_empty() {
-            // TODO: RAW_BUF_BYTES is probably the wrong size for feed. calculte it from the generic types somehow
-            window = match cobs_buf.feed::<Vec<u8, RAW_BUF_BYTES>>(window) {
-                FeedResult::Consumed => break 'cobs,
-                FeedResult::OverFull(new_wind) => {
-                    error!("cobs buffer overfull, dropping data");
-                    new_wind
-                }
-                FeedResult::DeserError(new_wind) => {
-                    error!("cobs buffer deserialization error, dropping data");
-                    new_wind
-                }
-                FeedResult::Success { data, remaining } => {
-                    match deserialize_with_crc(&data) {
-                        Ok(message) => {
-                            if let Err(err) = outputs.send(message) {
-                                warn!("failed to send message: {}", err);
-                            }
-                        }
-                        Err(err) => {
-                            warn!("failed to deserialize message: {}", err);
-                        }
-                    }
-
-                    remaining
-                }
-            };
-        }
-    }
-    Ok(())
-}
-*/
-
-// // TODO: make this optional
-// pub async fn example_deserialize_loop_async<
-//     const RAW_BUF_BYTES: usize,
-//     const COB_BUF_BYTES: usize,
-//     // TODO: Read or BufRead?
-//     R: embedded_io_async::Read,
-//     T,
-// >(
-//     mut input: R,
-//     outputs: flume::Sender<T>,
-// ) -> eyre::Result<()>
-// where
-//     T: for<'de> Deserialize<'de>,
-// {
-//     // TODO: DRY
-// }
 
 // TODO: make this generic.
 pub const fn max_size_with_crc<T: MaxSize>() -> usize {
@@ -202,7 +121,7 @@ mod tests {
         let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
         let mut output = [0u8; Message::POSTCARD_MAX_SIZE];
 
-        let message = Message::Orientation(Orientation::Up);
+        let message = Message::Orientation(Orientation::TopUp);
 
         println!("message: {message:?}");
 
