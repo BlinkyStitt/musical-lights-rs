@@ -333,10 +333,7 @@ fn mic_task(
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     let mut i2s_buffer = [0u8; I2S_U8_BUFFER_SIZE];
     loop {
-        // TODO: if its 32 bit, but our buffer is full of u8. how do we do this right?
-
-        // TODO: what should the timeout be?!?!
-        // TODO: do we want async here? i wasn't sure what to set for the timeout on the sync read
+        // TODO: what should the timeout be?!
         let bytes_read = i2s_driver.read(&mut i2s_buffer, 4)?;
 
         debug!("Read {bytes_read} bytes from I2S mic");
