@@ -5,18 +5,18 @@ use super::samples::Samples;
 
 /// buffer audio samples. might be read from a microphone wire to an ADC, or over i2s, or from anything
 /// outputs windowed samples for an FFT
-pub struct AudioBuffer<const SAMPLES: usize, const BUF: usize> {
+pub struct AudioBuffer<const IN: usize, const OUT: usize> {
     count: usize,
-    buffer: CircularBuffer<BUF, f32>,
+    buffer: CircularBuffer<OUT, f32>,
 }
 
-impl<const S: usize, const BUF: usize> AudioBuffer<S, BUF> {
+impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
     pub fn new() -> Self {
         // TODO: compile time assert
-        assert!(BUF >= S);
+        assert!(OUT >= IN);
 
         // start with a buffer full of zeroes, NOT an empty buffer
-        let sample_buffer = CircularBuffer::from([0.0; BUF]);
+        let sample_buffer = CircularBuffer::from([0.0; OUT]);
 
         Self {
             count: 0,
@@ -24,9 +24,9 @@ impl<const S: usize, const BUF: usize> AudioBuffer<S, BUF> {
         }
     }
 
-    pub fn samples(&self) -> Samples<BUF> {
+    pub fn samples(&self) -> Samples<OUT> {
         // TODO: this could probably be more efficient. benchmark. i think two refs might be better than copying. or maybe this should take a &mut [f32; BUF]
-        let mut samples = [0.0; BUF];
+        let mut samples = [0.0; OUT];
 
         let (a, b) = self.buffer.as_slices();
 
@@ -48,10 +48,10 @@ impl<const S: usize, const BUF: usize> AudioBuffer<S, BUF> {
         self.buffer.push_back(sample);
 
         // TODO: instead of mod, it would be safest to do >= and then reset to 0. but thats slower
-        self.count % S == 0
+        self.count % IN == 0
     }
 
-    pub fn push_samples(&mut self, samples: Samples<S>) {
+    pub fn push_samples(&mut self, samples: Samples<IN>) {
         trace!("new samples: {:?}", samples);
 
         self.count += samples.0.len();

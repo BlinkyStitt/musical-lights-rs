@@ -94,14 +94,14 @@ async fn blink_task(mut led: Output<'static>) {
 async fn read_from_sparkle_task(
     mut uart: UartFromSparkle<'static, 256, 256>,
     send_to_sparkle: MyMessageSender,
-    handleshake_complete: &'static Signal<CriticalSectionRawMutex, bool>,
+    pong_sent: &'static Signal<CriticalSectionRawMutex, bool>,
 ) {
     uart.read_loop(|x| async {
         match x {
             Message::Ping => {
                 send_to_sparkle.send(Message::Pong).await;
                 // TODO: ack/syn/synack instead of ping pong?
-                handleshake_complete.signal(true);
+                pong_sent.signal(true);
             }
             msg => {
                 // TODO: what should we do with the different message types here?

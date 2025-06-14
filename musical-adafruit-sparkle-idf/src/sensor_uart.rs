@@ -71,7 +71,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
 
     /// read messages from the uart until the uart shuts down
     /// TODO: how can we tell this loop to stop?
-    pub fn read_loop<F>(&mut self, output: F, read_timeout: TickType_t) -> MyResult<()>
+    pub fn read_loop<F>(&mut self, process_message: F, read_timeout: TickType_t) -> MyResult<()>
     where
         F: Fn(Message),
     {
@@ -108,7 +108,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
                     FeedResult::Success { data, remaining } => {
                         match deserialize_with_crc(&data) {
                             Ok(msg) => {
-                                output(msg);
+                                process_message(msg);
                             }
                             Err(err) => {
                                 // TODO: MyError doesn't implement defmt::Format

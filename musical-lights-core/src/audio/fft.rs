@@ -1,13 +1,13 @@
 use super::{
+    FlatWeighting,
     amplitudes::WeightedAmplitudes,
     samples::{Samples, WindowedSamples},
     weighting::Weighting,
-    FlatWeighting,
 };
 use crate::logging::trace;
 use crate::{audio::amplitudes::Amplitudes, windows::Window};
 
-use microfft::real::{rfft_1024, rfft_2048, rfft_512};
+use microfft::real::{rfft_512, rfft_1024, rfft_2048, rfft_4096};
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
 #[allow(unused_imports)]
 use micromath::F32Ext;
@@ -118,6 +118,7 @@ macro_rules! impl_fft {
 impl_fft!(512, rfft_512);
 impl_fft!(1024, rfft_1024);
 impl_fft!(2048, rfft_2048);
+impl_fft!(4096, rfft_4096);
 
 pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
     (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)

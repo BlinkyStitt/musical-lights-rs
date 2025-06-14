@@ -5,6 +5,7 @@ use micromath::F32Ext;
 /// IF N > S/2, there is an error
 /// If N == S/2, there is no aggregation
 /// If N < S/2,  there is aggregation
+/// TODO: do we definitely want f32?
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Amplitudes<const N: usize>(pub [f32; N]);

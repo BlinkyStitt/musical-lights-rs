@@ -138,7 +138,7 @@ mod tests {
         assert_eq!(bark_scale(13500.0), Some(24));
         assert_eq!(bark_scale(15500.0), Some(24));
         assert_eq!(bark_scale(16000.0), None); // Beyond the Bark scale
-                                               // TODO: i might actually want to go higher than this to get to 18 or 20kHz
+        // TODO: i might actually want to go higher than this to get to 18 or 20kHz
         assert_eq!(bark_scale(f32::MAX), None);
     }
 }

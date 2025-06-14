@@ -20,6 +20,7 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::Timer;
 use itertools::repeat_n;
+use musical_lights_core::audio::FlatWeighting;
 use musical_lights_core::lights::{DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
@@ -160,13 +161,11 @@ async fn fft_task(
     let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
 
     // TODO: i need custom weighting. the microphone dynamic gain might not work well with this
-    let equal_loudness_weighting = AWeighting::new(SAMPLE_RATE);
-    // let equal_loudness_weighting = FlatWeighting;
+    // TODO: i think the microphone might already have a weighting!
+    // let equal_loudness_weighting = AWeighting::new(SAMPLE_RATE);
 
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::new_with_window_and_weighting::<
-        HanningWindow<FFT_INPUTS>,
-        _,
-    >(equal_loudness_weighting);
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
+        FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(FlatWeighting);
 
     // TODO: figure out why 20-400 are too low. probably a weighting too strong and adc timings/sample rate not being correct
     let scale_builder =

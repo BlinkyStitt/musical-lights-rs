@@ -4,6 +4,7 @@ use micromath::F32Ext;
 
 use super::Weighting;
 
+/// TODO: i'm not sure we need this. i think the microphone already does this for us!
 pub struct AWeighting<const N: usize> {
     sample_rate_hz: f32,
 }

@@ -23,11 +23,14 @@ use esp_idf_sys::{
 };
 use flume::Receiver;
 use musical_lights_core::{
-    audio::{parse_i2s_24_bit_to_f32_array, Samples},
+    audio::{
+        parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer,
+        ExponentialScaleBuilder, Samples, FFT,
+    },
     fps::FpsTracker,
     logging::{debug, error, info, warn},
-    message::Message,
-    message::MESSAGE_BAUD_RATE,
+    message::{Message, MESSAGE_BAUD_RATE},
+    windows::HanningWindow,
 };
 use rand::RngCore;
 use smart_leds::{
@@ -53,7 +56,11 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 /// TODO: should this match our slowest sensor?
 const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
-const FFT_SIZE: usize = 4096;
+
+/// TODO: what size FFT? match the DMA buffer size?
+const FFT_INPUTS: usize = 4096;
+
+const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 /// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
 const I2S_U8_BUFFER_SIZE: usize = 4092;
@@ -87,7 +94,8 @@ fn main() -> eyre::Result<()> {
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
     let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio22)?;
 
-    let (audio_sample_tx, audio_sample_rx) = flume::bounded(4);
+    // TODO: what size?
+    let (audio_sample_tx, audio_sample_rx) = flume::bounded(10);
 
     // TODO: this baud rate needs to match the sensory board
     let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
@@ -104,9 +112,9 @@ fn main() -> eyre::Result<()> {
     // you need `into_split` and not `split` so that the halves can be sent to different threads
     let (uart_to_sensors_tx, uart_to_sensors_rx) = uart_to_sensors.into_split();
 
-    let uart_to_sensors_rx: UartFromSensors<'_, 256, 256> =
-        UartFromSensors::new(uart_to_sensors_rx);
-    let uart_to_sensors_tx: UartToSensors<'_, 256> = UartToSensors::new(uart_to_sensors_tx);
+    // TODO: pick proper sizes for these buffers. 256 should work, but its not correct
+    let uart_from_sensors: UartFromSensors<'_, 256, 256> = UartFromSensors::new(uart_to_sensors_rx);
+    let uart_to_sensors: UartToSensors<'_, 256> = UartToSensors::new(uart_to_sensors_tx);
 
     // TODO: do we need two cores? how do we set them up?
 
@@ -139,20 +147,23 @@ fn main() -> eyre::Result<()> {
         )
     });
 
-    // TODO: wait for a ping from the sensor board?
-
+    // TODO: what size?
+    let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(10);
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
-    let sensor_rx_handle = thread::spawn(move || {
-        sensor_rx_task(uart_to_sensors_rx, &PONG_RECEIVED).inspect_err(|err| {
-            error!("Error in sensor_rx_task: {err}");
-        })
+    let read_from_sensors_handle = thread::spawn(move || {
+        read_from_sensors_task(message_for_sensors_tx, &PONG_RECEIVED, uart_from_sensors)
+            .inspect_err(|err| {
+                error!("Error in sensor_rx_task: {err}");
+            })
     });
 
-    let sensor_tx_handle = thread::spawn(move || {
-        sensor_tx_task(uart_to_sensors_tx, &PONG_RECEIVED).inspect_err(|err| {
-            error!("Error in sensor_tx_task: {err}");
-        })
+    let send_to_sensors_handle = thread::spawn(move || {
+        send_to_sensors_task(message_for_sensors_rx, &PONG_RECEIVED, uart_to_sensors).inspect_err(
+            |err| {
+                error!("Error in sensor_tx_task: {err}");
+            },
+        )
     });
 
     let fft_handle = thread::spawn(move || {
@@ -190,8 +201,8 @@ fn main() -> eyre::Result<()> {
     blink_neopixels_handle.join().unwrap()?;
     mic_handle.join().unwrap()?;
     fft_handle.join().unwrap()?;
-    sensor_tx_handle.join().unwrap()?;
-    sensor_rx_handle.join().unwrap()?;
+    send_to_sensors_handle.join().unwrap()?;
+    read_from_sensors_handle.join().unwrap()?;
 
     // TODO: if we get here, should we force a restart?
     // unsafe { esp_restart() };
@@ -263,10 +274,37 @@ fn blink_neopixels_task(
 
 /// TODO: this size is wrong. we don't get 4096 at once. we get some weird amount like 4092 u8s (1023 i32s)
 fn fft_task(audio_sample_rx: Receiver<Samples<I2S_SAMPLE_SIZE>>) -> eyre::Result<()> {
-    loop {
-        let sample = audio_sample_rx.recv()?;
+    // create windows and weights and everything before starting any tasks
+    let mut audio_buffer: AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS> = AudioBuffer::new();
 
-        // TODO: now what? we need to turn these u8 into i32, then turn those into i24
+    // TODO: i need custom weighting. the microphone dynamic gain might not work well with this
+    // TODO: i think the microphone might already have a weighting!
+    // let equal_loudness_weighting = AWeighting::new(SAMPLE_RATE);
+
+    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::new_with_window::<HanningWindow<FFT_INPUTS>>();
+
+    // TODO: bark scale? exponential scale? something else?
+    // i wanted to do bark scale, but it has 24 outputs and 256 isn't divisibly by 24
+    // let scale_builder = BarkScaleBuilder::<FFT_OUTPUTS>::new(I2S_SAMPLE_RATE_HZ as f32);
+    let scale_builder =
+        ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(20.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
+
+    loop {
+        let samples = audio_sample_rx.recv()?;
+
+        audio_buffer.push_samples(samples);
+
+        // TODO: for some reason rust analyzer is showing 512 here even though it should be more
+        let samples: Samples<FFT_INPUTS> = audio_buffer.samples();
+
+        let amplitudes = fft.weighted_amplitudes(samples);
+
+        let loudness = scale_builder.build(amplitudes);
+        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
+        // TODO: shazam
+        // TODO: beat detection
+
+        info!("loudness: {:?}", loudness);
     }
 }
 
@@ -279,21 +317,20 @@ fn mic_task(
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
-    // 24 bit audio is padded to 32 bits.
-    // TODO: do we want to use 8 or 16 bit audio?
+    // 24 bit audio is padded to 32 bits. how do they pad the sign though?
+    // TODO: do we want to use 8 or 16 or 24 bit audio?
+    // TODO: philips is in stereo mode. can we switch it to mono?
     let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits24);
 
     // TODO: do we want the mclk pin?
-    // TODO: DMA?
+    // TODO: DMA? i think thats handled for us
     let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
     i2s_driver.rx_enable()?;
 
-    // TODO: what size should this buffer be? i'm really not sure what this data even looks like
-
     info!("I2S mic driver created");
 
-    // TODO: what size should this buffer be?
+    // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     let mut i2s_buffer = [0u8; I2S_U8_BUFFER_SIZE];
     loop {
         // TODO: if its 32 bit, but our buffer is full of u8. how do we do this right?
@@ -304,29 +341,30 @@ fn mic_task(
 
         debug!("Read {bytes_read} bytes from I2S mic");
 
+        // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
         let sample: [f32; I2S_SAMPLE_SIZE] = parse_i2s_24_bit_to_f32_array(&i2s_buffer);
 
-        // TODO: actually do something with the audio samples. probably just process them here, but maybe use flume to another core
         audio_sample_tx.send(Samples(sample))?;
     }
 }
 
-fn sensor_rx_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
-    mut uart_to_sensors_rx: UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
+fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
+    message_to_sensors: flume::Sender<Message>,
     pong_received: &'static AtomicBool,
+    mut uart_from_sensors: UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
 ) -> eyre::Result<()> {
-    // TODO: actually do things with the different messages. store them in a Mutex<State> or something like that
-    // TODO: no idea what the timeout should be
-    let output_f = |msg| {
+    let process_message = |msg| {
         info!("received msg: {msg:?}");
 
         match msg {
             Message::Ping => {
-                // TODO: send a Pong
+                // i don't think we actually see pings on this side, but it works for now
+                message_to_sensors.send(Message::Pong).unwrap();
             }
             Message::Pong => {
                 pong_received.store(true, Ordering::SeqCst);
             }
+            // TODO: actually do things with the different messages. store them in a Mutex<State> or something like that
             _ => {
                 // TODO: do something for all the message types
                 warn!("dropped message! {:?}", msg);
@@ -334,23 +372,27 @@ fn sensor_rx_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
         }
     };
 
-    uart_to_sensors_rx.read_loop(output_f, 4)?;
+    // TODO: no idea what the timeout should be
+    uart_from_sensors.read_loop(process_message, 4)?;
 
     Ok(())
 }
 
-/// TODO: this should take a flume channel of messages
-fn sensor_tx_task<const N: usize>(
-    mut uart_to_sensors_tx: UartToSensors<'static, N>,
+fn send_to_sensors_task<const N: usize>(
+    message_to_sensors: flume::Receiver<Message>,
     pong_received: &'static AtomicBool,
+    mut uart_to_sensors: UartToSensors<'static, N>,
 ) -> eyre::Result<()> {
-    // TODO: send a ping on an interval until we get a pong. then continue
+    // send a ping on an interval until we get a pong. then continue
     while !pong_received.load(Ordering::SeqCst) {
-        uart_to_sensors_tx.write(&Message::Ping)?;
+        uart_to_sensors.write(&Message::Ping)?;
         sleep(Duration::from_millis(100));
     }
 
-    // TODO: listen on a channel to see if we need to send anything more. i don't think we will
+    // listen on a channel to see if we need to send anything more. i don't think we will
+    loop {
+        let message = message_to_sensors.recv()?;
 
-    Ok(())
+        uart_to_sensors.write(&message)?;
+    }
 }
