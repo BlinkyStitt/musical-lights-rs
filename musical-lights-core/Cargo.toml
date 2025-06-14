@@ -4,12 +4,19 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
+ahrs = { version = "0.7.0", default-features = false }
 circular-buffer = { version = "1.1.0", default-features = false }
 cobs = { version = "0.3.0", default-features = false }
 crc = "3.3.0"
 defmt = { version = "1.0.1", default-features = false, optional = true }
+ed25519-dalek = { version = "2.1.1", default-features = false, features = [
+    "fast",
+    "serde",
+    "zeroize",
+] }
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
+embassy-time = { optional = true, version = "*" }
 enterpolation = { version = "0.3.0", default-features = false, features = [
     "bspline",
     "linear",
@@ -20,6 +27,7 @@ microfft = { version = "0.6.0", default-features = false, features = [
     "size-2048",
 ] }
 micromath = "2.1.0"
+nalgebra = { version = "0.33.2", default-features = false }
 num = { version = "0.4.3", default-features = false }
 num-complex = { version = "0.4.6", default-features = false }
 palette = { version = "0.7.6", default-features = false }
@@ -27,10 +35,6 @@ postcard = { version = "1.1.1", features = ["experimental-derive", "use-crc"] }
 serde = { version = "1.0.219", default-features = false }
 smart-leds = "0.4.0"
 thiserror = { version = "2", default-features = false }
-
-embassy-time = { optional = true, version = "*" }
-nalgebra = { version = "0.33.2", default-features = false }
-ahrs = { version = "0.7.0", default-features = false }
 
 # TODO: these need std
 # eyre = { version = "0.6.12", default-features = false, features = [] }
@@ -58,6 +62,7 @@ alloc = [
     "palette/alloc",
     "postcard/alloc",
     "serde/alloc",
+    "ed25519-dalek/alloc",
 ]
 defmt = ["dep:defmt", "cobs/defmt", "postcard/use-defmt", "heapless/defmt-03"]
 embassy = ["dep:embassy-time"]
@@ -71,8 +76,8 @@ libm = [
 std = [
     "ahrs/std",
     "cobs/use_std",
+    "ed25519-dalek/std",
     "enterpolation/std",
-    # "eyre/auto-install",
     "log?/std",
     "microfft/std",
     "num-complex/std",
