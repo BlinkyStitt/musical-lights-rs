@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// TODO: defmt should be optional!
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, MaxSize, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, MaxSize, PartialEq)]
 pub enum Orientation {
     /// Device is lying flat with screen/display facing upward
     FaceUp,
@@ -20,6 +20,7 @@ pub enum Orientation {
     /// Right side of the device is pointing upward
     RightUp,
     /// Orientation is unclear or in transition
+    #[default]
     Unknown,
 }
 

@@ -1,10 +1,11 @@
 #![feature(type_alias_impl_trait)]
 
+mod light_patterns;
 mod sensor_uart;
 
 use biski64::Biski64Rng;
 use esp_idf_svc::{
-    eventloop::EspSystemEventLoop,
+    // eventloop::EspSystemEventLoop,
     hal::{
         gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
         i2s::{
@@ -15,8 +16,8 @@ use esp_idf_svc::{
         uart::{config::Config, UartDriver},
         units::Hertz,
     },
-    nvs::EspDefaultNvsPartition,
-    timer::EspTaskTimerService,
+    // nvs::EspDefaultNvsPartition,
+    // timer::EspTaskTimerService,
 };
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
@@ -27,9 +28,12 @@ use musical_lights_core::{
         parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer,
         ExponentialScaleBuilder, Samples, FFT,
     },
+    compass::{Coordinate, Magnetometer},
+    errors::MyError,
     fps::FpsTracker,
     logging::{debug, error, info, warn},
-    message::{Message, MESSAGE_BAUD_RATE},
+    message::{Message, PeerId, MESSAGE_BAUD_RATE},
+    orientation::Orientation,
     windows::HanningWindow,
 };
 use rand::RngCore;
@@ -39,16 +43,21 @@ use smart_leds::{
     RGB8,
 };
 use smart_leds_trait::SmartLedsWrite;
-use std::time::Duration;
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread::{self, sleep},
 };
-
-// TODO: maybe use the spi driver instead? i'm not sure. rmt should be good. theres 8 channels and we only have 4 5v outputs. so lets stick with rmt for now
+use std::{sync::Mutex, time::Duration};
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
-use crate::sensor_uart::{UartFromSensors, UartToSensors};
+use crate::{
+    light_patterns::{clock, compass, flashlight, rainbow},
+    sensor_uart::{UartFromSensors, UartToSensors},
+};
 
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
@@ -67,6 +76,17 @@ const I2S_U8_BUFFER_SIZE: usize = 4092;
 /// TODO: how do we make this fit cleanly in the fft size?
 const I2S_SAMPLE_SIZE: usize = I2S_U8_BUFFER_SIZE / 4;
 
+/// TODO: add a lot more to this
+/// TODO: max capacity on the HashMap?
+/// TODO: include self in the main peer_coordinate map?
+#[derive(Clone, Default, Debug)]
+struct State {
+    orientation: Orientation,
+    magnetometer: Magnetometer,
+    self_coordinate: Coordinate,
+    peer_coordinate: HashMap<PeerId, Coordinate>,
+}
+
 fn main() -> eyre::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
@@ -81,13 +101,13 @@ fn main() -> eyre::Result<()> {
     let pins = peripherals.pins;
 
     // TODO: use this for anything? <https://github.com/esp-rs/esp-idf-svc/blob/master/examples/eventloop.rs>
-    let sysloop = EspSystemEventLoop::take();
+    // let sysloop = EspSystemEventLoop::take();
 
     // TODO: use timer service instead of std sleep?
-    let timer_service = EspTaskTimerService::new()?;
+    // let timer_service = EspTaskTimerService::new()?;
 
     // TODO: do something with nvs. like set up signing keys
-    let nvs = EspDefaultNvsPartition::take()?;
+    // let nvs = EspDefaultNvsPartition::take()?;
 
     // TODO: set up bluetooth or wifi. not sure what to do with them. but they give us a true rng
 
@@ -138,13 +158,21 @@ fn main() -> eyre::Result<()> {
     let rng_2_hello = rng_2.next_u64();
     debug!("rng {} {}", rng_1_hello, rng_2_hello);
 
+    // TODO: static? arc? something else?
+    let state = Arc::new(Mutex::new(State::default()));
+
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
+    let blink_neopixels_state = state.clone();
     let blink_neopixels_handle = thread::spawn(move || {
-        blink_neopixels_task(rng_1, &mut neopixel_onboard, &mut neopixel_external).inspect_err(
-            |err| {
-                error!("Error in blink_neopixels_task: {err}");
-            },
+        blink_neopixels_task(
+            &mut neopixel_onboard,
+            &mut neopixel_external,
+            rng_1,
+            blink_neopixels_state,
         )
+        .inspect_err(|err| {
+            error!("Error in blink_neopixels_task: {err}");
+        })
     });
 
     // TODO: what size?
@@ -152,10 +180,15 @@ fn main() -> eyre::Result<()> {
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
     let read_from_sensors_handle = thread::spawn(move || {
-        read_from_sensors_task(message_for_sensors_tx, &PONG_RECEIVED, uart_from_sensors)
-            .inspect_err(|err| {
-                error!("Error in sensor_rx_task: {err}");
-            })
+        read_from_sensors_task(
+            message_for_sensors_tx,
+            &PONG_RECEIVED,
+            state,
+            uart_from_sensors,
+        )
+        .inspect_err(|err| {
+            error!("Error in sensor_rx_task: {err}");
+        })
     });
 
     let send_to_sensors_handle = thread::spawn(move || {
@@ -172,7 +205,7 @@ fn main() -> eyre::Result<()> {
         })
     });
 
-    //
+    // TODO: make sure this has the highest priority?
     let mic_handle = thread::spawn(move || {
         mic_task(
             peripherals.i2s0,
@@ -187,7 +220,7 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: debug-only thread for monitoring ram/cpu/etc?
-    let memory_handle = thread::spawn(move || {
+    let _memory_handle = thread::spawn(move || {
         loop {
             // log free memory every 60 seconds. only do this if we are in debug mode
             let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
@@ -213,17 +246,18 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-/// TODO: dithering! fastled looked so good with the dithering
 fn blink_neopixels_task(
-    mut rng: Biski64Rng,
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
+    mut rng: Biski64Rng,
+    state: Arc<Mutex<State>>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
-    // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with
+    // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with the other art?
     let mut g_hue = rng.next_u32() as u8;
 
+    // TODO: do we want these boxed? they are large
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
@@ -245,13 +279,26 @@ fn blink_neopixels_task(
         // TODO: gamme correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
-        // TODO: do a real pattern here
-        for (i, x) in fibonacci_data.iter_mut().enumerate() {
-            let mut new = base_hsv;
+        // TODO: don't clone?
+        let state = state.lock().map_err(|_| MyError::PoisonLock)?.clone();
 
-            new.hue = new.hue.wrapping_add((i / 2) as u8);
-
-            *x = hsv2rgb(new);
+        // TODO: have a way to smoothly transition between patterns
+        // TODO: new random g_hue whenever the pattern changes?
+        match state.orientation {
+            Orientation::FaceDown => {
+                flashlight(fibonacci_data.as_mut_slice());
+            }
+            Orientation::FaceUp => {
+                compass(base_hsv, fibonacci_data.as_mut_slice());
+            }
+            Orientation::LeftUp
+            | Orientation::RightUp
+            | Orientation::TopUp
+            | Orientation::Unknown => {
+                // TODO: cycle between different patterns
+                rainbow(base_hsv, fibonacci_data.as_mut_slice());
+            }
+            Orientation::TopDown => clock(base_hsv, fibonacci_data.as_mut_slice()),
         }
 
         // TODO: reading these from a buffer is probably better than doing any calculations in the iter. that takes more memory, but it works well
@@ -336,22 +383,27 @@ fn mic_task(
         // TODO: what should the timeout be?!
         let bytes_read = i2s_driver.read(&mut i2s_buffer, 4)?;
 
-        debug!("Read {bytes_read} bytes from I2S mic");
+        // debug!("Read {bytes_read} bytes from I2S mic");
 
         // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
-        let sample: [f32; I2S_SAMPLE_SIZE] = parse_i2s_24_bit_to_f32_array(&i2s_buffer);
+        let samples: [f32; I2S_SAMPLE_SIZE] =
+            parse_i2s_24_bit_to_f32_array(&i2s_buffer[..bytes_read]);
 
-        audio_sample_tx.send(Samples(sample))?;
+        audio_sample_tx.send(Samples(samples))?;
     }
 }
 
 fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
     message_to_sensors: flume::Sender<Message>,
     pong_received: &'static AtomicBool,
+    state: Arc<Mutex<State>>,
     mut uart_from_sensors: UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
 ) -> eyre::Result<()> {
     let process_message = |msg| {
         info!("received msg: {msg:?}");
+
+        // TODO: only lock when necessary? pings and pongs aren't common
+        let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
 
         match msg {
             Message::Ping => {
@@ -361,12 +413,26 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
             Message::Pong => {
                 pong_received.store(true, Ordering::SeqCst);
             }
-            // TODO: actually do things with the different messages. store them in a Mutex<State> or something like that
-            _ => {
-                // TODO: do something for all the message types
-                warn!("dropped message! {:?}", msg);
+            Message::Orientation(orientation, mag) => {
+                state.orientation = orientation;
+                state.magnetometer = mag;
+            }
+            Message::GpsTime(gps_time) => {
+                warn!("not sure what to do with gps time. maybe instead connect to the pulse-per-second line? but we don't have many pins available");
+            }
+            Message::PeerCoordinate(peer_id, coordinate) => {
+                state.peer_coordinate.insert(peer_id, coordinate);
+            }
+            Message::SelfCoordinate(coordinate) => {
+                // TODO: on startup, the key needs to be passed to the sensor board so it can sign radio messages
+                state.self_coordinate = coordinate;
             }
         }
+
+        drop(state);
+
+        // TODO: should we send state into a watch channel? or is a mutex enough? arcswap maybe?
+        Ok(())
     };
 
     // TODO: no idea what the timeout should be

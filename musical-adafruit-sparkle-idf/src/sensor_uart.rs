@@ -73,7 +73,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
     /// TODO: how can we tell this loop to stop?
     pub fn read_loop<F>(&mut self, process_message: F, read_timeout: TickType_t) -> MyResult<()>
     where
-        F: Fn(Message),
+        F: Fn(Message) -> MyResult<()>,
     {
         // TODO: how should we make this work, and what should the asserts be?
         // const _: () = assert!(RAW_BUF_BYTES > COB_BUF_BYTES, "RAW_BUF_BYTES must be greater than COB_BUF_BYTES");
@@ -108,11 +108,10 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
                     FeedResult::Success { data, remaining } => {
                         match deserialize_with_crc(&data) {
                             Ok(msg) => {
-                                process_message(msg);
+                                process_message(msg)?;
                             }
                             Err(err) => {
-                                // TODO: MyError doesn't implement defmt::Format
-                                warn!("failed to deserialize message");
+                                warn!("failed to deserialize message: {err:?}");
                             }
                         }
 

@@ -22,15 +22,14 @@ pub const MESSAGE_BAUD_RATE: u32 = 115_200;
 
 /// TODO: peer ids should be a pubkey
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Serialize, Deserialize, MaxSize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, Hash, MaxSize, PartialEq)]
 pub struct PeerId(u8);
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Serialize, Deserialize, Debug, PartialEq, MaxSize)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, MaxSize)]
 pub enum Message {
     GpsTime(GpsTime),
-    Magnetometer(Magnetometer),
-    Orientation(Orientation),
+    Orientation(Orientation, Magnetometer),
     /// TODO: should these be batched up? should they be signed by the peer? signing can come later
     PeerCoordinate(PeerId, Coordinate),
     Ping,
@@ -38,15 +37,13 @@ pub enum Message {
     SelfCoordinate(Coordinate),
 }
 
-// TODO: where do we get digest from?
-
 pub type CrcWidth = u16;
 
 /// TODO: i have no idea which algo to pick. theres so many
 /// TODO: take this as an argument?
 pub const CRC: crc::Crc<CrcWidth> = crc::Crc::<CrcWidth>::new(&crc::CRC_16_IBM_SDLC);
 
-/// TODO: what size do these buffers need to be?
+/// TODO: what size do these buffers need to be? make sure to leave room for the sentinel byte
 /// TODO: is writing to a buffer like this good? should we have a std version that returns a Vec?
 /// TODO: <https://github.com/jamesmunns/postcard/issues/117#issuecomment-2888769291>
 /// NOTE: this does not include the sentinel value, so be careful with how you send this?
@@ -122,7 +119,14 @@ mod tests {
         let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
         let mut output = [0u8; Message::POSTCARD_MAX_SIZE];
 
-        let message = Message::Orientation(Orientation::TopUp);
+        let message = Message::Orientation(
+            Orientation::TopUp,
+            Magnetometer {
+                x_gauss: 0.0,
+                y_gauss: 0.0,
+                z_gauss: 0.0,
+            },
+        );
 
         println!("message: {message:?}");
 

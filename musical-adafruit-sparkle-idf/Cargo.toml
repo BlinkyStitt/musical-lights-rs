@@ -23,24 +23,22 @@ default = []
 experimental = ["esp-idf-svc/experimental"]
 
 [dependencies]
-log = "0.4"
+biski64 = { version = "0.3.2", default-features = false }
 embassy-time = {version = "0.4", features = ["generic-queue-8"]}
-esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
+esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver"] }
 esp-idf-sys = { version = "*", features = ["binstart"] }
-smart-leds = "*"
-ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
+eyre = "0.6.12"
+heapless = { version = "0.8.0", features = ["portable-atomic", "serde"] }
+log = "0.4"
+smart-leds = "0.4"
 smart-leds-trait = "0.3.1"
+ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
 flume = "0.11.1"
-
-# TODO: which logger?
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "std", "log"
 ] }
-eyre = "0.6.12"
-biski64 = { version = "0.3.2", default-features = false }
-rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
-heapless = { version = "0.8.0", features = ["portable-atomic", "serde"] }
 postcard = "1.1.1"
+rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
 
 [build-dependencies]
 embuild = "0.33"

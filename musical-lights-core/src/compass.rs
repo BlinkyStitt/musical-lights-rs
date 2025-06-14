@@ -30,7 +30,7 @@ pub struct Course {
 
 // TODO: should these be in the Gps Module instead?
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
+#[derive(Copy, Clone, Default, Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Coordinate {
     /// latitude
     pub lat: f32,
@@ -39,7 +39,7 @@ pub struct Coordinate {
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
+#[derive(Copy, Clone, Default, Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Magnetometer {
     pub x_gauss: f32,
     pub y_gauss: f32,

@@ -19,6 +19,8 @@ pub enum MyError {
     /// TODO: i don't like this. it doesn't have the actual error in it because theres too many different hardware options
     #[error("uart send error")]
     UartSend,
+    #[error("poison lock error")]
+    PoisonLock,
 }
 
 pub type MyResult<T> = Result<T, MyError>;
