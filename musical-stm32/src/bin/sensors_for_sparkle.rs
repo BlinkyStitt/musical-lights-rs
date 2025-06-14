@@ -33,6 +33,7 @@ use lsm9ds1::{
     mag::{self, MagSettings},
 };
 use musical_lights_core::{
+    compass::Magnetometer,
     errors::{MyError, MyResult},
     fps::FpsTracker,
     logging::{info, warn},
@@ -96,7 +97,7 @@ async fn read_from_sparkle_task(
     send_to_sparkle: MyMessageSender,
     pong_sent: &'static Signal<CriticalSectionRawMutex, bool>,
 ) {
-    uart.read_loop(|x| async {
+    uart.read_loop(|x| async move {
         match x {
             Message::Ping => {
                 send_to_sparkle.send(Message::Pong).await;
@@ -137,7 +138,7 @@ async fn read_lsm9ds1_task(
     mut lsm9ds1: LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>,
     // TODO: theres two interrupts here, possible too
     mut accel_gyro_data_ready: ExtiInput<'static>,
-    mut magnet_interrupt: ExtiInput<'static>,
+    mut mag_interrupt: ExtiInput<'static>,
     channel: MyMessageSender,
 ) {
     // TODO: i can't put an except on these. its saying it can't convert the errors
@@ -151,7 +152,7 @@ async fn read_lsm9ds1_task(
     // the accelerometer and gyro are ready
     accel_gyro_data_ready.wait_for_high().await;
     // the magnetometer is ready
-    magnet_interrupt.wait_for_high().await;
+    mag_interrupt.wait_for_high().await;
 
     // TODO: check the non-volatile storage to see if this device has been calibrated before, do some calibration setup here
 
@@ -169,22 +170,27 @@ async fn read_lsm9ds1_task(
 
     // TODO: how should this loop work? we need to select on multiple interrupts
     loop {
-        // TODO: should we instead wait for the ready signal from the slowest sensor?
+        // TODO: timer or interrupt?
         // Timer::after(Duration::from_micros(1_000_000 / UPDATE_HZ)).await;
-        magnet_interrupt.wait_for_high().await;
+        mag_interrupt.wait_for_high().await;
 
-        let new_orientation = read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
+        let (new_orientation, new_magnetometer) = read_accel_gyro_mag(&mut lsm9ds1, &mut ahrs)
             .await
             .expect("using lsm9ds1");
 
-        if new_orientation == last_orientation {
+        if new_orientation != Orientation::FaceUp && new_orientation == last_orientation {
+            // orientation hasn't changed and we aren't in compass mode.
+            // todo: i don't like this pattern very much
             continue;
         }
 
-        channel.send(Message::Orientation(new_orientation)).await;
+        channel
+            .send(Message::Orientation(new_orientation, new_magnetometer))
+            .await;
 
         last_orientation = new_orientation;
 
+        // TODO: this should be around 80.
         fps.tick();
     }
 }
@@ -193,7 +199,7 @@ async fn read_lsm9ds1_task(
 async fn read_accel_gyro_mag(
     lsm9ds1: &mut MyLSM9DS1,
     ahrs: &mut Madgwick<f64>,
-) -> MyResult<Orientation> {
+) -> MyResult<(Orientation, Magnetometer)> {
     // i think that reading the data clears the ready pin
     // TODO: read raw and have the ahrs use i16? i don't think we want that
     let (mag_x, mag_y, mag_z) = lsm9ds1.read_mag().await.unwrap();
@@ -214,7 +220,14 @@ async fn read_accel_gyro_mag(
         .update(&(gyroscope * (PI / 180.0)), &accelerometer, &magnetometer)
         .map_err(MyError::Ahrs)?;
 
-    Ok(Orientation::from_quat(quat))
+    let orientation = Orientation::from_quat(quat);
+    let mag = Magnetometer {
+        x_gauss: mag_x,
+        y_gauss: mag_y,
+        z_gauss: mag_z,
+    };
+
+    Ok((orientation, mag))
 }
 
 #[embassy_executor::task]

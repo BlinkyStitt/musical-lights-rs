@@ -13,6 +13,7 @@ pub struct FpsTracker {
 }
 
 impl FpsTracker {
+    /// TODO: add an "expected" framerate and we can print only if its outside the expected range?
     pub fn new(label: &'static str) -> Self {
         Self {
             label,
