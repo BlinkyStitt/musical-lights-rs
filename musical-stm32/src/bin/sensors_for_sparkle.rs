@@ -57,8 +57,8 @@ pub type MySpi = Spi<'static, Async>;
 pub type MySpiBus = Mutex<MyRawMutex, MySpi>;
 pub type MySpiDevice<CS> = SpiDevice<'static, MyRawMutex, MySpi, CS>;
 
-pub type AccelDevice = MySpiDevice<Output<'static>>;
-pub type MagnetDevice = MySpiDevice<Output<'static>>;
+pub type AccelGyroDevice = MySpiDevice<Output<'static>>;
+pub type MagDevice = MySpiDevice<Output<'static>>;
 pub type RadioDevice = MySpiDevice<Output<'static>>;
 
 pub type MyChannel<T, const S: usize> = Channel<MyRawMutex, T, S>;
@@ -69,7 +69,7 @@ pub type MyMessageChannel = MyChannel<Message, MESSAGE_CHANNEL_SIZE>;
 pub type MyMessageSender = MySender<Message, MESSAGE_CHANNEL_SIZE>;
 pub type MyMessageReceiver = MyReceiver<Message, MESSAGE_CHANNEL_SIZE>;
 
-pub type MyLSM9DS1 = LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>;
+pub type MyLSM9DS1 = LSM9DS1<SpiInterface<AccelGyroDevice, MagDevice>>;
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::InterruptHandler<peripherals::USART1>;
@@ -135,7 +135,7 @@ async fn read_gps_task(gps: (), channel: MyMessageSender) {
 #[embassy_executor::task]
 async fn read_lsm9ds1_task(
     // TODO: add a `split` function to the lsm9ds1 so that we can have two different tasks using it
-    mut lsm9ds1: LSM9DS1<SpiInterface<AccelDevice, MagnetDevice>>,
+    mut lsm9ds1: LSM9DS1<SpiInterface<AccelGyroDevice, MagDevice>>,
     // TODO: theres two interrupts here, possible too
     mut accel_gyro_data_ready: ExtiInput<'static>,
     mut mag_interrupt: ExtiInput<'static>,
@@ -324,12 +324,11 @@ async fn main(spawner: Spawner) {
     let spi_accel_gyro_drdy = ExtiInput::new(p.PA11, p.EXTI11, gpio::Pull::Down);
     let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down);
 
-    let spi_accel_gyro: AccelDevice = SpiDevice::new(spi_bus, spi_ag_cs);
-    let spi_magnetometer: MagnetDevice = SpiDevice::new(spi_bus, spi_mag_cs);
+    let spi_accel_gyro: AccelGyroDevice = SpiDevice::new(spi_bus, spi_ag_cs);
+    let spi_mag: MagDevice = SpiDevice::new(spi_bus, spi_mag_cs);
     let spi_radio: RadioDevice = SpiDevice::new(spi_bus, spi_radio_cs);
 
-    let lsm9sd1_spi_interface =
-        lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_magnetometer);
+    let lsm9sd1_spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_mag);
     // TODO: these all have slightly different sample rates. i don't love that. just be higher than our framerate?
     // TODO: we don't actually care about the mag settings unless we are displaying the compass
     let lsm9ds1 = lsm9ds1::LSM9DS1Init {
