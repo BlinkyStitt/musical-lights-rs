@@ -1,13 +1,13 @@
 use core::ops::Fn;
 use esp_idf_svc::{
     hal::uart::{UartRxDriver, UartTxDriver},
-    io::Write,
+    io::{Read, Write},
 };
 use esp_idf_sys::TickType_t;
 use heapless::Vec;
 use musical_lights_core::{
     errors::{MyError, MyResult},
-    logging::{error, warn},
+    logging::{error, info, warn},
     message::{deserialize_with_crc, serialize_with_crc_and_cobs, Message},
 };
 use postcard::accumulator::{CobsAccumulator, FeedResult};
@@ -33,6 +33,7 @@ impl<'a, const N: usize> UartToSensors<'a, N> {
 
     /// Write a Message with CRC and COBS.
     /// TODO: Return an error instead of unwrapping.
+    /// TODO: uarts have parity. i don't think we actually need crc
     pub fn write(&mut self, message: &Message) -> MyResult<()> {
         let encoded_len =
             serialize_with_crc_and_cobs(message, &mut self.crc_buffer, &mut self.output_buffer)?;
@@ -69,6 +70,8 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
         }
     }
 
+    // pub fn mock_loop<F>(&mut self, process_message: F, ) ...
+
     /// read messages from the uart until the uart shuts down
     /// TODO: how can we tell this loop to stop?
     pub fn read_loop<F>(&mut self, process_message: F, read_timeout: TickType_t) -> MyResult<()>
@@ -88,6 +91,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
         while let Ok(ct) = self.uart.read(&mut self.raw_buf, read_timeout) {
             if ct == 0 {
                 // Finished reading input
+                info!("read 0 bytes on uart");
                 break;
             }
 
@@ -106,6 +110,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
                         new_wind
                     }
                     FeedResult::Success { data, remaining } => {
+                        // TODO: uart already has parity checking. do we actually want the crc check too?
                         match deserialize_with_crc(&data) {
                             Ok(msg) => {
                                 process_message(msg)?;
@@ -120,6 +125,22 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
                 };
             }
         }
+        //         Err(err) => {
+        //             if err.code() == 263 {
+        //                 warn!("uart timeout");
+        //                 break;
+
+        //                 // TODO: `***ERROR*** A stack overflow in task pthread has been detected.`
+        //                 self.uart.clear().expect("uart clear failed");
+        //             } else {
+        //                 panic!("uart error: {:?}", err);
+        //             }
+        //         }
+        //     }
+        // }
+
+        info!("uart finished");
+
         Ok(())
     }
 }

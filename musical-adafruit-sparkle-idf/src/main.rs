@@ -4,12 +4,15 @@ mod light_patterns;
 mod sensor_uart;
 
 use biski64::Biski64Rng;
-use esp_idf_svc::hal::{
-    gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
-    i2s::{self, I2sDriver, I2S0},
-    prelude::Peripherals,
-    uart::{config::Config, UartDriver},
-    units::Hertz,
+use esp_idf_svc::{
+    hal::{
+        gpio::{AnyIOPin, Gpio10, Gpio23, Gpio25, Gpio26, Gpio27, Gpio33, Gpio9},
+        i2s::{self, I2sDriver, I2S0},
+        prelude::Peripherals,
+        uart::{config::Config, UartDriver},
+        units::Hertz,
+    },
+    io::Read,
 };
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
@@ -58,7 +61,7 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
-/// TODO: what size FFT? match the DMA buffer size?
+/// TODO: what size FFT? make sure the dma buffers from the i2s fit
 const FFT_INPUTS: usize = 4096;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
@@ -105,9 +108,6 @@ fn main() -> eyre::Result<()> {
 
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
     let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio22)?;
-
-    // TODO: what size?
-    let (audio_sample_tx, audio_sample_rx) = flume::bounded(10);
 
     // TODO: this baud rate needs to match the sensory board
     let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
@@ -168,9 +168,12 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: what size?
-    let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(10);
+    let (audio_sample_tx, audio_sample_rx) = flume::bounded::<Samples<I2S_SAMPLE_SIZE>>(10);
+
+    // TODO: what size?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
+    let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(10);
     let read_from_sensors_handle = thread::spawn(move || {
         read_from_sensors_task(
             message_for_sensors_tx,
@@ -201,9 +204,9 @@ fn main() -> eyre::Result<()> {
     let mic_handle = thread::spawn(move || {
         mic_task(
             peripherals.i2s0,
-            pins.gpio25,
             pins.gpio26,
-            pins.gpio27,
+            pins.gpio33,
+            pins.gpio25,
             audio_sample_tx,
         )
         .inspect_err(|err| {
@@ -222,12 +225,32 @@ fn main() -> eyre::Result<()> {
         }
     });
 
-    // TODO: do we care about joining handles here? is there an efficient way to join_first? we want to restart if any of these return
-    blink_neopixels_handle.join().unwrap()?;
-    mic_handle.join().unwrap()?;
-    fft_handle.join().unwrap()?;
-    send_to_sensors_handle.join().unwrap()?;
-    read_from_sensors_handle.join().unwrap()?;
+    mic_handle.join().unwrap().unwrap();
+
+    // // TODO: how do we do this efficiently?
+    // let mut handles = [
+    //     Some(("blink", blink_neopixels_handle)),
+    //     Some(("read_from_sensors_handle", read_from_sensors_handle)),
+    //     Some(("send_to_sensors_handle", send_to_sensors_handle)),
+    //     Some(("mic_handle", mic_handle)),
+    //     Some(("fft_handle", fft_handle)),
+    // ];
+    // loop {
+    //     for x in handles.iter_mut() {
+    //         if x.is_none() || x.as_ref().is_some_and(|(_, x)| !x.is_finished()) {
+    //             continue;
+    //         }
+
+    //         if let Some((label, handle)) = x.take() {
+    //             handle.join().expect("join failed").expect(label);
+
+    //             error!("a thread finished: {}", label);
+    //         } else {
+    //             unimplemented!();
+    //         }
+    //     }
+    //     sleep(Duration::from_millis(100));
+    // }
 
     // TODO: if we get here, should we force a restart?
     // unsafe { esp_restart() };
@@ -259,7 +282,7 @@ fn blink_neopixels_task(
     let mut fps = FpsTracker::new("pixel");
 
     loop {
-        info!("Hue: {g_hue}");
+        debug!("Hue: {g_hue}");
 
         // TODO: Hsl instead of Hsv?
         let base_hsv = Hsv {
@@ -313,6 +336,8 @@ fn blink_neopixels_task(
 
 /// TODO: this size is wrong. we don't get 4096 at once. we get some weird amount like 4092 u8s (1023 i32s)
 fn fft_task(audio_sample_rx: Receiver<Samples<I2S_SAMPLE_SIZE>>) -> eyre::Result<()> {
+    return Ok(());
+
     // create windows and weights and everything before starting any tasks
     let mut audio_buffer: AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS> = AudioBuffer::new();
 
@@ -330,6 +355,8 @@ fn fft_task(audio_sample_rx: Receiver<Samples<I2S_SAMPLE_SIZE>>) -> eyre::Result
 
     loop {
         let samples = audio_sample_rx.recv()?;
+
+        info!("received samples");
 
         audio_buffer.push_samples(samples);
 
@@ -349,9 +376,9 @@ fn fft_task(audio_sample_rx: Receiver<Samples<I2S_SAMPLE_SIZE>>) -> eyre::Result
 
 fn mic_task(
     i2s: I2S0, /*dma: I2s0DmaChannel, */
-    bclk: Gpio25,
-    ws: Gpio26,
-    din: Gpio27,
+    bclk: Gpio26,
+    ws: Gpio33,
+    din: Gpio25,
     audio_sample_tx: flume::Sender<Samples<I2S_SAMPLE_SIZE>>,
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
@@ -377,8 +404,10 @@ fn mic_task(
 
     let gpio_cfg = i2s::config::StdGpioConfig::default();
 
-    // let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits24);
+    // let i2s_config =
+    //     i2s::config::StdConfig::philips(I2S_SAMPLE_RATE_HZ, i2s::config::DataBitWidth::Bits16);
 
+    // TODO: i think we need a different config like this:
     let i2s_config = i2s::config::StdConfig::new(channel_cfg, clk_cfg, slot_cfg, gpio_cfg);
 
     // TODO: do we want the mclk pin?
@@ -390,18 +419,19 @@ fn mic_task(
     info!("I2S mic driver created");
 
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
-    let mut i2s_buffer = [0u8; I2S_U8_BUFFER_SIZE];
+    let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
     loop {
-        // TODO: what should the timeout be?!
-        let bytes_read = i2s_driver.read(&mut i2s_buffer, 4)?;
+        // TODO: read with a timeout? read_exact?
+        // TODO: this isn't ever returning. what are we doing wrong with the init/config?
+        i2s_driver.read_exact(i2s_buffer.as_mut_slice())?;
 
-        // debug!("Read {bytes_read} bytes from I2S mic");
+        info!("Read bytes from I2S mic");
 
-        // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
-        let samples: [f32; I2S_SAMPLE_SIZE] =
-            parse_i2s_24_bit_to_f32_array(&i2s_buffer[..bytes_read]);
+        // TODO: this is causing a stack overflow
+        // // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
+        // let samples: [f32; I2S_SAMPLE_SIZE] = parse_i2s_24_bit_to_f32_array(i2s_buffer.as_slice());
 
-        audio_sample_tx.send(Samples(samples))?;
+        // audio_sample_tx.send(Samples(samples))?;
     }
 }
 
@@ -414,18 +444,18 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
     let process_message = |msg| {
         info!("received msg: {msg:?}");
 
-        // TODO: only lock when necessary? pings and pongs aren't common
-        let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
-
         match msg {
             Message::Ping => {
                 // i don't think we actually see pings on this side, but it works for now
-                message_to_sensors.send(Message::Pong).unwrap();
+                message_to_sensors
+                    .send(Message::Pong)
+                    .expect("failed to respond with pong");
             }
             Message::Pong => {
-                pong_received.store(true, Ordering::SeqCst);
+                pong_received.store(true, Ordering::Relaxed);
             }
             Message::Orientation(orientation, mag) => {
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 state.orientation = orientation;
                 state.magnetometer = mag;
             }
@@ -433,22 +463,28 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
                 warn!("not sure what to do with gps time. maybe instead connect to the pulse-per-second line? but we don't have many pins available");
             }
             Message::PeerCoordinate(peer_id, coordinate) => {
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 state.peer_coordinate.insert(peer_id, coordinate);
             }
             Message::SelfCoordinate(coordinate) => {
                 // TODO: on startup, the key needs to be passed to the sensor board so it can sign radio messages
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 state.self_coordinate = coordinate;
             }
         }
 
-        drop(state);
-
         // TODO: should we send state into a watch channel? or is a mutex enough? arcswap maybe?
-        Ok(())
+        Ok::<_, MyError>(())
     };
 
+    // TODO: WE NEED A MOCK FUNCTION HERE!
+    process_message(Message::Pong).unwrap();
+
     // TODO: no idea what the timeout should be
-    uart_from_sensors.read_loop(process_message, 4)?;
+    // TODO: i think maybe we should use the async reader? we don't want a timeout
+    // uart_from_sensors.read_loop(process_message, 10)?;
+
+    // once the read loop exits, what should we do? it exits when it isn't connected
 
     Ok(())
 }
@@ -458,8 +494,11 @@ fn send_to_sensors_task<const N: usize>(
     pong_received: &'static AtomicBool,
     mut uart_to_sensors: UartToSensors<'static, N>,
 ) -> eyre::Result<()> {
+    return Ok(());
+
     // send a ping on an interval until we get a pong. then continue
-    while !pong_received.load(Ordering::SeqCst) {
+    while !pong_received.load(Ordering::Relaxed) {
+        info!("sending ping");
         uart_to_sensors.write(&Message::Ping)?;
         sleep(Duration::from_millis(100));
     }
@@ -468,6 +507,7 @@ fn send_to_sensors_task<const N: usize>(
     loop {
         let message = message_to_sensors.recv()?;
 
+        info!("writing to uart");
         uart_to_sensors.write(&message)?;
     }
 }
