@@ -4,20 +4,12 @@ mod light_patterns;
 mod sensor_uart;
 
 use biski64::Biski64Rng;
-use esp_idf_svc::{
-    // eventloop::EspSystemEventLoop,
-    hal::{
-        gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
-        i2s::{
-            config::{DataBitWidth, StdConfig},
-            I2sDriver, I2S0,
-        },
-        prelude::Peripherals,
-        uart::{config::Config, UartDriver},
-        units::Hertz,
-    },
-    // nvs::EspDefaultNvsPartition,
-    // timer::EspTaskTimerService,
+use esp_idf_svc::hal::{
+    gpio::{AnyIOPin, Gpio25, Gpio26, Gpio27},
+    i2s::{self, I2sDriver, I2S0},
+    prelude::Peripherals,
+    uart::{config::Config, UartDriver},
+    units::Hertz,
 };
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
@@ -72,9 +64,9 @@ const FFT_INPUTS: usize = 4096;
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 /// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
-const I2S_U8_BUFFER_SIZE: usize = 4092;
+const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<usize>();
 /// TODO: how do we make this fit cleanly in the fft size?
-const I2S_SAMPLE_SIZE: usize = I2S_U8_BUFFER_SIZE / 4;
+const I2S_SAMPLE_SIZE: usize = 512;
 
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
@@ -364,10 +356,30 @@ fn mic_task(
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
+    // TODO: what dma frame counts? what buffer count?
+    let channel_cfg = i2s::config::Config::default()
+        .frames_per_buffer(512)
+        .dma_buffer_count(4);
+
+    let clk_cfg = i2s::config::StdClkConfig::new(
+        I2S_SAMPLE_RATE_HZ,
+        i2s::config::ClockSource::Apll,
+        i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though
+    );
+
+    // TODO: really not sure about mono or stereo. it seems like all the default setup uses stereo
     // 24 bit audio is padded to 32 bits. how do they pad the sign though?
     // TODO: do we want to use 8 or 16 or 24 bit audio?
-    // TODO: philips is in stereo mode. can we switch it to mono?
-    let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits24);
+    let slot_cfg = i2s::config::StdSlotConfig::philips_slot_default(
+        i2s::config::DataBitWidth::Bits32,
+        i2s::config::SlotMode::Mono,
+    );
+
+    let gpio_cfg = i2s::config::StdGpioConfig::default();
+
+    // let i2s_config = StdConfig::philips(I2S_SAMPLE_RATE_HZ, DataBitWidth::Bits24);
+
+    let i2s_config = i2s::config::StdConfig::new(channel_cfg, clk_cfg, slot_cfg, gpio_cfg);
 
     // TODO: do we want the mclk pin?
     // TODO: DMA? i think thats handled for us
