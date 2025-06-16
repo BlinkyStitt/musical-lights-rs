@@ -5,9 +5,11 @@ use super::samples::Samples;
 
 /// buffer audio samples. might be read from a microphone wire to an ADC, or over i2s, or from anything
 /// outputs windowed samples for an FFT
+///
 pub struct AudioBuffer<const IN: usize, const OUT: usize> {
     count: usize,
-    buffer: CircularBuffer<OUT, f32>,
+    /// TODO: box should be optional
+    buffer: Box<CircularBuffer<OUT, f32>>,
 }
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
@@ -16,7 +18,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         assert!(OUT >= IN);
 
         // start with a buffer full of zeroes, NOT an empty buffer
-        let sample_buffer = CircularBuffer::from([0.0; OUT]);
+        let sample_buffer = CircularBuffer::boxed();
 
         Self {
             count: 0,
@@ -40,6 +42,23 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         samples
     }
 
+    pub fn boxed_samples(&self) -> Box<Samples<OUT>> {
+        let mut samples = Box::new([0.0; OUT]);
+
+        let (a, b) = self.buffer.as_slices();
+
+        samples[..a.len()].copy_from_slice(a);
+        samples[a.len()..].copy_from_slice(b);
+
+        todo!();
+
+        // let samples = Samples(samples);
+
+        // trace!("{:?}", samples);
+
+        // samples
+    }
+
     /// returns true if the buffer has been filled with enough values
     /// WARNING! BE CAREFUL COMBINGING THIS WITH `push_samples`. its best to use one or the other or you might not get true/false when you expect!
     pub fn push_sample(&mut self, sample: f32) -> bool {
@@ -51,7 +70,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         self.count % IN == 0
     }
 
-    pub fn push_samples(&mut self, samples: Samples<IN>) {
+    pub fn push_samples(&mut self, samples: &Samples<IN>) {
         trace!("new samples: {:?}", samples);
 
         self.count += samples.0.len();

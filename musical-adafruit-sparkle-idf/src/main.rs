@@ -18,8 +18,8 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{
-    bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
-    uxTaskGetStackHighWaterMark2,
+    bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size,
+    esp_get_minimum_free_heap_size, esp_random, uxTaskGetStackHighWaterMark,
 };
 use flume::Receiver;
 use musical_lights_core::{
@@ -63,16 +63,18 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 /// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
 /// TODO: should this match our slowest sensor?
 const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
-const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
+/// TODO: 48kHz?
+const I2S_SAMPLE_RATE_HZ: u32 = 44_100;
 
-/// TODO: what size FFT? make sure the dma buffers from the i2s fit
-const FFT_INPUTS: usize = 4096;
+/// TODO: what size FFT? i want to have 4096, but
+const FFT_INPUTS: usize = 2048;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 /// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
 /// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
+/// TODO: this is probably too small
 const I2S_SAMPLE_SIZE: usize = 256;
 
 /// TODO: add a lot more to this
@@ -83,6 +85,7 @@ struct State {
     orientation: Orientation,
     magnetometer: Magnetometer,
     self_coordinate: Coordinate,
+    self_id: Option<PeerId>,
     peer_coordinate: HashMap<PeerId, Coordinate>,
 }
 
@@ -220,48 +223,24 @@ fn main() -> eyre::Result<()> {
         )
     });
 
-    let fft_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"fft\0"),
-        priority: 2,
-        ..Default::default()
-    };
-    fft_thread_cfg.set()?;
-
-    let fft_handle = thread::spawn(move || {
-        fft_task(audio_sample_rx).inspect_err(|err| {
-            error!("Error in fft_task: {err}");
-        })
-    });
-
-    let mic_thread_cfg = ThreadSpawnConfiguration {
+    let mut mic_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"mic\0"),
         priority: 2,
         ..Default::default()
     };
+    mic_thread_cfg.stack_size += 1024 * 32; // TODO: how much bigger do we actually need?
     mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
     let mic_handle = thread::spawn(move || {
-        mic_task(
-            peripherals.i2s0,
-            pins.gpio26,
-            pins.gpio33,
-            pins.gpio25,
-            audio_sample_tx,
-        )
-        .inspect_err(|err| {
+        mic_task(peripherals.i2s0, pins.gpio26, pins.gpio33, pins.gpio25).inspect_err(|err| {
             error!("Error in mic task: {err}");
         })
     });
 
     // TODO: debug-only thread for monitoring ram/cpu/etc?
-
-    // let memory_thread_cfg = ThreadSpawnConfiguration {
-    //     stack_size
-    // }
-
     let memory_thread_cfg = ThreadSpawnConfiguration {
-        name: Some("memory".as_bytes()),
+        name: Some(b"memory\0"),
         priority: 1,
         ..Default::default()
     };
@@ -271,7 +250,13 @@ fn main() -> eyre::Result<()> {
         loop {
             // log free memory every 60 seconds. only do this if we are in debug mode
             let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
-            info!("Free memory: {free_memory}KB");
+            let min_free_memory = unsafe { esp_get_minimum_free_heap_size() } / 1024;
+
+            // TODO: print stack sizes of all the threads
+
+            info!("Free memory: {free_memory}KB (min {min_free_memory}KB)");
+
+            // uxTaskGetStackHighWaterMark(xTask);
 
             sleep(Duration::from_secs(1));
         }
@@ -376,6 +361,7 @@ fn blink_neopixels_task(
         // TODO: brightness should be from the config
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
+        // TODO: just run it as fast as the fft updates?
         sleep(Duration::from_nanos(
             1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
         ));
@@ -386,58 +372,12 @@ fn blink_neopixels_task(
     }
 }
 
-/// TODO: this size is wrong. we don't get 4096 at once. we get some weird amount like 4092 u8s (1023 i32s)
-fn fft_task(audio_sample_rx: Receiver<Samples<I2S_SAMPLE_SIZE>>) -> eyre::Result<()> {
-    return Ok(());
-
-    // create windows and weights and everything before starting any tasks
-    let mut audio_buffer: AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS> = AudioBuffer::new();
-
-    // TODO: i need custom weighting. the microphone dynamic gain might not work well with this
-    // TODO: i think the microphone might already have a weighting!
-    // let equal_loudness_weighting = AWeighting::new(SAMPLE_RATE);
-
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::new_with_window::<HanningWindow<FFT_INPUTS>>();
-
-    // TODO: bark scale? exponential scale? something else?
-    // i wanted to do bark scale, but it has 24 outputs and 256 isn't divisibly by 24
-    // let scale_builder = BarkScaleBuilder::<FFT_OUTPUTS>::new(I2S_SAMPLE_RATE_HZ as f32);
-    let scale_builder =
-        ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(20.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
-
-    loop {
-        let samples = audio_sample_rx.recv()?;
-
-        info!("received samples");
-
-        audio_buffer.push_samples(samples);
-
-        // TODO: for some reason rust analyzer is showing 512 here even though it should be more
-        let samples: Samples<FFT_INPUTS> = audio_buffer.samples();
-
-        let amplitudes = fft.weighted_amplitudes(samples);
-
-        let loudness = scale_builder.build(amplitudes);
-        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
-        // TODO: shazam
-        // TODO: beat detection
-
-        info!("loudness: {:?}", loudness);
-    }
-}
-
-fn mic_task(
-    i2s: I2S0, /*dma: I2s0DmaChannel, */
-    bclk: Gpio26,
-    ws: Gpio33,
-    din: Gpio25,
-    audio_sample_tx: flume::Sender<Samples<I2S_SAMPLE_SIZE>>,
-) -> eyre::Result<()> {
+fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
     // TODO: what dma frame counts? what buffer count?
     let channel_cfg = i2s::config::Config::default()
-        .frames_per_buffer(512)
+        .frames_per_buffer(I2S_SAMPLE_SIZE as u32)
         .dma_buffer_count(4);
 
     let clk_cfg = i2s::config::StdClkConfig::new(
@@ -470,6 +410,14 @@ fn mic_task(
 
     info!("I2S mic driver created");
 
+    let mut audio_buffer: AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS> = AudioBuffer::new();
+
+    // TODO: the fft is all on the stack. its too big. need to move it to the heap
+    // let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::new_with_window::<HanningWindow<FFT_INPUTS>>();
+
+    // let scale_builder =
+    //     ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(20.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
+
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
     loop {
@@ -477,29 +425,50 @@ fn mic_task(
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_buffer.as_mut_slice())?;
 
-        info!(
-            "Read i2s: {} {} {} {}",
-            i2s_buffer[0], i2s_buffer[1], i2s_buffer[2], i2s_buffer[3]
-        );
+        // trace!(
+        //     "Read i2s: {} {} {} {}",
+        //     i2s_buffer[0], i2s_buffer[1], i2s_buffer[2], i2s_buffer[3]
+        // );
 
         // TODO: without the box, this is causing a stack overflow
         // // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
         // TODO: uninit?
-        // let mut samples: Box<[f32; I2S_SAMPLE_SIZE]> = Box::new([0.0; I2S_SAMPLE_SIZE]);
-        let mut samples: [f32; I2S_SAMPLE_SIZE] = [0.0; I2S_SAMPLE_SIZE];
+        let mut samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
+        // let mut samples = [0.0f32; I2S_SAMPLE_SIZE];
 
-        // parse_i2s_24_bit_to_f32_array(
-        //     i2s_buffer.as_slice(),
-        //     samples.as_mut_array::<I2S_SAMPLE_SIZE>().unwrap(),
-        // );
+        // TODO: this should be a helper on Samples
+        parse_i2s_24_bit_to_f32_array(
+            i2s_buffer
+                .as_array::<I2S_U8_BUFFER_SIZE>()
+                .expect("i2s u8 buffer should fit"),
+            samples
+                .0
+                .as_mut_array::<I2S_SAMPLE_SIZE>()
+                .expect("i2s sample size should fit"),
+        );
 
-        // info!(
-        //     "Read bytes from I2S mic: {} ... {}",
-        //     samples[0],
-        //     samples[I2S_SAMPLE_SIZE - 1],
-        // );
+        // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
+        // info!("num f32s: {}", samples.0.len());
 
-        // audio_sample_tx.send(Samples(samples))?;
+        // TODO: i think this is crashing the app. but pushing them one at a time seems like a bad flow, too
+        // audio_buffer.push_samples(&samples);
+        for sample in samples.0.into_iter() {
+            if audio_buffer.push_sample(sample) {
+                // warn!("do the fft")
+            }
+        }
+
+        // // TODO: for some reason rust analyzer is showing 512 here even though it should be more
+        // let samples: Samples<FFT_INPUTS> = audio_buffer.samples();
+
+        // let amplitudes = fft.weighted_amplitudes(samples);
+
+        // let loudness = scale_builder.build(amplitudes);
+        // // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
+        // // TODO: shazam
+        // // TODO: beat detection
+
+        // info!("loudness: {:?}", loudness);
     }
 }
 

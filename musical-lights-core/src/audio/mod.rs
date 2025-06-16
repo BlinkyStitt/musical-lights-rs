@@ -30,7 +30,7 @@ pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
 pub use fft::{FFT, bin_to_frequency, frequency_to_bin};
-pub use i2s::{parse_i2s_24_bit_to_f32_array, parse_i2s_24_bit_to_i32};
+pub use i2s::parse_i2s_24_bit_to_f32_array;
 pub use peak_scaled::PeakScaledBuilder;
 pub use samples::{Samples, WindowedSamples};
 pub use weighting::{AWeighting, FlatWeighting, Weighting};

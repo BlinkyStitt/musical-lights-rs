@@ -1,4 +1,5 @@
 /// limit how fast a value can decrease
+/// TODO: have it decelerate like with gravity
 pub struct DownResistanceBuilder<const N: usize> {
     /// max rate that a value can decrease
     rate: f32,

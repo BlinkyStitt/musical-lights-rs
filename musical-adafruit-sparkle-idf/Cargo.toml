@@ -35,7 +35,7 @@ smart-leds-trait = "0.3.1"
 ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
 flume = "0.11.1"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
-    "std", "log"
+    "alloc", "std", "log"
 ] }
 postcard = "1.1.1"
 rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
