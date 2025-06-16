@@ -26,7 +26,7 @@ i24 = { version = "2.1.0", default-features = false }
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.6.0", default-features = false, features = [
     "size-2048",
-    # "size-4096",
+    "size-4096",
 ] }
 micromath = "2.1.0"
 nalgebra = { version = "0.33.2", default-features = false }
@@ -73,6 +73,7 @@ embassy = ["dep:embassy-time"]
 libm = [
     "palette/libm",
     "enterpolation/libm",
+    "i24/libm",
     "num/libm",
     "num-complex/libm",
     "heapless/portable-atomic",
