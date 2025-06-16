@@ -1,22 +1,16 @@
-const I24_MAX: f32 = (1 << 23) as f32;
+use i24::i24 as I24;
 
-/// TODO: better name. this is for 24-bit audio!
-/// TODO: write tests for this. chatgpt just made up nonsense
-pub fn parse_i2s_24_bit_to_i32(buf: &[u8]) -> impl Iterator<Item = i32> + '_ {
-    buf.chunks_exact(4)
-        .map(|chunk| i32::from_be_bytes(chunk.try_into().unwrap()) >> 8)
-}
+const I24_MAX: f32 = I24::MAX.to_i32() as f32;
 
 /// TODO: better name. this is for 24-bit audio!
 /// TODO: is there a more efficient way to do this?
-pub fn parse_i2s_24_bit_to_f32_array<const N: usize>(buf: &[u8]) -> [f32; N] {
+/// TODO: i think this is wrong. i'm not seeing any negative values come out of this
+pub fn parse_i2s_24_bit_to_f32_array<const N: usize>(buf: &[u8], out: &mut [f32; N]) {
     // TODO: debug assert? compile time assert?
     assert_eq!(buf.len(), N * 4);
 
-    let mut out = [0f32; N];
     for (i, chunk) in buf.chunks_exact(4).enumerate() {
-        let x = i32::from_be_bytes(chunk.try_into().unwrap()) >> 8;
-        out[i] = (x as f32 / I24_MAX).clamp(-1.0, 1.0);
+        let x = I24::from_be_bytes(chunk.try_into().expect("chunk should always fit"));
+        out[i] = (x.to_i32() as f32 / I24_MAX).clamp(-1.0, 1.0);
     }
-    out
 }

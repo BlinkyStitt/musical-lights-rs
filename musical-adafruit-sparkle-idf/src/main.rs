@@ -1,12 +1,15 @@
+//! TODO: totally unsure of prioritites. i should just start with everything on the same priority probably
 #![feature(type_alias_impl_trait)]
+#![feature(slice_as_array)]
 
 mod light_patterns;
 mod sensor_uart;
 
 use biski64::Biski64Rng;
+use esp_idf_svc::hal::task::thread::ThreadSpawnConfiguration;
 use esp_idf_svc::{
     hal::{
-        gpio::{AnyIOPin, Gpio10, Gpio23, Gpio25, Gpio26, Gpio27, Gpio33, Gpio9},
+        gpio::{AnyIOPin, Gpio25, Gpio26, Gpio33},
         i2s::{self, I2sDriver, I2S0},
         prelude::Peripherals,
         uart::{config::Config, UartDriver},
@@ -16,6 +19,7 @@ use esp_idf_svc::{
 };
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size, esp_random,
+    uxTaskGetStackHighWaterMark2,
 };
 use flume::Receiver;
 use musical_lights_core::{
@@ -67,9 +71,9 @@ const FFT_INPUTS: usize = 4096;
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 /// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
-const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<usize>();
-/// TODO: how do we make this fit cleanly in the fft size?
-const I2S_SAMPLE_SIZE: usize = 512;
+const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
+/// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
+const I2S_SAMPLE_SIZE: usize = 256;
 
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
@@ -153,6 +157,13 @@ fn main() -> eyre::Result<()> {
     // TODO: static? arc? something else?
     let state = Arc::new(Mutex::new(State::default()));
 
+    let blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
+        name: Some(b"blink_neopixels\0"),
+        priority: 2,
+        ..Default::default()
+    };
+    blink_neopixels_thread_cfg.set()?;
+
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_state = state.clone();
     let blink_neopixels_handle = thread::spawn(move || {
@@ -168,12 +179,20 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: what size?
-    let (audio_sample_tx, audio_sample_rx) = flume::bounded::<Samples<I2S_SAMPLE_SIZE>>(10);
+    let (audio_sample_tx, audio_sample_rx) = flume::bounded::<Samples<I2S_SAMPLE_SIZE>>(4);
 
     // TODO: what size?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
-    let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(10);
+    let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
+
+    let read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
+        name: Some(b"read_from_sensors\0"),
+        priority: 2,
+        ..Default::default()
+    };
+    read_from_sensors_thread_cfg.set()?;
+
     let read_from_sensors_handle = thread::spawn(move || {
         read_from_sensors_task(
             message_for_sensors_tx,
@@ -186,6 +205,13 @@ fn main() -> eyre::Result<()> {
         })
     });
 
+    let send_to_sensors_thread_cfg = ThreadSpawnConfiguration {
+        name: Some(b"send_to_sensors\0"),
+        priority: 2,
+        ..Default::default()
+    };
+    send_to_sensors_thread_cfg.set()?;
+
     let send_to_sensors_handle = thread::spawn(move || {
         send_to_sensors_task(message_for_sensors_rx, &PONG_RECEIVED, uart_to_sensors).inspect_err(
             |err| {
@@ -194,11 +220,25 @@ fn main() -> eyre::Result<()> {
         )
     });
 
+    let fft_thread_cfg = ThreadSpawnConfiguration {
+        name: Some(b"fft\0"),
+        priority: 2,
+        ..Default::default()
+    };
+    fft_thread_cfg.set()?;
+
     let fft_handle = thread::spawn(move || {
         fft_task(audio_sample_rx).inspect_err(|err| {
             error!("Error in fft_task: {err}");
         })
     });
+
+    let mic_thread_cfg = ThreadSpawnConfiguration {
+        name: Some(b"mic\0"),
+        priority: 2,
+        ..Default::default()
+    };
+    mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
     let mic_handle = thread::spawn(move || {
@@ -215,6 +255,18 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: debug-only thread for monitoring ram/cpu/etc?
+
+    // let memory_thread_cfg = ThreadSpawnConfiguration {
+    //     stack_size
+    // }
+
+    let memory_thread_cfg = ThreadSpawnConfiguration {
+        name: Some("memory".as_bytes()),
+        priority: 1,
+        ..Default::default()
+    };
+    memory_thread_cfg.set()?;
+
     let _memory_handle = thread::spawn(move || {
         loop {
             // log free memory every 60 seconds. only do this if we are in debug mode
@@ -425,11 +477,27 @@ fn mic_task(
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_buffer.as_mut_slice())?;
 
-        info!("Read bytes from I2S mic");
+        info!(
+            "Read i2s: {} {} {} {}",
+            i2s_buffer[0], i2s_buffer[1], i2s_buffer[2], i2s_buffer[3]
+        );
 
-        // TODO: this is causing a stack overflow
+        // TODO: without the box, this is causing a stack overflow
         // // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
-        // let samples: [f32; I2S_SAMPLE_SIZE] = parse_i2s_24_bit_to_f32_array(i2s_buffer.as_slice());
+        // TODO: uninit?
+        // let mut samples: Box<[f32; I2S_SAMPLE_SIZE]> = Box::new([0.0; I2S_SAMPLE_SIZE]);
+        let mut samples: [f32; I2S_SAMPLE_SIZE] = [0.0; I2S_SAMPLE_SIZE];
+
+        // parse_i2s_24_bit_to_f32_array(
+        //     i2s_buffer.as_slice(),
+        //     samples.as_mut_array::<I2S_SAMPLE_SIZE>().unwrap(),
+        // );
+
+        // info!(
+        //     "Read bytes from I2S mic: {} ... {}",
+        //     samples[0],
+        //     samples[I2S_SAMPLE_SIZE - 1],
+        // );
 
         // audio_sample_tx.send(Samples(samples))?;
     }

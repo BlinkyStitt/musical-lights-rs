@@ -36,6 +36,7 @@ postcard = { version = "1.1.1", features = ["experimental-derive", "use-crc"] }
 serde = { version = "1.0.219", default-features = false }
 smart-leds = "0.4.0"
 thiserror = { version = "2", default-features = false }
+i24 = { version = "2.1.0", features = ["serde"] }
 
 # TODO: these need std
 # eyre = { version = "0.6.12", default-features = false, features = [] }
@@ -59,6 +60,7 @@ alloc = [
     "circular-buffer/alloc",
     "cobs/alloc",
     "defmt/alloc",
+    "i24/alloc",
     "num/alloc",
     "palette/alloc",
     "postcard/alloc",
@@ -79,6 +81,7 @@ std = [
     "cobs/use_std",
     "ed25519-dalek/std",
     "enterpolation/std",
+    "i24/std",
     "log?/std",
     "microfft/std",
     "num-complex/std",

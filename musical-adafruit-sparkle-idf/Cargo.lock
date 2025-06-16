@@ -1139,6 +1139,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "i24"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe4e9f59fce450959a3bfe4a762ebba4afe2327ab3795ba11c489233c5d29733"
+dependencies = [
+ "bytemuck",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1365,6 +1376,7 @@ dependencies = [
  "embedded-io-async",
  "enterpolation",
  "heapless 0.8.0",
+ "i24",
  "log",
  "microfft",
  "micromath",
