@@ -550,7 +550,6 @@ checksum = "fe4e9f59fce450959a3bfe4a762ebba4afe2327ab3795ba11c489233c5d29733"
 dependencies = [
  "bytemuck",
  "num-traits",
- "serde",
 ]
 
 [[package]]

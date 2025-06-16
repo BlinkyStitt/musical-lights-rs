@@ -13,6 +13,7 @@ pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
     assert_eq!(IN, OUT * size_of::<f32>());
 
     for (chunk, x) in input.chunks_exact(4).zip(output.iter_mut()) {
+        // chunk[0] is always empty
         *x = I24::from_be_bytes([chunk[1], chunk[2], chunk[3]]).to_i32() as f32 / I24_MAX;
 
         debug_assert!(*x >= -1.0);

@@ -9,7 +9,7 @@ use super::samples::Samples;
 pub struct AudioBuffer<const IN: usize, const OUT: usize> {
     count: usize,
     /// TODO: box should be optional
-    buffer: Box<CircularBuffer<OUT, f32>>,
+    buffer: CircularBuffer<OUT, f32>,
 }
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
@@ -18,7 +18,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         assert!(OUT >= IN);
 
         // start with a buffer full of zeroes, NOT an empty buffer
-        let sample_buffer = CircularBuffer::boxed();
+        let sample_buffer = CircularBuffer::new();
 
         Self {
             count: 0,
@@ -42,6 +42,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         samples
     }
 
+    #[cfg(feature = "std")]
     pub fn boxed_samples(&self) -> Box<Samples<OUT>> {
         let mut samples = Box::new([0.0; OUT]);
 

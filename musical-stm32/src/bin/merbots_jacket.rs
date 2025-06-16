@@ -178,7 +178,9 @@ async fn fft_task(
         // every `MIC_SAMPLES` samples (probably 512), do an FFT
         let samples = mic_rx.receive().await;
 
-        audio_buffer.push_samples(samples);
+        audio_buffer.push_samples(&samples);
+
+        drop(samples);
 
         let samples = audio_buffer.samples();
 

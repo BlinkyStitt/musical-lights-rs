@@ -19,7 +19,7 @@ use esp_idf_svc::{
 };
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size,
-    esp_get_minimum_free_heap_size, esp_random, uxTaskGetStackHighWaterMark,
+    esp_get_minimum_free_heap_size, esp_random, heap_caps_dump_all, uxTaskGetStackHighWaterMark,
 };
 use flume::Receiver;
 use musical_lights_core::{
@@ -157,6 +157,8 @@ fn main() -> eyre::Result<()> {
     let rng_2_hello = rng_2.next_u64();
     debug!("rng {} {}", rng_1_hello, rng_2_hello);
 
+    unsafe { heap_caps_dump_all() };
+
     // TODO: static? arc? something else?
     let state = Arc::new(Mutex::new(State::default()));
 
@@ -228,7 +230,7 @@ fn main() -> eyre::Result<()> {
         priority: 2,
         ..Default::default()
     };
-    mic_thread_cfg.stack_size += 1024 * 32; // TODO: how much bigger do we actually need?
+    mic_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need?
     mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
@@ -255,6 +257,8 @@ fn main() -> eyre::Result<()> {
             // TODO: print stack sizes of all the threads
 
             info!("Free memory: {free_memory}KB (min {min_free_memory}KB)");
+
+            // unsafe { heap_caps_dump_all() };
 
             // uxTaskGetStackHighWaterMark(xTask);
 

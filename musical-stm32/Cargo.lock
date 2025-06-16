@@ -776,12 +776,10 @@ dependencies = [
 [[package]]
 name = "i24"
 version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4e9f59fce450959a3bfe4a762ebba4afe2327ab3795ba11c489233c5d29733"
+source = "git+https://github.com/BlinkyStitt/i24.git?rev=4f41af60055f756740572121bb7ff1cadf39233b#4f41af60055f756740572121bb7ff1cadf39233b"
 dependencies = [
  "bytemuck",
  "num-traits",
- "serde",
 ]
 
 [[package]]
