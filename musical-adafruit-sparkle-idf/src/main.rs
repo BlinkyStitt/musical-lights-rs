@@ -42,6 +42,7 @@ use smart_leds::{
     RGB8,
 };
 use smart_leds_trait::SmartLedsWrite;
+use std::thread::yield_now;
 use std::{
     collections::HashMap,
     sync::{
@@ -178,10 +179,13 @@ fn main() -> eyre::Result<()> {
             })
     });
 
+    // TODO: is this a good idea? i want the light code running ASAP
+    yield_now();
+
     // TODO: what size? do we need an arc around this? or is a static okay?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
-    // TODO: use the channels that come with idf instead?
+    // TODO: use the channels that come with idf instead? should they be static?
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
     let mut read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
@@ -309,14 +313,14 @@ fn blink_neopixels_task(
     // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with the other art?
     let mut g_hue = rng.next_u32() as u8;
 
-    // TODO: do we want these boxed? they are large
+    // TODO: do we want these boxed? they are large. maybe they should be statics instead?
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
     // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
 
-    let mut fps = FpsTracker::new("pixel");
+    let mut fps = Box::new(FpsTracker::new("pixel"));
 
     loop {
         debug!("Hue: {g_hue}");
@@ -441,6 +445,8 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
 
     info!("i2s_samples created");
 
+    let mut fps = Box::new(FpsTracker::new("i2s"));
+
     loop {
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
@@ -472,6 +478,8 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
         // // TODO: beat detection
 
         // info!("loudness: {:?}", loudness);
+
+        fps.tick();
     }
 }
 
@@ -522,26 +530,20 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
         Ok::<_, MyError>(())
     };
 
-    // TODO: WE NEED A MOCK FUNCTION HERE! make it easy to enable running without the sensor board. just send
-    process_message(Message::Pong).unwrap();
-
     // TODO: no idea what the timeout should be
     // TODO: this read loop is causing a stack overflow. how?!
     // TODO: i think maybe we should use the async reader? we don't want a timeout
-    // if let Err(err) = uart_from_sensors.read_loop(process_message, 10) {
-    //     error!("failed reading from uart");
-    // };
+    if let Err(err) = uart_from_sensors.read_loop(process_message, 10) {
+        error!("failed reading from uart");
+        error!("{err:?}");
+    };
 
     // TODO: once the read loop exits, what should we do? it exits when it isn't connected
 
+    // // TODO: stack overflow here?
     // // uart errored or disconnected
     // // TODO: ONLY in debug mode, run a mock loop. otherwise just set the state to something useful
-    // uart_from_sensors.mock_loop(process_message)?;
-
-    // TODO: stack overflow here?
-    loop {
-        sleep(Duration::from_secs(1));
-    }
+    uart_from_sensors.mock_loop(process_message)?;
 
     Ok(())
 }

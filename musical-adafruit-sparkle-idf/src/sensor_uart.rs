@@ -6,10 +6,11 @@ use esp_idf_svc::{
 use esp_idf_sys::TickType_t;
 use heapless::Vec;
 use musical_lights_core::{
-    compass::Magnetometer,
     errors::{MyError, MyResult},
     logging::{error, info, warn},
-    message::{deserialize_with_crc, serialize_with_crc_and_cobs, Message},
+    message::{
+        deserialize_with_crc, max_size_with_crc_and_cobs, serialize_with_crc_and_cobs, Message,
+    },
     orientation::Orientation,
 };
 use postcard::accumulator::{CobsAccumulator, FeedResult};
@@ -77,8 +78,10 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
     where
         F: Fn(Message) -> MyResult<()>,
     {
-        process_message(Message::Pong)?;
+        warn!("faking Pong");
+        process_message(Message::Pong).unwrap();
 
+        warn!("clearing orientation");
         process_message(Message::Orientation(Orientation::Unknown))?;
 
         loop {
@@ -96,10 +99,12 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
         F: Fn(Message) -> MyResult<()>,
     {
         // TODO: how should we make this work, and what should the asserts be?
-        // const _: () = assert!(RAW_BUF_BYTES > COB_BUF_BYTES, "RAW_BUF_BYTES must be greater than COB_BUF_BYTES");
-        // const _: () = assert!(RAW_BUF_BYTES > 0, "RAW_BUF_BYTES must be greater than 0");
-        // const RAW_BUF_BYTES: usize = max_size_with_crc_and_cobs::<T>();
-        // const _: () = assert!(RAW_BUF_BYTES * 3 == COB_BUF_BYTES);
+        assert!(
+            RAW_BUF_BYTES <= COB_BUF_BYTES,
+            "RAW_BUF_BYTES must be <= than COB_BUF_BYTES"
+        );
+        const RAW_BUF_BYTES: usize = max_size_with_crc_and_cobs::<Message>();
+        assert!(RAW_BUF_BYTES * 3 <= COB_BUF_BYTES);
 
         // TODO: what size do these buffers need to be?
 
