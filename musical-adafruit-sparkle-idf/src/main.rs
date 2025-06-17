@@ -40,9 +40,9 @@ use smart_leds::{
     RGB8,
 };
 use smart_leds_trait::SmartLedsWrite;
+use static_cell::{ConstStaticCell, StaticCell};
 use std::thread::yield_now;
 use std::{
-    collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
         RwLock,
@@ -53,7 +53,7 @@ use std::{
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 use crate::debug::log_stack_high_water_mark;
-use crate::light_patterns::{loading, startup};
+use crate::light_patterns::loading;
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -90,8 +90,21 @@ struct State {
     magnetometer: Option<Magnetometer>,
     self_coordinate: Option<Coordinate>,
     self_id: Option<PeerId>,
-    peer_coordinate: HashMap<PeerId, Coordinate>,
+    // TODO: max peers so that we dont run out of ram. what does this do when its full though?
+    peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, 4>,
 }
+
+// impl State {
+//     pub const fn new() -> Self {
+//         State {
+//             orientation: Orientation::Unknown,
+//             magnetometer: None,
+//             self_coordinate: None,
+//             self_id: None,
+//             peer_coordinate: FnvIndexMap::new(),
+//         }
+//     }
+// }
 
 fn main() -> eyre::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -166,7 +179,7 @@ fn main() -> eyre::Result<()> {
 
     // unsafe { heap_caps_dump_all() };
 
-    // TODO: static? arc? something else?
+    // TODO: static_cell? arc? something else? LazyLock from std?
     static STATE: Lazy<RwLock<State>> = Lazy::new(|| RwLock::new(State::default()));
 
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
@@ -465,11 +478,18 @@ fn mic_task(
     // log_stack_high_water_mark("mic 2", None);
 
     // TODO: this should maybe be a static+Lazy+Mutex instead of a box?
-    // TODO: does boxing do what we want?
+    // TODO: does boxing do what we want? i think its too big to make on the stack at all. we need to think more about this. maybe a static will work, but we might not have enough space there either
     // let mut audio_buffer: Box<AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS>> =
     //     Box::new(AudioBuffer::new());
 
-    // info!("Audio buffer created");
+    // TODO: still not sure if i should use static_cell or once_cell
+    // TODO: how do we put this in .bss? is that what we want
+    static AUDIO_BUFFER: ConstStaticCell<AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS>> =
+        ConstStaticCell::new(AudioBuffer::new());
+    let audio_buffer = AUDIO_BUFFER.take();
+    audio_buffer.fill();
+
+    info!("Audio buffer created");
 
     // TODO: the fft is all on the stack. its too big. need to move it to the heap
     // let fft: Box<FFT<FFT_INPUTS, FFT_OUTPUTS>> =
@@ -484,17 +504,19 @@ fn mic_task(
 
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     // TODO: do we actually want this in a Box?
+    // TODO: should this be in a Const Static Cell instead?
     let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
     info!("i2s_buffer created");
 
     // TODO: allocate this to somewhere special in ram? there seems to be a lot of choices
+    // TODO: should this be in a Const Static Cell instead?
     let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
     info!("i2s_samples created");
 
     // theres no need for i2s fps tracking when the pixel has its own tracker
     // let mut fps = Box::new(FpsTracker::new("i2s"));
 
-    // log_stack_high_water_mark("mic 3", None);
+    log_stack_high_water_mark("mic 3", None);
 
     loop {
         // TODO: read with a timeout? read_exact?
@@ -512,7 +534,7 @@ fn mic_task(
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
-        // audio_buffer.push_samples(i2s_samples);
+        audio_buffer.push_samples(&i2s_samples);
 
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
 
@@ -574,7 +596,11 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
             }
             Message::PeerCoordinate(peer_id, coordinate) => {
                 let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
-                state.peer_coordinate.insert(peer_id, coordinate);
+                if let Err((peer_id, peer_coord)) =
+                    state.peer_coordinate.insert(peer_id, coordinate)
+                {
+                    error!("too many peers: {:?} @ {:?}", peer_id, peer_coord);
+                };
             }
             Message::SelfCoordinate(coordinate) => {
                 // TODO: on startup, the key needs to be passed to the sensor board so it can sign radio messages

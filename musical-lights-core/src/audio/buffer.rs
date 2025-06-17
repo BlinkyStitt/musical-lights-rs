@@ -7,28 +7,28 @@ use super::samples::Samples;
 /// outputs windowed samples for an FFT
 pub struct AudioBuffer<const IN: usize, const OUT: usize> {
     count: usize,
-    /// TODO: box should be optional
     buffer: CircularBuffer<OUT, f32>,
 }
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
-    pub fn new() -> Self {
-        // // TODO: what is this the right way to do a compile time assert
-        // // TODO: assert that out fits in evently?
-        // const _: () = {
+    pub const fn new() -> Self {
+        // TODO: what is this the right way to do a compile time assert
         assert!(OUT >= IN);
-        assert_eq!(OUT % IN, 0);
-        // };
+        assert!(OUT % IN == 0);
 
-        let mut sample_buffer = CircularBuffer::new();
+        let sample_buffer = CircularBuffer::new();
 
-        // TODO: should we start with a buffer full of zeroes, NOT an empty buffer?
-        sample_buffer.fill(0.0);
+        // TODO: should we start with a buffer full of zeroes, NOT an empty buffer? this can't be const then
+        // sample_buffer.fill(0.0);
 
         Self {
             count: 0,
             buffer: sample_buffer,
         }
+    }
+
+    pub fn fill(&mut self) {
+        self.buffer.fill(0.0);
     }
 
     pub fn samples(&self) -> Samples<OUT> {
