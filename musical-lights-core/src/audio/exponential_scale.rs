@@ -6,6 +6,9 @@ use crate::logging::info;
 #[allow(unused_imports)]
 use micromath::F32Ext;
 
+/// TODO: do this more efficiently?
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
     map: [Option<usize>; IN],
 }

@@ -6,6 +6,7 @@ use smart_leds::{
 use crate::State;
 
 /// TODO: actually show the compass
+/// TODO: this should be a struct that keeps track of where it is in this pattern.
 pub fn startup(base_hsv: Hsv, light_data: &mut [RGB8], state: &State) {
     // TODO: 1 red
     // TODO: 1 blank

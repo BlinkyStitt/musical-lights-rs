@@ -2,6 +2,7 @@
 #![feature(type_alias_impl_trait)]
 #![feature(slice_as_array)]
 
+mod debug;
 mod light_patterns;
 mod sensor_uart;
 
@@ -17,10 +18,7 @@ use esp_idf_svc::{
     },
     io::Read,
 };
-use esp_idf_sys::{
-    bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size,
-    esp_get_minimum_free_heap_size, esp_random,
-};
+use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
 use musical_lights_core::{
     audio::{
         parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer,
@@ -54,6 +52,7 @@ use std::{
 };
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
+use crate::debug::{log_stack_high_water_mark, stack_high_water_mark};
 use crate::light_patterns::loading;
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
@@ -64,7 +63,7 @@ const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 /// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
 /// TODO: should this match our slowest sensor?
-const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
+// const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 /// TODO: 48kHz?
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
@@ -137,8 +136,11 @@ fn main() -> eyre::Result<()> {
     let (uart_to_sensors_tx, uart_to_sensors_rx) = uart_to_sensors.into_split();
 
     // TODO: pick proper sizes for these buffers. 256 should work, but its not correct
-    let uart_from_sensors: UartFromSensors<'_, 256, 256> = UartFromSensors::new(uart_to_sensors_rx);
-    let uart_to_sensors: UartToSensors<'_, 256> = UartToSensors::new(uart_to_sensors_tx);
+    // TODO: box the usart sensor things? its got some big buffers inside of it
+    let mut uart_from_sensors: Box<UartFromSensors<'_, 256, 256>> =
+        Box::new(UartFromSensors::new(uart_to_sensors_rx));
+    let mut uart_to_sensors: Box<UartToSensors<'_, 256>> =
+        Box::new(UartToSensors::new(uart_to_sensors_tx));
 
     // TODO: do we need two cores? how do we set them up?
 
@@ -167,6 +169,9 @@ fn main() -> eyre::Result<()> {
     // TODO: static? arc? something else?
     static STATE: Lazy<RwLock<State>> = Lazy::new(|| RwLock::new(State::default()));
 
+    // TODO: is there a better way to do signals? i think there probably is something built into esp32
+    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
+
     let blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"blink_neopixels\0"),
         priority: 2,
@@ -176,11 +181,42 @@ fn main() -> eyre::Result<()> {
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     let blink_neopixels_handle = thread::spawn(move || {
-        blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external, rng_1, &STATE)
-            .inspect_err(|err| {
-                error!("Error in blink_neopixels_task");
-                error!("{err:?}");
-            })
+        blink_neopixels_task(
+            &mut neopixel_onboard,
+            &mut neopixel_external,
+            rng_1,
+            &STATE,
+            fft_ready_rx,
+        )
+        .inspect_err(|err| {
+            error!("Error in blink_neopixels_task");
+            error!("{err:?}");
+        })
+    });
+
+    // TODO: is this a good idea? i want the light code running ASAP
+    yield_now();
+
+    let mut mic_thread_cfg = ThreadSpawnConfiguration {
+        name: Some(b"mic\0"),
+        priority: 2,
+        ..Default::default()
+    };
+    mic_thread_cfg.stack_size += 1024 * 70; // TODO: how much bigger do we actually need?
+    mic_thread_cfg.set()?;
+
+    // TODO: make sure this has the highest priority?
+    let mic_handle = thread::spawn(move || {
+        mic_task(
+            peripherals.i2s0,
+            pins.gpio26,
+            pins.gpio33,
+            pins.gpio25,
+            &mut fft_ready_tx,
+        )
+        .inspect_err(|err| {
+            error!("Error in mic task: {err}");
+        })
     });
 
     // TODO: is this a good idea? i want the light code running ASAP
@@ -189,7 +225,7 @@ fn main() -> eyre::Result<()> {
     // TODO: what size? do we need an arc around this? or is a static okay?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
-    // TODO: use the channels that come with idf instead? should they be static?
+    // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
     let mut read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
@@ -205,7 +241,7 @@ fn main() -> eyre::Result<()> {
             message_for_sensors_tx,
             &PONG_RECEIVED,
             &STATE,
-            uart_from_sensors,
+            &mut uart_from_sensors,
         )
         .inspect_err(|err| {
             error!("Error in sensor_rx_task");
@@ -221,25 +257,13 @@ fn main() -> eyre::Result<()> {
     send_to_sensors_thread_cfg.set()?;
 
     let send_to_sensors_handle = thread::spawn(move || {
-        send_to_sensors_task(message_for_sensors_rx, &PONG_RECEIVED, uart_to_sensors).inspect_err(
-            |err| {
-                error!("Error in sensor_tx_task: {err}");
-            },
+        send_to_sensors_task(
+            message_for_sensors_rx,
+            &PONG_RECEIVED,
+            uart_to_sensors.as_mut(),
         )
-    });
-
-    let mut mic_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"mic\0"),
-        priority: 2,
-        ..Default::default()
-    };
-    mic_thread_cfg.stack_size += 1024 * 70; // TODO: how much bigger do we actually need?
-    mic_thread_cfg.set()?;
-
-    // TODO: make sure this has the highest priority?
-    let mic_handle = thread::spawn(move || {
-        mic_task(peripherals.i2s0, pins.gpio26, pins.gpio33, pins.gpio25).inspect_err(|err| {
-            error!("Error in mic task: {err}");
+        .inspect_err(|err| {
+            error!("Error in sensor_tx_task: {err}");
         })
     });
 
@@ -312,6 +336,7 @@ fn blink_neopixels_task(
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
     mut rng: Biski64Rng,
     state: &'static RwLock<State>,
+    fft_ready: flume::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
@@ -373,10 +398,11 @@ fn blink_neopixels_task(
         // TODO: brightness should be from the config
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
-        // TODO: just run it as fast as the fft updates?
-        sleep(Duration::from_nanos(
-            1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
-        ));
+        // // TODO: just run it as fast as the fft updates?
+        // sleep(Duration::from_nanos(
+        //     1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
+        // ));
+        fft_ready.recv()?;
 
         g_hue = g_hue.wrapping_add(1);
 
@@ -384,8 +410,17 @@ fn blink_neopixels_task(
     }
 }
 
-fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()> {
+fn mic_task(
+    i2s: I2S0,
+    bclk: Gpio26,
+    ws: Gpio33,
+    din: Gpio25,
+    fft_ready: &mut flume::Sender<()>,
+) -> eyre::Result<()> {
+    // sleep(Duration::from_secs(1));
     info!("Start I2S mic!");
+
+    log_stack_high_water_mark("mic", None);
 
     // TODO: what dma frame counts? what buffer count?
     let channel_cfg = i2s::config::Config::default()
@@ -395,7 +430,7 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
     let clk_cfg = i2s::config::StdClkConfig::new(
         I2S_SAMPLE_RATE_HZ,
         i2s::config::ClockSource::Apll,
-        i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though
+        i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
     );
 
     // TODO: really not sure about mono or stereo. it seems like all the default setup uses stereo
@@ -421,6 +456,8 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
 
+    log_stack_high_water_mark("mic", None);
+
     // TODO: this should maybe be a static+Lazy+Mutex instead of a box?
     // TODO: does boxing do what we want?
     // let mut audio_buffer: Box<AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS>> =
@@ -432,8 +469,12 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
     // let fft: Box<FFT<FFT_INPUTS, FFT_OUTPUTS>> =
     //     Box::new(FFT::new_with_window::<HanningWindow<FFT_INPUTS>>());
 
-    // let scale_builder =
-    //     ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(20.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
+    // let scale_builder = Box::new(ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(
+    //     20.0,
+    //     15_500.0,
+    //     I2S_SAMPLE_RATE_HZ as f32,
+    // ));
+    // info!("scale_builder: {:?}", scale_builder);
 
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     // TODO: do we actually want this in a Box?
@@ -481,6 +522,8 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
         // TODO: notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push? that might just be wasted resources
 
         fps.tick();
+
+        fft_ready.try_send(()).ok();
     }
 }
 
@@ -489,7 +532,7 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
     message_to_sensors: flume::Sender<Message>,
     pong_received: &'static AtomicBool,
     state: &'static RwLock<State>,
-    mut uart_from_sensors: UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
+    uart_from_sensors: &mut UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
 ) -> eyre::Result<()> {
     let process_message = |msg| {
         info!("received msg: {msg:?}");
@@ -552,7 +595,7 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
 fn send_to_sensors_task<const N: usize>(
     message_to_sensors: flume::Receiver<Message>,
     pong_received: &'static AtomicBool,
-    mut uart_to_sensors: UartToSensors<'static, N>,
+    uart_to_sensors: &mut UartToSensors<'static, N>,
 ) -> eyre::Result<()> {
     // send a ping on an interval until we get a pong. then continue
     while !pong_received.load(Ordering::SeqCst) {
