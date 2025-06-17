@@ -78,6 +78,10 @@ const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
 /// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
 const I2S_SAMPLE_SIZE: usize = 512;
 
+const _SAFETY_CHECKS: () = {
+    assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
+};
+
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
 /// TODO: include self in the main peer_coordinate map?
