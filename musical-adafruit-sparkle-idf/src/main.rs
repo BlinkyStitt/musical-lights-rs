@@ -52,8 +52,8 @@ use std::{
 };
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
-use crate::debug::{log_stack_high_water_mark, stack_high_water_mark};
-use crate::light_patterns::loading;
+use crate::debug::log_stack_high_water_mark;
+use crate::light_patterns::{loading, startup};
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -172,11 +172,12 @@ fn main() -> eyre::Result<()> {
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
     let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
 
-    let blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
+    let mut blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"blink_neopixels\0"),
         priority: 2,
         ..Default::default()
     };
+    blink_neopixels_thread_cfg.stack_size += 1024;
     blink_neopixels_thread_cfg.set()?;
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
@@ -202,7 +203,8 @@ fn main() -> eyre::Result<()> {
         priority: 2,
         ..Default::default()
     };
-    mic_thread_cfg.stack_size += 1024 * 70; // TODO: how much bigger do we actually need?
+    // TODO: this size does not match what i'm actually seeing. i'm confused
+    mic_thread_cfg.stack_size += 1024 * 71; // TODO: how much bigger do we actually need?
     mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
@@ -365,7 +367,7 @@ fn blink_neopixels_task(
         // TODO: gamme correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
-        // TODO: clone here?
+        // TODO: clone here? is it okay to hold this lock open while we calculate things?
         let state = state.read().map_err(|_| MyError::PoisonLock)?;
 
         // TODO: have a way to smoothly transition between patterns
@@ -378,6 +380,7 @@ fn blink_neopixels_task(
                 compass(base_hsv, fibonacci_data.as_mut_slice(), &state);
             }
             Orientation::LeftUp | Orientation::RightUp | Orientation::TopUp => {
+                // TODO: variable patterns here
                 rainbow(base_hsv, fibonacci_data.as_mut_slice());
             }
             Orientation::Unknown => {
@@ -398,7 +401,8 @@ fn blink_neopixels_task(
         // TODO: brightness should be from the config
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
-        // // TODO: just run it as fast as the fft updates?
+        // // TODO: run it as fast as the fft updates? or on a timer?
+        // // the fft should update consistently and we don't want two frames of the same data, so i think i like this
         // sleep(Duration::from_nanos(
         //     1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
         // ));
@@ -407,6 +411,8 @@ fn blink_neopixels_task(
         g_hue = g_hue.wrapping_add(1);
 
         fps.tick();
+
+        // log_stack_high_water_mark("blink loop", None);
     }
 }
 
@@ -420,7 +426,7 @@ fn mic_task(
     // sleep(Duration::from_secs(1));
     info!("Start I2S mic!");
 
-    log_stack_high_water_mark("mic", None);
+    // log_stack_high_water_mark("mic 1", None);
 
     // TODO: what dma frame counts? what buffer count?
     let channel_cfg = i2s::config::Config::default()
@@ -456,7 +462,7 @@ fn mic_task(
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
 
-    log_stack_high_water_mark("mic", None);
+    // log_stack_high_water_mark("mic 2", None);
 
     // TODO: this should maybe be a static+Lazy+Mutex instead of a box?
     // TODO: does boxing do what we want?
@@ -485,7 +491,10 @@ fn mic_task(
     let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
     info!("i2s_samples created");
 
-    let mut fps = Box::new(FpsTracker::new("i2s"));
+    // theres no need for i2s fps tracking when the pixel has its own tracker
+    // let mut fps = Box::new(FpsTracker::new("i2s"));
+
+    // log_stack_high_water_mark("mic 3", None);
 
     loop {
         // TODO: read with a timeout? read_exact?
@@ -521,9 +530,13 @@ fn mic_task(
 
         // TODO: notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push? that might just be wasted resources
 
-        fps.tick();
+        // fps.tick();
 
+        // TODO: is this the best way to notify the other thread to run?
         fft_ready.try_send(()).ok();
+
+        // TODO: this is too verbose. maybe this should take the log level as an arg? or only display once per second? maybe put this into the fps counter?
+        // log_stack_high_water_mark("mic loop", None);
     }
 }
 
