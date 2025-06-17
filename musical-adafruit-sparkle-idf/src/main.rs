@@ -513,6 +513,10 @@ fn mic_task(
     let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
     info!("i2s_samples created");
 
+    // TODO: like the other buffers, i'm not sure if this should be a box or a static or a const static
+    let mut fft_samples = Box::new(Samples([0.0; FFT_INPUTS]));
+    info!("fft_samples created");
+
     // theres no need for i2s fps tracking when the pixel has its own tracker
     // let mut fps = Box::new(FpsTracker::new("i2s"));
 
@@ -539,7 +543,8 @@ fn mic_task(
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
 
         // // TODO: for some reason rust analyzer is showing 512 here even though it should be more
-        // let samples: Samples<FFT_INPUTS> = audio_buffer.samples();
+        // TODO: do we need them copied here? should we use references still?
+        audio_buffer.samples_in_place(fft_samples.as_mut());
 
         // let amplitudes = fft.weighted_amplitudes(samples);
 

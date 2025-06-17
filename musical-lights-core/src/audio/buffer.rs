@@ -31,20 +31,29 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         self.buffer.fill(0.0);
     }
 
+    /// TODO: can we do this without creating a whole new array?
+    /// TODO: option to return samples in a box?
     pub fn samples(&self) -> Samples<OUT> {
         // TODO: this could probably be more efficient. benchmark. i think two refs might be better than copying. or maybe this should take a &mut [f32; BUF]
-        let mut samples = [0.0; OUT];
+        let mut samples = Samples([0.0; OUT]);
 
-        let (a, b) = self.buffer.as_slices();
-
-        samples[..a.len()].copy_from_slice(a);
-        samples[a.len()..].copy_from_slice(b);
-
-        let samples = Samples(samples);
-
-        trace!("{:?}", samples);
+        Self::samples_in_place(&self, &mut samples);
 
         samples
+    }
+
+    /// TODO: think more about this. maybe we actually just want an iter
+    #[inline]
+    pub fn samples_in_place(&self, samples: &mut Samples<OUT>) {
+        let (a, b) = self.buffer.as_slices();
+
+        samples.0[..a.len()].copy_from_slice(a);
+        samples.0[a.len()..].copy_from_slice(b);
+    }
+
+    #[inline]
+    pub fn samples_iter(&self) -> impl Iterator<Item = &f32> {
+        self.buffer.iter()
     }
 
     /// returns true if the buffer has been filled with enough values
@@ -55,12 +64,14 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         self.buffer.push_back(sample);
 
         // TODO: instead of mod, it would be safest to do >= and then reset to 0. but thats slower
+        // TODO: is IN the right value to check? we might want sample rate if IN has to be small because of hardware constraints
         self.count % IN == 0
     }
 
     pub fn push_samples(&mut self, samples: &Samples<IN>) {
         // trace!("new samples: {:?}", samples);
 
+        // TODO: why even track count? this seems unnecessary
         self.count += samples.0.len();
 
         self.buffer.extend_from_slice(&samples.0);
