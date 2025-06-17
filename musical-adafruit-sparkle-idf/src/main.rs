@@ -419,9 +419,7 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
     let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
     i2s_driver.rx_enable()?;
-
     info!("I2S mic driver enabled");
-    sleep(Duration::from_secs(1));
 
     // TODO: this should maybe be a static+Lazy+Mutex instead of a box?
     // TODO: does boxing do what we want?
@@ -440,12 +438,10 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     // TODO: do we actually want this in a Box?
     let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
-
     info!("i2s_buffer created");
 
     // TODO: allocate this to somewhere special in ram? there seems to be a lot of choices
     let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
-
     info!("i2s_samples created");
 
     let mut fps = Box::new(FpsTracker::new("i2s"));
@@ -481,6 +477,8 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
         // // TODO: beat detection
 
         // info!("loudness: {:?}", loudness);
+
+        // TODO: notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push? that might just be wasted resources
 
         fps.tick();
     }
