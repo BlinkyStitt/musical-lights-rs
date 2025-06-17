@@ -504,7 +504,7 @@ fn mic_task(
 
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
     // TODO: do we actually want this in a Box?
-    // TODO: should this be in a Const Static Cell instead?
+    // TODO: should this be in a ConstStaticCell/StaticCell instead?
     let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
     info!("i2s_buffer created");
 
