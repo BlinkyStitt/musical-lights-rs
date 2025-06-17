@@ -54,6 +54,7 @@ use std::{
 };
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
+use crate::light_patterns::loading;
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -75,8 +76,7 @@ const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 /// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
 /// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
-/// TODO: i wanted this to be 512, but we don't have enough stack space
-const I2S_SAMPLE_SIZE: usize = 256;
+const I2S_SAMPLE_SIZE: usize = 512;
 
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
@@ -302,6 +302,7 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
+// TODO: i'd really love to do this without locking state, but i think we need to.
 fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
@@ -338,29 +339,27 @@ fn blink_neopixels_task(
         // TODO: clone here?
         let state = state.read().map_err(|_| MyError::PoisonLock)?;
 
-        let orientation = state.orientation;
-
-        // TODO: drop this later so that we don't have to copy the orientation? depends on if the patterns need more state. compass definitely needs mag
-        drop(state);
-
         // TODO: have a way to smoothly transition between patterns
         // TODO: new random g_hue whenever the pattern changes?
-        match orientation {
+        match &state.orientation {
             Orientation::FaceDown => {
                 flashlight(fibonacci_data.as_mut_slice());
             }
             Orientation::FaceUp => {
-                compass(base_hsv, fibonacci_data.as_mut_slice());
+                compass(base_hsv, fibonacci_data.as_mut_slice(), &state);
             }
-            Orientation::LeftUp
-            | Orientation::RightUp
-            | Orientation::TopUp
-            | Orientation::Unknown => {
-                // TODO: cycle between different patterns
+            Orientation::LeftUp | Orientation::RightUp | Orientation::TopUp => {
                 rainbow(base_hsv, fibonacci_data.as_mut_slice());
+            }
+            Orientation::Unknown => {
+                // TODO: cycle between different patterns
+                loading(base_hsv, fibonacci_data.as_mut_slice(), &state);
             }
             Orientation::TopDown => clock(base_hsv, fibonacci_data.as_mut_slice()),
         }
+
+        // TODO: does this hold the lock open too long? i think State is a rather large thing to clone?
+        drop(state);
 
         // TODO: reading these from a buffer is probably better than doing any calculations in the iter. that takes more memory, but it works well
         // TODO: check that the gamma correction is what we need for our leds
