@@ -14,7 +14,7 @@ Rust's standard library on a tiny little $25 computer. Amazing.
 
 When flashing, you can specify the default port like this:
 
-    cargo run --release -- -p /dev/cu.usbmodem5A4F0222811
+    RUST_BACKTRACE=1 cargo run --release -- -p /dev/cu.usbmodem5A4F0222811
 
 ## Crates to Investigate
 

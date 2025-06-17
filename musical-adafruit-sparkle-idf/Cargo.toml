@@ -39,6 +39,7 @@ musical-lights-core = { path = "../musical-lights-core", default-features = fals
 ] }
 postcard = "1.1.1"
 rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
+once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
 
 [build-dependencies]
 embuild = "0.33"

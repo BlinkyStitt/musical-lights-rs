@@ -2,10 +2,12 @@
 /// TODO: we need to have an option that uses a Box
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(transparent)]
 pub struct Samples<const S: usize>(pub [f32; S]);
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(transparent)]
 pub struct WindowedSamples<const S: usize>(pub [f32; S]);
 
 impl<const S: usize> WindowedSamples<S> {

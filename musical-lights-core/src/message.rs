@@ -25,11 +25,13 @@ pub const MESSAGE_BAUD_RATE: u32 = 115_200;
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, Hash, MaxSize, PartialEq)]
 pub struct PeerId(u8);
 
+/// TODO: Message type for setting the next pattern?
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, MaxSize)]
 pub enum Message {
     GpsTime(GpsTime),
-    Orientation(Orientation, Magnetometer),
+    Orientation(Orientation),
+    Magnetometer(Magnetometer),
     /// TODO: should these be batched up? should they be signed by the peer? signing can come later
     PeerCoordinate(PeerId, Coordinate),
     Ping,
@@ -119,14 +121,7 @@ mod tests {
         let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
         let mut output = [0u8; Message::POSTCARD_MAX_SIZE];
 
-        let message = Message::Orientation(
-            Orientation::TopUp,
-            Magnetometer {
-                x_gauss: 0.0,
-                y_gauss: 0.0,
-                z_gauss: 0.0,
-            },
-        );
+        let message = Message::Orientation(Orientation::TopUp);
 
         println!("message: {message:?}");
 

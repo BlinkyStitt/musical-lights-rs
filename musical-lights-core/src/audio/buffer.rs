@@ -5,7 +5,6 @@ use super::samples::Samples;
 
 /// buffer audio samples. might be read from a microphone wire to an ADC, or over i2s, or from anything
 /// outputs windowed samples for an FFT
-///
 pub struct AudioBuffer<const IN: usize, const OUT: usize> {
     count: usize,
     /// TODO: box should be optional
@@ -14,11 +13,17 @@ pub struct AudioBuffer<const IN: usize, const OUT: usize> {
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
     pub fn new() -> Self {
-        // TODO: compile time assert
+        // // TODO: what is this the right way to do a compile time assert
+        // // TODO: assert that out fits in evently?
+        // const _: () = {
         assert!(OUT >= IN);
+        assert_eq!(OUT % IN, 0);
+        // };
 
-        // start with a buffer full of zeroes, NOT an empty buffer
-        let sample_buffer = CircularBuffer::new();
+        let mut sample_buffer = CircularBuffer::new();
+
+        // TODO: should we start with a buffer full of zeroes, NOT an empty buffer?
+        sample_buffer.fill(0.0);
 
         Self {
             count: 0,
@@ -42,24 +47,6 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         samples
     }
 
-    #[cfg(feature = "std")]
-    pub fn boxed_samples(&self) -> Box<Samples<OUT>> {
-        let mut samples = Box::new([0.0; OUT]);
-
-        let (a, b) = self.buffer.as_slices();
-
-        samples[..a.len()].copy_from_slice(a);
-        samples[a.len()..].copy_from_slice(b);
-
-        todo!();
-
-        // let samples = Samples(samples);
-
-        // trace!("{:?}", samples);
-
-        // samples
-    }
-
     /// returns true if the buffer has been filled with enough values
     /// WARNING! BE CAREFUL COMBINGING THIS WITH `push_samples`. its best to use one or the other or you might not get true/false when you expect!
     pub fn push_sample(&mut self, sample: f32) -> bool {
@@ -72,7 +59,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
     }
 
     pub fn push_samples(&mut self, samples: &Samples<IN>) {
-        trace!("new samples: {:?}", samples);
+        // trace!("new samples: {:?}", samples);
 
         self.count += samples.0.len();
 

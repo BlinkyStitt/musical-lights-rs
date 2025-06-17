@@ -6,11 +6,14 @@ use esp_idf_svc::{
 use esp_idf_sys::TickType_t;
 use heapless::Vec;
 use musical_lights_core::{
+    compass::Magnetometer,
     errors::{MyError, MyResult},
     logging::{error, info, warn},
     message::{deserialize_with_crc, serialize_with_crc_and_cobs, Message},
+    orientation::Orientation,
 };
 use postcard::accumulator::{CobsAccumulator, FeedResult};
+use std::{thread::sleep, time::Duration};
 
 // TODO: make this work for async or sync? generics are hard
 pub struct UartToSensors<'a, const N: usize> {
@@ -70,10 +73,24 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
         }
     }
 
-    // pub fn mock_loop<F>(&mut self, process_message: F, ) ...
+    pub fn mock_loop<F>(&mut self, process_message: F) -> MyResult<()>
+    where
+        F: Fn(Message) -> MyResult<()>,
+    {
+        process_message(Message::Pong)?;
+
+        process_message(Message::Orientation(Orientation::Unknown))?;
+
+        loop {
+            // TODO: slide the gps around
+
+            sleep(Duration::from_secs(5));
+        }
+    }
 
     /// read messages from the uart until the uart shuts down
     /// TODO: how can we tell this loop to stop?
+    /// TODO: i don't think we actually need crc. uart already has parity bits
     pub fn read_loop<F>(&mut self, process_message: F, read_timeout: TickType_t) -> MyResult<()>
     where
         F: Fn(Message) -> MyResult<()>,

@@ -19,9 +19,8 @@ use esp_idf_svc::{
 };
 use esp_idf_sys::{
     bootloader_random_disable, bootloader_random_enable, esp_get_free_heap_size,
-    esp_get_minimum_free_heap_size, esp_random, heap_caps_dump_all, uxTaskGetStackHighWaterMark,
+    esp_get_minimum_free_heap_size, esp_random,
 };
-use flume::Receiver;
 use musical_lights_core::{
     audio::{
         parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer,
@@ -35,6 +34,7 @@ use musical_lights_core::{
     orientation::Orientation,
     windows::HanningWindow,
 };
+use once_cell::sync::Lazy;
 use rand::RngCore;
 use smart_leds::{
     brightness, gamma,
@@ -46,11 +46,11 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        RwLock,
     },
     thread::{self, sleep},
+    time::Duration,
 };
-use std::{sync::Mutex, time::Duration};
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 use crate::{
@@ -64,17 +64,17 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 /// TODO: should this match our slowest sensor?
 const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 /// TODO: 48kHz?
-const I2S_SAMPLE_RATE_HZ: u32 = 44_100;
+const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
 /// TODO: what size FFT? i want to have 4096, but
-const FFT_INPUTS: usize = 2048;
+const FFT_INPUTS: usize = 4096;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 /// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
 /// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
-/// TODO: this is probably too small
+/// TODO: i wanted this to be 512, but we don't have enough stack space
 const I2S_SAMPLE_SIZE: usize = 256;
 
 /// TODO: add a lot more to this
@@ -83,8 +83,8 @@ const I2S_SAMPLE_SIZE: usize = 256;
 #[derive(Clone, Default, Debug)]
 struct State {
     orientation: Orientation,
-    magnetometer: Magnetometer,
-    self_coordinate: Coordinate,
+    magnetometer: Option<Magnetometer>,
+    self_coordinate: Option<Coordinate>,
     self_id: Option<PeerId>,
     peer_coordinate: HashMap<PeerId, Coordinate>,
 }
@@ -157,10 +157,10 @@ fn main() -> eyre::Result<()> {
     let rng_2_hello = rng_2.next_u64();
     debug!("rng {} {}", rng_1_hello, rng_2_hello);
 
-    unsafe { heap_caps_dump_all() };
+    // unsafe { heap_caps_dump_all() };
 
     // TODO: static? arc? something else?
-    let state = Arc::new(Mutex::new(State::default()));
+    static STATE: Lazy<RwLock<State>> = Lazy::new(|| RwLock::new(State::default()));
 
     let blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"blink_neopixels\0"),
@@ -170,43 +170,38 @@ fn main() -> eyre::Result<()> {
     blink_neopixels_thread_cfg.set()?;
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
-    let blink_neopixels_state = state.clone();
     let blink_neopixels_handle = thread::spawn(move || {
-        blink_neopixels_task(
-            &mut neopixel_onboard,
-            &mut neopixel_external,
-            rng_1,
-            blink_neopixels_state,
-        )
-        .inspect_err(|err| {
-            error!("Error in blink_neopixels_task: {err}");
-        })
+        blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external, rng_1, &STATE)
+            .inspect_err(|err| {
+                error!("Error in blink_neopixels_task");
+                error!("{err:?}");
+            })
     });
 
-    // TODO: what size?
-    let (audio_sample_tx, audio_sample_rx) = flume::bounded::<Samples<I2S_SAMPLE_SIZE>>(4);
-
-    // TODO: what size?
+    // TODO: what size? do we need an arc around this? or is a static okay?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
+    // TODO: use the channels that come with idf instead?
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
-    let read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
+    let mut read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"read_from_sensors\0"),
         priority: 2,
         ..Default::default()
     };
+    read_from_sensors_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need?
     read_from_sensors_thread_cfg.set()?;
 
     let read_from_sensors_handle = thread::spawn(move || {
         read_from_sensors_task(
             message_for_sensors_tx,
             &PONG_RECEIVED,
-            state,
+            &STATE,
             uart_from_sensors,
         )
         .inspect_err(|err| {
-            error!("Error in sensor_rx_task: {err}");
+            error!("Error in sensor_rx_task");
+            error!("{err:?}");
         })
     });
 
@@ -230,7 +225,7 @@ fn main() -> eyre::Result<()> {
         priority: 2,
         ..Default::default()
     };
-    mic_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need?
+    mic_thread_cfg.stack_size += 1024 * 70; // TODO: how much bigger do we actually need?
     mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
@@ -240,6 +235,7 @@ fn main() -> eyre::Result<()> {
         })
     });
 
+    /*
     // TODO: debug-only thread for monitoring ram/cpu/etc?
     let memory_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"memory\0"),
@@ -254,10 +250,9 @@ fn main() -> eyre::Result<()> {
             let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
             let min_free_memory = unsafe { esp_get_minimum_free_heap_size() } / 1024;
 
-            // TODO: print stack sizes of all the threads
-
             info!("Free memory: {free_memory}KB (min {min_free_memory}KB)");
 
+            // TODO: print stack sizes of all the threads
             // unsafe { heap_caps_dump_all() };
 
             // uxTaskGetStackHighWaterMark(xTask);
@@ -265,6 +260,7 @@ fn main() -> eyre::Result<()> {
             sleep(Duration::from_secs(1));
         }
     });
+     */
 
     mic_handle.join().unwrap().unwrap();
 
@@ -306,7 +302,7 @@ fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
     mut rng: Biski64Rng,
-    state: Arc<Mutex<State>>,
+    state: &'static RwLock<State>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
@@ -335,12 +331,17 @@ fn blink_neopixels_task(
         // TODO: gamme correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
-        // TODO: don't clone?
-        let state = state.lock().map_err(|_| MyError::PoisonLock)?.clone();
+        // TODO: clone here?
+        let state = state.read().map_err(|_| MyError::PoisonLock)?;
+
+        let orientation = state.orientation;
+
+        // TODO: drop this later so that we don't have to copy the orientation? depends on if the patterns need more state. compass definitely needs mag
+        drop(state);
 
         // TODO: have a way to smoothly transition between patterns
         // TODO: new random g_hue whenever the pattern changes?
-        match state.orientation {
+        match orientation {
             Orientation::FaceDown => {
                 flashlight(fibonacci_data.as_mut_slice());
             }
@@ -400,10 +401,10 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
 
     let gpio_cfg = i2s::config::StdGpioConfig::default();
 
+    // philips doesn't let us set the clocks
     // let i2s_config =
     //     i2s::config::StdConfig::philips(I2S_SAMPLE_RATE_HZ, i2s::config::DataBitWidth::Bits16);
 
-    // TODO: i think we need a different config like this:
     let i2s_config = i2s::config::StdConfig::new(channel_cfg, clk_cfg, slot_cfg, gpio_cfg);
 
     // TODO: do we want the mclk pin?
@@ -412,55 +413,53 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
 
     i2s_driver.rx_enable()?;
 
-    info!("I2S mic driver created");
+    info!("I2S mic driver enabled");
+    sleep(Duration::from_secs(1));
 
-    let mut audio_buffer: AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS> = AudioBuffer::new();
+    // TODO: this should maybe be a static+Lazy+Mutex instead of a box?
+    // TODO: does boxing do what we want?
+    // let mut audio_buffer: Box<AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS>> =
+    //     Box::new(AudioBuffer::new());
+
+    // info!("Audio buffer created");
 
     // TODO: the fft is all on the stack. its too big. need to move it to the heap
-    // let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> = FFT::new_with_window::<HanningWindow<FFT_INPUTS>>();
+    // let fft: Box<FFT<FFT_INPUTS, FFT_OUTPUTS>> =
+    //     Box::new(FFT::new_with_window::<HanningWindow<FFT_INPUTS>>());
 
     // let scale_builder =
     //     ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(20.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
 
     // TODO: what size should this buffer be? i'm really not sure what this data even looks like
+    // TODO: do we actually want this in a Box?
     let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
+
+    info!("i2s_buffer created");
+
+    // TODO: allocate this to somewhere special in ram? there seems to be a lot of choices
+    let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
+
+    info!("i2s_samples created");
+
     loop {
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
-        i2s_driver.read_exact(i2s_buffer.as_mut_slice())?;
+        i2s_driver.read_exact(i2s_buffer.as_mut())?;
 
         // trace!(
         //     "Read i2s: {} {} {} {}",
         //     i2s_buffer[0], i2s_buffer[1], i2s_buffer[2], i2s_buffer[3]
         // );
 
-        // TODO: without the box, this is causing a stack overflow
-        // // TODO: is this always going to be the same size? should we use our allocator here and allow different sized vecs?
-        // TODO: uninit?
-        let mut samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
-        // let mut samples = [0.0f32; I2S_SAMPLE_SIZE];
-
         // TODO: this should be a helper on Samples
-        parse_i2s_24_bit_to_f32_array(
-            i2s_buffer
-                .as_array::<I2S_U8_BUFFER_SIZE>()
-                .expect("i2s u8 buffer should fit"),
-            samples
-                .0
-                .as_mut_array::<I2S_SAMPLE_SIZE>()
-                .expect("i2s sample size should fit"),
-        );
+        parse_i2s_24_bit_to_f32_array(&i2s_buffer, &mut i2s_samples.0);
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
-        // TODO: i think this is crashing the app. but pushing them one at a time seems like a bad flow, too
-        // audio_buffer.push_samples(&samples);
-        for sample in samples.0.into_iter() {
-            if audio_buffer.push_sample(sample) {
-                // warn!("do the fft")
-            }
-        }
+        // audio_buffer.push_samples(i2s_samples);
+
+        // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
 
         // // TODO: for some reason rust analyzer is showing 512 here even though it should be more
         // let samples: Samples<FFT_INPUTS> = audio_buffer.samples();
@@ -476,10 +475,11 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
     }
 }
 
+/// TODO: should state be in a RwLock?
 fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
     message_to_sensors: flume::Sender<Message>,
     pong_received: &'static AtomicBool,
-    state: Arc<Mutex<State>>,
+    state: &'static RwLock<State>,
     mut uart_from_sensors: UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
 ) -> eyre::Result<()> {
     let process_message = |msg| {
@@ -493,24 +493,28 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
                     .expect("failed to respond with pong");
             }
             Message::Pong => {
-                pong_received.store(true, Ordering::Relaxed);
+                // TODO: should this just be part of the state instead? Really not sure about Ordering
+                pong_received.store(true, Ordering::SeqCst);
             }
-            Message::Orientation(orientation, mag) => {
-                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
+            Message::Orientation(orientation) => {
+                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
                 state.orientation = orientation;
-                state.magnetometer = mag;
+            }
+            Message::Magnetometer(mag) => {
+                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
+                state.magnetometer = Some(mag);
             }
             Message::GpsTime(gps_time) => {
                 warn!("not sure what to do with gps time. maybe instead connect to the pulse-per-second line? but we don't have many pins available");
             }
             Message::PeerCoordinate(peer_id, coordinate) => {
-                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
+                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
                 state.peer_coordinate.insert(peer_id, coordinate);
             }
             Message::SelfCoordinate(coordinate) => {
                 // TODO: on startup, the key needs to be passed to the sensor board so it can sign radio messages
-                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
-                state.self_coordinate = coordinate;
+                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
+                state.self_coordinate = Some(coordinate);
             }
         }
 
@@ -518,14 +522,26 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
         Ok::<_, MyError>(())
     };
 
-    // TODO: WE NEED A MOCK FUNCTION HERE!
+    // TODO: WE NEED A MOCK FUNCTION HERE! make it easy to enable running without the sensor board. just send
     process_message(Message::Pong).unwrap();
 
     // TODO: no idea what the timeout should be
+    // TODO: this read loop is causing a stack overflow. how?!
     // TODO: i think maybe we should use the async reader? we don't want a timeout
-    // uart_from_sensors.read_loop(process_message, 10)?;
+    // if let Err(err) = uart_from_sensors.read_loop(process_message, 10) {
+    //     error!("failed reading from uart");
+    // };
 
-    // once the read loop exits, what should we do? it exits when it isn't connected
+    // TODO: once the read loop exits, what should we do? it exits when it isn't connected
+
+    // // uart errored or disconnected
+    // // TODO: ONLY in debug mode, run a mock loop. otherwise just set the state to something useful
+    // uart_from_sensors.mock_loop(process_message)?;
+
+    // TODO: stack overflow here?
+    loop {
+        sleep(Duration::from_secs(1));
+    }
 
     Ok(())
 }
@@ -535,10 +551,8 @@ fn send_to_sensors_task<const N: usize>(
     pong_received: &'static AtomicBool,
     mut uart_to_sensors: UartToSensors<'static, N>,
 ) -> eyre::Result<()> {
-    return Ok(());
-
     // send a ping on an interval until we get a pong. then continue
-    while !pong_received.load(Ordering::Relaxed) {
+    while !pong_received.load(Ordering::SeqCst) {
         info!("sending ping");
         uart_to_sensors.write(&Message::Ping)?;
         sleep(Duration::from_millis(100));
@@ -549,6 +563,8 @@ fn send_to_sensors_task<const N: usize>(
         let message = message_to_sensors.recv()?;
 
         info!("writing to uart");
+
+        // TODO: if writing to the uart fails, we should just log the error but don't crash the app
         uart_to_sensors.write(&message)?;
     }
 }

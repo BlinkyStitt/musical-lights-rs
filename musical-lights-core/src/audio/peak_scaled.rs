@@ -39,6 +39,7 @@ impl PeakScaledBuilder {
     }
 
     /// only call this through [scale]! this makes sure min and max are correct
+    /// TODO: think about this more
     #[inline]
     fn scale_one(&self, x: f32) -> f32 {
         (x - self.min) / (self.max - self.min)

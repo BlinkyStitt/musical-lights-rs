@@ -340,8 +340,7 @@ dependencies = [
 [[package]]
 name = "embassy-time"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f820157f198ada183ad62e0a66f554c610cdcd1a9f27d4b316358103ced7a1f8"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=6186d111a5c150946ee5b7e9e68d987a38c1a463#6186d111a5c150946ee5b7e9e68d987a38c1a463"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -356,8 +355,7 @@ dependencies = [
 [[package]]
 name = "embassy-time-driver"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d45f5d833b6d98bd2aab0c2de70b18bfaa10faf661a1578fd8e5dfb15eb7eba"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=6186d111a5c150946ee5b7e9e68d987a38c1a463#6186d111a5c150946ee5b7e9e68d987a38c1a463"
 dependencies = [
  "document-features",
 ]
@@ -375,8 +373,7 @@ dependencies = [
 [[package]]
 name = "embedded-hal"
 version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
+source = "git+https://github.com/rust-embedded/embedded-hal?rev=520945278942c301433c391f63a075227d9e7c84#520945278942c301433c391f63a075227d9e7c84"
 
 [[package]]
 name = "embedded-hal-async"
@@ -545,8 +542,7 @@ dependencies = [
 [[package]]
 name = "i24"
 version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4e9f59fce450959a3bfe4a762ebba4afe2327ab3795ba11c489233c5d29733"
+source = "git+https://github.com/BlinkyStitt/i24.git?rev=4f41af60055f756740572121bb7ff1cadf39233b#4f41af60055f756740572121bb7ff1cadf39233b"
 dependencies = [
  "bytemuck",
  "num-traits",

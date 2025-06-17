@@ -55,6 +55,7 @@ test-log = "0.2.17"
 
 # TODO: defmt should be optional. both defmt and log should be additive!
 
+# TODO: the crate is no_std, but then we have a no_std feature. should we have two members instead?
 default = ["std", "defmt"]
 
 alloc = [

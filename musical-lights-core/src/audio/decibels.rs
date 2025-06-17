@@ -5,6 +5,7 @@ use super::amplitudes::{AggregatedAmplitudes, Amplitudes};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(transparent)]
 pub struct Decibels<const N: usize>(pub [f32; N]);
 
 impl<const B: usize> Decibels<B> {

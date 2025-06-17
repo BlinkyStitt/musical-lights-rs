@@ -9,6 +9,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 /// TODO: should this be a trait instead?
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(transparent)]
 pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<24>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
