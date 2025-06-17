@@ -115,6 +115,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
                             Err(err) => {
                                 // TODO: MyError doesn't implement defmt::Format
                                 warn!("failed to deserialize message");
+                                warn!("{:?}", err);
                             }
                         }
 

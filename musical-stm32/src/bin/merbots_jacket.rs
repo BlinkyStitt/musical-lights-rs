@@ -24,7 +24,7 @@ use musical_lights_core::audio::FlatWeighting;
 use musical_lights_core::lights::{DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
-        AWeighting, AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
+        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
         ExponentialScaleBuilder, FFT, Samples,
     },
     logging::{debug, info, trace, warn},
@@ -179,8 +179,6 @@ async fn fft_task(
         let samples = mic_rx.receive().await;
 
         audio_buffer.push_samples(&samples);
-
-        drop(samples);
 
         let samples = audio_buffer.samples();
 

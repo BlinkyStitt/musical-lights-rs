@@ -178,17 +178,15 @@ async fn read_lsm9ds1_task(
             .await
             .expect("using lsm9ds1");
 
-        if new_orientation != Orientation::FaceUp && new_orientation == last_orientation {
+        channel.send(Message::Magnetometer(new_magnetometer)).await;
+
+        if new_orientation != last_orientation {
             // orientation hasn't changed and we aren't in compass mode.
             // todo: i don't like this pattern very much
-            continue;
+            channel.send(Message::Orientation(new_orientation)).await;
+
+            last_orientation = new_orientation;
         }
-
-        channel
-            .send(Message::Orientation(new_orientation, new_magnetometer))
-            .await;
-
-        last_orientation = new_orientation;
 
         // TODO: this should be around 80.
         fps.tick();
