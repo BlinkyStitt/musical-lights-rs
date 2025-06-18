@@ -2,6 +2,8 @@ use crate::audio::bin_to_frequency;
 
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
 
+const BARK_SCALE_OUT: usize = 24;
+
 pub struct BarkScaleBuilder<const IN: usize> {
     map: [Option<usize>; IN],
 }
@@ -10,7 +12,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
-pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<24>);
+pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<BARK_SCALE_OUT>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
     pub fn new(sample_rate_hz: f32) -> Self {
@@ -30,13 +32,17 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
     }
 }
 
-impl<const IN: usize> AggregatedAmplitudesBuilder<IN> for BarkScaleBuilder<IN> {
+impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkScaleBuilder<IN> {
     type Output = BarkScaleAmplitudes;
 
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::aggregate(&self.map, x);
+        let x = AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate::<IN>(&self.map, x);
 
         BarkScaleAmplitudes(x)
+    }
+
+    fn build_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
+        todo!();
     }
 }
 

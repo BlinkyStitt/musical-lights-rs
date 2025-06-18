@@ -69,9 +69,14 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
 
         Self { map }
     }
+
+    // TODO: move this onto the AggregatedAmplitudesBuilder trait
+    pub fn build_into(&self, weighted_amplitudes: &[f32; IN], output: &mut [f32; OUT]) {
+        AggregatedAmplitudes::aggregate_into(&self.map, weighted_amplitudes, output)
+    }
 }
 
-impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN>
+impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
     for ExponentialScaleBuilder<IN, OUT>
 {
     type Output = ExponentialScaleAmplitudes<OUT>;
@@ -80,6 +85,10 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN>
         let x = AggregatedAmplitudes::aggregate(&self.map, x);
 
         ExponentialScaleAmplitudes(x)
+    }
+
+    fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
+        todo!();
     }
 }
 

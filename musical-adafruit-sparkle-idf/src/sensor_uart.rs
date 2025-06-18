@@ -1,7 +1,7 @@
 use core::ops::Fn;
 use esp_idf_svc::{
     hal::uart::{UartRxDriver, UartTxDriver},
-    io::{Read, Write},
+    io::Write,
 };
 use esp_idf_sys::TickType_t;
 use heapless::Vec;
@@ -85,7 +85,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
         process_message(Message::Orientation(Orientation::Unknown))?;
 
         loop {
-            // TODO: slide the gps around
+            // TODO: move the gps around
 
             sleep(Duration::from_secs(5));
         }
@@ -161,7 +161,7 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
         //     }
         // }
 
-        info!("uart finished");
+        warn!("uart finished");
 
         Ok(())
     }

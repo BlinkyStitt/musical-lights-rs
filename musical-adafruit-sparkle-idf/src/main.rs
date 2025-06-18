@@ -1,6 +1,8 @@
 //! TODO: totally unsure of prioritites. i should just start with everything on the same priority probably
+//! TODO: move this to a lib and then have multiple bins. one for the hat, one for the necklace, one for the net, etc. they should try to share code in the crate or in musical-lights-core.
 #![feature(type_alias_impl_trait)]
 #![feature(slice_as_array)]
+// #![feature(thread_sleep_until)]
 
 mod debug;
 mod light_patterns;
@@ -35,18 +37,20 @@ use musical_lights_core::{
 };
 use once_cell::sync::Lazy;
 use rand::RngCore;
+use smart_leds::colors::BLACK;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
     RGB8,
 };
 use smart_leds_trait::SmartLedsWrite;
-use static_cell::{ConstStaticCell, StaticCell};
+use static_cell::ConstStaticCell;
 use std::thread::yield_now;
+use std::time::Instant;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        RwLock,
+        Mutex,
     },
     thread::{self, sleep},
     time::Duration,
@@ -61,25 +65,29 @@ use crate::{
 };
 
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
-const NUM_FIBONACCI_NEOPIXELS: usize = 256;
+
+/// fibonacci panel is 256
+/// the 1x1 net is 20x20 == 400 pixels. the watchdog timer is throwing if I2S_SAMPLE_SIZE is 512. thats just too many ffts
+/// the 1x2 net is 20x40 == 800 pixels.
+const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 /// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
 /// TODO: should this match our slowest sensor?
 // const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
 /// TODO: 48kHz?
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
-/// TODO: what size FFT? i want to have 4096, but
-const FFT_INPUTS: usize = 4096;
+/// TODO: what size FFT? i want to have 4096, but 2048 is probably fine
+const FFT_INPUTS: usize = 2048;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
-/// TODO: really not sure about this. i think it comes from dma sizes that i don't see how to control
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
 /// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
-const I2S_SAMPLE_SIZE: usize = 512;
+const I2S_SAMPLE_SIZE: usize = 1024;
 
 const _SAFETY_CHECKS: () = {
     assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
+    assert!(I2S_SAMPLE_SIZE > 1);
 };
 
 /// TODO: add a lot more to this
@@ -118,7 +126,7 @@ fn main() -> eyre::Result<()> {
     info!("Hello, world!");
 
     // TODO: static_cell? arc? something else? LazyLock from std?
-    static STATE: Lazy<RwLock<State>> = Lazy::new(|| RwLock::new(State::default()));
+    static STATE: Lazy<Mutex<State>> = Lazy::new(|| Mutex::new(State::default()));
 
     // TODO: what size? do we need an arc around this? or is a static okay?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
@@ -138,7 +146,10 @@ fn main() -> eyre::Result<()> {
     // TODO: set up bluetooth or wifi. not sure what to do with them. but they give us a true rng
 
     let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
-    let mut neopixel_external = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio22)?;
+    // let mut neopixel_external1 = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio21)?;
+    let mut neopixel_external2 = Ws2812Esp32Rmt::new(peripherals.rmt.channel2, pins.gpio22)?;
+    // let mut neopixel_external3 = Ws2812Esp32Rmt::new(peripherals.rmt.channel3, pins.gpio19)?;
+    // let mut neopixel_external4 = Ws2812Esp32Rmt::new(peripherals.rmt.channel4, pins.gpio23)?;
 
     // TODO: this baud rate needs to match the sensory board
     let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
@@ -157,6 +168,7 @@ fn main() -> eyre::Result<()> {
 
     // TODO: pick proper sizes for these buffers. 256 should work, but its not correct
     // TODO: box the usart sensor things? its got some big buffers inside of it
+    // TODO: const new functions for these so we can statically allocate them?
     let mut uart_from_sensors: Box<UartFromSensors<'_, 256, 256>> =
         Box::new(UartFromSensors::new(uart_to_sensors_rx));
     let mut uart_to_sensors: Box<UartToSensors<'_, 256>> =
@@ -201,7 +213,7 @@ fn main() -> eyre::Result<()> {
     let blink_neopixels_handle = thread::spawn(move || {
         blink_neopixels_task(
             &mut neopixel_onboard,
-            &mut neopixel_external,
+            &mut neopixel_external2,
             rng_1,
             &STATE,
             fft_ready_rx,
@@ -221,7 +233,7 @@ fn main() -> eyre::Result<()> {
         ..Default::default()
     };
     // TODO: this size does not match what i'm actually seeing. i'm confused
-    mic_thread_cfg.stack_size += 1024 * 71; // TODO: how much bigger do we actually need?
+    mic_thread_cfg.stack_size += 1024 * 71; // TODO: how much bigger do we actually need? changing this doesn't behave like i expected. i must be missing something
     mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
@@ -238,7 +250,7 @@ fn main() -> eyre::Result<()> {
         })
     });
 
-    // TODO: is this a good idea? i want the light code running ASAP
+    // TODO: is this a good idea? i want the mic code running ASAP
     yield_now();
 
     // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
@@ -351,7 +363,7 @@ fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
     mut rng: Biski64Rng,
-    state: &'static RwLock<State>,
+    state: &'static Mutex<State>,
     fft_ready: flume::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
@@ -360,8 +372,14 @@ fn blink_neopixels_task(
     let mut g_hue = rng.next_u32() as u8;
 
     // TODO: do we want these boxed? they are large. maybe they should be statics instead?
-    let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
-    let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
+    static ONBOARD_DATA: ConstStaticCell<[RGB8; NUM_ONBOARD_NEOPIXELS]> =
+        ConstStaticCell::new([BLACK; NUM_ONBOARD_NEOPIXELS]);
+    let onboard_data = ONBOARD_DATA.take();
+
+    // TODO: use embedded_graphics crate
+    static FIBONACCI_DATA: ConstStaticCell<[RGB8; NUM_FIBONACCI_NEOPIXELS]> =
+        ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
+    let fibonacci_data = FIBONACCI_DATA.take();
 
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
     // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
@@ -369,6 +387,10 @@ fn blink_neopixels_task(
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
     loop {
+        fft_ready.recv()?;
+
+        // let start = Instant::now();
+
         debug!("Hue: {g_hue}");
 
         // TODO: Hsl instead of Hsv?
@@ -381,52 +403,69 @@ fn blink_neopixels_task(
         // TODO: gamme correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
-        // TODO: clone here? is it okay to hold this lock open while we calculate things?
-        let state = state.read().map_err(|_| MyError::PoisonLock)?;
+        // TODO: this clone is too slow, but a critical section mutex also shouldn't be held open for long
+        let unlocked_state = state.lock().map_err(|_| MyError::PoisonLock)?;
 
         // TODO: have a way to smoothly transition between patterns
         // TODO: new random g_hue whenever the pattern changes?
-        match &state.orientation {
+        match unlocked_state.orientation {
             Orientation::FaceDown => {
+                // state isn't needed in this orientation. drop it now
+                drop(unlocked_state);
+
                 flashlight(fibonacci_data.as_mut_slice());
             }
             Orientation::FaceUp => {
-                compass(base_hsv, fibonacci_data.as_mut_slice(), &state);
+                // TODO: clone it into a box?
+                compass(base_hsv, fibonacci_data.as_mut_slice(), &unlocked_state);
+
+                drop(unlocked_state);
             }
             Orientation::LeftUp | Orientation::RightUp | Orientation::TopUp => {
+                // TODO: some state might be useful here. clone just whats needed
+                drop(unlocked_state);
+
                 // TODO: variable patterns here
                 rainbow(base_hsv, fibonacci_data.as_mut_slice());
             }
             Orientation::Unknown => {
                 // TODO: cycle between different patterns
-                loading(base_hsv, fibonacci_data.as_mut_slice(), &state);
-            }
-            Orientation::TopDown => clock(base_hsv, fibonacci_data.as_mut_slice()),
-        }
+                loading(base_hsv, fibonacci_data.as_mut_slice(), &unlocked_state);
 
-        // TODO: does this hold the lock open too long? i think State is a rather large thing to clone?
-        drop(state);
+                drop(unlocked_state);
+            }
+            Orientation::TopDown => {
+                // TODO: some state might be useful here. clone just whats needed
+                drop(unlocked_state);
+
+                clock(base_hsv, fibonacci_data.as_mut_slice());
+            }
+        }
 
         // TODO: reading these from a buffer is probably better than doing any calculations in the iter. that takes more memory, but it works well
         // TODO: check that the gamma correction is what we need for our leds
         // TODO: dithering
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
 
+        // TODO: yield or watchdog reset?
+        // yield_now();
+
         // TODO: brightness should be from the config
+        // TODO: do we want the async driver? do we want write_no_copy?
         neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
 
-        // // TODO: run it as fast as the fft updates? or on a timer?
-        // // the fft should update consistently and we don't want two frames of the same data, so i think i like this
-        // sleep(Duration::from_nanos(
-        //     1_000_000_000 / FPS_FIBONACCI_NEOPIXELS,
-        // ));
-        fft_ready.recv()?;
-
+        // TODO: better to base on time or on frame counts? time
         g_hue = g_hue.wrapping_add(1);
 
+        // TODO: where should the tick be?
         fps.tick();
-
         // log_stack_high_water_mark("blink loop", None);
+
+        // TODO: think more about this sleep/recv.
+        // sleep_until will give us a consistent framerate. but we might show multiple frames for the same data
+        // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
+        // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
+        // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
     }
 }
 
@@ -441,6 +480,15 @@ fn mic_task(
     info!("Start I2S mic!");
 
     // log_stack_high_water_mark("mic 2", None);
+
+    // TODO: this is probably going to panic. probably need a ConstStaticCell and then we init it (or a better pattern that I don't know yet)
+    // static EXPONENTIAL_SCALE_BUILDER: StaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> =
+    //     StaticCell::new();
+    // let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER
+    //     .init_with(|| ExponentialScaleBuilder::new(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32));
+    // info!("exponential_scale_builder created")
+
+    // TODO: also do shazam and aggregations?
 
     // TODO: how should we set the window and weighting with const? maybe its fine to just set after?
     static BUFFERED_FFT: ConstStaticCell<
@@ -460,29 +508,30 @@ fn mic_task(
     // // info!("scale_builder: {:?}", scale_builder);
     // info!("scale_builder created");
 
-    // TODO: what size should this buffer be? i'm really not sure what this data even looks like
-    // TODO: do we actually want this in a Box?
-    // TODO: should this be in a ConstStaticCell/StaticCell instead?
-    let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
+    static I2S_BUF: ConstStaticCell<[u8; I2S_U8_BUFFER_SIZE]> =
+        ConstStaticCell::new([0u8; I2S_U8_BUFFER_SIZE]);
+    let mut i2s_buf = I2S_BUF.take();
     info!("i2s_buffer created");
 
-    // TODO: allocate this to somewhere special in ram? there seems to be a lot of choices
-    // TODO: should this be in a Const Static Cell instead?
-    let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
-    info!("i2s_samples created");
-
-    // // TODO: like the other buffers, i'm not sure if this should be a box or a static or a const static
-    // let mut fft_inputs = Box::new([0.0; FFT_INPUTS]);
-    // info!("fft_inputs created");
+    static I2S_SAMPLE_BUF: ConstStaticCell<Samples<I2S_SAMPLE_SIZE>> =
+        ConstStaticCell::new(Samples([0.0; I2S_SAMPLE_SIZE]));
+    let mut i2s_sample_buf = I2S_SAMPLE_BUF.take();
+    info!("i2s_sample_buf created");
 
     // TODO: store these in a global? in the state? i dunno.
-    let mut fft_outputs = Box::new([0.0; FFT_OUTPUTS]);
+    static FFT_OUTPUTS_BUF: ConstStaticCell<[f32; FFT_OUTPUTS]> =
+        ConstStaticCell::new([0.0; FFT_OUTPUTS]);
+    let mut fft_outputs_buf = FFT_OUTPUTS_BUF.take();
     info!("fft_outputs created");
+
+    static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 32]> = ConstStaticCell::new([0.0; 32]);
+    let mut exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
+    info!("exponential_scale_outputs created");
 
     // theres no need for i2s fps tracking when the pixel has its own tracker
     // let mut fps = Box::new(FpsTracker::new("i2s"));
 
-    log_stack_high_water_mark("mic 3", None);
+    log_stack_high_water_mark("mic", None);
 
     // TODO: what dma frame counts? what buffer count?
     let channel_cfg = i2s::config::Config::default()
@@ -521,7 +570,7 @@ fn mic_task(
     loop {
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
-        i2s_driver.read_exact(i2s_buffer.as_mut())?;
+        i2s_driver.read_exact(i2s_buf)?;
 
         // trace!(
         //     "Read i2s: {} {} {} {}",
@@ -529,27 +578,30 @@ fn mic_task(
         // );
 
         // TODO: this should be a helper on Samples
-        parse_i2s_24_bit_to_f32_array(&i2s_buffer, &mut i2s_samples.0);
+        parse_i2s_24_bit_to_f32_array(i2s_buf, &mut i2s_sample_buf.0);
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
-        buffered_fft.push_samples(&i2s_samples);
+        buffered_fft.push_samples(i2s_sample_buf);
 
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
-        buffered_fft.fft(fft_outputs.as_mut());
+        // yield or reset?
+        // yield_now();
 
-        // // // TODO: for some reason rust analyzer is showing 512 here even though it should be more
-        // // TODO: do we need them copied here? should we use references still?
-        // audio_buffer.samples_in_place(fft_outputs.as_mut());
+        // TODO: only do the FFT if the sample buffer has the right number of elements
+        buffered_fft.fft(fft_outputs_buf);
 
-        // // TODO: this is probably going to overflow
-        // let amplitudes = fft.weighted_amplitudes(fft_samples.as_ref());
+        // yield_now();
 
-        // let loudness = scale_builder.build(amplitudes);
+        // fft_outputs now includes the non-aggregated outputs. this is 2048 bins! thats honestly probably more than we need, but lets try it anyways
+
+        // TODO: sum the fft_outputs with some aggregators (whats the actual technical term?)
+        // exponential_scale_builder
+        //     .build_into(fft_outputs.as_slice(), exponential_scale_outputs.as_mut());
         // // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
         // // TODO: shazam
         // // TODO: beat detection
@@ -568,11 +620,11 @@ fn mic_task(
     }
 }
 
-/// TODO: should state be in a RwLock?
+/// TODO: should state be in a RwLock? should it be a watch channel instead that we send things to and some other task does work on it?
 fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
     message_to_sensors: flume::Sender<Message>,
     pong_received: &'static AtomicBool,
-    state: &'static RwLock<State>,
+    state: &'static Mutex<State>,
     uart_from_sensors: &mut UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
 ) -> eyre::Result<()> {
     let process_message = |msg| {
@@ -590,18 +642,18 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
                 pong_received.store(true, Ordering::SeqCst);
             }
             Message::Orientation(orientation) => {
-                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 state.orientation = orientation;
             }
             Message::Magnetometer(mag) => {
-                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 state.magnetometer = Some(mag);
             }
             Message::GpsTime(gps_time) => {
                 warn!("not sure what to do with gps time. maybe instead connect to the pulse-per-second line? but we don't have many pins available");
             }
             Message::PeerCoordinate(peer_id, coordinate) => {
-                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 if let Err((peer_id, peer_coord)) =
                     state.peer_coordinate.insert(peer_id, coordinate)
                 {
@@ -610,7 +662,7 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
             }
             Message::SelfCoordinate(coordinate) => {
                 // TODO: on startup, the key needs to be passed to the sensor board so it can sign radio messages
-                let mut state = state.write().map_err(|_| MyError::PoisonLock)?;
+                let mut state = state.lock().map_err(|_| MyError::PoisonLock)?;
                 state.self_coordinate = Some(coordinate);
             }
         }

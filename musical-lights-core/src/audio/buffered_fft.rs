@@ -52,11 +52,11 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, W: Windo
     }
 }
 
-/// TODO: macro for this
-impl<W: Window<4096>> BufferedFFT<512, 4096, 2048, W> {
+/// TODO: macro for this so we can support multiple rfft sizes. or maybe a different library that does more at runtime?
+impl<const SAMPLE_IN: usize, W: Window<2048>> BufferedFFT<SAMPLE_IN, 2048, 1024, W> {
     /// TODO: not sure what type to put here for the output
     /// TODO: what should this function be called?
-    pub fn fft(&mut self, output: &mut [f32; 2048]) {
+    pub fn fft(&mut self, output: &mut [f32; 1024]) {
         // first, we load buffer up with the samples (TODO: move this to a helper function)
         let (a, b) = self.sample_buf.as_slices();
 
@@ -68,7 +68,7 @@ impl<W: Window<4096>> BufferedFFT<512, 4096, 2048, W> {
         // todo: apply the window to the fft_buf
         // self.window.something(&mut self.fft_buf)
 
-        let spectrum = microfft::real::rfft_4096(&mut self.fft_buf);
+        let spectrum = microfft::real::rfft_2048(&mut self.fft_buf);
 
         // since the real-valued coefficient at the Nyquist frequency is packed into the
         // imaginary part of the DC bin, it must be cleared before computing the amplitudes
