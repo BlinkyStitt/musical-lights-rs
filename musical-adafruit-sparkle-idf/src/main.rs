@@ -21,7 +21,7 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
-use musical_lights_core::audio::FlatWeighting;
+use musical_lights_core::audio::AWeighting;
 use musical_lights_core::{
     audio::{
         parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer, BufferedFFT,
@@ -46,7 +46,6 @@ use smart_leds::{
 use smart_leds_trait::SmartLedsWrite;
 use static_cell::ConstStaticCell;
 use std::thread::yield_now;
-use std::time::Instant;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -64,12 +63,14 @@ use crate::{
     sensor_uart::{UartFromSensors, UartToSensors},
 };
 
+/// theres 1 built in neopixel. its useful for debugging, but we should maybe have an option to skip it
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 
 /// fibonacci panel is 256
 /// the 1x1 net is 20x20 == 400 pixels. the watchdog timer is throwing if I2S_SAMPLE_SIZE is 512. thats just too many ffts
 /// the 1x2 net is 20x40 == 800 pixels.
 const NUM_FIBONACCI_NEOPIXELS: usize = 400;
+
 /// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
 /// TODO: should this match our slowest sensor?
 // const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
@@ -78,12 +79,11 @@ const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
 /// TODO: what size FFT? i want to have 4096, but 2048 is probably fine
 const FFT_INPUTS: usize = 4096;
+/// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
+const I2S_SAMPLE_SIZE: usize = 1024;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
-
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
-/// TODO: how do we make sure this fits cleanly inside the fft inputs? and also that its not so big that it slows down
-const I2S_SAMPLE_SIZE: usize = 1024;
 
 const _SAFETY_CHECKS: () = {
     assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
