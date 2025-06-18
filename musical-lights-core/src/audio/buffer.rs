@@ -1,4 +1,3 @@
-use crate::logging::trace;
 use circular_buffer::CircularBuffer;
 
 use super::samples::Samples;
@@ -11,6 +10,7 @@ pub struct AudioBuffer<const IN: usize, const OUT: usize> {
 }
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
+    #[deprecated = "use BufferedFFT instead"]
     pub const fn new() -> Self {
         // TODO: what is this the right way to do a compile time assert
         assert!(OUT >= IN);
@@ -37,7 +37,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         // TODO: this could probably be more efficient. benchmark. i think two refs might be better than copying. or maybe this should take a &mut [f32; BUF]
         let mut samples = Samples([0.0; OUT]);
 
-        Self::samples_in_place(&self, &mut samples);
+        Self::samples_in_place(self, &mut samples);
 
         samples
     }

@@ -19,10 +19,11 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
+use musical_lights_core::audio::FlatWeighting;
 use musical_lights_core::{
     audio::{
-        parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer,
-        ExponentialScaleBuilder, Samples, FFT,
+        parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer, BufferedFFT,
+        ExponentialScaleBuilder, Samples,
     },
     compass::{Coordinate, Magnetometer},
     errors::MyError,
@@ -116,6 +117,12 @@ fn main() -> eyre::Result<()> {
 
     info!("Hello, world!");
 
+    // TODO: static_cell? arc? something else? LazyLock from std?
+    static STATE: Lazy<RwLock<State>> = Lazy::new(|| RwLock::new(State::default()));
+
+    // TODO: what size? do we need an arc around this? or is a static okay?
+    static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
+
     let peripherals = Peripherals::take()?;
     let pins = peripherals.pins;
 
@@ -179,9 +186,6 @@ fn main() -> eyre::Result<()> {
 
     // unsafe { heap_caps_dump_all() };
 
-    // TODO: static_cell? arc? something else? LazyLock from std?
-    static STATE: Lazy<RwLock<State>> = Lazy::new(|| RwLock::new(State::default()));
-
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
     let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
 
@@ -236,9 +240,6 @@ fn main() -> eyre::Result<()> {
 
     // TODO: is this a good idea? i want the light code running ASAP
     yield_now();
-
-    // TODO: what size? do we need an arc around this? or is a static okay?
-    static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
 
     // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
@@ -439,7 +440,49 @@ fn mic_task(
     // sleep(Duration::from_secs(1));
     info!("Start I2S mic!");
 
-    // log_stack_high_water_mark("mic 1", None);
+    // log_stack_high_water_mark("mic 2", None);
+
+    // TODO: how should we set the window and weighting with const? maybe its fine to just set after?
+    static BUFFERED_FFT: ConstStaticCell<
+        BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>,
+    > = ConstStaticCell::new(BufferedFFT::new(HanningWindow));
+    let buffered_fft = BUFFERED_FFT.take();
+
+    // TODO: type safety to make sure this is called!
+    buffered_fft.fill_zero();
+
+    info!("buffered_fft created");
+
+    // TODO: this is causing a stack overflow, but in IDLE_1, not here? whats up with that. maybe do this init in main and pass it here?
+    // static SCALE_BUILDER: StaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> = StaticCell::new();
+    // let scale_builder = SCALE_BUILDER
+    //     .init_with(|| ExponentialScaleBuilder::new(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32));
+    // // info!("scale_builder: {:?}", scale_builder);
+    // info!("scale_builder created");
+
+    // TODO: what size should this buffer be? i'm really not sure what this data even looks like
+    // TODO: do we actually want this in a Box?
+    // TODO: should this be in a ConstStaticCell/StaticCell instead?
+    let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
+    info!("i2s_buffer created");
+
+    // TODO: allocate this to somewhere special in ram? there seems to be a lot of choices
+    // TODO: should this be in a Const Static Cell instead?
+    let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
+    info!("i2s_samples created");
+
+    // // TODO: like the other buffers, i'm not sure if this should be a box or a static or a const static
+    // let mut fft_inputs = Box::new([0.0; FFT_INPUTS]);
+    // info!("fft_inputs created");
+
+    // TODO: store these in a global? in the state? i dunno.
+    let mut fft_outputs = Box::new([0.0; FFT_OUTPUTS]);
+    info!("fft_outputs created");
+
+    // theres no need for i2s fps tracking when the pixel has its own tracker
+    // let mut fps = Box::new(FpsTracker::new("i2s"));
+
+    log_stack_high_water_mark("mic 3", None);
 
     // TODO: what dma frame counts? what buffer count?
     let channel_cfg = i2s::config::Config::default()
@@ -475,53 +518,6 @@ fn mic_task(
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
 
-    // log_stack_high_water_mark("mic 2", None);
-
-    // TODO: this should maybe be a static+Lazy+Mutex instead of a box?
-    // TODO: does boxing do what we want? i think its too big to make on the stack at all. we need to think more about this. maybe a static will work, but we might not have enough space there either
-    // let mut audio_buffer: Box<AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS>> =
-    //     Box::new(AudioBuffer::new());
-
-    // TODO: still not sure if i should use static_cell or once_cell
-    // TODO: how do we put this in .bss? is that what we want
-    static AUDIO_BUFFER: ConstStaticCell<AudioBuffer<I2S_SAMPLE_SIZE, FFT_INPUTS>> =
-        ConstStaticCell::new(AudioBuffer::new());
-    let audio_buffer = AUDIO_BUFFER.take();
-    audio_buffer.fill();
-
-    info!("Audio buffer created");
-
-    // TODO: the fft is all on the stack. its too big. need to move it to the heap
-    // let fft: Box<FFT<FFT_INPUTS, FFT_OUTPUTS>> =
-    //     Box::new(FFT::new_with_window::<HanningWindow<FFT_INPUTS>>());
-
-    // let scale_builder = Box::new(ExponentialScaleBuilder::<FFT_OUTPUTS, 32>::new(
-    //     20.0,
-    //     15_500.0,
-    //     I2S_SAMPLE_RATE_HZ as f32,
-    // ));
-    // info!("scale_builder: {:?}", scale_builder);
-
-    // TODO: what size should this buffer be? i'm really not sure what this data even looks like
-    // TODO: do we actually want this in a Box?
-    // TODO: should this be in a ConstStaticCell/StaticCell instead?
-    let mut i2s_buffer = Box::new([0u8; I2S_U8_BUFFER_SIZE]);
-    info!("i2s_buffer created");
-
-    // TODO: allocate this to somewhere special in ram? there seems to be a lot of choices
-    // TODO: should this be in a Const Static Cell instead?
-    let mut i2s_samples = Box::new(Samples([0.0; I2S_SAMPLE_SIZE]));
-    info!("i2s_samples created");
-
-    // TODO: like the other buffers, i'm not sure if this should be a box or a static or a const static
-    let mut fft_samples = Box::new(Samples([0.0; FFT_INPUTS]));
-    info!("fft_samples created");
-
-    // theres no need for i2s fps tracking when the pixel has its own tracker
-    // let mut fps = Box::new(FpsTracker::new("i2s"));
-
-    log_stack_high_water_mark("mic 3", None);
-
     loop {
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
@@ -538,15 +534,20 @@ fn mic_task(
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
-        audio_buffer.push_samples(&i2s_samples);
+        // this passes by ref because they are coming out of a buffer that we need to re-use next loop
+        buffered_fft.push_samples(&i2s_samples);
 
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
+        // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
-        // // TODO: for some reason rust analyzer is showing 512 here even though it should be more
-        // TODO: do we need them copied here? should we use references still?
-        audio_buffer.samples_in_place(fft_samples.as_mut());
+        buffered_fft.fft(fft_outputs.as_mut());
 
-        // let amplitudes = fft.weighted_amplitudes(samples);
+        // // // TODO: for some reason rust analyzer is showing 512 here even though it should be more
+        // // TODO: do we need them copied here? should we use references still?
+        // audio_buffer.samples_in_place(fft_outputs.as_mut());
+
+        // // TODO: this is probably going to overflow
+        // let amplitudes = fft.weighted_amplitudes(fft_samples.as_ref());
 
         // let loudness = scale_builder.build(amplitudes);
         // // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0

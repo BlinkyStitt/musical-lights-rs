@@ -26,7 +26,7 @@ pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
 pub trait AggregatedAmplitudesBuilder<const IN: usize> {
     type Output;
 
-    // you probably want something like this
+    // // NOTE: you maybe want something like this
     // map: [Option<usize>; IN],
 
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output;
