@@ -69,18 +69,19 @@ const NUM_ONBOARD_NEOPIXELS: usize = 1;
 /// fibonacci panel is 256
 /// the 1x1 net is 20x20 == 400 pixels. the watchdog timer is throwing if I2S_SAMPLE_SIZE is 512. thats just too many ffts
 /// the 1x2 net is 20x40 == 800 pixels.
-const NUM_FIBONACCI_NEOPIXELS: usize = 400;
+const NUM_FIBONACCI_NEOPIXELS: usize = 256;
 
 /// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
 /// TODO: should this match our slowest sensor?
 // const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
-/// TODO: 48kHz?
-const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
+/// TODO: 48kHz? 96Khz? 44.1kHz?
+const I2S_SAMPLE_RATE_HZ: u32 = 96_000;
 
 /// TODO: what size FFT? i want to have 4096, but 2048 is probably fine
 const FFT_INPUTS: usize = 4096;
 /// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
-const I2S_SAMPLE_SIZE: usize = 1024;
+/// different sample rates and FFT_INPUTS are a good idea here!
+const I2S_SAMPLE_SIZE: usize = 2048;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
