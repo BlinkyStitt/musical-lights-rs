@@ -77,7 +77,7 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
 /// TODO: what size FFT? i want to have 4096, but 2048 is probably fine
-const FFT_INPUTS: usize = 2048;
+const FFT_INPUTS: usize = 4096;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
