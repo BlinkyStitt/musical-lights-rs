@@ -31,6 +31,7 @@ pub trait AggregatedAmplitudesBuilder<const IN: usize, const OUT: usize> {
 
     fn build(&self, input: WeightedAmplitudes<IN>) -> Self::Output;
 
+    /// TODO: this output should use Self::Output
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]);
 }
 

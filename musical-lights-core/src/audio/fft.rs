@@ -120,10 +120,11 @@ impl_fft!(1024, rfft_1024);
 impl_fft!(2048, rfft_2048);
 impl_fft!(4096, rfft_4096);
 
-pub fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
+pub const fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
     (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)
 }
 
+/// TODO: this can't be const because of round
 pub fn frequency_to_bin(frequency: f32, sample_rate_hz: f32, num_bins: usize) -> usize {
     ((frequency * (num_bins * 2) as f32) / sample_rate_hz).round() as usize
 }

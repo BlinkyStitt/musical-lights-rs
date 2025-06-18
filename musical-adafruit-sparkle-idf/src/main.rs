@@ -104,7 +104,8 @@ struct State {
     magnetometer: Option<Magnetometer>,
     self_coordinate: Option<Coordinate>,
     self_id: Option<PeerId>,
-    // TODO: max peers so that we dont run out of ram. what does this do when its full though?
+    /// TODO: max peers is so that we dont run out of ram. what does this do when its full though?
+    /// TODO: do we want their coordinates, or something else?
     peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
 }
 

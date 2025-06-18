@@ -15,6 +15,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<BARK_SCALE_OUT>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
+    /// TODO: this needs to be const!
     pub fn new(sample_rate_hz: f32) -> Self {
         let mut map = [Some(0); BINS];
         for (i, x) in map.iter_mut().enumerate() {
@@ -42,12 +43,12 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkSc
     }
 
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
-        todo!();
+        AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate_into(&self.map, input, output);
     }
 }
 
 /// turn a frequency into a bark value
-pub fn bark_scale(f: f32) -> Option<usize> {
+pub const fn bark_scale(f: f32) -> Option<usize> {
     // TODO: these formulas don't match the table on the wiki page. i guess a match is fine
     // let x = 13.0 * (0.00076 * f).atan() + 3.5 * ((f / 7500.0) * (f / 7500.0)).atan();
 
