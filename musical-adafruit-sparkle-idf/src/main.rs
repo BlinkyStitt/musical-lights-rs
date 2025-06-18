@@ -207,7 +207,7 @@ fn main() -> eyre::Result<()> {
         priority: 2,
         ..Default::default()
     };
-    blink_neopixels_thread_cfg.stack_size += 1024;
+    // blink_neopixels_thread_cfg.stack_size += 1024;
     blink_neopixels_thread_cfg.set()?;
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
@@ -234,7 +234,7 @@ fn main() -> eyre::Result<()> {
         ..Default::default()
     };
     // TODO: this size does not match what i'm actually seeing. i'm confused
-    mic_thread_cfg.stack_size += 1024 * 71; // TODO: how much bigger do we actually need? changing this doesn't behave like i expected. i must be missing something
+    // mic_thread_cfg.stack_size += 1024 * 71; // TODO: how much bigger do we actually need? changing this doesn't behave like i expected. i must be missing something
     mic_thread_cfg.set()?;
 
     // TODO: make sure this has the highest priority?
@@ -262,7 +262,7 @@ fn main() -> eyre::Result<()> {
         priority: 2,
         ..Default::default()
     };
-    read_from_sensors_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need?
+    // read_from_sensors_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need?
     read_from_sensors_thread_cfg.set()?;
 
     let read_from_sensors_handle = thread::spawn(move || {
