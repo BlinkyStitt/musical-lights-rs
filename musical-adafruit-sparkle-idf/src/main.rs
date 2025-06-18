@@ -21,7 +21,7 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
-use musical_lights_core::audio::AWeighting;
+use musical_lights_core::audio::{normalize_spectrum, AWeighting};
 use musical_lights_core::{
     audio::{
         parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer, BufferedFFT,
@@ -63,25 +63,28 @@ use crate::{
     sensor_uart::{UartFromSensors, UartToSensors},
 };
 
+const MAX_PEERS: usize = 4;
+
 /// theres 1 built in neopixel. its useful for debugging, but we should maybe have an option to skip it
 const NUM_ONBOARD_NEOPIXELS: usize = 1;
 
 /// fibonacci panel is 256
 /// the 1x1 net is 20x20 == 400 pixels. the watchdog timer is throwing if I2S_SAMPLE_SIZE is 512. thats just too many ffts
 /// the 1x2 net is 20x40 == 800 pixels.
-const NUM_FIBONACCI_NEOPIXELS: usize = 256;
+const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 
-/// TODO: this is probably too high once we have a bunch of other things going on. but lets try out two cores!
-/// TODO: should this match our slowest sensor?
-// const FPS_FIBONACCI_NEOPIXELS: u64 = 100;
-/// TODO: 48kHz? 96Khz? 44.1kHz?
-const I2S_SAMPLE_RATE_HZ: u32 = 96_000;
+/// TODO: 44.1kHz? 48kHz? 96Khz?
+const I2S_SAMPLE_RATE_HZ: u32 = 44100;
 
 /// TODO: what size FFT? i want to have 4096, but 2048 is probably fine
 const FFT_INPUTS: usize = 4096;
+
+/// TODO: not sure if this should be 1, 2, or 4
+const I2S_SAMPLE_OVERLAP: usize = 4;
+
 /// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
 /// different sample rates and FFT_INPUTS are a good idea here!
-const I2S_SAMPLE_SIZE: usize = 2048;
+const I2S_SAMPLE_SIZE: usize = FFT_INPUTS / I2S_SAMPLE_OVERLAP;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
@@ -89,6 +92,7 @@ const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
 const _SAFETY_CHECKS: () = {
     assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
     assert!(I2S_SAMPLE_SIZE > 1);
+    assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP % 2 == 0)
 };
 
 /// TODO: add a lot more to this
@@ -101,7 +105,7 @@ struct State {
     self_coordinate: Option<Coordinate>,
     self_id: Option<PeerId>,
     // TODO: max peers so that we dont run out of ram. what does this do when its full though?
-    peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, 4>,
+    peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
 }
 
 // impl State {
@@ -495,7 +499,7 @@ fn mic_task(
     static BUFFERED_FFT: ConstStaticCell<
         BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>,
     > = ConstStaticCell::new(BufferedFFT::new(HanningWindow));
-    let buffered_fft = BUFFERED_FFT.take();
+    let mut buffered_fft = BUFFERED_FFT.take();
 
     // TODO: type safety to make sure this is called!
     buffered_fft.fill_zero();
@@ -590,15 +594,15 @@ fn mic_task(
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
-        // yield or reset?
-        // yield_now();
-
         // TODO: only do the FFT if the sample buffer has the right number of elements
-        buffered_fft.fft(fft_outputs_buf);
+        let spectrum = buffered_fft.fft();
 
-        // yield_now();
+        // running the fft can be slow. yield now
+        yield_now();
 
-        // fft_outputs now includes the non-aggregated outputs. this is 2048 bins! thats honestly probably more than we need, but lets try it anyways
+        normalize_spectrum(spectrum, fft_outputs_buf);
+
+        // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
 
         // TODO: sum the fft_outputs with some aggregators (whats the actual technical term?)
         // exponential_scale_builder

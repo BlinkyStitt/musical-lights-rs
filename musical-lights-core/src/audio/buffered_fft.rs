@@ -56,7 +56,7 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, W: Windo
 impl<const SAMPLE_IN: usize, W: Window<4096>> BufferedFFT<SAMPLE_IN, 4096, 2048, W> {
     /// TODO: not sure what type to put here for the output
     /// TODO: what should this function be called?
-    pub fn fft(&mut self, output: &mut [f32; 2048]) {
+    pub fn fft(&mut self) -> &mut [num::Complex<f32>; 2048] {
         // first, we load buffer up with the samples (TODO: move this to a helper function)
         let (a, b) = self.sample_buf.as_slices();
 
@@ -70,20 +70,31 @@ impl<const SAMPLE_IN: usize, W: Window<4096>> BufferedFFT<SAMPLE_IN, 4096, 2048,
 
         let spectrum = microfft::real::rfft_4096(&mut self.fft_buf);
 
-        // TODO: yield here?
-
         // since the real-valued coefficient at the Nyquist frequency is packed into the
         // imaginary part of the DC bin, it must be cleared before computing the amplitudes
+        // TODO: what does this even mean?
+        // TODO: print this once per second. need an every_n_milliseconds macro like fastled has
+        // info!("???: {}", spectrum[0].im);
         spectrum[0].im = 0.0;
 
-        // TODO: can we do this better?
-        for (x, &spectrum) in output.iter_mut().zip(spectrum.iter()) {
-            *x = spectrum.norm();
+        spectrum
+    }
+}
 
-            // TODO: need to apply something to offset the windowing?
-            // TODO: need to apply something for weighting. lets default to a-weighting
-        }
+// TODO: do we need this output to match the number of fft values? don't we actually want it to do the weighting and then add it directly to an aggregated bin?
+// TODO: this should probably be a function on
+pub fn normalize_spectrum<const N: usize>(
+    spectrum: &mut [num::Complex<f32>],
+    output: &mut [f32; N],
+) {
+    debug_assert!(spectrum.len() == N);
 
-        // TODO: what do we do here? how do we do all the conversion steps with using as few buffers as possible?
+    // TODO: can we do this better?
+    for (x, &s) in output.iter_mut().zip(spectrum.iter()) {
+        *x = s.norm();
+
+        // TODO: need to apply something to offset the windowing?
+        // TODO: need to apply something for weighting. lets default to a-weighting
+        // TODO: aggregate here? no need for having all the outputs here
     }
 }

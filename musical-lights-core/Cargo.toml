@@ -24,7 +24,9 @@ enterpolation = { version = "0.3.0", default-features = false, features = [
 heapless = { version = "0.8.0", features = ["serde"] }
 i24 = { version = "2.1.0", default-features = false }
 log = { version = "*", default-features = false, optional = true }
-microfft = { version = "0.6.0" }
+microfft = { version = "0.6.0", default-features = false, features = [
+    "size-4096",
+] }
 micromath = "2.1.0"
 nalgebra = { version = "0.33.2", default-features = false }
 num = { version = "0.4.3", default-features = false }
