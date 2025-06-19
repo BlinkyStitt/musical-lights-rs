@@ -24,7 +24,7 @@ use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_rando
 use musical_lights_core::audio::AWeighting;
 use musical_lights_core::{
     audio::{
-        parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
+        parse_i2s_16_bit_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
         ExponentialScaleBuilder, Samples,
     },
     compass::{Coordinate, Magnetometer},
@@ -87,12 +87,14 @@ const I2S_SAMPLE_OVERLAP: usize = 4;
 const I2S_SAMPLE_SIZE: usize = FFT_INPUTS / I2S_SAMPLE_OVERLAP;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
-const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i32>();
+
+/// TODO: with 24-but audio, this should use size_of::<i32>
+const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
 const _SAFETY_CHECKS: () = {
     assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
     assert!(I2S_SAMPLE_SIZE > 1);
-    assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP % 2 == 0)
+    assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
 };
 
 /// TODO: add a lot more to this
@@ -102,10 +104,11 @@ const _SAFETY_CHECKS: () = {
 struct State {
     orientation: Orientation,
     magnetometer: Option<Magnetometer>,
+    /// TODO: should this be a bearing along with the coordinate?
     self_coordinate: Option<Coordinate>,
     self_id: Option<PeerId>,
     /// TODO: max peers is so that we dont run out of ram. what does this do when its full though?
-    /// TODO: do we want their coordinates, or something else?
+    /// TODO: do we want their coordinates, or something else like our bearing to them?
     peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
 }
 
@@ -410,6 +413,7 @@ fn blink_neopixels_task(
         // TODO: gamme correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
+        // TODO: do something to force a faked state for the first 5 seconds. during that time, we should play the "startup" pattern
         // TODO: this clone is too slow, but a critical section mutex also shouldn't be held open for long
         let unlocked_state = state.lock().map_err(|_| MyError::PoisonLock)?;
 
@@ -509,7 +513,7 @@ fn mic_task(
     >;
 
     static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> = ConstStaticCell::new(
-        BufferedFFT::uninit(HanningWindow, AWeighting::new(I2S_SAMPLE_RATE_HZ as f32)),
+        BufferedFFT::uninit(AWeighting::new(I2S_SAMPLE_RATE_HZ as f32)),
     );
     let buffered_fft = BUFFERED_FFT.take();
     buffered_fft.init();
@@ -562,7 +566,7 @@ fn mic_task(
     // 24 bit audio is padded to 32 bits. how do they pad the sign though?
     // TODO: do we want to use 8 or 16 or 24 bit audio?
     let slot_cfg = i2s::config::StdSlotConfig::philips_slot_default(
-        i2s::config::DataBitWidth::Bits32,
+        i2s::config::DataBitWidth::Bits16,
         i2s::config::SlotMode::Mono,
     );
 
@@ -592,7 +596,7 @@ fn mic_task(
         // );
 
         // TODO: this should be a helper on Samples
-        parse_i2s_24_bit_to_f32_array(i2s_buf, &mut i2s_sample_buf.0);
+        parse_i2s_16_bit_to_f32_array(i2s_buf, &mut i2s_sample_buf.0);
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());

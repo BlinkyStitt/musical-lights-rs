@@ -9,12 +9,28 @@ pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
     input: &[u8; IN],
     output: &mut [f32; OUT],
 ) {
-    // TODO: debug assert? compile time assert?
-    assert_eq!(IN, OUT * size_of::<f32>());
+    // TODO: debug assert? compile time assert? should this be size_of i32 or f32?
+    assert_eq!(IN, OUT * size_of::<i32>());
 
     for (chunk, x) in input.chunks_exact(4).zip(output.iter_mut()) {
         // chunk[0] is always empty
         *x = I24::from_be_bytes([chunk[1], chunk[2], chunk[3]]).to_i32() as f32 / I24_MAX;
+
+        debug_assert!(*x >= -1.0);
+        debug_assert!(*x <= 1.0);
+    }
+}
+
+pub fn parse_i2s_16_bit_to_f32_array<const IN: usize, const OUT: usize>(
+    input: &[u8; IN],
+    output: &mut [f32; OUT],
+) {
+    // TODO: debug assert? compile time assert?
+    assert_eq!(IN, OUT * size_of::<i16>());
+
+    for (chunk, x) in input.chunks_exact(2).zip(output.iter_mut()) {
+        // chunk[0] is always empty
+        *x = i16::from_be_bytes([chunk[0], chunk[1]]) as f32 / i16::MAX as f32;
 
         debug_assert!(*x >= -1.0);
         debug_assert!(*x <= 1.0);

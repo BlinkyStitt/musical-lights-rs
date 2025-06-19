@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use std::thread::yield_now;
 
 use crate::{
@@ -12,12 +13,12 @@ pub struct BufferedFFT<
     const SAMPLE_IN: usize,
     const FFT_IN: usize,
     const FFT_OUT: usize,
-    W: Window<FFT_IN>,
+    WI: Window<FFT_IN>,
     WE: Weighting<FFT_OUT>,
 > {
     sample_buf: CircularBuffer<FFT_IN, f32>,
-    window: W,
     fft_buf: [f32; FFT_IN],
+    window: PhantomData<WI>,
     weights: [f32; FFT_OUT],
     weighting: WE,
     // /// TODO: think more about this
@@ -34,23 +35,23 @@ impl<
 {
     /// Use this when you want the buffered fft to be statically allocated.
     /// TODO: figure out how to call init on this from const. or at least how to make sure init gets called
-    pub const fn uninit(window: WI, weighting: WE) -> Self {
+    pub const fn uninit(weighting: WE) -> Self {
         assert!(SAMPLE_IN > 0);
         assert!(FFT_IN / 2 == FFT_OUT);
         assert!(FFT_IN % SAMPLE_IN == 0);
 
         Self {
             sample_buf: CircularBuffer::new(),
-            window,
             fft_buf: [0.0; FFT_IN],
+            window: PhantomData::<WI>,
             weights: [0.0; FFT_OUT],
             weighting,
         }
     }
 
     /// useful if you don't need this statically allocated.
-    pub fn new(window: WI, weighting: WE) -> Self {
-        let mut x = Self::uninit(window, weighting);
+    pub fn new(weighting: WE) -> Self {
+        let mut x = Self::uninit(weighting);
 
         x.init();
 
