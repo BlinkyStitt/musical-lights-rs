@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![feature(type_alias_impl_trait)]
+#![feature(duration_millis_float)]
 
 pub mod audio;
 pub mod battery;

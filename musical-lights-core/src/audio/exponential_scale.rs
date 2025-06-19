@@ -21,10 +21,14 @@ pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes
 
 /// bins in, bands/channels out
 impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
-    pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
-        let mut map = [None; IN];
+    pub const fn uninit() -> Self {
+        let map = [None; IN];
+        Self { map }
+    }
 
-        debug_assert!(
+    /// TODO: how can we use types to be sure this init gets called
+    pub fn init(&mut self, min_freq: f32, max_freq: f32, sample_rate_hz: f32) {
+        assert!(
             sample_rate_hz / 2.0 >= max_freq,
             "sample rate too low. must be at least double the maximum frequency"
         );
@@ -42,6 +46,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         info!("E = {}", e);
 
         // TODO: use end_bins instead of map? less RAM but more complicated code
+        // TODO: this is big and might cause a stack overflow! need to take a buffer or refactor
         let mut end_bins = [0; OUT];
 
         let mut count = min_bin;
@@ -52,7 +57,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
 
             count += d;
 
-            // TODO: is there where max_bin should be checked? we shouldn't be that far over, but we should test more if its a lot over
+            // TODO: is this where max_bin should be checked? we shouldn't be that far over, but we should test more if its a lot over
             *end_bin = count.min(max_bin);
         }
 
@@ -60,19 +65,18 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
 
         let mut start_bin = min_bin;
         for (b, &end_bin) in end_bins.iter().enumerate() {
-            for x in map.iter_mut().take(end_bin).skip(start_bin) {
+            for x in self.map.iter_mut().take(end_bin).skip(start_bin) {
                 *x = Some(b);
             }
 
             start_bin = end_bin;
         }
-
-        Self { map }
     }
 
-    // TODO: move this onto the AggregatedAmplitudesBuilder trait
-    pub fn build_into(&self, weighted_amplitudes: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedAmplitudes::aggregate_into(&self.map, weighted_amplitudes, output)
+    pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
+        let mut x = Self::uninit();
+        x.init(min_freq, max_freq, sample_rate_hz);
+        x
     }
 }
 
@@ -81,14 +85,16 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
 {
     type Output = ExponentialScaleAmplitudes<OUT>;
 
+    /// TODO: rename this function
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
         let x = AggregatedAmplitudes::aggregate(&self.map, x);
 
         ExponentialScaleAmplitudes(x)
     }
 
+    /// TODO: rename this function
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        todo!();
+        AggregatedAmplitudes::aggregate_into(&self.map, input, output)
     }
 }
 

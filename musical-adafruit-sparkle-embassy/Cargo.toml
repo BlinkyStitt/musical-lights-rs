@@ -49,6 +49,8 @@ bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5
 ] }
 critical-section = "1.2.0"
 embassy-executor = { version = "0.7.0", features = ["defmt", "nightly"] }
+embassy-sync = { version = "0.6.2", features = ["defmt"] }
+embassy-futures = { version = "0.1.1", features = ["defmt"] }
 embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
 esp-hal-embassy = { version = "0.7.0", features = ["esp32"] }
 esp-wifi = { version = "0.13.0", features = [
@@ -61,21 +63,28 @@ esp-wifi = { version = "0.13.0", features = [
   "wifi",
 ] }
 heapless = { version = "0.8.0", default-features = false }
+lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1", version = "0.1.0" }
+musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
+  "defmt",
+  "embassy",
+  "libm",
+] }
 static_cell = { version = "2.1.0", features = ["nightly"] }
-ws2812-async = "0.3.0"
 smart-leds = "0.4.0"
 esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", branch = "main", version = "0.14.0", features = [
   "defmt",
   "esp32",
 ] }
 sx1262 = { version = "0.2.1", features = ["defmt"] }
-lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1", version = "0.1.0" }
-embassy-sync = { version = "0.6.2", features = ["defmt"] }
-embassy-futures = { version = "0.1.1", features = ["defmt"] }
+ws2812-async = "0.3.0"
 
 # TODO: this is incompatible with the current esp-hal version (1.0.0-beta.0). its on main, but not released yet
 # TODO: i think its only a blocking method of writing though. so i don't know if we want it. maybe its okay if we keep it on core 1?
 # esp-hal-smartled = { version = "*", features = ["esp32"] }
+
+[patch.crates-io]
+# Forked until <https://github.com/jmg049/i24/pull/17> is merged
+i24 = { git = "https://github.com/BlinkyStitt/i24.git", rev = "4f41af60055f756740572121bb7ff1cadf39233b" }
 
 [profile.dev]
 # Rust debug is too slow.

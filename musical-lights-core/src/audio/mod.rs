@@ -27,7 +27,7 @@ pub use amplitudes::{
 };
 pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
 pub use buffer::AudioBuffer;
-pub use buffered_fft::{BufferedFFT, normalize_spectrum};
+pub use buffered_fft::BufferedFFT;
 pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};

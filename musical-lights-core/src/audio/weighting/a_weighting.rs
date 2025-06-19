@@ -10,7 +10,7 @@ pub struct AWeighting<const N: usize> {
 }
 
 impl<const N: usize> AWeighting<N> {
-    pub fn new(sample_rate_hz: f32) -> Self {
+    pub const fn new(sample_rate_hz: f32) -> Self {
         Self { sample_rate_hz }
     }
 }

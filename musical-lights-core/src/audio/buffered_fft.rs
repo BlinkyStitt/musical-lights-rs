@@ -1,5 +1,9 @@
-use crate::logging::{info, warn};
-use crate::{audio::Samples, windows::Window};
+use std::thread::yield_now;
+
+use crate::{
+    audio::{Samples, Weighting},
+    windows::Window,
+};
 use circular_buffer::CircularBuffer;
 
 /// put a circular buffer in front of an FFT. Use windowing to make the middle of the middle window more important.
@@ -9,22 +13,28 @@ pub struct BufferedFFT<
     const FFT_IN: usize,
     const FFT_OUT: usize,
     W: Window<FFT_IN>,
+    WE: Weighting<FFT_OUT>,
 > {
-    /// TODO: box this? or will this always be statically allocated?
     sample_buf: CircularBuffer<FFT_IN, f32>,
-    /// TODO: think more about this
     window: W,
-    /// TODO: think more about this
     fft_buf: [f32; FFT_IN],
+    weights: [f32; FFT_OUT],
+    weighting: WE,
     // /// TODO: think more about this
     // fft_complex_output_buf: [Complex<f32>; FFT_OUT],
 }
 
-impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, W: Window<FFT_IN>>
-    BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, W>
+impl<
+    const SAMPLE_IN: usize,
+    const FFT_IN: usize,
+    const FFT_OUT: usize,
+    WI: Window<FFT_IN>,
+    WE: Weighting<FFT_OUT>,
+> BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, WI, WE>
 {
+    /// Use this when you want the buffered fft to be statically allocated.
     /// TODO: figure out how to call init on this from const. or at least how to make sure init gets called
-    pub const fn new(window: W) -> Self {
+    pub const fn uninit(window: WI, weighting: WE) -> Self {
         assert!(SAMPLE_IN > 0);
         assert!(FFT_IN / 2 == FFT_OUT);
         assert!(FFT_IN % SAMPLE_IN == 0);
@@ -33,42 +43,60 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, W: Windo
             sample_buf: CircularBuffer::new(),
             window,
             fft_buf: [0.0; FFT_IN],
-            // fft_complex_output_buf: [Complex::ZERO; FFT_OUT],
+            weights: [0.0; FFT_OUT],
+            weighting,
         }
     }
 
-    /// use builder pattern to ensure that fill_zero is called before the buffer is used. be sure this is zero cost!
-    pub fn fill_zero(&mut self) {
+    /// useful if you don't need this statically allocated.
+    pub fn new(window: WI, weighting: WE) -> Self {
+        let mut x = Self::uninit(window, weighting);
+
+        x.init();
+
+        x
+    }
+
+    /// TODO: use types to make sure this function is called after uninit!
+    pub fn init(&mut self) {
         self.sample_buf.fill(0.0);
+
+        let window_scaling = WI::scaling();
+
+        for (i, x) in self.weights.iter_mut().enumerate() {
+            *x = window_scaling * self.weighting.weight(i);
+        }
     }
 
     pub fn push_samples(&mut self, samples: &Samples<SAMPLE_IN>) {
         self.sample_buf.extend_from_slice(&samples.0)
     }
-
-    #[inline]
-    pub fn window_scaling(&self) -> f32 {
-        W::scaling()
-    }
 }
 
 /// TODO: macro for this so we can support multiple rfft sizes. or maybe a different library that does more at runtime?
-impl<const SAMPLE_IN: usize, W: Window<4096>> BufferedFFT<SAMPLE_IN, 4096, 2048, W> {
-    /// TODO: not sure what type to put here for the output
+impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
+    BufferedFFT<SAMPLE_IN, 4096, 2048, WI, WE>
+{
+    /// TODO: not sure what type to put here for the output? WeightedOutputs?
     /// TODO: what should this function be called?
-    pub fn fft(&mut self) -> &mut [num::Complex<f32>; 2048] {
-        // first, we load buffer up with the samples (TODO: move this to a helper function)
+    pub fn fft(&mut self, output: &mut [f32; 2048]) {
+        // first, we load buffer up with the samples (TODO: move this to a helper function?)
         let (a, b) = self.sample_buf.as_slices();
-
         self.fft_buf[..a.len()].copy_from_slice(a);
         self.fft_buf[a.len()..].copy_from_slice(b);
 
-        // info!("length: {} {} {}", a.len(), b.len(), self.fft_buf.len());
+        // apply the window to the fft_buf
+        WI::windows_in_place(&mut self.fft_buf);
 
-        // todo: apply the window to the fft_buf
-        // self.window.something(&mut self.fft_buf)
+        // TODO: yield here with a specific compile time feature
+        #[cfg(feature = "std")]
+        yield_now();
 
         let spectrum = microfft::real::rfft_4096(&mut self.fft_buf);
+
+        // TODO: yield here with a specific compile time feature
+        #[cfg(feature = "std")]
+        yield_now();
 
         // since the real-valued coefficient at the Nyquist frequency is packed into the
         // imaginary part of the DC bin, it must be cleared before computing the amplitudes
@@ -77,24 +105,14 @@ impl<const SAMPLE_IN: usize, W: Window<4096>> BufferedFFT<SAMPLE_IN, 4096, 2048,
         // info!("???: {}", spectrum[0].im);
         spectrum[0].im = 0.0;
 
-        spectrum
-    }
-}
+        // TODO: can we do this better?
+        for (i, (x, &s)) in output.iter_mut().zip(spectrum.iter()).enumerate() {
+            // calculate the magnitude of the sample, then restore the window scaling, then apply a weighting
+            *x = s.norm() * self.weights[i];
+        }
 
-// TODO: do we need this output to match the number of fft values? don't we actually want it to do the weighting and then add it directly to an aggregated bin?
-// TODO: this should probably be a function on
-pub fn normalize_spectrum<const N: usize>(
-    spectrum: &mut [num::Complex<f32>],
-    output: &mut [f32; N],
-) {
-    debug_assert!(spectrum.len() == N);
-
-    // TODO: can we do this better?
-    for (x, &s) in output.iter_mut().zip(spectrum.iter()) {
-        *x = s.norm();
-
-        // TODO: need to apply something to offset the windowing?
-        // TODO: need to apply something for weighting. lets default to a-weighting
-        // TODO: aggregate here? no need for having all the outputs here
+        // // TODO: yield here with a specific compile time feature
+        // #[cfg(feature = "std")]
+        // yield_now();
     }
 }

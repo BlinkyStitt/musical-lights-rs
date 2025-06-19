@@ -8,7 +8,7 @@ pub use hanning::HanningWindow;
 
 /// TODO: really not sure about this anymore
 pub trait Window<const N: usize> {
-    /// since the windows have some part of them reduced from their original value, we need to offset them back after doing an FFT to get them back to 1.0
+    /// since the windows have some part of them reduced from their original value, we need to get them back to 1.0 after doing an FFT.
     /// TODO: think more about this
     fn scaling() -> f32 {
         let sum: f32 = (0..N)
@@ -47,6 +47,7 @@ pub trait Window<const N: usize> {
         (0..N).map(|i| Self::window(i))
     }
 
+    /// TODO: is this a good name?
     fn windows_in_place(output: &mut [f32; N]) {
         for (i, sample) in output.iter_mut().enumerate() {
             *sample = Self::window(i);

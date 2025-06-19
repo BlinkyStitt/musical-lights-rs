@@ -21,10 +21,10 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
-use musical_lights_core::audio::{normalize_spectrum, AWeighting};
+use musical_lights_core::audio::AWeighting;
 use musical_lights_core::{
     audio::{
-        parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, AudioBuffer, BufferedFFT,
+        parse_i2s_24_bit_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
         ExponentialScaleBuilder, Samples,
     },
     compass::{Coordinate, Magnetometer},
@@ -130,6 +130,7 @@ fn main() -> eyre::Result<()> {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     info!("Hello, world!");
+    info!("NUM LEDS: {}", NUM_FIBONACCI_NEOPIXELS);
 
     // TODO: static_cell? arc? something else? LazyLock from std?
     static STATE: Lazy<Mutex<State>> = Lazy::new(|| Mutex::new(State::default()));
@@ -207,7 +208,7 @@ fn main() -> eyre::Result<()> {
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
     let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
 
-    let mut blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
+    let blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"blink_neopixels\0"),
         priority: 2,
         ..Default::default()
@@ -233,7 +234,7 @@ fn main() -> eyre::Result<()> {
     // TODO: is this a good idea? i want the light code running ASAP
     yield_now();
 
-    let mut mic_thread_cfg = ThreadSpawnConfiguration {
+    let mic_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"mic\0"),
         priority: 2,
         ..Default::default()
@@ -262,7 +263,7 @@ fn main() -> eyre::Result<()> {
     // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
-    let mut read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
+    let read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"read_from_sensors\0"),
         priority: 2,
         ..Default::default()
@@ -485,26 +486,33 @@ fn mic_task(
     // sleep(Duration::from_secs(1));
     info!("Start I2S mic!");
 
-    // log_stack_high_water_mark("mic 2", None);
+    // log_stack_high_water_mark("mic 1", None);
 
     // TODO: this is probably going to panic. probably need a ConstStaticCell and then we init it (or a better pattern that I don't know yet)
-    // static EXPONENTIAL_SCALE_BUILDER: StaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> =
-    //     StaticCell::new();
-    // let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER
-    //     .init_with(|| ExponentialScaleBuilder::new(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32));
-    // info!("exponential_scale_builder created")
+    static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> =
+        ConstStaticCell::new(ExponentialScaleBuilder::uninit());
+    let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
+    exponential_scale_builder.init(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
+    info!("exponential_scale_builder created");
 
-    // TODO: also do shazam and aggregations?
+    // TODO: write this
+    static SHAZAM_SCALE_BUILDER: ConstStaticCell<()> = ConstStaticCell::new(());
+    let shazam_scale_builder = SHAZAM_SCALE_BUILDER.take();
+    info!("shazam_scale_builder created");
 
-    // TODO: how should we set the window and weighting with const? maybe its fine to just set after?
-    static BUFFERED_FFT: ConstStaticCell<
-        BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>,
-    > = ConstStaticCell::new(BufferedFFT::new(HanningWindow));
-    let mut buffered_fft = BUFFERED_FFT.take();
+    type MyBufferedFFT = BufferedFFT<
+        I2S_SAMPLE_SIZE,
+        FFT_INPUTS,
+        FFT_OUTPUTS,
+        HanningWindow<FFT_INPUTS>,
+        AWeighting<FFT_OUTPUTS>,
+    >;
 
-    // TODO: type safety to make sure this is called!
-    buffered_fft.fill_zero();
-
+    static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> = ConstStaticCell::new(
+        BufferedFFT::uninit(HanningWindow, AWeighting::new(I2S_SAMPLE_RATE_HZ as f32)),
+    );
+    let buffered_fft = BUFFERED_FFT.take();
+    buffered_fft.init();
     info!("buffered_fft created");
 
     // TODO: this is causing a stack overflow, but in IDLE_1, not here? whats up with that. maybe do this init in main and pass it here?
@@ -516,22 +524,22 @@ fn mic_task(
 
     static I2S_BUF: ConstStaticCell<[u8; I2S_U8_BUFFER_SIZE]> =
         ConstStaticCell::new([0u8; I2S_U8_BUFFER_SIZE]);
-    let mut i2s_buf = I2S_BUF.take();
+    let i2s_buf = I2S_BUF.take();
     info!("i2s_buffer created");
 
     static I2S_SAMPLE_BUF: ConstStaticCell<Samples<I2S_SAMPLE_SIZE>> =
         ConstStaticCell::new(Samples([0.0; I2S_SAMPLE_SIZE]));
-    let mut i2s_sample_buf = I2S_SAMPLE_BUF.take();
+    let i2s_sample_buf = I2S_SAMPLE_BUF.take();
     info!("i2s_sample_buf created");
 
     // TODO: store these in a global? in the state? i dunno.
     static FFT_OUTPUTS_BUF: ConstStaticCell<[f32; FFT_OUTPUTS]> =
         ConstStaticCell::new([0.0; FFT_OUTPUTS]);
-    let mut fft_outputs_buf = FFT_OUTPUTS_BUF.take();
+    let fft_outputs_buf = FFT_OUTPUTS_BUF.take();
     info!("fft_outputs created");
 
     static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 32]> = ConstStaticCell::new([0.0; 32]);
-    let mut exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
+    let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
     info!("exponential_scale_outputs created");
 
     // theres no need for i2s fps tracking when the pixel has its own tracker
@@ -595,20 +603,22 @@ fn mic_task(
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
-        // TODO: only do the FFT if the sample buffer has the right number of elements
-        let spectrum = buffered_fft.fft();
-
         // running the fft can be slow. yield now
+        // TODO: do some analysis to see if this is always needed
         yield_now();
 
-        normalize_spectrum(spectrum, fft_outputs_buf);
+        // TODO: only do the FFT if the sample buffer has the right number of elements
+        buffered_fft.fft(fft_outputs_buf);
+
+        // running the fft can be slow. yield now
+        // TODO: do some analysis to see if this is always needed
+        yield_now();
 
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
 
         // TODO: sum the fft_outputs with some aggregators (whats the actual technical term?)
-        // exponential_scale_builder
-        //     .build_into(fft_outputs.as_slice(), exponential_scale_outputs.as_mut());
-        // // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
+        exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
+        // // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
         // // TODO: shazam
         // // TODO: beat detection
 

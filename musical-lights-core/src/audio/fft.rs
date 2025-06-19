@@ -124,7 +124,8 @@ pub const fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: u
     (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)
 }
 
-/// TODO: this can't be const because of round
-pub fn frequency_to_bin(frequency: f32, sample_rate_hz: f32, num_bins: usize) -> usize {
-    ((frequency * (num_bins * 2) as f32) / sample_rate_hz).round() as usize
+pub const fn frequency_to_bin(frequency: f32, sample_rate_hz: f32, num_bins: usize) -> usize {
+    // // NOTE: this can't be const because of round
+    // ((frequency * (num_bins * 2) as f32) / sample_rate_hz).round() as usize
+    (((frequency * (num_bins * 2) as f32) / sample_rate_hz) + 0.5) as usize
 }

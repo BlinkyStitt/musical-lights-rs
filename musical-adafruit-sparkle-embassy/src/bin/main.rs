@@ -42,7 +42,7 @@ use esp_hal_embassy::{Executor, InterruptExecutor};
 use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
 use esp_println as _;
 use lsm9ds1::interface::{I2cInterface, SpiInterface};
-use musical_adafruit_sparkle::fps::FpsTracker;
+use musical_lights_core::fps::FpsTracker;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -94,7 +94,7 @@ async fn blink_fibonacci256_neopixel_rmt(
         val: 255,
     };
 
-    // TODO: make these static mut with #[link_section = ".ext_ram.bss"]  ?
+    // TODO: make these static mut with #[link_section = ".ext_ram.bss"]  ? or use conststaticcell
     let mut onboard_data = Box::new([RGB8::default(); NUM_ONBOARD_NEOPIXELS]);
     let mut fibonacci_data = Box::new([RGB8::default(); NUM_FIBONACCI_NEOPIXELS]);
 
