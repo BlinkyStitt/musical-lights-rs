@@ -107,7 +107,7 @@ impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
 
         // TODO: can we do this better?
         for (i, (x, &s)) in output.iter_mut().zip(spectrum.iter()).enumerate() {
-            // calculate the magnitude of the sample, then restore the window scaling, then apply a weighting
+            // calculate the magnitude of the sample, then apply the window scaling and weighting
             *x = s.norm() * self.weights[i];
         }
 
