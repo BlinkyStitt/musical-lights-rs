@@ -186,10 +186,13 @@ fn main() -> eyre::Result<()> {
 
     // TODO: do we need two cores? how do we set them up?
 
+    // TODO: optionally turn on wifi so we can query shazam
+
     // for using randomness, we could also turn on the bluetooth or wifi modules, but I don't have a use for them currently
     let seed_high;
     let seed_low;
     unsafe {
+        // TODO: randome enable is only needed if wifi and bluetooth are both off
         bootloader_random_enable();
         seed_high = esp_random();
         seed_low = esp_random();
@@ -626,21 +629,24 @@ fn mic_task(
         yield_now();
 
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
-
         // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
+
+        // TODO: i don't think this is right. its showing the same values every loop
         exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
-        shazam_scale_builder.build_into(fft_outputs_buf, shazam_scale_outputs);
+
+        // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
+
+        // shazam_scale_builder.build_into(fft_outputs_buf, shazam_scale_outputs);
+        // TODO: i don't think this is right. its showing the same values every loop
+        // info!("shazam: {:?}", shazam_scale_outputs);
+
         // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
         // TODO: beat detection
         // TODO: what else? steve had some ideas
 
-        // info!("loudness: {:?}", exponential_scale_outputs);
-        info!("shazam: {:?}", shazam_scale_outputs);
-
-        // TODO: notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push? that might just be wasted resources
-
         // fps.tick();
 
+        // notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push without any delay?
         // TODO: is this the best way to notify the other thread to run?
         fft_ready.try_send(()).ok();
 

@@ -1,5 +1,7 @@
-#[allow(unused_imports)]
-use micromath::F32Ext;
+// #[allow(unused_imports)]
+// use micromath::F32Ext;
+
+use crate::logging::info;
 
 /// N = number of amplitudes
 /// IF N > S/2, there is an error
@@ -70,7 +72,10 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
         // TODO: we don't need to do this always
         output.fill(0.0);
 
+        // TODO: filter this efficiently?
         for (x, &i) in input.iter().zip(map.iter()) {
+            // info!("adding {} to {:?}", x, i);
+
             if let Some(i) = i {
                 output[i] += x;
             }

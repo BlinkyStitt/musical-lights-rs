@@ -1,6 +1,6 @@
-use crate::audio::bin_to_frequency;
-
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
+use crate::audio::bin_to_frequency;
+use crate::logging::info;
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
 
@@ -24,12 +24,11 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
     /// TODO: how can we use types to be sure this init gets called
     pub fn init(&mut self, sample_rate_hz: f32) {
         for (i, x) in self.map.iter_mut().enumerate() {
-            let f = bin_to_frequency(i, sample_rate_hz, SHAZAM_SCALE_OUT);
+            let f = bin_to_frequency(i, sample_rate_hz, FFT_OUT);
 
-            // bark is 1-24, but we want 0-23
-            let b = shazam_band(f).map(|x| x - 1);
+            let b = shazam_band(f);
 
-            // trace!("{} {} = {:?}", i, f, b);
+            // info!("{} {} = {:?}", i, f, b);
 
             *x = b;
         }

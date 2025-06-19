@@ -65,6 +65,8 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
 
         let mut start_bin = min_bin;
         for (b, &end_bin) in end_bins.iter().enumerate() {
+            info!("{} = bins {}..{}", b, start_bin, end_bin);
+
             for x in self.map.iter_mut().take(end_bin).skip(start_bin) {
                 *x = Some(b);
             }

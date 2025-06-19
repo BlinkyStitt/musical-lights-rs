@@ -78,15 +78,14 @@ impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
     where
         F: Fn(Message) -> MyResult<()>,
     {
-        warn!("faking Pong");
+        warn!("mock Pong");
         process_message(Message::Pong).unwrap();
 
-        warn!("clearing orientation");
+        warn!("mock orientation");
         process_message(Message::Orientation(Orientation::Unknown))?;
 
         loop {
             // TODO: move the gps around
-
             sleep(Duration::from_secs(5));
         }
     }
