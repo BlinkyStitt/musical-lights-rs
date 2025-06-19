@@ -528,7 +528,7 @@ fn mic_task(
 
     static I2S_BUF: ConstStaticCell<[u8; I2S_U8_BUFFER_SIZE]> =
         ConstStaticCell::new([0u8; I2S_U8_BUFFER_SIZE]);
-    let i2s_buf = I2S_BUF.take();
+    let i2s_u8_buf = I2S_BUF.take();
     info!("i2s_buffer created");
 
     static I2S_SAMPLE_BUF: ConstStaticCell<Samples<I2S_SAMPLE_SIZE>> =
@@ -588,15 +588,15 @@ fn mic_task(
     loop {
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
-        i2s_driver.read_exact(i2s_buf)?;
+        i2s_driver.read_exact(i2s_u8_buf)?;
 
         // trace!(
         //     "Read i2s: {} {} {} {}",
         //     i2s_buffer[0], i2s_buffer[1], i2s_buffer[2], i2s_buffer[3]
         // );
 
-        // TODO: this should be a helper on Samples
-        parse_i2s_16_bit_to_f32_array(i2s_buf, &mut i2s_sample_buf.0);
+        // TODO: compile time option to choose between 16-bit or 24-bit audio
+        parse_i2s_16_bit_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
