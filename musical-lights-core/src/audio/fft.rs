@@ -129,3 +129,25 @@ pub const fn frequency_to_bin(frequency: f32, sample_rate_hz: f32, num_bins: usi
     // ((frequency * (num_bins * 2) as f32) / sample_rate_hz).round() as usize
     (((frequency * (num_bins * 2) as f32) / sample_rate_hz) + 0.5) as usize
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::audio::{bin_to_frequency, frequency_to_bin};
+
+    #[test]
+    fn test_bin_and_frequency() {
+        let sample_rate_hz = 44_100.0;
+
+        let num_bins = 2048;
+
+        for i in 0..num_bins {
+            let frequency = bin_to_frequency(i, sample_rate_hz, num_bins);
+
+            let j = frequency_to_bin(frequency, sample_rate_hz, num_bins);
+
+            println!("{i} = {frequency} = {j}");
+
+            assert_eq!(i, j);
+        }
+    }
+}
