@@ -25,7 +25,7 @@ use musical_lights_core::audio::AWeighting;
 use musical_lights_core::{
     audio::{
         parse_i2s_16_bit_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
-        ExponentialScaleBuilder, Samples,
+        ExponentialScaleBuilder, Samples, ShazamScaleBuilder, SHAZAM_SCALE_OUT,
     },
     compass::{Coordinate, Magnetometer},
     errors::MyError,
@@ -500,8 +500,10 @@ fn mic_task(
     info!("exponential_scale_builder created");
 
     // TODO: write this
-    static SHAZAM_SCALE_BUILDER: ConstStaticCell<()> = ConstStaticCell::new(());
+    static SHAZAM_SCALE_BUILDER: ConstStaticCell<ShazamScaleBuilder<FFT_OUTPUTS>> =
+        ConstStaticCell::new(ShazamScaleBuilder::uninit());
     let shazam_scale_builder = SHAZAM_SCALE_BUILDER.take();
+    shazam_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
     info!("shazam_scale_builder created");
 
     type MyBufferedFFT = BufferedFFT<
@@ -545,6 +547,11 @@ fn mic_task(
     static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 32]> = ConstStaticCell::new([0.0; 32]);
     let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
     info!("exponential_scale_outputs created");
+
+    static SHAZAM_SCALE_OUTPUTS: ConstStaticCell<[f32; SHAZAM_SCALE_OUT]> =
+        ConstStaticCell::new([0.0; SHAZAM_SCALE_OUT]);
+    let shazam_scale_outputs = SHAZAM_SCALE_OUTPUTS.take();
+    info!("shazam_scale_outputs created");
 
     // theres no need for i2s fps tracking when the pixel has its own tracker
     // let mut fps = Box::new(FpsTracker::new("i2s"));
@@ -620,13 +627,15 @@ fn mic_task(
 
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
 
-        // TODO: sum the fft_outputs with some aggregators (whats the actual technical term?)
+        // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
         exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
-        // // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
-        // // TODO: shazam
-        // // TODO: beat detection
+        shazam_scale_builder.build_into(fft_outputs_buf, shazam_scale_outputs);
+        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
+        // TODO: beat detection
+        // TODO: what else? steve had some ideas
 
-        // info!("loudness: {:?}", loudness);
+        // info!("loudness: {:?}", exponential_scale_outputs);
+        info!("shazam: {:?}", shazam_scale_outputs);
 
         // TODO: notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push? that might just be wasted resources
 

@@ -2,21 +2,21 @@ use crate::audio::bin_to_frequency;
 
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
 
-const SHAZAM_SCALE_OUT: usize = 4;
+pub const SHAZAM_SCALE_OUT: usize = 4;
 
-pub struct ShazamScaleAmplitudesBuilder<const IN: usize> {
-    map: [Option<usize>; IN],
+pub struct ShazamScaleBuilder<const FFT_OUT: usize> {
+    map: [Option<usize>; FFT_OUT],
 }
 
 /// TODO: should this be a trait instead?
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
-pub struct ShazamScaleAmplitudes(pub AggregatedAmplitudes<SHAZAM_SCALE_OUT>);
+pub struct ShazamAmplitudes(pub AggregatedAmplitudes<SHAZAM_SCALE_OUT>);
 
-impl<const IN: usize> ShazamScaleAmplitudesBuilder<IN> {
+impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
     pub const fn uninit() -> Self {
-        let map = [None; IN];
+        let map = [None; FFT_OUT];
 
         Self { map }
     }
@@ -42,15 +42,13 @@ impl<const IN: usize> ShazamScaleAmplitudesBuilder<IN> {
     }
 }
 
-impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT>
-    for ShazamScaleAmplitudesBuilder<IN>
-{
-    type Output = ShazamScaleAmplitudes;
+impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScaleBuilder<IN> {
+    type Output = ShazamAmplitudes;
 
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
         let x = AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::aggregate::<IN>(&self.map, x);
 
-        ShazamScaleAmplitudes(x)
+        ShazamAmplitudes(x)
     }
 
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
