@@ -33,6 +33,7 @@ pub trait Window<const N: usize> {
 
     fn window(i: usize) -> f32;
 
+    /// TODO: cache this?
     fn windows() -> [f32; N] {
         let mut window = [0.0; N];
 
@@ -48,9 +49,9 @@ pub trait Window<const N: usize> {
     }
 
     /// TODO: is this a good name?
-    fn windows_in_place(output: &mut [f32; N]) {
-        for (i, sample) in output.iter_mut().enumerate() {
-            *sample = Self::window(i);
+    fn apply_windows(x: &mut [f32; N]) {
+        for (i, sample) in x.iter_mut().enumerate() {
+            *sample *= Self::window(i);
         }
     }
 }

@@ -82,3 +82,18 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::audio::{AggregatedAmplitudes, WeightedAmplitudes};
+
+    #[test]
+    fn test_aggregate_into() {
+        let map = [None, Some(0), Some(1), Some(1), None];
+
+        let output =
+            AggregatedAmplitudes::aggregate(&map, WeightedAmplitudes([1.0, 2.0, 4.0, 8.0, 16.0]));
+
+        assert_eq!(output.0, [2.0, 12.0]);
+    }
+}

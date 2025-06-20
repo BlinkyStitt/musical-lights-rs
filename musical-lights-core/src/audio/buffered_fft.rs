@@ -16,6 +16,7 @@ pub struct BufferedFFT<
     WI: Window<FFT_IN>,
     WE: Weighting<FFT_OUT>,
 > {
+    /// TODO: need a test that adds to the circular buffer and makes sure it wraps around like we want
     sample_buf: CircularBuffer<FFT_IN, f32>,
     fft_buf: [f32; FFT_IN],
     window: PhantomData<WI>,
@@ -86,8 +87,7 @@ impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
         self.fft_buf[..a.len()].copy_from_slice(a);
         self.fft_buf[a.len()..].copy_from_slice(b);
 
-        // apply the window to the fft_buf
-        WI::windows_in_place(&mut self.fft_buf);
+        WI::apply_windows(&mut self.fft_buf);
 
         // TODO: yield here with a specific compile time feature
         #[cfg(feature = "std")]
@@ -115,5 +115,15 @@ impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
         // // TODO: yield here with a specific compile time feature
         // #[cfg(feature = "std")]
         // yield_now();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_extend_from_slice() {
+        let mut buf: CircularBuffer<5, u32> = CircularBuffer::from([1, 2, 3]);
+        buf.extend_from_slice(&[4, 5, 6, 7]);
+        assert_eq!(buf, [3, 4, 5, 6, 7]);
     }
 }

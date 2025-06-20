@@ -495,19 +495,18 @@ fn mic_task(
 
     // log_stack_high_water_mark("mic 1", None);
 
-    // TODO: this is probably going to panic. probably need a ConstStaticCell and then we init it (or a better pattern that I don't know yet)
     static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> =
         ConstStaticCell::new(ExponentialScaleBuilder::uninit());
     let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
     exponential_scale_builder.init(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
     info!("exponential_scale_builder created");
 
-    // TODO: write this
-    static SHAZAM_SCALE_BUILDER: ConstStaticCell<ShazamScaleBuilder<FFT_OUTPUTS>> =
-        ConstStaticCell::new(ShazamScaleBuilder::uninit());
-    let shazam_scale_builder = SHAZAM_SCALE_BUILDER.take();
-    shazam_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
-    info!("shazam_scale_builder created");
+    // // TODO: make shazam work
+    // static SHAZAM_SCALE_BUILDER: ConstStaticCell<ShazamScaleBuilder<FFT_OUTPUTS>> =
+    //     ConstStaticCell::new(ShazamScaleBuilder::uninit());
+    // let shazam_scale_builder = SHAZAM_SCALE_BUILDER.take();
+    // shazam_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
+    // info!("shazam_scale_builder created");
 
     type MyBufferedFFT = BufferedFFT<
         I2S_SAMPLE_SIZE,
@@ -516,20 +515,12 @@ fn mic_task(
         HanningWindow<FFT_INPUTS>,
         AWeighting<FFT_OUTPUTS>,
     >;
-
     static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> = ConstStaticCell::new(
         BufferedFFT::uninit(AWeighting::new(I2S_SAMPLE_RATE_HZ as f32)),
     );
     let buffered_fft = BUFFERED_FFT.take();
     buffered_fft.init();
     info!("buffered_fft created");
-
-    // TODO: this is causing a stack overflow, but in IDLE_1, not here? whats up with that. maybe do this init in main and pass it here?
-    // static SCALE_BUILDER: StaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> = StaticCell::new();
-    // let scale_builder = SCALE_BUILDER
-    //     .init_with(|| ExponentialScaleBuilder::new(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32));
-    // // info!("scale_builder: {:?}", scale_builder);
-    // info!("scale_builder created");
 
     static I2S_BUF: ConstStaticCell<[u8; I2S_U8_BUFFER_SIZE]> =
         ConstStaticCell::new([0u8; I2S_U8_BUFFER_SIZE]);
@@ -600,10 +591,10 @@ fn mic_task(
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_u8_buf)?;
 
-        // trace!(
-        //     "Read i2s: {} {} {} {}",
-        //     i2s_buffer[0], i2s_buffer[1], i2s_buffer[2], i2s_buffer[3]
-        // );
+        info!(
+            "Read i2s: {} {} {} {} ...",
+            i2s_u8_buf[0], i2s_u8_buf[1], i2s_u8_buf[2], i2s_u8_buf[3]
+        );
 
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
@@ -611,8 +602,15 @@ fn mic_task(
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
+        info!(
+            "i2s_sample_buf: {} {} {} {} ...",
+            i2s_sample_buf.0[0], i2s_sample_buf.0[1], i2s_sample_buf.0[2], i2s_sample_buf.0[3]
+        );
+
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
         buffered_fft.push_samples(i2s_sample_buf);
+
+        // TODO: check the buffered_fft.
 
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
@@ -628,16 +626,19 @@ fn mic_task(
         // TODO: do some analysis to see if this is always needed
         yield_now();
 
+        // TODO: BUG! its showing the same values every loop. the bug might be above this though
+        info!(
+            "fft outputs: {} {} {} {} ...",
+            fft_outputs_buf[0], fft_outputs_buf[1], fft_outputs_buf[2], fft_outputs_buf[3]
+        );
+
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
         // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
 
-        // TODO: i don't think this is right. its showing the same values every loop
         exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
-
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
         // shazam_scale_builder.build_into(fft_outputs_buf, shazam_scale_outputs);
-        // TODO: i don't think this is right. its showing the same values every loop
         // info!("shazam: {:?}", shazam_scale_outputs);
 
         // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity

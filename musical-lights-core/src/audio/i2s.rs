@@ -4,7 +4,7 @@ const I24_MAX: f32 = I24::MAX.to_i32() as f32;
 
 /// TODO: better name. this is for 24-bit audio!
 /// TODO: is there a more efficient way to do this?
-/// TODO: i think this is wrong. i'm not seeing any negative values come out of this
+/// TODO: this needs some tests!
 pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
     input: &[u8; IN],
     output: &mut [f32; OUT],
@@ -21,6 +21,7 @@ pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
     }
 }
 
+/// TODO: this needs some tests!
 pub fn parse_i2s_16_bit_to_f32_array<const IN: usize, const OUT: usize>(
     input: &[u8; IN],
     output: &mut [f32; OUT],
@@ -35,4 +36,11 @@ pub fn parse_i2s_16_bit_to_f32_array<const IN: usize, const OUT: usize>(
         debug_assert!(*x >= -1.0);
         debug_assert!(*x <= 1.0);
     }
+}
+
+#[cfg(test)]
+mod tests {
+    // TODO: test for 24-bit audio
+    // TODO: test for 16-bit audio
+    // TODO: test for 8-bit audio?
 }
