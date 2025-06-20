@@ -652,7 +652,9 @@ fn mic_task(
         // TODO: is this the best way to notify the other thread to run? it might miss frames, but i don't think we actually want backpressure here
         // TODO: this needs to clone light_scale_outputs into a Box and then send that
         // TODO: how do we turn exponential_scale_outputs into light_scale_outputs, and do we even want to do that here? i think that might belong in the light task!
-        fft_ready.try_send(()).ok();
+        if fft_ready.try_send(()).is_err() {
+            warn!("fft was faster than the pixels");
+        }
 
         // TODO: this is too verbose. maybe this should take the log level as an arg? or only display once per second? maybe put this into the fps counter?
         // log_stack_high_water_mark("mic loop", None);
