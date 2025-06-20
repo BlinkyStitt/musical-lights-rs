@@ -591,10 +591,10 @@ fn mic_task(
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_u8_buf)?;
 
-        info!(
-            "Read i2s: {} {} {} {} ...",
-            i2s_u8_buf[0], i2s_u8_buf[1], i2s_u8_buf[2], i2s_u8_buf[3]
-        );
+        // trace!(
+        //     "Read i2s: {} {} {} {} ...",
+        //     i2s_u8_buf[0], i2s_u8_buf[1], i2s_u8_buf[2], i2s_u8_buf[3]
+        // );
 
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
@@ -602,10 +602,10 @@ fn mic_task(
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
-        info!(
-            "i2s_sample_buf: {} {} {} {} ...",
-            i2s_sample_buf.0[0], i2s_sample_buf.0[1], i2s_sample_buf.0[2], i2s_sample_buf.0[3]
-        );
+        // trace!(
+        //     "i2s_sample_buf: {} {} {} {} ...",
+        //     i2s_sample_buf.0[0], i2s_sample_buf.0[1], i2s_sample_buf.0[2], i2s_sample_buf.0[3]
+        // );
 
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
         buffered_fft.push_samples(i2s_sample_buf);
@@ -626,11 +626,10 @@ fn mic_task(
         // TODO: do some analysis to see if this is always needed
         yield_now();
 
-        // TODO: BUG! its showing the same values every loop. the bug might be above this though
-        info!(
-            "fft outputs: {} {} {} {} ...",
-            fft_outputs_buf[0], fft_outputs_buf[1], fft_outputs_buf[2], fft_outputs_buf[3]
-        );
+        // trace!(
+        //     "fft outputs: {} {} {} {} ...",
+        //     fft_outputs_buf[0], fft_outputs_buf[1], fft_outputs_buf[2], fft_outputs_buf[3]
+        // );
 
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
         // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
@@ -638,17 +637,21 @@ fn mic_task(
         exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
+        // TODO: actually do something with the exponential_scale_outputs. put them through some sort of filter/EMA/decay
+        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
+
         // shazam_scale_builder.build_into(fft_outputs_buf, shazam_scale_outputs);
         // info!("shazam: {:?}", shazam_scale_outputs);
 
-        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
         // TODO: beat detection
         // TODO: what else? steve had some ideas
 
         // fps.tick();
 
-        // notify blink_neopixels_task? that way instead of a timer we get the fastest FPS we can push without any delay?
-        // TODO: is this the best way to notify the other thread to run?
+        // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
+        // TODO: is this the best way to notify the other thread to run? it might miss frames, but i don't think we actually want backpressure here
+        // TODO: this needs to clone light_scale_outputs into a Box and then send that
+        // TODO: how do we turn exponential_scale_outputs into light_scale_outputs, and do we even want to do that here? i think that might belong in the light task!
         fft_ready.try_send(()).ok();
 
         // TODO: this is too verbose. maybe this should take the log level as an arg? or only display once per second? maybe put this into the fps counter?

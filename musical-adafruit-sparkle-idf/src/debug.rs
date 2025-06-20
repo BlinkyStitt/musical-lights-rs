@@ -15,6 +15,7 @@ pub fn stack_high_water_mark(task: Option<TaskHandle_t>) -> usize {
     }
 }
 
+/// if task is None, then the current task is checked
 #[inline]
 pub fn log_stack_high_water_mark(label: &'static str, task: Option<TaskHandle_t>) {
     let high_water_mark = stack_high_water_mark(task);
