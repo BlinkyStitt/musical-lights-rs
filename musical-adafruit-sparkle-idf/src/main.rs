@@ -57,7 +57,7 @@ use std::{
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 use crate::debug::log_stack_high_water_mark;
-use crate::light_patterns::loading;
+use crate::light_patterns::{loading, MicFire};
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -100,6 +100,7 @@ const _SAFETY_CHECKS: () = {
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
 /// TODO: include self in the main peer_coordinate map?
+/// TODO: add a color pallet here?
 #[derive(Clone, Default, Debug)]
 struct State {
     orientation: Orientation,
@@ -112,18 +113,6 @@ struct State {
     peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
 }
 
-// impl State {
-//     pub const fn new() -> Self {
-//         State {
-//             orientation: Orientation::Unknown,
-//             magnetometer: None,
-//             self_coordinate: None,
-//             self_id: None,
-//             peer_coordinate: FnvIndexMap::new(),
-//         }
-//     }
-// }
-
 fn main() -> eyre::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
@@ -135,7 +124,7 @@ fn main() -> eyre::Result<()> {
     info!("Hello, world!");
     info!("NUM LEDS: {}", NUM_FIBONACCI_NEOPIXELS);
 
-    // TODO: static_cell? arc? something else? LazyLock from std?
+    // TODO: static_cell? arc? something else? LazyLock from std? RwLock?
     static STATE: Lazy<Mutex<State>> = Lazy::new(|| Mutex::new(State::default()));
 
     // TODO: what size? do we need an arc around this? or is a static okay?
@@ -459,6 +448,7 @@ fn blink_neopixels_task(
         // TODO: reading these from a buffer is probably better than doing any calculations in the iter. that takes more memory, but it works well
         // TODO: check that the gamma correction is what we need for our leds
         // TODO: dithering
+        // TODO: the docs for brightness and gamma are confusing. they say opposite things unless I just can't read?
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
 
         // TODO: yield or watchdog reset?
@@ -542,10 +532,15 @@ fn mic_task(
     let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
     info!("exponential_scale_outputs created");
 
-    static SHAZAM_SCALE_OUTPUTS: ConstStaticCell<[f32; SHAZAM_SCALE_OUT]> =
-        ConstStaticCell::new([0.0; SHAZAM_SCALE_OUT]);
-    let shazam_scale_outputs = SHAZAM_SCALE_OUTPUTS.take();
-    info!("shazam_scale_outputs created");
+    /// TODO: no idea about cooling per tick
+    static MIC_FIRE: ConstStaticCell<MicFire<256, 32, 8>> = ConstStaticCell::new(MicFire::new(20));
+    let mic_fire = MIC_FIRE.take();
+    info!("mic_fire created");
+
+    // static SHAZAM_SCALE_OUTPUTS: ConstStaticCell<[f32; SHAZAM_SCALE_OUT]> =
+    //     ConstStaticCell::new([0.0; SHAZAM_SCALE_OUT]);
+    // let shazam_scale_outputs = SHAZAM_SCALE_OUTPUTS.take();
+    // info!("shazam_scale_outputs created");
 
     // theres no need for i2s fps tracking when the pixel has its own tracker
     // let mut fps = Box::new(FpsTracker::new("i2s"));
@@ -610,8 +605,6 @@ fn mic_task(
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
         buffered_fft.push_samples(i2s_sample_buf);
 
-        // TODO: check the buffered_fft.
-
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
@@ -637,14 +630,10 @@ fn mic_task(
         exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
-        // TODO: actually do something with the exponential_scale_outputs. put them through some sort of filter/EMA/decay
-        // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0. fall at the rate of gravity
+        let (col_heat, col_heating) = mic_fire.tick(exponential_scale_outputs);
 
-        // shazam_scale_builder.build_into(fft_outputs_buf, shazam_scale_outputs);
-        // info!("shazam: {:?}", shazam_scale_outputs);
-
-        // TODO: beat detection
-        // TODO: what else? steve had some ideas
+        // TODO: beat detection?
+        // TODO: what else? shazam? steve had some ideas
 
         // fps.tick();
 
