@@ -28,6 +28,7 @@ impl FpsTracker {
         let elapsed = now.duration_since(self.last);
 
         if elapsed >= Duration::from_secs(1) {
+            // TODO: track the stddev too?
             #[cfg(not(feature = "embassy"))]
             {
                 let fps = self.count as f32 / elapsed.as_secs_f32();

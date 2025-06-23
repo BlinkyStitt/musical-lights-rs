@@ -35,9 +35,9 @@ These crates might come in handy:
 
 Crates to find:
 
-- GPS
-- LoRa
-- Tilt Sensor
+- [ ] GPS
+- [ ] LoRa
+- [x] Tilt Sensor
 
 ## PRs to follow
 

@@ -653,6 +653,7 @@ fn mic_task(
         // TODO: this needs to clone light_scale_outputs into a Box and then send that
         // TODO: how do we turn exponential_scale_outputs into light_scale_outputs, and do we even want to do that here? i think that might belong in the light task!
         if fft_ready.try_send(()).is_err() {
+            // TODO: count how many times this errors?
             warn!("fft was faster than the pixels");
         }
 
