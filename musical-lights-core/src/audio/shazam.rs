@@ -1,11 +1,11 @@
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
 use crate::audio::bin_to_frequency;
-use crate::logging::info;
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
 
 pub struct ShazamScaleBuilder<const FFT_OUT: usize> {
     map: [Option<usize>; FFT_OUT],
+    weights: [f32; SHAZAM_SCALE_OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -17,12 +17,15 @@ pub struct ShazamAmplitudes(pub AggregatedAmplitudes<SHAZAM_SCALE_OUT>);
 impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
     pub const fn uninit() -> Self {
         let map = [None; FFT_OUT];
+        let weights = [1.0; SHAZAM_SCALE_OUT];
 
-        Self { map }
+        Self { map, weights }
     }
 
     /// TODO: how can we use types to be sure this init gets called
     pub fn init(&mut self, sample_rate_hz: f32) {
+        // TODO: dynamically create weights (its always just 1.0 for now so no need)
+
         for (i, x) in self.map.iter_mut().enumerate() {
             let f = bin_to_frequency(i, sample_rate_hz, FFT_OUT);
 
@@ -45,13 +48,14 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT> for Shaz
     type Output = ShazamAmplitudes;
 
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::aggregate::<IN>(&self.map, x);
+        let x =
+            AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::aggregate::<IN>(&self.map, &self.weights, x);
 
         ShazamAmplitudes(x)
     }
 
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
-        AggregatedAmplitudes::aggregate_into(&self.map, input, output);
+        AggregatedAmplitudes::aggregate_into(&self.map, &self.weights, input, output);
     }
 }
 

@@ -6,6 +6,8 @@ const BARK_SCALE_OUT: usize = 24;
 
 pub struct BarkScaleBuilder<const IN: usize> {
     map: [Option<usize>; IN],
+    /// store weights so we can calculate the averages
+    weights: [f32; BARK_SCALE_OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -18,18 +20,30 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
     /// TODO: this needs to be const!
     pub fn new(sample_rate_hz: f32) -> Self {
         let mut map = [Some(0); BINS];
+        let mut counts = [0usize; BARK_SCALE_OUT];
+
         for (i, x) in map.iter_mut().enumerate() {
             let f = bin_to_frequency(i, sample_rate_hz, BINS);
 
             // bark is 1-24, but we want 0-23
             let b = bark_scale(f).map(|x| x - 1);
 
+            if let Some(b) = b {
+                counts[b] += 1;
+            }
+
             // trace!("{} {} = {:?}", i, f, b);
 
             *x = b;
         }
 
-        Self { map }
+        let mut weights = [0.0; BARK_SCALE_OUT];
+
+        for (w, c) in weights.iter_mut().zip(counts.iter()) {
+            *w = 1.0 / (*c as f32);
+        }
+
+        Self { map, weights }
     }
 }
 
@@ -37,13 +51,19 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkSc
     type Output = BarkScaleAmplitudes;
 
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate::<IN>(&self.map, x);
+        let x =
+            AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate::<IN>(&self.map, &self.weights, x);
 
         BarkScaleAmplitudes(x)
     }
 
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
-        AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate_into(&self.map, input, output);
+        AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate_into(
+            &self.map,
+            &self.weights,
+            input,
+            output,
+        );
     }
 }
 

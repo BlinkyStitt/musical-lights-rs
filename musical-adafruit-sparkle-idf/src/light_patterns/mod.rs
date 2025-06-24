@@ -10,7 +10,7 @@ mod compass;
 mod fibonacci_layout;
 mod flashlight;
 mod loading;
-mod mic_fire;
+mod mic_loudness;
 mod rainbow;
 mod startup;
 
@@ -18,6 +18,6 @@ pub use clock::clock;
 pub use compass::compass;
 pub use flashlight::flashlight;
 pub use loading::loading;
-pub use mic_fire::MicFire;
+pub use mic_loudness::MicLoudnessPattern;
 pub use rainbow::rainbow;
 pub use startup::startup;

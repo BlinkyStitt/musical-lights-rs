@@ -26,6 +26,7 @@ pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
 }
 
 /// TODO: this needs some tests!
+/// I don't really want to turn everything into f32s, but thats what microfft wants. maybe we should find a library that can work on i16 and i24
 pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     input: &[u8; IN],
     output: &mut [f32; OUT],
@@ -34,6 +35,7 @@ pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     assert_eq!(IN, OUT * size_of::<i16>());
 
     for (chunk, x) in input.chunks_exact(2).zip(output.iter_mut()) {
+        // TODO: is there an off-by-one error here? does a or b need to be moved by 1?
         *x = remap(
             i16::from_le_bytes([chunk[0], chunk[1]]) as f32,
             i16::MIN as f32,

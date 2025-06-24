@@ -107,6 +107,7 @@ impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
         spectrum[0].im = 0.0;
 
         // TODO: can we do this better?
+        // TODO: i think we should just skip the first bin entirely
         for ((a, &s), w) in output
             .iter_mut()
             .zip(spectrum.iter())

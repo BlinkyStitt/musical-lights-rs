@@ -10,7 +10,11 @@ use micromath::F32Ext;
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
+    /// index is the input id. the value is the output id. if none, the input is ignored
     map: [Option<usize>; IN],
+    /// a weight is calculated based on how many bins are in the same bucket.
+    /// this lets us calculate the average instead of the sum. (thanks flowersandbytes!)
+    weight: [f32; OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -22,8 +26,10 @@ pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes
 /// bins in, bands/channels out
 impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
     pub const fn uninit() -> Self {
-        let map = [None; IN];
-        Self { map }
+        Self {
+            map: [None; IN],
+            weight: [0.0; OUT],
+        }
     }
 
     /// TODO: how can we use types to be sure this init gets called
@@ -67,8 +73,18 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         for (b, &end_bin) in end_bins.iter().enumerate() {
             info!("{} = bins {}..{}", b, start_bin, end_bin);
 
-            for x in self.map.iter_mut().take(end_bin).skip(start_bin) {
+            let batch_weight = 1.0 / (end_bin - start_bin) as f32;
+
+            // TODO: should take or skip be first?
+            for (x, w) in self
+                .map
+                .iter_mut()
+                .zip(self.weight.iter_mut())
+                .take(end_bin)
+                .skip(start_bin)
+            {
                 *x = Some(b);
+                *w = batch_weight;
             }
 
             start_bin = end_bin;
@@ -89,14 +105,14 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
 
     /// TODO: rename this function
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::aggregate(&self.map, x);
+        let x = AggregatedAmplitudes::aggregate(&self.map, &self.weight, x);
 
         ExponentialScaleAmplitudes(x)
     }
 
     /// TODO: rename this function
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedAmplitudes::aggregate_into(&self.map, input, output)
+        AggregatedAmplitudes::aggregate_into(&self.map, &self.weight, input, output)
     }
 }
 

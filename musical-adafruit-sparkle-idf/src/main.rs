@@ -25,7 +25,7 @@ use musical_lights_core::audio::AWeighting;
 use musical_lights_core::{
     audio::{
         parse_i2s_16_bit_mono_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
-        ExponentialScaleBuilder, Samples, ShazamScaleBuilder, SHAZAM_SCALE_OUT,
+        ExponentialScaleBuilder, Samples,
     },
     compass::{Coordinate, Magnetometer},
     errors::MyError,
@@ -46,6 +46,7 @@ use smart_leds::{
 use smart_leds_trait::SmartLedsWrite;
 use static_cell::ConstStaticCell;
 use std::thread::yield_now;
+use std::time::Instant;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -57,7 +58,7 @@ use std::{
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 use crate::debug::log_stack_high_water_mark;
-use crate::light_patterns::{loading, MicFire};
+use crate::light_patterns::{loading, MicLoudnessPattern};
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -111,6 +112,9 @@ struct State {
     /// TODO: max peers is so that we dont run out of ram. what does this do when its full though?
     /// TODO: do we want their coordinates, or something else like our bearing to them?
     peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
+    /// the SystemTime is the time from the GPS and the Instant is when we received it.
+    /// TODO: There's probably a small offset needed.
+    time: Option<(std::time::SystemTime, Instant)>,
 }
 
 fn main() -> eyre::Result<()> {
@@ -533,8 +537,9 @@ fn mic_task(
     info!("exponential_scale_outputs created");
 
     /// TODO: no idea about cooling per tick
-    static MIC_FIRE: ConstStaticCell<MicFire<256, 32, 8>> = ConstStaticCell::new(MicFire::new(20.));
-    let mic_fire = MIC_FIRE.take();
+    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<256, 32, 8>> =
+        ConstStaticCell::new(MicLoudnessPattern::new());
+    let mic_loudness = MIC_FIRE.take();
     info!("mic_fire created");
 
     // static SHAZAM_SCALE_OUTPUTS: ConstStaticCell<[f32; SHAZAM_SCALE_OUT]> =
@@ -638,16 +643,18 @@ fn mic_task(
         yield_now();
 
         // heating is if the heat was applied this tick, or if it is cooling down
-        let (heat, heating) = mic_fire.tick(exponential_scale_outputs);
+        let mic_loudness_tick = mic_loudness.tick(exponential_scale_outputs);
 
         // calculating the "heat" can be slow. yield now
         // TODO: do some analysis to see if this is always needed
         yield_now();
 
         // TODO: what actual units are these
+        // TODO: this can overflow. writing floats is hard
         info!(
-            "average db: {}",
-            heat.iter().sum::<f32>() / heat.len() as f32
+            "num_lights: {}",
+            // TODO: display that skips printing the 0 and just writes a space instead
+            mic_loudness_tick.loudness.iter().sum::<u8>()
         );
 
         // TODO: beat detection?
