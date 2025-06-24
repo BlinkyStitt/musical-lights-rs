@@ -53,6 +53,7 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             // TODO: can't decide if we should add the new dbfs, or just set it as the max
             // TODO: this is probably not the right way to scale/clamp/round this
             // TODO: what should `a` be? b should be 0.0 if this is full scale db
+            // TODO: i kind of think a and b should by dynamic. but i am sure much smarter people than me have thought about that
             *loudness = remap(dbfs, -90.0, 0.0, 0.0, Y as f32)
                 .clamp(0.0, Y as f32)
                 .round() as u8;

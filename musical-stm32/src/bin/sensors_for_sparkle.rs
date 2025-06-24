@@ -42,6 +42,7 @@ use musical_lights_core::{
 };
 use musical_stm32::sparkle_uart::{UartFromSparkle, UartToSparkle};
 use nalgebra::Vector3;
+use postcard::experimental::max_size::MaxSize;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -93,7 +94,7 @@ async fn blink_task(mut led: Output<'static>) {
 
 #[embassy_executor::task]
 async fn read_from_sparkle_task(
-    mut uart: UartFromSparkle<'static, 256, 256>,
+    mut uart: UartFromSparkle<'static>,
     send_to_sparkle: MyMessageSender,
     pong_sent: &'static Signal<CriticalSectionRawMutex, bool>,
 ) {
@@ -280,7 +281,7 @@ async fn main(spawner: Spawner) {
 
     // TODO: What should the buffer sizes be?!
     let uart_sparkle_tx = UartToSparkle::<256>::new(uart_sparkle_tx);
-    let uart_sparkle_rx = UartFromSparkle::<256, 256>::new(uart_sparkle_rx);
+    let uart_sparkle_rx = UartFromSparkle::new(uart_sparkle_rx);
 
     let mut uart_gps_config = Config::default();
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate

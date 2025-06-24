@@ -1,4 +1,6 @@
 use core::marker::PhantomData;
+
+#[cfg(feature = "std")]
 use std::thread::yield_now;
 
 use crate::{

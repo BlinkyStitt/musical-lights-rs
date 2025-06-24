@@ -8,9 +8,21 @@ use heapless::Vec;
 use musical_lights_core::{
     errors::{MyError, MyResult},
     logging::{error, warn},
-    message::{Message, deserialize_with_crc, serialize_with_crc_and_cobs},
+    message::{
+        Message, deserialize_with_crc, max_size_with_crc, max_size_with_crc_and_cobs,
+        serialize_with_crc_and_cobs,
+    },
 };
 use postcard::accumulator::{CobsAccumulator, FeedResult};
+
+pub const CRC_BUF_BYTES: usize = max_size_with_crc::<Message>();
+pub const RAW_BUF_BYTES: usize = max_size_with_crc_and_cobs::<Message>();
+pub const COBS_ACCUMULATOR_BUF_BYTES: usize = RAW_BUF_BYTES * 2;
+
+const _SAFETY_CHECKS: () = {
+    assert!(CRC_BUF_BYTES < RAW_BUF_BYTES);
+    assert!(COBS_ACCUMULATOR_BUF_BYTES >= RAW_BUF_BYTES * 2);
+};
 
 // TODO: make this work for async or sync? generics are hard
 pub struct UartToSparkle<'a, const N: usize> {
@@ -18,16 +30,17 @@ pub struct UartToSparkle<'a, const N: usize> {
 
     /// TODO: i think these buffers should be different lengths
     /// TODO: should these buffers just be a part of the write function?
-    crc_buffer: [u8; N],
-    output_buffer: [u8; N],
+    crc_buffer: [u8; CRC_BUF_BYTES],
+    /// TODO: what size does this need? it should be RAW_BUF_BYTES minus something
+    output_buffer: [u8; RAW_BUF_BYTES],
 }
 
 impl<'a, const N: usize> UartToSparkle<'a, N> {
     pub fn new(uart: UartTx<'a, Async>) -> Self {
         Self {
             uart,
-            crc_buffer: [0u8; N],
-            output_buffer: [0u8; N],
+            crc_buffer: [0u8; CRC_BUF_BYTES],
+            output_buffer: [0u8; RAW_BUF_BYTES],
         }
     }
 
@@ -46,19 +59,16 @@ impl<'a, const N: usize> UartToSparkle<'a, N> {
     }
 }
 
-pub struct UartFromSparkle<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize> {
-    /// TODO: RingBufferedUartRx?
+pub struct UartFromSparkle<'a> {
     uart: UartRx<'a, Async>,
     raw_buf: [u8; RAW_BUF_BYTES],
-    cobs_acc: CobsAccumulator<COB_BUF_BYTES>,
+    cobs_acc: CobsAccumulator<COBS_ACCUMULATOR_BUF_BYTES>,
 }
 
-impl<'a, const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>
-    UartFromSparkle<'a, RAW_BUF_BYTES, COB_BUF_BYTES>
-{
-    pub fn new(uart: UartRx<'a, Async>) -> Self {
+impl<'a> UartFromSparkle<'a> {
+    pub const fn new(uart: UartRx<'a, Async>) -> Self {
         let raw_buf = [0u8; RAW_BUF_BYTES];
-        let cobs_acc = CobsAccumulator::<COB_BUF_BYTES>::new();
+        let cobs_acc = CobsAccumulator::<COBS_ACCUMULATOR_BUF_BYTES>::new();
 
         // TODO: do we want a ring buffer? theres not a ton of data here, so it should be fine
         // let uart = uart.into_ring_buffered(dma_buf);
