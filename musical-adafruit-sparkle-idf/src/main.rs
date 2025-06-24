@@ -113,7 +113,8 @@ struct State {
     /// TODO: do we want their coordinates, or something else like our bearing to them?
     peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
     /// the SystemTime is the time from the GPS and the Instant is when we received it.
-    /// TODO: There's probably a small offset needed.
+    /// TODO: There's probably a small offset needed. make a helper for adding them?
+    /// TODO: think more about this
     time: Option<(std::time::SystemTime, Instant)>,
 }
 
@@ -642,20 +643,15 @@ fn mic_task(
         // TODO: do some analysis to see if this is always needed. this one can probably be removed
         yield_now();
 
-        // heating is if the heat was applied this tick, or if it is cooling down
+        // TODO: what actual units are these
         let mic_loudness_tick = mic_loudness.tick(exponential_scale_outputs);
 
         // calculating the "heat" can be slow. yield now
         // TODO: do some analysis to see if this is always needed
         yield_now();
 
-        // TODO: what actual units are these
-        // TODO: this can overflow. writing floats is hard
-        info!(
-            "num_lights: {}",
-            // TODO: display that skips printing the 0 and just writes a space instead
-            mic_loudness_tick.loudness.iter().sum::<u8>()
-        );
+        // info!("num_lights: {}", mic_loudness_tick.num_lights());
+        info!("loudness: {}", &mic_loudness_tick);
 
         // TODO: beat detection?
         // TODO: what else? shazam? steve had some ideas

@@ -5,6 +5,7 @@
 //! make it work, make it right, make it fast. don't get caught up making perfect iterators on this first pass!
 
 use musical_lights_core::remap;
+use std::fmt::{Display, Write};
 
 /// TODO: i'm not sure where the code that turns this heat into a XY matrix belongs. or code for rotating the matrix by frame count
 /// TODO: this doesn't work exactly the same as Fire2012. maybe i should have kept it more similar at the start?
@@ -21,6 +22,30 @@ pub struct MicLoudnessTick<'a, const X: usize, const Y: usize> {
     /// the max value of loudness is `Y`
     pub loudness: &'a [u8; X],
     pub sparkle: &'a [bool; X],
+}
+
+/// TODO: this could be much better i'm sure. but it works for now.
+impl<const X: usize, const Y: usize> Display for MicLoudnessTick<'_, X, Y> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (x, y_height) in self.loudness.iter().enumerate() {
+            match (self.sparkle[x], y_height) {
+                (_, 0) => {
+                    f.write_str("   |")?;
+                }
+                // TODO: make this work with more than 9
+                (true, x) => f.write_fmt(format_args!("*{}*|", x))?,
+                (false, x) => f.write_fmt(format_args!(" {} |", x))?,
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<const X: usize, const Y: usize> MicLoudnessTick<'_, X, Y> {
+    pub fn num_lights(&self) -> usize {
+        self.loudness.iter().map(|x| *x as usize).sum()
+    }
 }
 
 impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y> {
@@ -51,14 +76,13 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             let old_loudness = *loudness;
 
             // TODO: can't decide if we should add the new dbfs, or just set it as the max
+            // TODO: or maybe decay and use the larger value?
             // TODO: this is probably not the right way to scale/clamp/round this
             // TODO: what should `a` be? b should be 0.0 if this is full scale db
             // TODO: i kind of think a and b should by dynamic. but i am sure much smarter people than me have thought about that
             *loudness = remap(dbfs, -90.0, 0.0, 0.0, Y as f32)
                 .clamp(0.0, Y as f32)
                 .round() as u8;
-
-            // TODO: decay and use the larger value?
 
             *sparkle = *loudness > old_loudness;
         }
