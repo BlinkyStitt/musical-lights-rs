@@ -93,6 +93,7 @@ macro_rules! impl_fft {
         }
 
         impl Amplitudes<{ $in_size / 2 }> {
+            #[deprecated(note = "this doesn't divide the magnitude by N/2")]
             pub fn fft_windowed_samples(x: WindowedSamples<$in_size>) -> Self {
                 let mut fft_input = x.0;
 
@@ -106,7 +107,7 @@ macro_rules! impl_fft {
                 let mut amplitudes: [f32; { $in_size / 2 }] = [0.0; { $in_size / 2 }];
 
                 for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
-                    *x = spectrum.norm();
+                    *x = spectrum.norm() / { $in_size / 2 } as f32;
                 }
 
                 Self(amplitudes)

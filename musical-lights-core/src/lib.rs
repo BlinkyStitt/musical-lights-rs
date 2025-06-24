@@ -22,6 +22,7 @@ pub mod windows;
 /// Map t in range [a, b] to range [c, d]
 /// TODO: remap for u8 and u16
 /// TODO: do we need this still? it was useful in arduino. did it come from fastled or some other arduino code?
-pub fn remap(t: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
+#[inline(always)]
+pub const fn remap(t: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
     (t - a) * ((d - c) / (b - a)) + c
 }

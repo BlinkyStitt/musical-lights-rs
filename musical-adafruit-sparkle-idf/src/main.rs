@@ -24,7 +24,7 @@ use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_rando
 use musical_lights_core::audio::AWeighting;
 use musical_lights_core::{
     audio::{
-        parse_i2s_16_bit_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
+        parse_i2s_16_bit_mono_to_f32_array, AggregatedAmplitudesBuilder, BufferedFFT,
         ExponentialScaleBuilder, Samples, ShazamScaleBuilder, SHAZAM_SCALE_OUT,
     },
     compass::{Coordinate, Magnetometer},
@@ -76,7 +76,7 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 /// TODO: 44.1kHz? 48kHz? 96Khz?
 const I2S_SAMPLE_RATE_HZ: u32 = 44100;
 
-/// TODO: what size FFT? i want to have 4096, but 2048 is probably fine
+/// TODO: what size FFT? i want to have 4096, but 2048 is probably fine. the teensy had 1024 i think.
 const FFT_INPUTS: usize = 4096;
 
 /// TODO: not sure if this should be 1, 2, or 4
@@ -533,7 +533,7 @@ fn mic_task(
     info!("exponential_scale_outputs created");
 
     /// TODO: no idea about cooling per tick
-    static MIC_FIRE: ConstStaticCell<MicFire<256, 32, 8>> = ConstStaticCell::new(MicFire::new(20));
+    static MIC_FIRE: ConstStaticCell<MicFire<256, 32, 8>> = ConstStaticCell::new(MicFire::new(20.));
     let mic_fire = MIC_FIRE.take();
     info!("mic_fire created");
 
@@ -592,7 +592,7 @@ fn mic_task(
         // );
 
         // TODO: compile time option to choose between 16-bit or 24-bit audio
-        parse_i2s_16_bit_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
+        parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
@@ -627,10 +627,28 @@ fn mic_task(
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
         // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
 
+        // TODO: i'm not sure that i like this. i think we might want to show the average, not the sum!
         exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
-        let (col_heat, col_heating) = mic_fire.tick(exponential_scale_outputs);
+        // TODO: convert exponential_scale_outputs to decibels here?
+
+        // calculating the exponential scale can be slow. yield now
+        // TODO: do some analysis to see if this is always needed. this one can probably be removed
+        yield_now();
+
+        // heating is if the heat was applied this tick, or if it is cooling down
+        let (heat, heating) = mic_fire.tick(exponential_scale_outputs);
+
+        // calculating the "heat" can be slow. yield now
+        // TODO: do some analysis to see if this is always needed
+        yield_now();
+
+        // TODO: what actual units are these
+        info!(
+            "average db: {}",
+            heat.iter().sum::<f32>() / heat.len() as f32
+        );
 
         // TODO: beat detection?
         // TODO: what else? shazam? steve had some ideas

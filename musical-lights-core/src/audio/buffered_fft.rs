@@ -66,7 +66,7 @@ impl<
         let window_scaling = WI::scaling();
 
         for (i, x) in self.weights.iter_mut().enumerate() {
-            *x = window_scaling * self.weighting.weight(i);
+            *x = window_scaling * self.weighting.weight(i) / FFT_OUT as f32;
         }
     }
 
@@ -107,9 +107,14 @@ impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
         spectrum[0].im = 0.0;
 
         // TODO: can we do this better?
-        for (i, (x, &s)) in output.iter_mut().zip(spectrum.iter()).enumerate() {
+        for ((a, &s), w) in output
+            .iter_mut()
+            .zip(spectrum.iter())
+            .zip(self.weights.iter())
+        {
             // calculate the magnitude of the sample, then apply the window scaling and weighting
-            *x = s.norm() * self.weights[i];
+            // TODO: i think theres more to do here. we want to sum the power (a * a)
+            *a = s.norm() * w;
         }
 
         // // TODO: yield here with a specific compile time feature
@@ -120,6 +125,8 @@ impl<const SAMPLE_IN: usize, WI: Window<4096>, WE: Weighting<2048>>
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_extend_from_slice() {
         let mut buf: CircularBuffer<5, u32> = CircularBuffer::from([1, 2, 3]);
