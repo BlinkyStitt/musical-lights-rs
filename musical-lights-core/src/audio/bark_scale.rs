@@ -17,19 +17,29 @@ pub struct BarkScaleBuilder<const IN: usize> {
 pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<BARK_SCALE_OUT>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
-    /// TODO: this needs to be const!
     pub fn new(sample_rate_hz: f32) -> Self {
-        let mut map = [Some(0); BINS];
-        let mut counts = [0usize; BARK_SCALE_OUT];
+        let mut x = Self::uninit();
+        x.init(sample_rate_hz);
+        x
+    }
 
-        for (i, x) in map.iter_mut().enumerate() {
+    pub const fn uninit() -> Self {
+        let map = [Some(0); BINS];
+        let weights = [0.0; BARK_SCALE_OUT];
+
+        BarkScaleBuilder { map, weights }
+    }
+
+    /// TODO: this needs to be const!
+    pub fn init(&mut self, sample_rate_hz: f32) {
+        for (i, x) in self.map.iter_mut().enumerate() {
             let f = bin_to_frequency(i, sample_rate_hz, BINS);
 
             // bark is 1-24, but we want 0-23
             let b = bark_scale(f).map(|x| x - 1);
 
             if let Some(b) = b {
-                counts[b] += 1;
+                self.weights[b] += 1.;
             }
 
             // trace!("{} {} = {:?}", i, f, b);
@@ -39,11 +49,9 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
 
         let mut weights = [0.0; BARK_SCALE_OUT];
 
-        for (w, c) in weights.iter_mut().zip(counts.iter()) {
-            *w = 1.0 / (*c as f32);
+        for w in weights.iter_mut() {
+            *w = 1.0 / *w;
         }
-
-        Self { map, weights }
     }
 }
 

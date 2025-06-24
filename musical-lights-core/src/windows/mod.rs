@@ -1,7 +1,7 @@
 mod flat;
 mod hanning;
 
-use crate::logging::debug;
+use crate::logging::info;
 
 pub use flat::FlatWindow;
 pub use hanning::HanningWindow;
@@ -11,22 +11,14 @@ pub trait Window<const N: usize> {
     /// since the windows have some part of them reduced from their original value, we need to get them back to 1.0 after doing an FFT.
     /// TODO: think more about this
     fn scaling() -> f32 {
-        let sum: f32 = (0..N)
-            .map(|i| {
-                let x = Self::window(i);
+        let sum_windows: f32 = Self::windows_iter().sum::<f32>();
 
-                debug!("{} = {}", i, x);
-
-                x
-            })
-            .sum();
-
-        // let coherent_gain = sum / N as f32;
+        // let coherent_gain = sum_windows / N as f32;
         // 1.0 / coherent_gain
 
-        let scaling = N as f32 / sum;
+        let scaling = N as f32 / sum_windows;
 
-        debug!("scaling: {}", scaling);
+        info!("scaling: {}", scaling);
 
         scaling
     }
@@ -39,6 +31,8 @@ pub trait Window<const N: usize> {
 
         for (i, sample) in window.iter_mut().enumerate() {
             *sample = Self::window(i);
+
+            info!("{} = {}", i, sample);
         }
 
         window
@@ -49,6 +43,7 @@ pub trait Window<const N: usize> {
     }
 
     /// TODO: is this a good name?
+    /// TODO: do we even use this? we usually save the window weights in an array and zip that up
     fn apply_windows(x: &mut [f32; N]) {
         for (i, sample) in x.iter_mut().enumerate() {
             *sample *= Self::window(i);

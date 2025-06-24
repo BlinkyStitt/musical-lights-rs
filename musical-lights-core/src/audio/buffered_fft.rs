@@ -136,4 +136,11 @@ mod tests {
         buf.extend_from_slice(&[4, 5, 6, 7]);
         assert_eq!(buf, [3, 4, 5, 6, 7]);
     }
+
+    #[test]
+    fn test_sin_waves() {
+        todo!(
+            "set up a small buffered fft with a known frequency and then make sure we get expected values out of it"
+        );
+    }
 }
