@@ -1,6 +1,6 @@
 //! Audio processing
 //!
-//! Samples -> Buffer -> Window -> FFT -> Amplitudes -> WeightedAmplitudes -> AggregatedAmplitudes -> Decibels/PeakScaled
+//! Samples -> Buffer -> Window -> FFT -> Amplitudes -> WeightedAmplitudes -> AggregatedAmplitudes -> Decibels -> MicLoudness
 //!                                                                           (Bark, Shazam, etc.)
 //!
 //! TODO: bucket by note
@@ -18,10 +18,6 @@ mod samples;
 mod shazam;
 mod weighting;
 
-// TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
-#[allow(unused_imports)]
-use micromath::F32Ext;
-
 pub use amplitudes::{
     AggregatedAmplitudes, AggregatedAmplitudesBuilder, Amplitudes, WeightedAmplitudes,
 };
@@ -32,8 +28,10 @@ pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
 pub use fft::{FFT, bin_to_frequency, frequency_to_bin};
-pub use i2s::{parse_i2s_16_bit_mono_to_f32_array, parse_i2s_24_bit_to_f32_array};
+pub use i2s::{parse_i2s_16_bit_mono_to_f32_array, parse_i2s_24_bit_mono_to_f32_array};
 pub use peak_scaled::PeakScaledBuilder;
 pub use samples::{Samples, WindowedSamples};
 pub use shazam::{SHAZAM_SCALE_OUT, ShazamScaleBuilder};
 pub use weighting::{AWeighting, FlatWeighting, Weighting};
+
+// TODO: test comparing bark scale and exponential scale

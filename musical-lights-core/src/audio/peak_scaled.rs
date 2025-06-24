@@ -1,3 +1,5 @@
+//! TODO: i don't like this very much.
+
 pub struct PeakScaledBuilder {
     pub max: f32,
     pub decay_per_tick: f32,

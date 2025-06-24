@@ -1,3 +1,5 @@
+//! TODO: i don't like this very much
+
 /// limit how fast a value can decrease
 /// TODO: have it decelerate like with gravity
 /// TODO: think more about this

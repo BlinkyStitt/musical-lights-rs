@@ -538,10 +538,10 @@ fn mic_task(
     let fft_outputs_buf = FFT_OUTPUTS_BUF.take();
     info!("fft_outputs created");
 
-    // TODO: num outputs should be a const
-    static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 32]> = ConstStaticCell::new([0.0; 32]);
-    let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
-    info!("exponential_scale_outputs created");
+    // // TODO: num outputs should be a const
+    // static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 32]> = ConstStaticCell::new([0.0; 32]);
+    // let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
+    // info!("exponential_scale_outputs created");
 
     // TODO: num outputs should be a const
     static BARK_SCALE_OUTPUTS: ConstStaticCell<[f32; 24]> = ConstStaticCell::new([0.0; 24]);
@@ -549,7 +549,7 @@ fn mic_task(
     info!("bark_scale_outputs created");
 
     // TODO: 24 buckets don't fit inside of 256 or 400!
-    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<240, 24, 10>> =
+    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<216, 24, 9>> =
         ConstStaticCell::new(MicLoudnessPattern::new());
     let mic_loudness = MIC_FIRE.take();
     info!("mic_fire created");
@@ -662,7 +662,7 @@ fn mic_task(
         // TODO: this still has a lot of work to do to make it work correctly
         let mic_loudness_tick = mic_loudness.tick(bark_scale_outputs);
 
-        // calculating the "heat" can be slow. yield now
+        // calculating the mic_loudness_tick can be slow. yield now
         // TODO: do some analysis to see if this is always needed
         yield_now();
 

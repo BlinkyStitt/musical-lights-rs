@@ -7,7 +7,7 @@ const I24_MAX: f32 = I24::MAX.to_i32() as f32;
 /// TODO: better name. this is for 24-bit audio!
 /// TODO: is there a more efficient way to do this?
 /// TODO: this needs some tests!
-pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
+pub fn parse_i2s_24_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     input: &[u8; IN],
     output: &mut [f32; OUT],
 ) {
@@ -18,6 +18,7 @@ pub fn parse_i2s_24_bit_to_f32_array<const IN: usize, const OUT: usize>(
         // chunk[0] is always empty. TODO: i thought chunk3 was the one that would always be empty, but i guess not?
         debug_assert!(chunk[0] == 0);
 
+        // TODO: be or le?
         *x = I24::from_le_bytes([chunk[1], chunk[2], chunk[3]]).to_i32() as f32 / I24_MAX;
 
         debug_assert!(*x >= -1.0);
@@ -37,6 +38,7 @@ pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     for (chunk, x) in input.chunks_exact(2).zip(output.iter_mut()) {
         // TODO: is there an off-by-one error here? does a or b need to be moved by 1?
         *x = remap(
+            // TODO: be or le?
             i16::from_le_bytes([chunk[0], chunk[1]]) as f32,
             i16::MIN as f32,
             i16::MAX as f32,
