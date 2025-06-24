@@ -25,5 +25,5 @@ exclude = [
 embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
 embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "520945278942c301433c391f63a075227d9e7c84" }
 
-# Forked until <https://github.com/jmg049/i24/pull/17> is merged
-i24 = { git = "https://github.com/BlinkyStitt/i24.git", rev = "4f41af60055f756740572121bb7ff1cadf39233b" }
+# Forked until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
+i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
