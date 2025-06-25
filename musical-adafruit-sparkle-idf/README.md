@@ -32,6 +32,7 @@ These crates might come in handy:
 - https://docs.rs/dither/latest/dither/
 - https://lib.rs/crates/defmt-or-log
 - https://crates.io/crates/adafruit-seesaw
+- https://github.com/RustAudio/dasp
 
 Crates to find:
 
