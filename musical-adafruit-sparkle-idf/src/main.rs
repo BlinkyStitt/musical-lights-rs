@@ -21,6 +21,7 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
+use musical_lights_core::audio::ExponentialScaleBuilder;
 use musical_lights_core::{
     audio::{
         parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedAmplitudesBuilder,
@@ -489,17 +490,17 @@ fn mic_task(
 
     // log_stack_high_water_mark("mic 1", None);
 
-    // static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 32>> =
-    //     ConstStaticCell::new(ExponentialScaleBuilder::uninit());
-    // let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
-    // exponential_scale_builder.init(24.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
-    // info!("exponential_scale_builder created");
+    static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 20>> =
+        ConstStaticCell::new(ExponentialScaleBuilder::uninit());
+    let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
+    exponential_scale_builder.init(120.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
+    info!("exponential_scale_builder created");
 
-    static BARK_SCALE_BUILDER: ConstStaticCell<BarkScaleBuilder<FFT_OUTPUTS>> =
-        ConstStaticCell::new(BarkScaleBuilder::uninit());
-    let mut bark_scale_builder = BARK_SCALE_BUILDER.take();
-    bark_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
-    info!("bark_scale_builder created");
+    // static BARK_SCALE_BUILDER: ConstStaticCell<BarkScaleBuilder<FFT_OUTPUTS>> =
+    //     ConstStaticCell::new(BarkScaleBuilder::uninit());
+    // let mut bark_scale_builder = BARK_SCALE_BUILDER.take();
+    // bark_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
+    // info!("bark_scale_builder created");
 
     // // TODO: make shazam work
     // static SHAZAM_SCALE_BUILDER: ConstStaticCell<ShazamScaleBuilder<FFT_OUTPUTS>> =
@@ -538,18 +539,18 @@ fn mic_task(
     let fft_outputs_buf = FFT_OUTPUTS_BUF.take();
     info!("fft_outputs created");
 
-    // // TODO: num outputs should be a const
-    // static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 32]> = ConstStaticCell::new([0.0; 32]);
-    // let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
-    // info!("exponential_scale_outputs created");
-
     // TODO: num outputs should be a const
-    static BARK_SCALE_OUTPUTS: ConstStaticCell<[f32; 24]> = ConstStaticCell::new([0.0; 24]);
-    let bark_scale_outputs = BARK_SCALE_OUTPUTS.take();
-    info!("bark_scale_outputs created");
+    static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 20]> = ConstStaticCell::new([0.0; 20]);
+    let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
+    info!("exponential_scale_outputs created");
 
-    // TODO: 24 buckets don't fit inside of 256 or 400!
-    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<216, 24, 9>> =
+    // // TODO: num outputs should be a const
+    // static BARK_SCALE_OUTPUTS: ConstStaticCell<[f32; 24]> = ConstStaticCell::new([0.0; 24]);
+    // let bark_scale_outputs = BARK_SCALE_OUTPUTS.take();
+    // info!("bark_scale_outputs created");
+
+    // TODO: 20/24 buckets don't fit inside of 256 or 400!
+    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<180, 20, 9>> =
         ConstStaticCell::new(MicLoudnessPattern::new(-60.0));
     let mic_loudness = MIC_FIRE.take();
     info!("mic_fire created");
@@ -646,11 +647,11 @@ fn mic_task(
 
         // TODO: i'm not sure that i like this
         // TODO: exponential scale builder probably has bugs. investigate more
-        // exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
+        exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
         // TODO: should bark_scale_outputs just be part of the builder?
-        bark_scale_builder.build_into(fft_outputs_buf, bark_scale_outputs);
+        // bark_scale_builder.build_into(fft_outputs_buf, bark_scale_outputs);
         // info!("bark_scale_outputs: {:?}", bark_scale_outputs);
 
         // TODO: convert scaled outputs to decibels here?
@@ -661,7 +662,8 @@ fn mic_task(
 
         // TODO: what actual units are these
         // TODO: this still has a lot of work to do to make it work correctly
-        let mic_loudness_tick = mic_loudness.tick(bark_scale_outputs);
+        // let mic_loudness_tick = mic_loudness.tick(bark_scale_outputs);
+        let mic_loudness_tick = mic_loudness.tick(exponential_scale_outputs);
 
         // calculating the mic_loudness_tick can be slow. yield now
         // TODO: do some analysis to see if this is always needed
