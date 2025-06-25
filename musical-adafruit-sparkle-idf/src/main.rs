@@ -550,7 +550,7 @@ fn mic_task(
     // info!("bark_scale_outputs created");
 
     // TODO: 20/24 buckets don't fit inside of 256 or 400!
-    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<180, 20, 9>> =
+    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<400, 20, 20>> =
         ConstStaticCell::new(MicLoudnessPattern::new(-60.0));
     let mic_loudness = MIC_FIRE.take();
     info!("mic_fire created");
