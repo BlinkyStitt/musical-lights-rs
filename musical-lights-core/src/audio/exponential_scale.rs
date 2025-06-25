@@ -1,5 +1,6 @@
 //! todo: better name
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
+use crate::audio::amplitudes::scaling_from_bin_map;
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
 
@@ -14,7 +15,7 @@ pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
     map: [Option<usize>; IN],
     /// a weight is calculated based on how many bins are in the same bucket.
     /// this lets us calculate the average instead of the sum. (thanks flowersandbytes!)
-    weight: [f32; OUT],
+    scaling: [(f32, f32); OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -28,7 +29,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
     pub const fn uninit() -> Self {
         Self {
             map: [None; IN],
-            weight: [0.0; OUT],
+            scaling: [(0.0, 0.0); OUT],
         }
     }
 
@@ -75,24 +76,16 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
         for (b, &end_bin) in end_bins.iter().enumerate() {
             info!("{} = bins {}..{}", b, start_bin, end_bin);
 
-            // TODO: i think this is off by one
-            // TODO: get rid of this anyway. we want RMS of the power, not the average
-            let batch_weight = 1.0 / (1 + end_bin - start_bin) as f32;
-
             // TODO: should take or skip be first? if we do skip then take, take needs to be the number of bins, not the final index - 1
-            for (x, w) in self
-                .map
-                .iter_mut()
-                .zip(self.weight.iter_mut())
-                .take(end_bin)
-                .skip(start_bin)
-            {
+            for x in self.map.iter_mut().take(end_bin).skip(start_bin) {
                 *x = Some(b);
-                *w = batch_weight;
             }
 
             start_bin = end_bin;
         }
+
+        // TODO: do this as part of the loop above? no real need to optimize the init function
+        self.scaling = scaling_from_bin_map(&self.map);
     }
 
     pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
@@ -109,14 +102,14 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
 
     /// TODO: rename this function
     fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::aggregate(&self.map, &self.weight, x);
+        let x = AggregatedAmplitudes::rms(&self.map, &self.scaling, x);
 
         ExponentialScaleAmplitudes(x)
     }
 
     /// TODO: rename this function
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedAmplitudes::rms_into(&self.map, &self.weight, input, output)
+        AggregatedAmplitudes::rms_into(&self.map, &self.scaling, input, output)
     }
 }
 

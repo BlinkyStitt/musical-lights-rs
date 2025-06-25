@@ -14,6 +14,7 @@ pub fn parse_i2s_24_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     // TODO: debug assert? compile time assert? should this be size_of i32 or f32?
     assert_eq!(IN, OUT * size_of::<i32>());
 
+    // TODO: should chunk size be 4 or 8? i'm not sure how mono works
     for (chunk, x) in input.chunks_exact(4).zip(output.iter_mut()) {
         // chunk[0] is always empty. TODO: i thought chunk3 was the one that would always be empty, but i guess not?
         debug_assert!(chunk[0] == 0);
@@ -35,6 +36,7 @@ pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     // TODO: debug assert? compile time assert?
     assert_eq!(IN, OUT * size_of::<i16>());
 
+    // TODO: should chunk size be 2 or 4? i'm not sure how mono works
     for (chunk, x) in input.chunks_exact(2).zip(output.iter_mut()) {
         // TODO: is there an off-by-one error here? does a or b need to be moved by 1?
         *x = remap(

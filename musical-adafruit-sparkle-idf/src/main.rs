@@ -550,7 +550,7 @@ fn mic_task(
 
     // TODO: 24 buckets don't fit inside of 256 or 400!
     static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<216, 24, 9>> =
-        ConstStaticCell::new(MicLoudnessPattern::new(-70.0));
+        ConstStaticCell::new(MicLoudnessPattern::new(-60.0));
     let mic_loudness = MIC_FIRE.take();
     info!("mic_fire created");
 

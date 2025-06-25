@@ -56,7 +56,7 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
     }
 
     /// TODO: should this take an AggregatedAmplitudes or a ref? We need a AggregatedAmplitudesRef type maybe? seems verbose
-    /// returns the
+    /// TODO: or maybe this should take `powers` instead of `amplitudes`?
     pub fn tick(&mut self, amplitudes: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
         // Step 1. Cool down every column a little. then add new heat based on the amplitudes
         // TODO: EMA tracking the overall heat? use this for scaling the Y-axis?
@@ -66,7 +66,9 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             .zip(amplitudes.iter())
             .zip(self.sparkle.iter_mut())
         {
-            // whats the point of a constant here if we are just going to remap it?
+            // TODO: if amplitude, dbfs = 20. * amplitude.log10();
+            // TODO: if power, dbfs = 10. * power.log();
+            // let dbfs = 10. * power.log10();
             let dbfs = 20. * amplitude.log10();
 
             // capture the previous loudness so we can compare
