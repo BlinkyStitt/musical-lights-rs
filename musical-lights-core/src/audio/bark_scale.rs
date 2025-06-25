@@ -66,12 +66,7 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkSc
     }
 
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
-        AggregatedAmplitudes::<BARK_SCALE_OUT>::aggregate_into(
-            &self.map,
-            &self.weights,
-            input,
-            output,
-        );
+        AggregatedAmplitudes::<BARK_SCALE_OUT>::rms_into(&self.map, &self.weights, input, output);
     }
 }
 

@@ -116,7 +116,7 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
 
     /// TODO: rename this function
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedAmplitudes::aggregate_into(&self.map, &self.weight, input, output)
+        AggregatedAmplitudes::rms_into(&self.map, &self.weight, input, output)
     }
 }
 

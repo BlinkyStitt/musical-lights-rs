@@ -550,7 +550,7 @@ fn mic_task(
 
     // TODO: 24 buckets don't fit inside of 256 or 400!
     static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<216, 24, 9>> =
-        ConstStaticCell::new(MicLoudnessPattern::new(-30.0));
+        ConstStaticCell::new(MicLoudnessPattern::new(-60.0));
     let mic_loudness = MIC_FIRE.take();
     info!("mic_fire created");
 
@@ -644,7 +644,8 @@ fn mic_task(
         // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
         // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
 
-        // TODO: i'm not sure that i like this. i think we might want to show the average, not the sum!
+        // TODO: i'm not sure that i like this
+        // TODO: exponential scale builder probably has bugs. investigate more
         // exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 

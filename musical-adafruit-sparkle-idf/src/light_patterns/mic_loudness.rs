@@ -10,7 +10,7 @@ use std::fmt::Display;
 pub struct MicLoudnessPattern<const N: usize, const X: usize, const Y: usize> {
     /// how many rows are lit up for each column of the matrix. range of 0-Y
     loudness: [u8; X],
-    /// TODO: what should floor_db be? should it be dynamic?
+    /// TODO: what should floor_db be? should it be dynamic for each X?
     /// TODO: the higher frequency groups need a higher floor db. or we need to work more on the windowing/bucketing/etc
     /// TODO: i think we should change from average to RMS and see how that changes things first
     floor_db: f32,

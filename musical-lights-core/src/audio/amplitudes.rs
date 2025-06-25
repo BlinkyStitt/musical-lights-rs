@@ -61,7 +61,7 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
         // TODO: uninit?
         let mut output = [0.0; OUT];
 
-        AggregatedAmplitudes::aggregate_into(map, weights, &input.0, &mut output);
+        AggregatedAmplitudes::rms_into(map, weights, &input.0, &mut output);
 
         AggregatedAmplitudes(output)
     }
@@ -72,7 +72,7 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
     /// TODO: change this to do RMS of the power (input * input) with some other math
     /// TODO: i'm sure this could be made efficient. we call it a lot, so optimizations here probably matter (but compilers are smart)
     #[inline]
-    pub fn aggregate_into<const IN: usize>(
+    pub fn rms_into<const IN: usize>(
         map: &[Option<usize>; IN],
         weight: &[f32; OUT],
         input: &[f32; IN],
@@ -85,12 +85,12 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
             // info!("adding {} to {:?}", x, i);
 
             if let Some(i) = i {
-                output[i] += x;
+                output[i] += x * x;
             }
         }
 
         for (x, w) in output.iter_mut().zip(weight.iter()) {
-            *x *= w;
+            *x = (*x * w).sqrt();
         }
     }
 }

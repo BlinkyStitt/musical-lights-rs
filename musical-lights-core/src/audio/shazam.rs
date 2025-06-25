@@ -55,7 +55,7 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT> for Shaz
     }
 
     fn build_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
-        AggregatedAmplitudes::aggregate_into(&self.map, &self.weights, input, output);
+        AggregatedAmplitudes::rms_into(&self.map, &self.weights, input, output);
     }
 }
 
