@@ -4,11 +4,12 @@ use crate::audio::AggregatedAmplitudes;
 use crate::lights::{Layout, SnakeXY};
 use crate::logging::{debug, info, trace};
 use crate::remap;
-
-#[allow(unused_imports)]
-use micromath::F32Ext;
-use smart_leds::colors::{BLACK, SILVER};
 use smart_leds::RGB8;
+use smart_leds::colors::{BLACK, SILVER};
+
+/// TODO: do we need this?
+#[cfg(feature = "libm")]
+use micromath::F32Ext;
 
 /// TODO: this is probably going to be refactored several times
 pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
@@ -66,6 +67,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         }
     }
 
+    /// TODO: this X/Y is the opposite of how i usually think of things
     pub fn update(&mut self, mut loudness: AggregatedAmplitudes<Y>) {
         trace!("{:?}", loudness);
 

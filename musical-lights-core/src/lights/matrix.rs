@@ -1,3 +1,5 @@
+//! TODO: replace this with embedded-graphics crate things?
+
 pub struct SimpleXY;
 pub struct SnakeXY;
 

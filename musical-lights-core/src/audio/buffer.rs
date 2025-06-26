@@ -10,6 +10,7 @@ pub struct AudioBuffer<const IN: usize, const OUT: usize> {
 }
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
+    /// You **MUST** call `init` on this before using it!
     #[deprecated = "use BufferedFFT instead"]
     pub const fn new() -> Self {
         // TODO: what is this the right way to do a compile time assert
@@ -18,7 +19,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
 
         let sample_buffer = CircularBuffer::new();
 
-        // TODO: should we start with a buffer full of zeroes, NOT an empty buffer? this can't be const then
+        // theres no const fill
         // sample_buffer.fill(0.0);
 
         Self {
@@ -27,7 +28,8 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
         }
     }
 
-    pub fn fill(&mut self) {
+    /// TODO: some wrapper type that ensures init gets called.
+    pub fn init(&mut self) {
         self.buffer.fill(0.0);
     }
 
@@ -43,6 +45,7 @@ impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
     }
 
     /// TODO: think more about this. maybe we actually just want an iter
+    /// TODO: what should this be called? samples_in_place? samples_buf? samples_mut?
     #[inline]
     pub fn samples_in_place(&self, samples: &mut Samples<OUT>) {
         let (a, b) = self.buffer.as_slices();

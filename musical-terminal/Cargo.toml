@@ -1,18 +1,31 @@
 [package]
 name = "terminal_mac"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.98"
-cpal = "0.15.3"
+cpal = "0.16.0"
 critical-section = { version = "1.2", features = ["std"] }
-embassy-executor = { version = "0.7.0", features = ["arch-std", "executor-thread", "log", "nightly"] }
-embassy-sync = { version = "0.6.2", features = ["log", "std"] }
+embassy-executor = { version = "0.7.0", features = [
+    "arch-std",
+    "executor-thread",
+    "log",
+    "nightly",
+] }
+embassy-sync = { version = "0.7.0", features = ["log", "std"] }
 embassy-time = { version = "0.4.0", features = ["log", "std"] }
+embedded-graphics = { version = "0.8.1", features = [
+    "nalgebra_support",
+    "defmt",
+] }
+embedded-graphics-simulator = "0.7.0"
 env_logger = "0.11.8"
 flume = "0.11.1"
 log = { version = "0.4.27", features = ["std"] }
-musical-lights-core = { path = "../musical-lights-core", features = ["std", "log"] }
+musical-lights-core = { path = "../musical-lights-core", features = [
+    "std",
+    "log",
+] }

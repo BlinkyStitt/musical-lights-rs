@@ -92,6 +92,7 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
             }
         }
 
+        // TODO: try no scaling? i think we want different units out of this.
         // at this point, output is the sum of the squares of the inputs. it needs some scaling still
         for (x, (s_inv, s_sqrt)) in output.iter_mut().zip(scaling.iter()) {
             // TODO: sqrt for RMS-amplitude. Otherwise it's power (I think? Which do we want)

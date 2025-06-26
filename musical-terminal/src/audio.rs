@@ -31,7 +31,7 @@ impl MicrophoneStream {
         let config = device.default_input_config().unwrap();
 
         let err_fn = move |err| {
-            error!("an error occurred on stream: {:?}", err);
+            error!("an error occurred on stream: {err:?}");
         };
 
         // samples per second
@@ -39,7 +39,7 @@ impl MicrophoneStream {
         info!("sample rate = {}", sample_rate.0);
 
         let buffer_size = config.buffer_size();
-        info!("buffer size = {:?}", buffer_size);
+        info!("buffer size = {buffer_size:?}");
 
         // TODO: what capacity channel? i think we want to discard old samples if we are lagging, so probably a watch
         let (tx, rx) = flume::bounded(2);

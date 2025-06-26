@@ -18,7 +18,9 @@ use std::env;
 
 const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
-const NUM_CHANNELS: usize = 120;
+
+/// equal temperment == 120?
+const NUM_CHANNELS: usize = 8;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
@@ -32,7 +34,7 @@ async fn audio_task(
     tx_loudness: flume::Sender<AggregatedAmplitudes<NUM_CHANNELS>>,
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
-        audio_buffer.push_samples(samples);
+        audio_buffer.push_samples(&samples);
 
         let samples = audio_buffer.samples();
 
@@ -69,10 +71,12 @@ async fn lights_task(rx_loudness: flume::Receiver<AggregatedAmplitudes<NUM_CHANN
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    env::set_var(
-        "RUST_LOG",
-        env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
-    );
+    unsafe {
+        env::set_var(
+            "RUST_LOG",
+            env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
+        );
+    }
 
     env_logger::builder()
         .format_timestamp_nanos()
@@ -85,25 +89,27 @@ async fn main(spawner: Spawner) {
 
     let mic_stream = audio::MicrophoneStream::try_new().unwrap();
 
-    let audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
+    let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
+    audio_buffer.init();
 
     let sample_rate = mic_stream.sample_rate.0 as f32;
 
     // TODO: a-weighting probably isn't what we want. also, our microphone frequency response is definitely not flat
     let weighting = AWeighting::new(sample_rate);
 
+    // TODO: rewrite this to use the BufferedFFT
     let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
 
     // TODO: have multiple scales and compare them. is "scale" the right term?
     // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
-    // TODO: I'm never seeing anything in bucket 0
-    let equal_tempered_scale_builder = ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
+    // TODO: I'm never seeing anything in bucket 0. that means its working right? we want that to be 0 i think
+    let scale_builder = ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
 
     spawner.must_spawn(audio_task(
         mic_stream,
         audio_buffer,
         fft,
-        equal_tempered_scale_builder,
+        scale_builder,
         loudness_tx,
     ));
     spawner.must_spawn(lights_task(loudness_rx));
