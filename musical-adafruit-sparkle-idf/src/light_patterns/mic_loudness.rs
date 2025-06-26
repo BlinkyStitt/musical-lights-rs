@@ -73,6 +73,8 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             // TODO: this is probably not the right way to scale/clamp/round this
             *loudness = (((x - self.floor_db) / -self.floor_db).clamp(0.0, 1.0) * Y as f32) as u8;
 
+            // TODO: only sparkle if its the top-most band overall
+            // TODO: "band" or "channel"? I'm inconsistent
             *sparkle = *loudness > old_loudness;
         }
 
