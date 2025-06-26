@@ -21,6 +21,7 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
+use itertools::Itertools;
 use musical_lights_core::audio::ExponentialScaleBuilder;
 use musical_lights_core::{
     audio::{
@@ -493,7 +494,7 @@ fn mic_task(
     static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 20>> =
         ConstStaticCell::new(ExponentialScaleBuilder::uninit());
     let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
-    exponential_scale_builder.init(120.0, 15_500.0, I2S_SAMPLE_RATE_HZ as f32);
+    exponential_scale_builder.init(80.0, 20_000.0, I2S_SAMPLE_RATE_HZ as f32);
     info!("exponential_scale_builder created");
 
     // static BARK_SCALE_BUILDER: ConstStaticCell<BarkScaleBuilder<FFT_OUTPUTS>> =
@@ -509,16 +510,15 @@ fn mic_task(
     // shazam_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
     // info!("shazam_scale_builder created");
 
-    type MyBufferedFFT = BufferedFFT<
-        I2S_SAMPLE_SIZE,
-        FFT_INPUTS,
-        FFT_OUTPUTS,
-        HanningWindow<FFT_INPUTS>,
-        AWeighting<FFT_OUTPUTS>,
-    >;
-    static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> = ConstStaticCell::new(
-        BufferedFFT::uninit(AWeighting::new(I2S_SAMPLE_RATE_HZ as f32)),
-    );
+    // TODO: actually use this
+    static WEIGHTING: ConstStaticCell<AWeighting<FFT_OUTPUTS>> =
+        ConstStaticCell::new(AWeighting::new(I2S_SAMPLE_RATE_HZ as f32));
+    let weighting = WEIGHTING.take();
+
+    type MyBufferedFFT =
+        BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>;
+    static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> =
+        ConstStaticCell::new(BufferedFFT::uninit());
     let buffered_fft = BUFFERED_FFT.take();
     buffered_fft.init();
     info!("buffered_fft created");
@@ -536,7 +536,7 @@ fn mic_task(
     // TODO: store these in a global? in the state? i dunno.
     static FFT_OUTPUTS_BUF: ConstStaticCell<[f32; FFT_OUTPUTS]> =
         ConstStaticCell::new([0.0; FFT_OUTPUTS]);
-    let fft_outputs_buf = FFT_OUTPUTS_BUF.take();
+    let fft_power_buf = FFT_OUTPUTS_BUF.take();
     info!("fft_outputs created");
 
     // TODO: num outputs should be a const
@@ -550,9 +550,10 @@ fn mic_task(
     // info!("bark_scale_outputs created");
 
     // TODO: 20/24 buckets don't fit inside of 256 or 400!
-    static MIC_FIRE: ConstStaticCell<MicLoudnessPattern<400, 20, 20>> =
+    // TODO: do 10 buckets and have them be 2 wide?
+    static MIC_LOUDNESS: ConstStaticCell<MicLoudnessPattern<180, 20, 9>> =
         ConstStaticCell::new(MicLoudnessPattern::new(-60.0));
-    let mic_loudness = MIC_FIRE.take();
+    let mic_loudness = MIC_LOUDNESS.take();
     info!("mic_fire created");
 
     // static SHAZAM_SCALE_OUTPUTS: ConstStaticCell<[f32; SHAZAM_SCALE_OUT]> =
@@ -631,24 +632,32 @@ fn mic_task(
         yield_now();
 
         // TODO: only do the FFT if the sample buffer has the right number of elements
-        buffered_fft.fft(fft_outputs_buf);
+        let spectrum = buffered_fft.fft();
 
         // running the fft can be slow. yield now
         // TODO: do some analysis to see if this is always needed
         yield_now();
 
-        // trace!(
-        //     "fft outputs: {} {} {} {} ...",
-        //     fft_outputs_buf[0], fft_outputs_buf[1], fft_outputs_buf[2], fft_outputs_buf[3]
-        // );
+        // TODO: power? amplitude? rms? so many choices.
+        fft_power_buf
+            .iter_mut()
+            .set_from(spectrum.iter_mean_square_power_density());
 
-        // fft_outputs now includes the non-aggregated outputs. this is a lot of bins! 4096 is honestly probably more than we need, but lets try it anyways
-        // sum the fft_outputs with some aggregators (whats the actual technical term? i call them scale builders which i don't like very much)
+        // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
+        // TODO: apply a-weigthing
+        for x in fft_power_buf.iter_mut().take(FFT_OUTPUTS - 1).skip(1) {
+            *x *= 2.0
+        }
 
-        // TODO: i'm not sure that i like this
-        // TODO: exponential scale builder probably has bugs. investigate more
-        exponential_scale_builder.build_into(fft_outputs_buf, exponential_scale_outputs);
+        // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
+        exponential_scale_builder.sum_into(fft_power_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
+
+        // Convert each band energy to RMS amplitude in dbfs
+        for x in exponential_scale_outputs.iter_mut() {
+            let rms = x.sqrt();
+            *x = 20. * rms.log10();
+        }
 
         // TODO: should bark_scale_outputs just be part of the builder?
         // bark_scale_builder.build_into(fft_outputs_buf, bark_scale_outputs);

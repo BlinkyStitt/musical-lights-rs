@@ -4,12 +4,12 @@ use micromath::F32Ext;
 
 use super::Weighting;
 
-/// TODO: i'm not sure we need this. i think the microphone already does this for us!
 pub struct AWeighting<const N: usize> {
     sample_rate_hz: f32,
 }
 
 impl<const N: usize> AWeighting<N> {
+    /// TODO: create a lookup table, or calculate as needed? a lookup table is easy to add after this
     pub const fn new(sample_rate_hz: f32) -> Self {
         Self { sample_rate_hz }
     }

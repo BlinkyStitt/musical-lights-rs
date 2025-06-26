@@ -32,10 +32,11 @@ pub trait AggregatedAmplitudesBuilder<const IN: usize, const OUT: usize> {
     // // NOTE: you maybe want something like this
     // map: [Option<usize>; IN],
 
-    fn build(&self, input: WeightedAmplitudes<IN>) -> Self::Output;
+    /// TODO: write a default implementation on this
+    // fn mean_square_power_densisty(&self, input: WeightedAmplitudes<IN>) -> Self::Output;
 
     /// TODO: this output should use Self::Output
-    fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]);
+    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; OUT]);
 }
 
 /// TODO: From trait won't work because we need some state (the precomputed equal loudness curves)
@@ -52,75 +53,50 @@ impl<const B: usize> WeightedAmplitudes<B> {
     }
 }
 
+/// TODO: i don't think this is amplitudes anymore. cuz we are using power now
 impl<const OUT: usize> AggregatedAmplitudes<OUT> {
-    /// TODO: i don't like this function being here. feels like it should be in the builder instead
-    pub fn rms<const IN: usize>(
-        map: &[Option<usize>; IN],
-        scaling: &[(f32, f32); OUT],
-        input: WeightedAmplitudes<IN>,
-    ) -> AggregatedAmplitudes<OUT> {
-        // TODO: uninit?
-        let mut output = [0.0; OUT];
-
-        AggregatedAmplitudes::rms_into(map, scaling, &input.0, &mut output);
-
-        AggregatedAmplitudes(output)
-    }
-
-    /// TODO: give this a "rusty" name
+    /// Convert each bin to mean-square power density. Square the magnitude and divide by N² to match Parseval’s theorem.
+    ///
+    /// TODO: give this a "rusty" name. i don't think this is very rusty though. think more about refactoring it once more of it works
     /// We used to just sum the bins, but that seemes wrong.
     /// Now we take average of the bins. that isn't right either though
     /// TODO: change this to do RMS of the power (input * input) with some other math
     /// TODO: i'm sure this could be made efficient. we call it a lot, so optimizations here probably matter (but compilers are smart)
-    /// TODO: i don't like the name of "scaling". its (1/bins_per_output, sqrt(bins_per_output))
     /// TODO: i don't like this function being here. feels like it should be in the builder instead
+    /// TODO: should input_power be an iterator?
+    /// TODO: should this just take the FftOutput as the main argument?
     #[inline]
-    pub fn rms_into<const IN: usize>(
+    pub fn sum_into<const IN: usize>(
         map: &[Option<usize>; IN],
-        scaling: &[(f32, f32); OUT],
-        input: &[f32; IN],
-        output: &mut [f32; OUT],
+        input_power: &[f32; IN],
+        output_power: &mut [f32; OUT],
     ) {
-        output.fill(0.0);
+        // TODO: should we require fill be called outside this function?
+        output_power.fill(0.0);
 
-        // TODO: filter this efficiently?
-        for (x, &i) in input.iter().zip(map.iter()) {
-            // info!("adding {} to {:?}", x, i);
-
+        for (x, &i) in input_power.iter().zip(map.iter()) {
             if let Some(i) = i {
-                output[i] += x * x;
+                output_power[i] += x;
             }
-        }
-
-        // TODO: try no scaling? i think we want different units out of this.
-        // at this point, output is the sum of the squares of the inputs. it needs some scaling still
-        for (x, (s_inv, s_sqrt)) in output.iter_mut().zip(scaling.iter()) {
-            // TODO: sqrt for RMS-amplitude. Otherwise it's power (I think? Which do we want)
-            // then we multiple it by the sqrt
-            *x = (*x * *s_inv).sqrt() * s_sqrt;
         }
     }
 }
 
 /// TODO: tests on this!
 /// TODO: can this be made const?
-pub fn scaling_from_bin_map<const OUT: usize>(map: &[Option<usize>]) -> [(f32, f32); OUT] {
-    let mut output: [(f32, f32); OUT] = [(0.0, 0.0); OUT];
+/// TODO: whats a better name for this? _buf? _in_place? _into?
+pub fn bin_counts_from_map_buf<const OUT: usize>(map: &[Option<usize>], counts: &mut [usize; OUT]) {
     for i in map.iter().copied().flatten() {
-        output[i].0 += 1.0;
+        counts[i] += 1;
     }
+}
 
-    // at this point, output.0 is the count of bins in each band
+pub fn bin_counts_from_map<const OUT: usize>(map: &[Option<usize>]) -> [usize; OUT] {
+    let mut bin_counts = [0; OUT];
 
-    for (scale_inv, scale_sqrt) in output.iter_mut() {
-        let bin_count = *scale_inv;
+    bin_counts_from_map_buf(map, &mut bin_counts);
 
-        *scale_inv = 1.0 / bin_count;
-        // TODO: is an approx sqrt fine?
-        *scale_sqrt = bin_count.sqrt();
-    }
-
-    output
+    bin_counts
 }
 
 #[cfg(test)]
@@ -131,14 +107,11 @@ mod tests {
     fn test_aggregate_into() {
         let map = [None, Some(0), Some(1), Some(1), None];
 
-        let scaling = scaling_from_bin_map(&map);
+        let bin_counts = bin_counts_from_map(&map);
+        let mut output = [0.0; 2];
 
-        let output = AggregatedAmplitudes::rms(
-            &map,
-            &scaling,
-            WeightedAmplitudes([1.0, 2.0, 4.0, 8.0, 16.0]),
-        );
+        AggregatedAmplitudes::sum_into(&map, &[1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
 
-        assert_eq!(output.0, [2.0, 6.0]);
+        assert_eq!(output, [2.0, 6.0]);
     }
 }

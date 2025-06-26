@@ -1,4 +1,4 @@
-use crate::audio::bin_to_frequency;
+use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
 
@@ -6,11 +6,9 @@ const BARK_SCALE_OUT: usize = 24;
 
 pub struct BarkScaleBuilder<const IN: usize> {
     map: [Option<usize>; IN],
-    /// store weights so we can calculate the averages
-    /// the first value is the 1/bins_per_out
-    /// the second value is bins_per_out.sqrt()
-    /// TODO: this should probably be a specific type instead of just a tuple.
-    weights: [(f32, f32); BARK_SCALE_OUT],
+    /// store bin counts so we can scale channels properly.
+    /// TODO: this could probably be the f32 instead, but this is simpler for now
+    bin_counts: [usize; BARK_SCALE_OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -28,9 +26,9 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
 
     pub const fn uninit() -> Self {
         let map = [Some(0); BINS];
-        let weights = [(0.0, 0.0); BARK_SCALE_OUT];
+        let bin_counts = [0; BARK_SCALE_OUT];
 
-        BarkScaleBuilder { map, weights }
+        BarkScaleBuilder { map, bin_counts }
     }
 
     pub fn init(&mut self, sample_rate_hz: f32) {
@@ -40,35 +38,27 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
             // bark is 1-24, but we want 0-23
             let b = bark_scale(f).map(|x| x - 1);
 
-            if let Some(b) = b {
-                self.weights[b].0 += 1.;
-                self.weights[b].1 += 1.;
-            }
-
             // trace!("{} {} = {:?}", i, f, b);
 
             *x = b;
         }
 
-        // at this point, weights is the count of bins per band.
-        for (w_inv, w_sqrt) in self.weights.iter_mut() {
-            *w_inv = 1.0 / *w_inv;
-            *w_sqrt = w_sqrt.sqrt();
-        }
+        bin_counts_from_map_buf(&self.map, &mut self.bin_counts);
     }
 }
 
 impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkScaleBuilder<IN> {
     type Output = BarkScaleAmplitudes;
 
-    fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::<BARK_SCALE_OUT>::rms::<IN>(&self.map, &self.weights, x);
+    // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
+    //     todo!("refactor");
+    //     // let x = AggregatedAmplitudes::<BARK_SCALE_OUT>::rms::<IN>(&self.map, &self.weights, x);
 
-        BarkScaleAmplitudes(x)
-    }
+    //     // BarkScaleAmplitudes(x)
+    // }
 
-    fn build_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
-        AggregatedAmplitudes::<BARK_SCALE_OUT>::rms_into(&self.map, &self.weights, input, output);
+    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
+        AggregatedAmplitudes::<BARK_SCALE_OUT>::sum_into(&self.map, input, output);
     }
 }
 

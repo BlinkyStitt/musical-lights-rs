@@ -1,11 +1,10 @@
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::audio::{amplitudes::scaling_from_bin_map, bin_to_frequency};
+use crate::audio::{amplitudes::bin_counts_from_map, bin_to_frequency};
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
 
 pub struct ShazamScaleBuilder<const FFT_OUT: usize> {
     map: [Option<usize>; FFT_OUT],
-    scaling: [(f32, f32); SHAZAM_SCALE_OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -17,9 +16,8 @@ pub struct ShazamAmplitudes(pub AggregatedAmplitudes<SHAZAM_SCALE_OUT>);
 impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
     pub const fn uninit() -> Self {
         let map = [None; FFT_OUT];
-        let scaling = [(1.0, 1.0); SHAZAM_SCALE_OUT];
 
-        Self { map, scaling }
+        Self { map }
     }
 
     /// TODO: how can we use types to be sure this init gets called
@@ -35,8 +33,6 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
 
             *x = b;
         }
-
-        self.scaling = scaling_from_bin_map(&self.map);
     }
 
     pub fn new(sample_rate_hz: f32) -> Self {
@@ -49,14 +45,15 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
 impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScaleBuilder<IN> {
     type Output = ShazamAmplitudes;
 
-    fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::rms::<IN>(&self.map, &self.scaling, x);
+    // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
+    //     todo!("refactor");
+    //     // let x = AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::rms::<IN>(&self.map, &self.scaling, x);
 
-        ShazamAmplitudes(x)
-    }
+    //     // ShazamAmplitudes(x)
+    // }
 
-    fn build_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
-        AggregatedAmplitudes::rms_into(&self.map, &self.scaling, input, output);
+    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
+        AggregatedAmplitudes::sum_into(&self.map, input, output);
     }
 }
 

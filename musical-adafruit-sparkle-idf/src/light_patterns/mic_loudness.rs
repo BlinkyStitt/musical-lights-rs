@@ -56,29 +56,22 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
     }
 
     /// TODO: should this take an AggregatedAmplitudes or a ref? We need a AggregatedAmplitudesRef type maybe? seems verbose
-    /// TODO: or maybe this should take `powers` instead of `amplitudes`?
-    pub fn tick(&mut self, amplitudes: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
+    /// TODO: or maybe this should take `powers` instead of `amplitudes`? maybe a type that lets us pick? I'm really not sure what units we want!
+    pub fn tick(&mut self, dbfs: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
         // Step 1. Cool down every column a little. then add new heat based on the amplitudes
         // TODO: EMA tracking the overall heat? use this for scaling the Y-axis?
-        for ((loudness, amplitude), sparkle) in self
+        for ((loudness, x), sparkle) in self
             .loudness
             .iter_mut()
-            .zip(amplitudes.iter())
+            .zip(dbfs.iter())
             .zip(self.sparkle.iter_mut())
         {
-            // TODO: if amplitude, dbfs = 20. * amplitude.log10();
-            // TODO: if power, dbfs = 10. * power.log();
-            // let dbfs = 10. * power.log10();
-            let dbfs = 20. * amplitude.log10();
-
             // capture the previous loudness so we can compare
             let old_loudness = *loudness;
 
-            // TODO: can't decide if we should add the new dbfs, or just set it as the max
-            // TODO: or maybe decay and use the larger value?
+            // TODO: use a real AGC!
             // TODO: this is probably not the right way to scale/clamp/round this
-            *loudness = (((dbfs - self.floor_db) / -self.floor_db).clamp(0.0, 1.0) * Y as f32)
-                .round() as u8;
+            *loudness = (((x - self.floor_db) / -self.floor_db).clamp(0.0, 1.0) * Y as f32) as u8;
 
             *sparkle = *loudness > old_loudness;
         }

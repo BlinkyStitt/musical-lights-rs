@@ -875,6 +875,7 @@ dependencies = [
  "enterpolation",
  "heapless 0.8.0",
  "i24",
+ "itertools",
  "microfft",
  "micromath",
  "nalgebra",

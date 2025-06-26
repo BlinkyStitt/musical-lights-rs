@@ -102,7 +102,8 @@ async fn main(spawner: Spawner) {
 
     // TODO: have multiple scales and compare them. is "scale" the right term?
     // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
-    // TODO: I'm never seeing anything in bucket 0. that means its working right? we want that to be 0 i think
+    // TODO: I'm never seeing anything in bin 0. that means its working right?
+    // TODO: i'm also never seeing anything in bucket 0. that doesn't seem right. need to think more about bass
     let scale_builder = ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
 
     spawner.must_spawn(audio_task(

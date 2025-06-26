@@ -1,6 +1,6 @@
 //! todo: better name
 use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::audio::amplitudes::scaling_from_bin_map;
+use crate::audio::amplitudes::{bin_counts_from_map, bin_counts_from_map_buf};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
 
@@ -12,10 +12,8 @@ use micromath::F32Ext;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
     /// index is the input id. the value is the output id. if none, the input is ignored
+    /// TODO: do something fancy with ranges instead
     map: [Option<usize>; IN],
-    /// a weight is calculated based on how many bins are in the same bucket.
-    /// this lets us calculate the average instead of the sum. (thanks flowersandbytes!)
-    scaling: [(f32, f32); OUT],
 }
 
 /// TODO: should this be a trait instead?
@@ -27,10 +25,7 @@ pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes
 /// bins in, bands/channels out
 impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
     pub const fn uninit() -> Self {
-        Self {
-            map: [None; IN],
-            scaling: [(0.0, 0.0); OUT],
-        }
+        Self { map: [None; IN] }
     }
 
     /// TODO: how can we use types to be sure this init gets called
@@ -83,9 +78,6 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
 
             start_bin = end_bin;
         }
-
-        // TODO: do this as part of the loop above? no real need to optimize the init function
-        self.scaling = scaling_from_bin_map(&self.map);
     }
 
     pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
@@ -100,16 +92,19 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
 {
     type Output = ExponentialScaleAmplitudes<OUT>;
 
-    /// TODO: rename this function
-    fn build(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-        let x = AggregatedAmplitudes::rms(&self.map, &self.scaling, x);
+    // /// TODO: rename this function
+    // fn aggregate(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
+    //     todo!("refactor");
 
-        ExponentialScaleAmplitudes(x)
-    }
+    //     // let x = AggregatedAmplitudes::rms(&self.map, &self.scaling, x);
 
-    /// TODO: rename this function
-    fn build_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedAmplitudes::rms_into(&self.map, &self.scaling, input, output)
+    //     // ExponentialScaleAmplitudes(x)
+    // }
+
+    /// TODO: rename this function?
+    /// TODO: use iters?
+    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
+        AggregatedAmplitudes::sum_into(&self.map, input, output)
     }
 }
 

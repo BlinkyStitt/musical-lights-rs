@@ -42,9 +42,9 @@ impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
     pub fn new_with_window_and_weighting<WI: Window<IN>, WE: Weighting<OUT>>(
         weighting: WE,
     ) -> Self {
-        let window_multipliers = WI::windows();
+        let window_multipliers = WI::input_windows();
 
-        let window_scaling = WI::scaling();
+        let window_scaling = WI::output_scaling();
 
         let mut equal_loudness_curve = weighting.curve();
 
