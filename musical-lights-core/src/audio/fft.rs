@@ -106,6 +106,8 @@ macro_rules! impl_fft {
 
                 let mut amplitudes: [f32; { $in_size / 2 }] = [0.0; { $in_size / 2 }];
 
+                // TODO: i'm really not sure what to do with the spectrum here.
+                // TODO: theres some code duplication now. one of them should probably be deleted
                 for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
                     *x = spectrum.norm() / { $in_size / 2 } as f32;
                 }
