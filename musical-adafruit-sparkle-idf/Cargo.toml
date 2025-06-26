@@ -37,7 +37,7 @@ flume = "0.11.1"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "alloc", "std", "log"
 ] }
-postcard = "1.1.1"
+postcard = "1.1.2"
 rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
 once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
 static_cell = { version = "2.1.1", features = ["nightly"] }

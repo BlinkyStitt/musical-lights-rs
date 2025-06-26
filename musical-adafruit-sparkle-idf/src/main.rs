@@ -494,7 +494,7 @@ fn mic_task(
     static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 20>> =
         ConstStaticCell::new(ExponentialScaleBuilder::uninit());
     let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
-    exponential_scale_builder.init(80.0, 20_000.0, I2S_SAMPLE_RATE_HZ as f32);
+    exponential_scale_builder.init(80.0, 18_000.0, I2S_SAMPLE_RATE_HZ as f32);
     info!("exponential_scale_builder created");
 
     // static BARK_SCALE_BUILDER: ConstStaticCell<BarkScaleBuilder<FFT_OUTPUTS>> =
