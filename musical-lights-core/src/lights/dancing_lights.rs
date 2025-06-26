@@ -1,4 +1,6 @@
 //! Based on the visualizer, but with some artistic choices to make the lights look they are dancing.
+use core::fmt::Display;
+
 use super::Gradient;
 use crate::audio::AggregatedAmplitudes;
 use crate::lights::{Layout, SnakeXY};
@@ -11,9 +13,29 @@ use smart_leds::colors::{BLACK, SILVER};
 #[cfg(feature = "libm")]
 use micromath::F32Ext;
 
+/// TODO: i'm not sure i actually need this. i'm rewritting this for the net and not using this code. but maybe i should keep using it?
+/// TODO: at this point, should this be scaled 0-255? right now its the number of lights
+pub struct Channels<const N: usize>([u8; N]);
+
+impl<const N: usize> Display for Channels<N> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for y_height in self.0.iter() {
+            match y_height {
+                0 => {
+                    f.write_str("   |")?;
+                }
+                // TODO: make this work with more than 9. also track going up or down.
+                _ => f.write_fmt(format_args!(" {y_height} |"))?,
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// TODO: this is probably going to be refactored several times
 pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
-    channels: [u8; Y],
+    channels: Channels<Y>,
     /// TODO: use a framebuf crate that supports DMA and drawing fonts and such
     pub fbuf: [RGB8; N],
     /// recent maximum loudness. decays over time
@@ -51,7 +73,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         }
 
         // TODO: get rid of channels. just use the fbuf
-        let channels = [0; Y];
+        let channels = Channels([0; Y]);
 
         let peak_max = 0.1;
 
@@ -94,7 +116,11 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         const BORDERS: usize = BOTTOM_BORDER + TOP_BORDER;
 
-        for (y, (&loudness, channel)) in loudness.0.iter().zip(self.channels.iter_mut()).enumerate()
+        for (y, (&loudness, channel)) in loudness
+            .0
+            .iter()
+            .zip(self.channels.0.iter_mut())
+            .enumerate()
         {
             // TODO: log scale?
             let scaled =
@@ -129,8 +155,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             }
         }
 
-        // TODO: pretty print this
-        debug!("channels: {:?}", self.channels);
+        debug!("channels: {}", self.channels);
     }
 
     pub fn iter(&self, y_offset: usize) -> impl Iterator<Item = &RGB8> {
