@@ -2,6 +2,7 @@
 //! TODO: move this to a lib and then have multiple bins. one for the hat, one for the necklace, one for the net, etc. they should try to share code in the crate or in musical-lights-core.
 #![feature(type_alias_impl_trait)]
 #![feature(slice_as_array)]
+#![feature(cmp_minmax)]
 // #![feature(thread_sleep_until)]
 
 mod debug;
@@ -93,12 +94,20 @@ const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 /// TODO: with 24-but audio, this should use size_of::<i32>
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
-const AGGREGATED_OUTPUTS: usize = 10;
+const AGGREGATED_OUTPUTS: usize = 20;
 
 /// TODO: the mic's floor is -90, but I think we should ignore under 60.
 /// TODO: this will probably change once we have scaling based on an AGC
 /// TODO: have the floor dynamically set to the average
 const FLOOR_DB: f32 = -60.;
+// const FLOOR_PEAK_DB: f32 = -30.;
+const FLOOR_PEAK_DB: f32 = FLOOR_DB + 12.;
+
+// TODO: 20/24 buckets don't fit inside of 256 or 400!
+// TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
+// Y is currently set to 9 because the terminal logging looks better. but that should change to fit the actual leds
+const DEBUGGING_Y: usize = 9;
+const DEBUGGING_N: usize = AGGREGATED_OUTPUTS * DEBUGGING_Y;
 
 const _SAFETY_CHECKS: () = {
     assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
@@ -480,11 +489,9 @@ fn mic_task(
     let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
     info!("exponential_scale_outputs created");
 
-    // TODO: 20/24 buckets don't fit inside of 256 or 400!
-    // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
-    // Y is currently set to 9 because the terminal logging looks better. but that should change to fit the actual leds
-    static MIC_LOUDNESS: ConstStaticCell<MicLoudnessPattern<90, AGGREGATED_OUTPUTS, 9>> =
-        ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB));
+    static MIC_LOUDNESS: ConstStaticCell<
+        MicLoudnessPattern<DEBUGGING_N, AGGREGATED_OUTPUTS, DEBUGGING_Y>,
+    > = ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB, FLOOR_PEAK_DB));
     let mic_loudness = MIC_LOUDNESS.take();
     info!("mic_loudness created");
 

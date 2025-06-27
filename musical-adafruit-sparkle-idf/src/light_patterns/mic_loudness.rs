@@ -3,20 +3,28 @@
 //! the initial idea was to use the [fire2012](https://github.com/FastLED/FastLED/blob/master/examples/Fire2012/Fire2012.ino) patterns from fastled, but instead of randomly adding heat, we add heat based on frequency amplitudes
 //!
 //! make it work, make it right, make it fast. don't get caught up making perfect iterators on this first pass!
+use core::f32;
 use std::fmt::Display;
+use std::thread::yield_now;
+
+use itertools::{Itertools, MinMaxResult};
+use musical_lights_core::logging::info;
+use musical_lights_core::remap;
 
 /// TODO: i'm not sure where the code that turns this heat into a XY matrix belongs. or code for rotating the matrix by frame count
 /// TODO: this doesn't work exactly the same as Fire2012. maybe i should have kept it more similar at the start?
 pub struct MicLoudnessPattern<const N: usize, const X: usize, const Y: usize> {
-    agc: dagc::MonoAgc,
     /// how many rows are lit up for each column of the matrix. range of 0-Y
     loudness: [u8; X],
     /// TODO: what should floor_db be? should it be dynamic for each X?
     /// TODO: the higher frequency groups need a higher floor db. or we need to work more on the windowing/bucketing/etc
     /// TODO: i think we should change from average to RMS and see how that changes things first
     floor_db: f32,
+    floor_peak_db: f32,
     /// if the column was louder this tick than the previous tick
     sparkle: [bool; X],
+    peak_ema_min_dbfs: f32,
+    peak_ema_max_dbfs: f32,
 }
 
 /// TODO: i'm not sure the bet way to pack this. not worth optimizing at this point, so lets KISS.
@@ -46,42 +54,74 @@ impl<const X: usize, const Y: usize> Display for MicLoudnessTick<'_, X, Y> {
 }
 
 impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y> {
-    pub const fn new(floor_db: f32) -> Self {
+    pub const fn new(floor_db: f32, floor_peak_db: f32) -> Self {
         assert!(X * Y == N);
 
-        // TODO: no idea what this should be
-        let desired_output_rms = 12.;
-        let distortion_factor = 0.001;
+        let peak_ema_min_dbfs = floor_db;
+        let peak_ema_max_dbfs = floor_peak_db;
 
-        if let Ok(agc) = dagc::MonoAgc::new(desired_output_rms, distortion_factor) {
-            Self {
-                agc,
-                loudness: [0; X],
-                floor_db,
-                sparkle: [false; X],
-            }
-        } else {
-            panic!("unable to create mono agc")
+        Self {
+            loudness: [0; X],
+            floor_db,
+            floor_peak_db,
+            sparkle: [false; X],
+            peak_ema_min_dbfs,
+            peak_ema_max_dbfs,
         }
     }
 
+    /// TODO: take the spectrum or dbfs? maybe both
     /// TODO: should this take an AggregatedAmplitudes or a ref? We need a AggregatedAmplitudesRef type maybe? seems verbose
     /// TODO: or maybe this should take `powers` instead of `amplitudes`? maybe a type that lets us pick? I'm really not sure what units we want!
-    pub fn tick(&mut self, dbfs: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
-        // Step 1. Cool down every column a little. then add new heat based on the amplitudes
-        // TODO: EMA tracking the overall heat? use this for scaling the Y-axis?
+    pub fn tick(&mut self, dbfs: &mut [f32; X]) -> MicLoudnessTick<'_, X, Y> {
+        // TODO: how should we use an AGC?
+        // self.agc.process(dbfs);
+
+        // TODO: print the dbfs for debugging. we need some tests to make sure the input dbfs make sense. i think they are too low right now
+
+        // EMA for tracking the min/avg/max
+        // TODO: this is not right
+        match dbfs.iter().minmax() {
+            MinMaxResult::NoElements => todo!(),
+            MinMaxResult::OneElement(&x) => todo!(),
+            MinMaxResult::MinMax(&min, &max) => {
+                // // TODO: include self.floor_db in this too
+                // if min < self.peak_ema_min_dbfs {
+                //     self.peak_ema_min_dbfs = min;
+                // } else {
+                //     // todo!("do an ema");
+                //     self.peak_ema_min_dbfs = min;
+                // }
+
+                if max > self.peak_ema_max_dbfs {
+                    self.peak_ema_max_dbfs = max;
+                } else {
+                    // TODO: ema here? circular buffer for true maxes here? we are going to display like 20 frames, so we should keep the maxes of the last 20?
+                    // TODO: max from config
+                    self.peak_ema_max_dbfs = (self.peak_ema_max_dbfs + max) / 2.0;
+                }
+                self.peak_ema_max_dbfs = self.peak_ema_max_dbfs.max(self.floor_peak_db);
+
+                // info!("dbfs range: {}..{}/{}", min, max, self.peak_ema_max_dbfs);
+
+                // self.peak_ema_max_dbfs = self.peak_ema_max_dbfs.min(0.0);
+            }
+        }
+
+        yield_now();
+
         for ((loudness, x), sparkle) in self
             .loudness
             .iter_mut()
-            .zip(dbfs.iter())
+            .zip(dbfs.iter().copied())
             .zip(self.sparkle.iter_mut())
         {
             // capture the previous loudness so we can compare
             let old_loudness = *loudness;
 
-            // TODO: use a real AGC!
-            // TODO: this is probably not the right way to scale/clamp/round this
-            *loudness = (((x - self.floor_db) / -self.floor_db).clamp(0.0, 1.0) * Y as f32) as u8;
+            // TODO: scale
+            *loudness = (remap(x, self.floor_db, self.peak_ema_max_dbfs, 0.0, 1.0).clamp(0.0, 1.0)
+                * Y as f32) as u8;
 
             // TODO: only sparkle if its the top-most band overall
             // TODO: "band" or "channel"? I'm inconsistent
