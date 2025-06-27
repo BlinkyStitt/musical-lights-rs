@@ -24,11 +24,14 @@ experimental = ["esp-idf-svc/experimental"]
 
 [dependencies]
 biski64 = { version = "0.3.2", default-features = false }
+dagc = "0.1.0"
 embassy-time = {version = "0.4", features = ["generic-queue-8"]}
+embedded-graphics = { version = "0.8.1", features = ["nalgebra_support", "defmt"] }
 esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver"] }
 esp-idf-sys = { version = "*", features = ["binstart"] }
 eyre = "0.6.12"
 heapless = { version = "0.8.0", features = ["portable-atomic", "serde"] }
+itertools = { version = "0.14.0", default-features = false }
 log = "0.4"
 smart-leds = "0.4"
 smart-leds-trait = "0.3.1"
@@ -41,8 +44,9 @@ postcard = "1.1.2"
 rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
 once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
 static_cell = { version = "2.1.1", features = ["nightly"] }
-embedded-graphics = { version = "0.8.1", features = ["nalgebra_support", "defmt"] }
-itertools = { version = "0.14.0", default-features = false, features = ["use_alloc", "use_std"] }
+
+[patch.crates-io]
+dagc = { git = "https://github.com/BlinkyStitt/dagc.git", rev = "d1c63785f29f55c0b8d3d4caf4a76b286e7ec5f5" }
 
 [build-dependencies]
 embuild = "0.33"

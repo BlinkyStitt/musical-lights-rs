@@ -2,7 +2,6 @@ mod flat;
 mod hanning;
 
 use crate::logging::info;
-use itertools::Itertools;
 
 pub use flat::FlatWindow;
 pub use hanning::HanningWindow;

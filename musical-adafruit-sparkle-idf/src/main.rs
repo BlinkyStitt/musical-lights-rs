@@ -93,7 +93,7 @@ const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 /// TODO: with 24-but audio, this should use size_of::<i32>
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
-const AGGREGATED_OUTPUTS: usize = 20;
+const AGGREGATED_OUTPUTS: usize = 10;
 
 /// TODO: the mic's floor is -90, but I think we should ignore under 60.
 /// TODO: this will probably change once we have scaling based on an AGC
@@ -482,7 +482,8 @@ fn mic_task(
 
     // TODO: 20/24 buckets don't fit inside of 256 or 400!
     // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
-    static MIC_LOUDNESS: ConstStaticCell<MicLoudnessPattern<400, 20, 20>> =
+    // Y is currently set to 9 because the terminal logging looks better. but that should change to fit the actual leds
+    static MIC_LOUDNESS: ConstStaticCell<MicLoudnessPattern<90, AGGREGATED_OUTPUTS, 9>> =
         ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB));
     let mic_loudness = MIC_LOUDNESS.take();
     info!("mic_loudness created");
@@ -563,6 +564,7 @@ fn mic_task(
         yield_now();
 
         // TODO: power? amplitude? rms? so many choices.
+        // TODO: pass spectrum to mic_loudness and have it do all of this
         fft_outputs_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());

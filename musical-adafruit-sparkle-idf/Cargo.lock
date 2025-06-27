@@ -453,6 +453,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dagc"
+version = "0.1.0"
+source = "git+https://github.com/BlinkyStitt/dagc.git?rev=d1c63785f29f55c0b8d3d4caf4a76b286e7ec5f5#d1c63785f29f55c0b8d3d4caf4a76b286e7ec5f5"
+dependencies = [
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1401,6 +1409,7 @@ name = "musical-adafruit-sparkle-idf"
 version = "0.1.0"
 dependencies = [
  "biski64",
+ "dagc",
  "embassy-time",
  "embedded-graphics",
  "embuild 0.33.0",

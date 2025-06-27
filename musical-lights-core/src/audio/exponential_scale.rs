@@ -1,6 +1,5 @@
 //! todo: better name
-use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::audio::amplitudes::{bin_counts_from_map, bin_counts_from_map_buf};
+use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
 

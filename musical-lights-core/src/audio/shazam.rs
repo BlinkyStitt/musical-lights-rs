@@ -1,5 +1,5 @@
-use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
-use crate::audio::{amplitudes::bin_counts_from_map, bin_to_frequency};
+use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder};
+use crate::audio::bin_to_frequency;
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
 

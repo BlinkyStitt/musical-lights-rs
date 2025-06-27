@@ -1,6 +1,6 @@
 use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
-use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder, WeightedAmplitudes};
+use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder};
 
 const BARK_SCALE_OUT: usize = 24;
 

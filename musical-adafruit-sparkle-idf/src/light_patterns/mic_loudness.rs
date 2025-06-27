@@ -8,6 +8,7 @@ use std::fmt::Display;
 /// TODO: i'm not sure where the code that turns this heat into a XY matrix belongs. or code for rotating the matrix by frame count
 /// TODO: this doesn't work exactly the same as Fire2012. maybe i should have kept it more similar at the start?
 pub struct MicLoudnessPattern<const N: usize, const X: usize, const Y: usize> {
+    agc: dagc::MonoAgc,
     /// how many rows are lit up for each column of the matrix. range of 0-Y
     loudness: [u8; X],
     /// TODO: what should floor_db be? should it be dynamic for each X?
@@ -48,10 +49,19 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
     pub const fn new(floor_db: f32) -> Self {
         assert!(X * Y == N);
 
-        Self {
-            loudness: [0; X],
-            floor_db,
-            sparkle: [false; X],
+        // TODO: no idea what this should be
+        let desired_output_rms = 12.;
+        let distortion_factor = 0.001;
+
+        if let Ok(agc) = dagc::MonoAgc::new(desired_output_rms, distortion_factor) {
+            Self {
+                agc,
+                loudness: [0; X],
+                floor_db,
+                sparkle: [false; X],
+            }
+        } else {
+            panic!("unable to create mono agc")
         }
     }
 

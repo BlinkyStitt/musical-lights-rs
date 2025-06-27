@@ -3,16 +3,11 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use std::thread::yield_now;
 
-use crate::{
-    audio::{Samples, Weighting},
-    logging::debug,
-    windows::Window,
-};
+use crate::{audio::Samples, logging::debug, windows::Window};
 use circular_buffer::CircularBuffer;
 use num::Complex;
 
 /// put a circular buffer in front of an FFT. Use windowing to make the middle of the middle window more important.
-/// TODO: think more about a-weighting
 pub struct BufferedFFT<
     const SAMPLE_IN: usize,
     const FFT_IN: usize,
