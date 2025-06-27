@@ -553,7 +553,7 @@ fn mic_task(
     /// TODO: the mic's floor is -90, but I think we should ignore under 60.
     /// TODO: this will probably change once we have scaling based on an AGC
     /// TODO: have the floor dynamically
-    const FLOOR_DB: f32 = -96.;
+    const FLOOR_DB: f32 = -60.;
 
     // TODO: 20/24 buckets don't fit inside of 256 or 400!
     // TODO: do 10 buckets and have them be 2 wide?
