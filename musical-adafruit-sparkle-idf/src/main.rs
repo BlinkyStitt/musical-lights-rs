@@ -25,8 +25,8 @@ use itertools::Itertools;
 use musical_lights_core::audio::{ExponentialScaleBuilder, Weighting};
 use musical_lights_core::{
     audio::{
-        parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedAmplitudesBuilder,
-        BarkScaleBuilder, BufferedFFT, Samples,
+        parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedAmplitudesBuilder, BufferedFFT,
+        Samples,
     },
     compass::{Coordinate, Magnetometer},
     errors::MyError,
@@ -233,7 +233,7 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: is this a good idea? i want the light code running ASAP
-    yield_now();
+    // yield_now();
 
     let mic_thread_cfg = ThreadSpawnConfiguration {
         name: Some(b"mic\0"),
@@ -259,7 +259,7 @@ fn main() -> eyre::Result<()> {
     });
 
     // TODO: is this a good idea? i want the mic code running ASAP
-    yield_now();
+    // yield_now();
 
     // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
@@ -269,7 +269,7 @@ fn main() -> eyre::Result<()> {
         priority: 2,
         ..Default::default()
     };
-    // read_from_sensors_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need?
+    // read_from_sensors_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need? this doesn't seem to do anything
     read_from_sensors_thread_cfg.set()?;
 
     let read_from_sensors_handle = thread::spawn(move || {
@@ -303,65 +303,7 @@ fn main() -> eyre::Result<()> {
         })
     });
 
-    /*
-    // TODO: debug-only thread for monitoring ram/cpu/etc?
-    let memory_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"memory\0"),
-        priority: 1,
-        ..Default::default()
-    };
-    memory_thread_cfg.set()?;
-
-    let _memory_handle = thread::spawn(move || {
-        loop {
-            // log free memory every 60 seconds. only do this if we are in debug mode
-            let free_memory = unsafe { esp_get_free_heap_size() } / 1024;
-            let min_free_memory = unsafe { esp_get_minimum_free_heap_size() } / 1024;
-
-            info!("Free memory: {free_memory}KB (min {min_free_memory}KB)");
-
-            // TODO: print stack sizes of all the threads
-            // unsafe { heap_caps_dump_all() };
-
-            // uxTaskGetStackHighWaterMark(xTask);
-
-            sleep(Duration::from_secs(1));
-        }
-    });
-     */
-
     mic_handle.join().unwrap().unwrap();
-
-    // // TODO: how do we do this efficiently?
-    // let mut handles = [
-    //     Some(("blink", blink_neopixels_handle)),
-    //     Some(("read_from_sensors_handle", read_from_sensors_handle)),
-    //     Some(("send_to_sensors_handle", send_to_sensors_handle)),
-    //     Some(("mic_handle", mic_handle)),
-    //     Some(("fft_handle", fft_handle)),
-    // ];
-    // loop {
-    //     for x in handles.iter_mut() {
-    //         if x.is_none() || x.as_ref().is_some_and(|(_, x)| !x.is_finished()) {
-    //             continue;
-    //         }
-
-    //         if let Some((label, handle)) = x.take() {
-    //             handle.join().expect("join failed").expect(label);
-
-    //             error!("a thread finished: {}", label);
-    //         } else {
-    //             unimplemented!();
-    //         }
-    //     }
-    //     sleep(Duration::from_millis(100));
-    // }
-
-    // TODO: if we get here, should we force a restart?
-    // unsafe { esp_restart() };
-
-    // // this runs forever. it won't ever return. should we have it waiting for errors on a channel?
-    // memory_handle.join().unwrap();
 
     Ok(())
 }
@@ -451,18 +393,21 @@ fn blink_neopixels_task(
             }
         }
 
-        // TODO: reading these from a buffer is probably better than doing any calculations in the iter. that takes more memory, but it works well
-        // TODO: check that the gamma correction is what we need for our leds
+        // TODO: check that this is the right gamma correction for our leds
         // TODO: dithering
         // TODO: the docs for brightness and gamma are confusing. they say opposite things unless I just can't read?
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
 
         // TODO: yield or watchdog reset?
-        // yield_now();
+        yield_now();
 
-        // TODO: brightness should be from the config
         // TODO: do we want the async driver? do we want write_no_copy?
-        neopixel_external.write(brightness(gamma(fibonacci_data.iter().cloned()), 16))?;
+        // TODO: this should be an embedded_graphics display i think. though the fibonacci disk is rather different from a grid
+        neopixel_external
+            .write(brightness(gamma(fibonacci_data.iter().cloned()), 16))
+            .unwrap();
+
+        yield_now();
 
         // TODO: better to base on time or on frame counts? time
         g_hue = g_hue.wrapping_add(1);
