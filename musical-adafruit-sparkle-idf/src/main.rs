@@ -93,6 +93,13 @@ const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 /// TODO: with 24-but audio, this should use size_of::<i32>
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
+const AGGREGATED_OUTPUTS: usize = 20;
+
+/// TODO: the mic's floor is -90, but I think we should ignore under 60.
+/// TODO: this will probably change once we have scaling based on an AGC
+/// TODO: have the floor dynamically set to the average
+const FLOOR_DB: f32 = -60.;
+
 const _SAFETY_CHECKS: () = {
     assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
     assert!(I2S_SAMPLE_SIZE > 1);
@@ -337,6 +344,11 @@ fn blink_neopixels_task(
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
     loop {
+        // TODO: think more about this sleep/recv.
+        // sleep_until will give us a consistent framerate. but we might show multiple frames for the same data
+        // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
+        // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
+        // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
         fft_ready.recv()?;
 
         // let start = Instant::now();
@@ -376,7 +388,7 @@ fn blink_neopixels_task(
                 // TODO: some state might be useful here. clone just whats needed
                 drop(unlocked_state);
 
-                // TODO: variable patterns here
+                // TODO: if we have mic data, display one of the musical patterns
                 rainbow(base_hsv, fibonacci_data.as_mut_slice());
             }
             Orientation::Unknown => {
@@ -404,23 +416,15 @@ fn blink_neopixels_task(
         // TODO: do we want the async driver? do we want write_no_copy?
         // TODO: this should be an embedded_graphics display i think. though the fibonacci disk is rather different from a grid
         neopixel_external
-            .write(brightness(gamma(fibonacci_data.iter().cloned()), 16))
+            .write(brightness(gamma(fibonacci_data.iter().cloned()), 25))
             .unwrap();
 
         yield_now();
 
-        // TODO: better to base on time or on frame counts? time
+        // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
         g_hue = g_hue.wrapping_add(1);
 
-        // TODO: where should the tick be?
         fps.tick();
-        // log_stack_high_water_mark("blink loop", None);
-
-        // TODO: think more about this sleep/recv.
-        // sleep_until will give us a consistent framerate. but we might show multiple frames for the same data
-        // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
-        // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
-        // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
     }
 }
 
@@ -431,35 +435,22 @@ fn mic_task(
     din: Gpio25,
     fft_ready: &mut flume::Sender<()>,
 ) -> eyre::Result<()> {
-    // sleep(Duration::from_secs(1));
     info!("Start I2S mic!");
 
-    // log_stack_high_water_mark("mic 1", None);
-
-    static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<ExponentialScaleBuilder<FFT_OUTPUTS, 20>> =
-        ConstStaticCell::new(ExponentialScaleBuilder::uninit());
+    static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<
+        ExponentialScaleBuilder<FFT_OUTPUTS, AGGREGATED_OUTPUTS>,
+    > = ConstStaticCell::new(ExponentialScaleBuilder::uninit());
     let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
     exponential_scale_builder.init(200.0, 16_000.0, I2S_SAMPLE_RATE_HZ as f32);
     info!("exponential_scale_builder created");
 
-    // static BARK_SCALE_BUILDER: ConstStaticCell<BarkScaleBuilder<FFT_OUTPUTS>> =
-    //     ConstStaticCell::new(BarkScaleBuilder::uninit());
-    // let mut bark_scale_builder = BARK_SCALE_BUILDER.take();
-    // bark_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
-    // info!("bark_scale_builder created");
-
-    // // TODO: make shazam work
-    // static SHAZAM_SCALE_BUILDER: ConstStaticCell<ShazamScaleBuilder<FFT_OUTPUTS>> =
-    //     ConstStaticCell::new(ShazamScaleBuilder::uninit());
-    // let shazam_scale_builder = SHAZAM_SCALE_BUILDER.take();
-    // shazam_scale_builder.init(I2S_SAMPLE_RATE_HZ as f32);
-    // info!("shazam_scale_builder created");
-
     // TODO: i don't like doing this here. move this inside the buffered fft or something
+    // TODO: i don't think a-weighting is actually what we want
+    // TODO: maybe k-weighting? maybe something much more advanced?
     const WEIGHTING: AWeighting<FFT_OUTPUTS> = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
     static WEIGHTS: ConstStaticCell<[f32; FFT_OUTPUTS]> = ConstStaticCell::new([0.0; FFT_OUTPUTS]);
-    let weighting = WEIGHTS.take();
-    WEIGHTING.curve_in_place(weighting);
+    let weights = WEIGHTS.take();
+    WEIGHTING.curve_in_place(weights);
 
     type MyBufferedFFT =
         BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>;
@@ -479,43 +470,22 @@ fn mic_task(
     let i2s_sample_buf = I2S_SAMPLE_BUF.take();
     info!("i2s_sample_buf created");
 
-    // TODO: store these in a global? in the state? i dunno.
     static FFT_OUTPUTS_BUF: ConstStaticCell<[f32; FFT_OUTPUTS]> =
         ConstStaticCell::new([0.0; FFT_OUTPUTS]);
-    let fft_power_buf = FFT_OUTPUTS_BUF.take();
-    info!("fft_outputs created");
+    let fft_outputs_buf = FFT_OUTPUTS_BUF.take();
+    info!("fft_outputs_buf created");
 
-    // TODO: num outputs should be a const
-    static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; 20]> = ConstStaticCell::new([0.0; 20]);
+    static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; AGGREGATED_OUTPUTS]> =
+        ConstStaticCell::new([0.0; AGGREGATED_OUTPUTS]);
     let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
     info!("exponential_scale_outputs created");
 
-    // // TODO: num outputs should be a const
-    // static BARK_SCALE_OUTPUTS: ConstStaticCell<[f32; 24]> = ConstStaticCell::new([0.0; 24]);
-    // let bark_scale_outputs = BARK_SCALE_OUTPUTS.take();
-    // info!("bark_scale_outputs created");
-
-    /// TODO: the mic's floor is -90, but I think we should ignore under 60.
-    /// TODO: this will probably change once we have scaling based on an AGC
-    /// TODO: have the floor dynamically
-    const FLOOR_DB: f32 = -60.;
-
     // TODO: 20/24 buckets don't fit inside of 256 or 400!
-    // TODO: do 10 buckets and have them be 2 wide?
-    static MIC_LOUDNESS: ConstStaticCell<MicLoudnessPattern<180, 20, 9>> =
+    // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
+    static MIC_LOUDNESS: ConstStaticCell<MicLoudnessPattern<400, 20, 20>> =
         ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB));
     let mic_loudness = MIC_LOUDNESS.take();
-    info!("mic_fire created");
-
-    // static SHAZAM_SCALE_OUTPUTS: ConstStaticCell<[f32; SHAZAM_SCALE_OUT]> =
-    //     ConstStaticCell::new([0.0; SHAZAM_SCALE_OUT]);
-    // let shazam_scale_outputs = SHAZAM_SCALE_OUTPUTS.take();
-    // info!("shazam_scale_outputs created");
-
-    // theres no need for i2s fps tracking when the pixel has its own tracker
-    // let mut fps = Box::new(FpsTracker::new("i2s"));
-
-    log_stack_high_water_mark("mic", None);
+    info!("mic_loudness created");
 
     // TODO: what dma frame counts? what buffer count?
     let channel_cfg = i2s::config::Config::default()
@@ -550,6 +520,8 @@ fn mic_task(
 
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
+
+    log_stack_high_water_mark("mic", None);
 
     loop {
         // TODO: read with a timeout? read_exact?
@@ -591,16 +563,16 @@ fn mic_task(
         yield_now();
 
         // TODO: power? amplitude? rms? so many choices.
-        fft_power_buf
+        fft_outputs_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());
 
         // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
         // also apply weigthing (a-weighting or some other equal loudness countour)
         // TODO: double check this. it seems to push the bass down too far now
-        for (x, w) in fft_power_buf
+        for (x, w) in fft_outputs_buf
             .iter_mut()
-            .zip(weighting.iter())
+            .zip(weights.iter())
             .take(FFT_OUTPUTS - 1)
             .skip(1)
         {
@@ -613,7 +585,7 @@ fn mic_task(
 
         // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
         // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
-        exponential_scale_builder.sum_into(fft_power_buf, exponential_scale_outputs);
+        exponential_scale_builder.sum_into(fft_outputs_buf, exponential_scale_outputs);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
         // Convert each band energy to RMS amplitude in dbfs
