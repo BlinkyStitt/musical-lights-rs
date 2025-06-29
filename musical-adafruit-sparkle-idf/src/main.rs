@@ -606,7 +606,7 @@ fn mic_task(
         yield_now();
 
         // TODO: still lots to think about on this
-        let mic_loudness_tick = mic_loudness.tick(exponential_scale_outputs);
+        let mic_loudness_tick = mic_loudness.tick_dbfs(exponential_scale_outputs);
 
         // calculating the mic_loudness_tick can be slow. yield now
         // TODO: do some analysis to see if this is always needed

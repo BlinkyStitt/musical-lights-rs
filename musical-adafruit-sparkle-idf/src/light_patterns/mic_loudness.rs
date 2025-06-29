@@ -70,10 +70,55 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
         }
     }
 
+    /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
+    pub fn tick_fft_outputs<'fft, const NUM_FFT_OUTPUTS: usize>(
+        &mut self,
+        spectrum: FFtOutputs<'fft, NUM_FFT_OUTPUTS>,
+    ) -> MicLoudnessTick<'_, X, Y> {
+        self.fft_outputs_buf
+            .iter_mut()
+            .set_from(spectrum.iter_mean_square_power_density());
+
+        // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
+        // also apply weigthing (a-weighting or some other equal loudness countour)
+        // TODO: double check this. too much cargo culting
+        for (x, w) in self
+            .fft_outputs_buf
+            .iter_mut()
+            .zip(weights.iter())
+            .take(FFT_OUTPUTS - 1)
+            .skip(1)
+        {
+            *x *= 2.0 * w;
+        }
+
+        // calculating the weights can be slow. yield now
+        // TODO: do some analysis to see if this is always needed. this one can probably be removed
+        yield_now();
+
+        // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
+        // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
+        self.scale_builder
+            .sum_into(self.fft_outputs_buf, self.scale_outputs_buf);
+        // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
+
+        // Convert each band energy to RMS amplitude in dbfs
+        for x in scale_outputs_buf.iter_mut() {
+            let rms = x.sqrt();
+            *x = 20. * rms.log10();
+        }
+
+        // calculating the exponential scale can be slow. yield now
+        // TODO: do some analysis to see if this is always needed. this one can probably be removed
+        yield_now();
+
+        self.tick_dbfs(exponential_scale_outputs)
+    }
+
     /// TODO: take the spectrum or dbfs? maybe both
     /// TODO: should this take an AggregatedAmplitudes or a ref? We need a AggregatedAmplitudesRef type maybe? seems verbose
     /// TODO: or maybe this should take `powers` instead of `amplitudes`? maybe a type that lets us pick? I'm really not sure what units we want!
-    pub fn tick(&mut self, dbfs: &mut [f32; X]) -> MicLoudnessTick<'_, X, Y> {
+    pub fn tick_dbfs(&mut self, dbfs: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
         // TODO: how should we use an AGC?
         // self.agc.process(dbfs);
 
@@ -127,8 +172,6 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             // TODO: "band" or "channel"? I'm inconsistent
             *sparkle = *loudness > old_loudness;
         }
-
-        // TODO: diffuse some heat upwards in a buffer?
 
         MicLoudnessTick {
             loudness: &self.loudness,
