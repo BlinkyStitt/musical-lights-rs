@@ -67,3 +67,5 @@ The 4 [fibonnaci256](https://www.evilgeniuslabs.org/fibonacci256) panels that i 
 <https://randomnerdtutorials.com/esp32-spi-communication-arduino/>
 
 [eventloop](https://github.com/esp-rs/esp-idf-svc/blob/master/examples/eventloop.rs) or flume?
+
+rmt-legacy was needed to get a RxRmtDriver struct. Is there an issue tracking using the v5 idf for rmt?

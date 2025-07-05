@@ -24,6 +24,14 @@ pub struct BufferedFFT<
     window_scale_outputs: f32,
 }
 
+impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Window<FFT_IN>> Default
+    for BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, WI>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Window<FFT_IN>>
     BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, WI>
 {

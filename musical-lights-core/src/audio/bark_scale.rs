@@ -1,6 +1,6 @@
 use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
-use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder};
+use super::amplitudes::{AggregatedBins, AggregatedAmplitudesBuilder};
 
 const BARK_SCALE_OUT: usize = 24;
 
@@ -15,7 +15,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
-pub struct BarkScaleAmplitudes(pub AggregatedAmplitudes<BARK_SCALE_OUT>);
+pub struct BarkScaleAmplitudes(pub AggregatedBins<BARK_SCALE_OUT>);
 
 impl<const BINS: usize> BarkScaleBuilder<BINS> {
     pub fn new(sample_rate_hz: f32) -> Self {
@@ -58,7 +58,7 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkSc
     // }
 
     fn sum_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
-        AggregatedAmplitudes::<BARK_SCALE_OUT>::sum_into(&self.map, input, output);
+        AggregatedBins::<BARK_SCALE_OUT>::sum_into(&self.map, input, output);
     }
 }
 

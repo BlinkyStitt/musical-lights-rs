@@ -7,6 +7,7 @@
 mod clock;
 mod color_correction;
 mod dancing_lights;
+mod flag;
 mod font;
 mod gradient;
 mod matrix;

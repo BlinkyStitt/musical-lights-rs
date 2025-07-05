@@ -19,11 +19,11 @@ mod shazam;
 mod weighting;
 
 pub use amplitudes::{
-    AggregatedAmplitudes, AggregatedAmplitudesBuilder, Amplitudes, WeightedAmplitudes,
+    AggregatedBins, AggregatedAmplitudesBuilder, Amplitudes, WeightedAmplitudes,
 };
 pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
 pub use buffer::AudioBuffer;
-pub use buffered_fft::BufferedFFT;
+pub use buffered_fft::{BufferedFFT, FftOutputs};
 pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};

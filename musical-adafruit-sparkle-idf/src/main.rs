@@ -91,7 +91,7 @@ const I2S_SAMPLE_SIZE: usize = FFT_INPUTS / I2S_SAMPLE_OVERLAP;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
-/// TODO: with 24-but audio, this should use size_of::<i32>
+/// TODO: with 24-bit audio, this should use `size_of::<i32>`
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
 const AGGREGATED_OUTPUTS: usize = 20;
@@ -489,7 +489,7 @@ fn mic_task(
 
     static MIC_LOUDNESS: ConstStaticCell<
         MicLoudnessPattern<DEBUGGING_N, AGGREGATED_OUTPUTS, DEBUGGING_Y>,
-    > = ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB, FLOOR_PEAK_DB));
+    > = ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB, FLOOR_PEAK_DB, 1.0));
     let mic_loudness = MIC_LOUDNESS.take();
     info!("mic_loudness created");
 

@@ -25,7 +25,7 @@ pub trait Window<const N: usize> {
 
     fn input_window(i: usize) -> f32;
 
-    /// TODO: cache this?
+    /// TODO: cache this? or rewrite it so that it can be const. can't use for loops in const though
     fn input_windows() -> [f32; N] {
         let mut window = [0.0; N];
 

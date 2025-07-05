@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
 use micromath::F32Ext;
 
-use super::amplitudes::{AggregatedAmplitudes, Amplitudes};
+use super::amplitudes::{AggregatedBins, Amplitudes};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -24,7 +24,7 @@ impl<const B: usize> Decibels<B> {
         Self::from_floats(x.0)
     }
 
-    pub fn from_aggregated_amplitudes(x: AggregatedAmplitudes<B>) -> Self {
+    pub fn from_aggregated_amplitudes(x: AggregatedBins<B>) -> Self {
         Self::from_floats(x.0)
     }
 }

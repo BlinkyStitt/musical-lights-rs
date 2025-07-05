@@ -19,11 +19,13 @@ pub struct Amplitudes<const N: usize>(pub [f32; N]);
 #[repr(transparent)]
 pub struct WeightedAmplitudes<const N: usize>(pub [f32; N]);
 
-/// bin amounts summed in some way, probably exponentially
+/// bin amounts summed in some way, probably exponentially.
+/// TODO: rename this to SummedAmplitudes? Or do we want it to have a more generic name?
+/// TODO: some people say things should be summed, but others say to take the average. then others say to calculate the RMS. And sometimes you divide by the number of bins and other times you don't. I have no idea what i'm doing.
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
-pub struct AggregatedAmplitudes<const N: usize>(pub [f32; N]);
+pub struct AggregatedBins<const N: usize>(pub [f32; N]);
 
 /// TODO: i am summing up bins, but i should be doing more advanced math there. either rms the power, or take the average of the amplitudes
 pub trait AggregatedAmplitudesBuilder<const IN: usize, const OUT: usize> {
@@ -32,15 +34,12 @@ pub trait AggregatedAmplitudesBuilder<const IN: usize, const OUT: usize> {
     // // NOTE: you maybe want something like this
     // map: [Option<usize>; IN],
 
-    /// TODO: write a default implementation on this
-    // fn mean_square_power_densisty(&self, input: WeightedAmplitudes<IN>) -> Self::Output;
-
     /// TODO: this output should use Self::Output
     fn sum_into(&self, input: &[f32; IN], output: &mut [f32; OUT]);
 }
 
 /// TODO: From trait won't work because we need some state (the precomputed equal loudness curves)
-/// TODO: do we use this anymore?
+/// TODO: do we use this anymore? if not, should we? i think this "copies" unnecessarily, but I'm not sure
 impl<const B: usize> WeightedAmplitudes<B> {
     pub fn from_amplitudes(x: Amplitudes<B>, equal_loudness_curve: &[f32; B]) -> Self {
         let mut inner = x.0;
@@ -53,18 +52,12 @@ impl<const B: usize> WeightedAmplitudes<B> {
     }
 }
 
-/// TODO: i don't think this is amplitudes anymore. cuz we are using power now
-impl<const OUT: usize> AggregatedAmplitudes<OUT> {
-    /// Convert each bin to mean-square power density. Square the magnitude and divide by N² to match Parseval’s theorem.
+impl<const OUT: usize> AggregatedBins<OUT> {
+    /// Sum groups of amplitudes
     ///
-    /// TODO: give this a "rusty" name. i don't think this is very rusty though. think more about refactoring it once more of it works
-    /// We used to just sum the bins, but that seemes wrong.
-    /// Now we take average of the bins. that isn't right either though
-    /// TODO: change this to do RMS of the power (input * input) with some other math
-    /// TODO: i'm sure this could be made efficient. we call it a lot, so optimizations here probably matter (but compilers are smart)
-    /// TODO: i don't like this function being here. feels like it should be in the builder instead
-    /// TODO: should input_power be an iterator?
-    /// TODO: should this just take the FftOutput as the main argument?
+    /// The `map` should be something like a Bark Scale or some other exponentially increasing scale
+    ///
+    /// TODO: i don't think this is amplitudes anymore. cuz we are using power now
     #[inline]
     pub fn sum_into<const IN: usize>(
         map: &[Option<usize>; IN],
@@ -82,7 +75,7 @@ impl<const OUT: usize> AggregatedAmplitudes<OUT> {
     }
 }
 
-/// TODO: tests on this!
+/// TODO: tests on this! or just delete it? i don't think we use it anymore
 /// TODO: can this be made const?
 /// TODO: whats a better name for this? _buf? _in_place? _into?
 pub fn bin_counts_from_map_buf<const OUT: usize>(map: &[Option<usize>], counts: &mut [usize; OUT]) {
@@ -107,11 +100,11 @@ mod tests {
     fn test_aggregate_into() {
         let map = [None, Some(0), Some(1), Some(1), None];
 
-        let bin_counts = bin_counts_from_map(&map);
+        // let bin_counts = bin_counts_from_map(&map);
         let mut output = [0.0; 2];
 
-        AggregatedAmplitudes::sum_into(&map, &[1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
+        AggregatedBins::sum_into(&map, &[1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
 
-        assert_eq!(output, [2.0, 6.0]);
+        assert_eq!(output, [2.0, 12.0]);
     }
 }

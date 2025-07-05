@@ -2,6 +2,7 @@
 #![cfg_attr(not(test), no_main)]
 #![feature(type_alias_impl_trait)]
 #![feature(duration_millis_float)]
+#![feature(iter_next_chunk)]
 
 pub mod audio;
 pub mod battery;
@@ -10,6 +11,7 @@ pub mod config;
 pub mod errors;
 pub mod fps;
 pub mod gps;
+pub mod iter;
 pub mod lights;
 pub mod logging;
 pub mod message;

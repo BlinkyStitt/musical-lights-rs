@@ -1,4 +1,6 @@
-use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder};
+//! TODO: i don't think this is actually how shazam works
+
+use super::amplitudes::{AggregatedBins, AggregatedAmplitudesBuilder};
 use crate::audio::bin_to_frequency;
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
@@ -11,7 +13,7 @@ pub struct ShazamScaleBuilder<const FFT_OUT: usize> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
-pub struct ShazamAmplitudes(pub AggregatedAmplitudes<SHAZAM_SCALE_OUT>);
+pub struct ShazamAmplitudes(pub AggregatedBins<SHAZAM_SCALE_OUT>);
 
 impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
     pub const fn uninit() -> Self {
@@ -53,7 +55,7 @@ impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT> for Shaz
     // }
 
     fn sum_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
-        AggregatedAmplitudes::sum_into(&self.map, input, output);
+        AggregatedBins::sum_into(&self.map, input, output);
     }
 }
 

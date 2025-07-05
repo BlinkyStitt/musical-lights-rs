@@ -8,6 +8,7 @@ use std::fmt::Display;
 use std::thread::yield_now;
 
 use itertools::{Itertools, MinMaxResult};
+use musical_lights_core::audio::FftOutputs;
 use musical_lights_core::logging::info;
 use musical_lights_core::remap;
 
@@ -23,6 +24,8 @@ pub struct MicLoudnessPattern<const N: usize, const X: usize, const Y: usize> {
     floor_peak_db: f32,
     /// if the column was louder this tick than the previous tick
     sparkle: [bool; X],
+    /// 1.0 == 100%
+    sparkle_chance: f32,
     peak_ema_min_dbfs: f32,
     peak_ema_max_dbfs: f32,
 }
@@ -54,8 +57,9 @@ impl<const X: usize, const Y: usize> Display for MicLoudnessTick<'_, X, Y> {
 }
 
 impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y> {
-    pub const fn new(floor_db: f32, floor_peak_db: f32) -> Self {
-        assert!(X * Y == N);
+    pub const fn new(floor_db: f32, floor_peak_db: f32, sparkle_chance: f32) -> Self {
+        assert!(X * Y == N, "wrong dimensions");
+        assert!(sparkle_chance == 1.0, "only 1.0 is currently supported");
 
         let peak_ema_min_dbfs = floor_db;
         let peak_ema_max_dbfs = floor_peak_db;
@@ -65,15 +69,17 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             floor_db,
             floor_peak_db,
             sparkle: [false; X],
+            sparkle_chance,
             peak_ema_min_dbfs,
             peak_ema_max_dbfs,
         }
     }
 
+    /*
     /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
     pub fn tick_fft_outputs<'fft, const NUM_FFT_OUTPUTS: usize>(
         &mut self,
-        spectrum: FFtOutputs<'fft, NUM_FFT_OUTPUTS>,
+        spectrum: FftOutputs<'fft, NUM_FFT_OUTPUTS>,
     ) -> MicLoudnessTick<'_, X, Y> {
         self.fft_outputs_buf
             .iter_mut()
@@ -114,10 +120,49 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
 
         self.tick_dbfs(exponential_scale_outputs)
     }
+     */
 
-    /// TODO: take the spectrum or dbfs? maybe both
-    /// TODO: should this take an AggregatedAmplitudes or a ref? We need a AggregatedAmplitudesRef type maybe? seems verbose
-    /// TODO: or maybe this should take `powers` instead of `amplitudes`? maybe a type that lets us pick? I'm really not sure what units we want!
+    /// TODO: i need to learn more about AGC because I think that's the right thing to use here
+    fn update_max(&mut self, max: f32) {
+        const ALPHA: f32 = 0.1;
+
+        if max > self.peak_ema_max_dbfs {
+            self.peak_ema_max_dbfs = max;
+        } else {
+            // TODO: ema here? circular buffer for true maxes here? we are going to display like 20 frames, so we should keep the maxes of the last 20?
+            // TODO: max from config
+            // TODO: in the past i had a fixed decay. it seems there is disagrement about what the human ear/brain even do.
+            self.peak_ema_max_dbfs = (self.peak_ema_max_dbfs * (1. - ALPHA)) + (max * ALPHA);
+        }
+        self.peak_ema_max_dbfs = self.peak_ema_max_dbfs.max(self.floor_peak_db);
+    }
+
+    /// TODO: this is very similar to update_max, but the signs are flipped.
+    fn update_min(&mut self, min: f32) {
+        const ALPHA: f32 = 0.1;
+
+        if min < self.peak_ema_min_dbfs {
+            self.peak_ema_min_dbfs = min;
+        } else {
+            // TODO: ema here? circular buffer for true mins here? we are going to display like 20 frames, so we should keep the maxes of the last 20?
+            // TODO: less float math! (maybe. this isn't a tiny controller so maybe its fine)
+            self.peak_ema_min_dbfs = (self.peak_ema_min_dbfs * (1. - ALPHA)) + (min * ALPHA);
+        }
+        self.peak_ema_min_dbfs = self.peak_ema_min_dbfs.min(self.floor_db);
+    }
+
+    fn update_ema(&mut self, dbfs: &[f32; X]) {
+        const ALPHA: f32 = 0.1;
+
+        // TODO: is there an "average" iter?
+        // TODO: should we just take the midpoint of the min and max? probably not
+        // TODO: should this be a real average instead of an ema?
+        let avg_dbfs = dbfs.iter().sum::<f32>() / dbfs.len() as f32;
+
+        todo!();
+    }
+
+    /// TODO: this will probably make someone that actually knows things cry.
     pub fn tick_dbfs(&mut self, dbfs: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
         // TODO: how should we use an AGC?
         // self.agc.process(dbfs);
@@ -128,30 +173,17 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
         // TODO: this is not right
         match dbfs.iter().minmax() {
             MinMaxResult::NoElements => todo!(),
-            MinMaxResult::OneElement(&x) => todo!(),
+            MinMaxResult::OneElement(&x) => {
+                self.update_min(x);
+                self.update_max(x);
+            }
             MinMaxResult::MinMax(&min, &max) => {
-                // // TODO: include self.floor_db in this too
-                // if min < self.peak_ema_min_dbfs {
-                //     self.peak_ema_min_dbfs = min;
-                // } else {
-                //     // todo!("do an ema");
-                //     self.peak_ema_min_dbfs = min;
-                // }
-
-                if max > self.peak_ema_max_dbfs {
-                    self.peak_ema_max_dbfs = max;
-                } else {
-                    // TODO: ema here? circular buffer for true maxes here? we are going to display like 20 frames, so we should keep the maxes of the last 20?
-                    // TODO: max from config
-                    self.peak_ema_max_dbfs = (self.peak_ema_max_dbfs + max) / 2.0;
-                }
-                self.peak_ema_max_dbfs = self.peak_ema_max_dbfs.max(self.floor_peak_db);
-
-                // info!("dbfs range: {}..{}/{}", min, max, self.peak_ema_max_dbfs);
-
-                // self.peak_ema_max_dbfs = self.peak_ema_max_dbfs.min(0.0);
+                self.update_min(min);
+                self.update_max(max);
             }
         }
+
+        self.update_ema(dbfs);
 
         yield_now();
 
@@ -164,7 +196,7 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             // capture the previous loudness so we can compare
             let old_loudness = *loudness;
 
-            // TODO: scale
+            // TODO: scale this on the average instead of the floor? or maybe the midpoint?
             *loudness = (remap(x, self.floor_db, self.peak_ema_max_dbfs, 0.0, 1.0).clamp(0.0, 1.0)
                 * Y as f32) as u8;
 

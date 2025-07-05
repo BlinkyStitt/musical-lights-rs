@@ -2,7 +2,7 @@
 use core::fmt::Display;
 
 use super::Gradient;
-use crate::audio::AggregatedAmplitudes;
+use crate::audio::AggregatedBins;
 use crate::lights::{Layout, SnakeXY};
 use crate::logging::{debug, info, trace};
 use crate::remap;
@@ -15,9 +15,10 @@ use micromath::F32Ext;
 
 /// TODO: i'm not sure i actually need this. i'm rewritting this for the net and not using this code. but maybe i should keep using it?
 /// TODO: at this point, should this be scaled 0-255? right now its the number of lights
-pub struct Channels<const N: usize>([u8; N]);
+/// TODO: this used to be called "channels" but i don't think thats correct
+pub struct Bands<const N: usize>([u8; N]);
 
-impl<const N: usize> Display for Channels<N> {
+impl<const N: usize> Display for Bands<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for y_height in self.0.iter() {
             match y_height {
@@ -35,7 +36,7 @@ impl<const N: usize> Display for Channels<N> {
 
 /// TODO: this is probably going to be refactored several times
 pub struct DancingLights<const X: usize, const Y: usize, const N: usize> {
-    channels: Channels<Y>,
+    bands: Bands<Y>,
     /// TODO: use a framebuf crate that supports DMA and drawing fonts and such
     pub fbuf: [RGB8; N],
     /// recent maximum loudness. decays over time
@@ -73,7 +74,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         }
 
         // TODO: get rid of channels. just use the fbuf
-        let channels = Channels([0; Y]);
+        let bands = Bands([0; Y]);
 
         let peak_max = 0.1;
 
@@ -82,7 +83,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         let decay_alpha = peak_decay;
 
         Self {
-            channels,
+            bands,
             fbuf,
             peak_max,
             decay_alpha,
@@ -90,7 +91,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
     }
 
     /// TODO: this X/Y is the opposite of how i usually think of things
-    pub fn update(&mut self, mut loudness: AggregatedAmplitudes<Y>) {
+    pub fn update(&mut self, mut loudness: AggregatedBins<Y>) {
         trace!("{:?}", loudness);
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
@@ -116,11 +117,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         const BORDERS: usize = BOTTOM_BORDER + TOP_BORDER;
 
-        for (y, (&loudness, channel)) in loudness
-            .0
-            .iter()
-            .zip(self.channels.0.iter_mut())
-            .enumerate()
+        for (y, (&loudness, channel)) in loudness.0.iter().zip(self.bands.0.iter_mut()).enumerate()
         {
             // TODO: log scale?
             let scaled =
@@ -155,7 +152,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
             }
         }
 
-        debug!("channels: {}", self.channels);
+        debug!("bands: {}", self.bands);
     }
 
     pub fn iter(&self, y_offset: usize) -> impl Iterator<Item = &RGB8> {

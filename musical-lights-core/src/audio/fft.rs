@@ -4,8 +4,11 @@ use super::{
     samples::{Samples, WindowedSamples},
     weighting::Weighting,
 };
-use crate::logging::trace;
-use crate::{audio::amplitudes::Amplitudes, windows::Window};
+use crate::{
+    audio::{AWeighting, amplitudes::Amplitudes},
+    windows::Window,
+};
+use crate::{logging::trace, windows::HanningWindow};
 
 use microfft::real::{rfft_512, rfft_1024, rfft_2048, rfft_4096};
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
@@ -15,17 +18,18 @@ use micromath::F32Ext;
 pub struct FFT<const IN: usize, const OUT: usize> {
     /// apply a window to the samples before processing them with the FFT
     /// hanning window or similar things can be applied with this
+    /// TODO: whats the scienctific name for these?
     window_multipliers: [f32; IN],
 
     /// apply this curve to amplitudes after the FFT calculates them
     /// a-weighting or similra things can be applied with this
+    /// TODO: i'm not actually sure this is the correct place to apply the curve
     equal_loudness_curve: [f32; OUT],
 }
 
 impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
-    pub fn new(window_multipliers: [f32; IN], equal_loudness_curve: [f32; OUT]) -> Self {
-        // TODO: compile time assert
-        debug_assert_eq!(IN / 2, OUT);
+    pub const fn new(window_multipliers: [f32; IN], equal_loudness_curve: [f32; OUT]) -> Self {
+        assert!(IN / 2 == OUT);
 
         Self {
             window_multipliers,
@@ -58,9 +62,10 @@ impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
 
 impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
     fn default() -> Self {
-        let window_multipliers = [1.0; IN];
+        let window_multipliers = HanningWindow::input_windows();
 
-        let equal_loudness_curve = [1.0; OUT];
+        // TODO: I think spotify and others use "k-weighting" for their visualizers
+        let equal_loudness_curve: [f32; OUT] = [1.0; OUT];
 
         Self::new(window_multipliers, equal_loudness_curve)
     }

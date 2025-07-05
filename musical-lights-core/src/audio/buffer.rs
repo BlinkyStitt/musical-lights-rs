@@ -11,7 +11,7 @@ pub struct AudioBuffer<const IN: usize, const OUT: usize> {
 
 impl<const IN: usize, const OUT: usize> AudioBuffer<IN, OUT> {
     /// You **MUST** call `init` on this before using it!
-    #[deprecated = "use BufferedFFT instead"]
+    #[deprecated = "use BufferedFFT instead. or maybe that should reuse this code?"]
     pub const fn new() -> Self {
         // TODO: what is this the right way to do a compile time assert
         assert!(OUT >= IN);

@@ -28,25 +28,32 @@ dagc = "0.1.0"
 embassy-time = {version = "0.4", features = ["generic-queue-8"]}
 embedded-graphics = { version = "0.8.1", features = ["nalgebra_support", "defmt"] }
 esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver"] }
+esp-idf-hal = { version = "*", features = ["rmt-legacy"] }
 esp-idf-sys = { version = "*", features = ["binstart"] }
 eyre = "0.6.12"
+flume = "0.11.1"
 heapless = { version = "0.8.0", features = ["portable-atomic", "serde"] }
 itertools = { version = "0.14.0", default-features = false }
+infrared = { version = "0.14.2", features = ["defmt"] }
 log = "0.4"
-smart-leds = "0.4"
-smart-leds-trait = "0.3.1"
-ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
-flume = "0.11.1"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "alloc", "std", "log"
 ] }
+once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
 postcard = "1.1.2"
 rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
-once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
+smart-leds = "0.4"
+smart-leds-trait = "0.3.1"
 static_cell = { version = "2.1.1", features = ["nightly"] }
+ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
 
 [patch.crates-io]
+# TODO: i'm not using this anymore
 dagc = { git = "https://github.com/BlinkyStitt/dagc.git", rev = "d1c63785f29f55c0b8d3d4caf4a76b286e7ec5f5" }
+
+# TODO: not sure about this
+esp-idf-svc = { git = "https://github.com/esp-rs/esp-idf-svc.git", rev = "836fa8245c6c664bcd6d31b8ec9645189ba4512b" }
+esp-idf-hal = { git = "https://github.com/esp-rs/esp-idf-hal.git", rev = "f49233ad2258d1e9da848c90ca128a286d97250c" }
 
 [build-dependencies]
 embuild = "0.33"

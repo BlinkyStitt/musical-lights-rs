@@ -1,5 +1,5 @@
 //! todo: better name
-use super::amplitudes::{AggregatedAmplitudes, AggregatedAmplitudesBuilder};
+use super::amplitudes::{AggregatedAmplitudesBuilder, AggregatedBins};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
 
@@ -19,7 +19,7 @@ pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
-pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedAmplitudes<OUT>);
+pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedBins<OUT>);
 
 /// bins in, bands/channels out
 impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
@@ -103,7 +103,7 @@ impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
     /// TODO: rename this function?
     /// TODO: use iters?
     fn sum_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedAmplitudes::sum_into(&self.map, input, output)
+        AggregatedBins::sum_into(&self.map, input, output)
     }
 }
 

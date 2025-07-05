@@ -1,16 +1,15 @@
 //! TODO: refactor this to use the types in microphone.rs
 
 use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleRate, Stream,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use musical_lights_core::audio::Samples;
 use musical_lights_core::logging::{error, info, trace};
 
-// i wanted this to be generic, but that's making things complicated
 const SAMPLES: usize = 512;
 
-/// TODO: i think this should be a trait
+/// TODO: i think this should be a trait. then we could have the i2s mic on embedded and the cpal input use mo
 pub struct MicrophoneStream {
     pub sample_rate: SampleRate,
     pub stream: flume::Receiver<Samples<SAMPLES>>,
@@ -71,7 +70,7 @@ impl MicrophoneStream {
             sample_format => {
                 return Err(anyhow::anyhow!(
                     "Unsupported sample format '{sample_format}'"
-                ))
+                ));
             }
         };
 
@@ -89,7 +88,7 @@ impl MicrophoneStream {
 
         debug_assert_eq!(samples.len(), SAMPLES);
 
-        let samples: [f32; SAMPLES] = samples[..SAMPLES].try_into().unwrap();
+        let samples: [f32; SAMPLES] = samples[..].try_into().unwrap();
 
         tx.send(Samples(samples)).unwrap();
 
