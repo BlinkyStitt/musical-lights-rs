@@ -148,77 +148,73 @@ mod tests {
         for i in 0..10 {
             println!("loop {i}");
 
+            // TODO? it would actually help to grab a much larger chunk. i want to see the whole flag at once
+
             // flag #1
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]
-            );
+            // TODO: need a helper macro on these. also unique log lines
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk  1 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [RED, RED, RED]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk  2 = {next_chunk:?}");
+            assert_eq!(next_chunk, [RED, RED, RED]);
 
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, WHITE, BLUE, WHITE, BLUE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk  3 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, BLUE, WHITE, BLUE, WHITE, BLUE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [WHITE, WHITE, WHITE]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk  4 = {next_chunk:?}");
+            assert_eq!(next_chunk, [WHITE, WHITE, WHITE]);
 
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk  5 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [RED, RED, RED]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk  6 = {next_chunk:?}");
+            assert_eq!(next_chunk, [RED, RED, RED]);
 
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, WHITE, BLUE, WHITE, BLUE, WHITE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk  7 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, WHITE, BLUE, WHITE, BLUE, WHITE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [WHITE, WHITE, WHITE]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk  8 = {next_chunk:?}");
+            assert_eq!(next_chunk, [WHITE, WHITE, WHITE]);
 
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk  9 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [RED, RED, RED]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk 10 = {next_chunk:?}");
+            assert_eq!(next_chunk, [RED, RED, RED]);
 
-            // flag #2
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk 11 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, BLUE, WHITE, BLUE, WHITE, BLUE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [RED, RED, RED]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk 12 = {next_chunk:?}");
+            assert_eq!(next_chunk, [WHITE, WHITE, WHITE]);
 
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, WHITE, BLUE, WHITE, BLUE, WHITE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk 13 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [WHITE, WHITE, WHITE]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk 14 = {next_chunk:?}");
+            assert_eq!(next_chunk, [RED, RED, RED]);
 
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]
-            );
+            let next_chunk = x.next_chunk::<X_STARS>().unwrap();
+            println!("chunk 15 = {next_chunk:?}");
+            assert_eq!(next_chunk, [BLUE, WHITE, BLUE, WHITE, BLUE, WHITE, BLUE]);
 
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [RED, RED, RED]);
-
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, WHITE, BLUE, WHITE, BLUE, BLUE]
-            );
-
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [WHITE, WHITE, WHITE]);
-
-            assert_eq!(
-                x.next_chunk::<X_STARS>().unwrap(),
-                [BLUE, BLUE, BLUE, BLUE, BLUE, BLUE, BLUE]
-            );
-
-            assert_eq!(x.next_chunk::<X_STRIPES>().unwrap(), [RED, RED, RED]);
+            let next_chunk = x.next_chunk::<X_STRIPES>().unwrap();
+            println!("chunk 16 = {next_chunk:?}");
+            assert_eq!(next_chunk, [WHITE, WHITE, WHITE]);
         }
     }
 }
