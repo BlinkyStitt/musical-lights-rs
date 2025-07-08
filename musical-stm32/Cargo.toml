@@ -99,9 +99,6 @@ embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d
 embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
 embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "520945278942c301433c391f63a075227d9e7c84" }
 
-# Forked until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
-i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
-
 #smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 
 [profile.dev]

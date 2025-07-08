@@ -26,8 +26,7 @@ use itertools::Itertools;
 use musical_lights_core::audio::{ExponentialScaleBuilder, Weighting};
 use musical_lights_core::{
     audio::{
-        parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedAmplitudesBuilder, BufferedFFT,
-        Samples,
+        parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedBinsBuilder, BufferedFFT, Samples,
     },
     compass::{Coordinate, Magnetometer},
     errors::MyError,

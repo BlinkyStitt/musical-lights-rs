@@ -52,5 +52,8 @@ ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
 esp-idf-svc = { git = "https://github.com/esp-rs/esp-idf-svc.git", rev = "e0d9c76e83122ac991526a6c6f296b12cf698258" }
 esp-idf-hal = { git = "https://github.com/esp-rs/esp-idf-hal.git", rev = "71179237888568453fa5eb129b4971d5ec54c90a" }
 
+# Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
+i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
+
 [build-dependencies]
 embuild = "0.33"

@@ -49,7 +49,7 @@ itertools = { version = "0.14.0", default-features = false }
 # cichlid = { version = "0.2.1", features = ["no-std"] }
 
 [dev-dependencies]
-test-log = "0.2.17"
+test-log = "0.2.18"
 
 [features]
 
@@ -94,3 +94,7 @@ std = [
     "serde/std",
     "thiserror/std",
 ]
+
+[patch.crates-io]
+# Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
+i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
