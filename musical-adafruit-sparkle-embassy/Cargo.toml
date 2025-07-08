@@ -8,7 +8,7 @@ name = "musical-adafruit-sparkle"
 path = "./src/bin/main.rs"
 
 [dependencies]
-bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5148d8ae679e021b78f53fd33afb8bb35d0b62e", features = [
+bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "ca149efc842324f2cc282ea743897e204cf920b5", features = [
   "async",
   "macros",
 ] }
@@ -21,8 +21,8 @@ embassy-net = { version = "0.7.0", features = [
 ] }
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
-esp-alloc = "0.7.0"
-esp-backtrace = { version = "0.15.1", features = [
+esp-alloc = "0.8.0"
+esp-backtrace = { version = "0.16.0", features = [
   "defmt",
   "esp32",
   "exception-handler",
@@ -33,19 +33,19 @@ esp-hal = { version = "1.0.0-beta.1", features = [
   "esp32",
   "unstable",
 ] }
-esp-println = { version = "0.13.1", features = ["defmt-espflash", "esp32"] }
+esp-println = { version = "0.14.0", features = ["defmt-espflash", "esp32"] }
 # for more networking protocol support see https://crates.io/crates/edge-net
 critical-section = "1.2.0"
 embassy-executor = { version = "0.7.0", features = ["defmt", "nightly"] }
-embassy-sync = { version = "0.6.2", features = ["defmt"] }
+embassy-sync = { version = "0.7.0", features = ["defmt"] }
 embassy-futures = { version = "0.1.1", features = ["defmt"] }
 embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
-esp-hal-embassy = { version = "0.7.0", features = ["esp32"] }
+esp-hal-embassy = { version = "0.8.1", features = ["esp32"] }
 esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", branch = "main", version = "0.15.0", features = [
   "defmt",
   "esp32",
 ] }
-esp-wifi = { version = "0.13.0", features = [
+esp-wifi = { version = "0.14.1", features = [
   "ble",
   "builtin-scheduler",
   "coex",
