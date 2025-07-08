@@ -4,7 +4,7 @@ use smart_leds::{
     colors::{BLUE, RED, WHITE},
 };
 
-use crate::{iter::LeftRightIter, logging::warn};
+use crate::iter::LeftRightIter;
 
 /// TODO: does this only work on odd sizes?
 pub fn flag_stars_pattern<const X: usize>() -> impl Iterator<Item = RGB8> + Clone {

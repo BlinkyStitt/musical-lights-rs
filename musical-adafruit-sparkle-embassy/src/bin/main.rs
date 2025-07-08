@@ -17,13 +17,14 @@ use embassy_futures::{join, yield_now};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
-use esp_hal::dma::{AnyI2sDmaChannel, I2s0DmaChannel, Spi2DmaChannel, Spi3DmaChannel, CHUNK_SIZE};
+use esp_hal::dma::{AnyI2sDmaChannel, AnySpiDmaChannel, CHUNK_SIZE};
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
-use esp_hal::i2c::master::{AnyI2c, I2c};
+use esp_hal::i2c::master::I2c;
+use esp_hal::i2c::AnyI2c;
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::interrupt::Priority;
-use esp_hal::peripherals::{I2C0, I2S0, SPI2, SPI3};
+use esp_hal::peripherals::{DMA_I2S0, DMA_SPI2, I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::spi::AnySpi;
@@ -31,7 +32,7 @@ use esp_hal::system::{CpuControl, Stack};
 use esp_hal::timer::AnyTimer;
 use esp_hal::{
     dma_buffers, dma_circular_buffers, dma_circular_buffers_chunk_size, dma_circular_descriptors,
-    dma_rx_stream_buffer,
+    dma_rx_stream_buffer, Async,
 };
 use lsm9ds1::accel;
 // use esp_hal::spi::master::{Config, Spi};
@@ -39,7 +40,7 @@ use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
 use esp_hal_embassy::{Executor, InterruptExecutor};
-use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
+use esp_hal_smartled::{smart_led_buffer, SmartLedsAdapter};
 use esp_println as _;
 use lsm9ds1::interface::{I2cInterface, SpiInterface};
 use musical_lights_core::fps::FpsTracker;
@@ -63,23 +64,23 @@ const ONBOARD_BRIGHTNESS: u8 = 10;
 /// TODO: we have 5 Amps max. 256 leds at 20mA is 5.12A. max white is 60mA. limit to 82/255 to be extra cautious. these are bright even then.
 const FIBONACCI_BRIGHTNESS: u8 = 25;
 
-/// TODO: what size should these be?
-/// TODO: I'm sometimes seeing "late" errors. i think this is because the buffer is too small. but i thought a circular buffer would keep it working
-/// TODO: i can't make it bigger than this because the esp32 is too small. need to get this into external ram
-/// TODO: i think this needs to be 4. the examples all use 4 and i'm getting weird hangs when i don't read fast enough
+// / TODO: what size should these be?
+// / TODO: I'm sometimes seeing "late" errors. i think this is because the buffer is too small. but i thought a circular buffer would keep it working
+// / TODO: i can't make it bigger than this because the esp32 is too small. need to get this into external ram
+// / TODO: i think this needs to be 4. the examples all use 4 and i'm getting weird hangs when i don't read fast enough
 // const I2S_BUFFER_SIZE: usize = CHUNK_SIZE * 3;
 
 /// blink the onboard neopixel and the fibonacci neopixels
 #[embassy_executor::task]
 async fn blink_fibonacci256_neopixel_rmt(
     onboard_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
-    onboard_pin: AnyPin,
+    onboard_pin: AnyPin<'static>,
     fibonacci_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 1>,
-    fibonacci_pin: AnyPin,
+    fibonacci_pin: AnyPin<'static>,
 ) {
     // TODO: why can't we use the NUM_ONBOARD_NEOPIXELS const here? that's sad
-    let onboard_rmt_buffer: [u32; NUM_ONBOARD_NEOPIXELS * 24 + 1] = smartLedBuffer!(1);
-    let fibonacci_rmt_buffer: [u32; NUM_FIBONACCI_NEOPIXELS * 24 + 1] = smartLedBuffer!(256);
+    let onboard_rmt_buffer: [u32; NUM_ONBOARD_NEOPIXELS * 24 + 1] = smart_led_buffer!(1);
+    let fibonacci_rmt_buffer: [u32; NUM_FIBONACCI_NEOPIXELS * 24 + 1] = smart_led_buffer!(256);
 
     let mut onboard_leds =
         SmartLedsAdapter::new(onboard_rmt_channel, onboard_pin, onboard_rmt_buffer);
@@ -174,14 +175,20 @@ async fn blink_fibonacci256_neopixel_rmt(
 /// lower priority sensors get grouped together here
 /// embassy is a "fair" executor, but we need i2s to be read really quickly because we have a small DMA buffer for it
 #[embassy_executor::task]
-async fn sensor_task(spi: SPI2, dma: Spi2DmaChannel, i2c: I2C0, scl: AnyPin, sda: AnyPin) {
-    let radio_f = radio_subtask(spi.into(), dma);
+async fn sensor_task(
+    spi: SPI2<'static>,
+    dma: DMA_SPI2<'static>,
+    i2c: I2C0<'static>,
+    scl: AnyPin<'static>,
+    sda: AnyPin<'static>,
+) {
+    let radio_f = radio_subtask(spi.into(), dma.into());
     let accelerometer_f = accelerometer_subtask(i2c.into(), scl, sda);
 
     join(radio_f, accelerometer_f).await;
 }
 
-async fn radio_subtask(spi: AnySpi, _dma: Spi2DmaChannel) {
+async fn radio_subtask(spi: AnySpi<'static>, _dma: AnySpiDmaChannel<'static>) {
     // TODO: hmm. i think my interface is actually a tx/rx interface. i need to check the docs
     let mut radio = sx1262::Device::new(spi);
 
@@ -189,8 +196,7 @@ async fn radio_subtask(spi: AnySpi, _dma: Spi2DmaChannel) {
     warn!("what should the radio loop do?");
 }
 
-// TODO: are we sure want I2C0 and not I2C1? or even SPI?
-async fn accelerometer_subtask(i2c: AnyI2c, scl: AnyPin, sda: AnyPin) {
+async fn accelerometer_subtask(i2c: AnyI2c<'static>, scl: AnyPin<'static>, sda: AnyPin<'static>) {
     // async fn accelerometer_task(spi: SPI3, ag_cs: AnyPin, m_cs: AnyPin) {
     // TODO: do we need to upgrade this library to support the magnetometer over i2c
     // TODO: what frequency?
@@ -198,13 +204,13 @@ async fn accelerometer_subtask(i2c: AnyI2c, scl: AnyPin, sda: AnyPin) {
     // let spi_interface = SpiInterface::init(spi, ag_cs, m_cs);
 
     // TODO: what frequency?
-    // TODO: support async i2c?
     let i2c = I2c::new(i2c, Default::default())
         .expect("failed to create i2c")
         .with_scl(scl)
-        .with_sda(sda);
+        .with_sda(sda)
+        .into_async();
 
-    let i2c_interface = I2cInterface::init(
+    let i2c_interface: I2cInterface<I2c<'static, Async>> = I2cInterface::init(
         i2c,
         lsm9ds1::interface::i2c::AgAddress::_1,
         lsm9ds1::interface::i2c::MagAddress::_1,
@@ -220,13 +226,13 @@ async fn accelerometer_subtask(i2c: AnyI2c, scl: AnyPin, sda: AnyPin) {
     // TODO: have an interrupt?
 
     // TODO: how should we handle errors here? it shouldn't be fatal. we should still get blinkly lights of some kind
-    if let Err(err) = lsm.begin_accel() {
+    if let Err(err) = lsm.begin_accel().await {
         error!("failed to begin accelerometer");
     };
-    if let Err(err) = lsm.begin_gyro() {
+    if let Err(err) = lsm.begin_gyro().await {
         error!("failed to begin gyro");
     };
-    if let Err(err) = lsm.begin_mag() {
+    if let Err(err) = lsm.begin_mag().await {
         error!("failed to begin magnetometer");
     };
 
@@ -245,7 +251,13 @@ const I2S_BUFFER_SIZE: usize = CHUNK_SIZE * BUFFERS_IN_RING; // 8192 B
 ///
 /// TODO: should this function take the transfer object instead? need 'static lifetimes for that to work
 #[embassy_executor::task]
-async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din: AnyPin) {
+async fn mic_task(
+    i2s: I2S0<'static>,
+    dma: DMA_I2S0<'static>,
+    bclk: AnyPin<'static>,
+    ws: AnyPin<'static>,
+    din: AnyPin<'static>,
+) {
     // TODO: the esp32-s3 can put the dma on external ram, but i don't think the esp32 can
     // <https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/spi_loopback_dma_psram.rs>
     // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
@@ -254,7 +266,7 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
     // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
     //     dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
 
-    // TODO: i don't understand how to make the chunk size smaller
+    // TODO: i don't understand how to make the chunk size smaller. is this right? i get a clippy warning
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
         dma_circular_buffers_chunk_size!(I2S_BUFFER_SIZE, 0, CHUNK_SIZE);
 
@@ -265,19 +277,22 @@ async fn mic_task(i2s: I2S0, dma: I2s0DmaChannel, bclk: AnyPin, ws: AnyPin, din:
         Standard::Philips, // TODO: is this the right standard?
         // DataFormat::Data32Channel32, // TODO: this might be too much data
         DataFormat::Data16Channel16,
-        Rate::from_hz(48_000), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
+        Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
         // Rate::from_hz(16_000),
         dma,
-        rx_descriptors,
-        tx_descriptors,
     )
     // .with_mclk(mclk) // TODO: do we need this pin? its the master clock output pin.
     .into_async();
 
     // TODO: set an interrupt handler?
 
-    let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
+    let i2s_rx = i2s
+        .i2s_rx
+        .with_bclk(bclk)
+        .with_ws(ws)
+        .with_din(din)
+        .build(rx_descriptors);
 
     // TODO: maybe we don't want a circular buffer. maybe we want to read with one shots?
     let mut transfer = i2s_rx

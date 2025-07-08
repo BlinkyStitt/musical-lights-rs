@@ -4,10 +4,7 @@ use super::{
     samples::{Samples, WindowedSamples},
     weighting::Weighting,
 };
-use crate::{
-    audio::{AWeighting, amplitudes::Amplitudes},
-    windows::Window,
-};
+use crate::{audio::amplitudes::Amplitudes, windows::Window};
 use crate::{logging::trace, windows::HanningWindow};
 
 use microfft::real::{rfft_512, rfft_1024, rfft_2048, rfft_4096};
