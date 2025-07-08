@@ -28,6 +28,8 @@ dagc = "0.1.1"
 embassy-time = {version = "0.4", features = ["generic-queue-8"]}
 embedded-graphics = { version = "0.8.1", features = ["nalgebra_support", "defmt"] }
 esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver"] }
+# we need the "rmt-legacy" feature so that we can receive too. the newer driver only supports transmit
+# <https://github.com/esp-rs/esp-idf-hal/issues/512#issuecomment-3050467212>
 esp-idf-hal = { version = "*", features = ["rmt-legacy"] }
 esp-idf-sys = { version = "*", features = ["binstart"] }
 eyre = "0.6.12"
