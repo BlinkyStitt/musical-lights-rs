@@ -7,8 +7,8 @@ use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{
-        AWeighting, AggregatedAmplitudes, AggregatedAmplitudesBuilder, AudioBuffer,
-        ExponentialScaleBuilder, FFT,
+        AWeighting, AggregatedBins, AggregatedBinsBuilder, AudioBuffer, ExponentialScaleBuilder,
+        FFT,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -31,7 +31,7 @@ async fn audio_task(
     mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS>,
     fft: FFT<FFT_INPUTS, FFT_OUTPUTS>,
     scale_builder: ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>,
-    tx_loudness: flume::Sender<AggregatedAmplitudes<NUM_BANDS>>,
+    tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
         audio_buffer.push_samples(&samples);
@@ -40,7 +40,7 @@ async fn audio_task(
 
         let amplitudes = fft.weighted_amplitudes(samples);
 
-        let mut loudness = AggregatedAmplitudes([0.0; NUM_BANDS]);
+        let mut loudness = AggregatedBins([0.0; NUM_BANDS]);
         scale_builder.sum_into(&amplitudes.0, &mut loudness.0);
 
         // TODO: decibels here?
@@ -56,7 +56,7 @@ async fn audio_task(
 }
 
 #[embassy_executor::task]
-async fn lights_task(rx_loudness: flume::Receiver<AggregatedAmplitudes<NUM_BANDS>>) {
+async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
     // TODO: what should these be?
     let gradient = Gradient::new_mermaid();
     let peak_decay = 0.99;

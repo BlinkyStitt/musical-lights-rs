@@ -1,5 +1,5 @@
 //! todo: better name
-use super::amplitudes::{AggregatedAmplitudesBuilder, AggregatedBins};
+use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
 
@@ -86,7 +86,7 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
     }
 }
 
-impl<const IN: usize, const OUT: usize> AggregatedAmplitudesBuilder<IN, OUT>
+impl<const IN: usize, const OUT: usize> AggregatedBinsBuilder<IN, OUT>
     for ExponentialScaleBuilder<IN, OUT>
 {
     type Output = ExponentialScaleAmplitudes<OUT>;

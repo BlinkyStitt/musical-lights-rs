@@ -19,7 +19,7 @@ mod shazam;
 mod weighting;
 
 pub use amplitudes::{
-    AggregatedBins, AggregatedAmplitudesBuilder, Amplitudes, WeightedAmplitudes,
+    AggregatedBins, AggregatedBinsBuilder, Amplitudes, WeightedAmplitudes,
 };
 pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
 pub use buffer::AudioBuffer;

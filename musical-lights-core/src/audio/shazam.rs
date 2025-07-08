@@ -1,6 +1,6 @@
 //! TODO: i don't think this is actually how shazam works
 
-use super::amplitudes::{AggregatedBins, AggregatedAmplitudesBuilder};
+use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 use crate::audio::bin_to_frequency;
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
@@ -44,7 +44,7 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
     }
 }
 
-impl<const IN: usize> AggregatedAmplitudesBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScaleBuilder<IN> {
+impl<const IN: usize> AggregatedBinsBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScaleBuilder<IN> {
     type Output = ShazamAmplitudes;
 
     // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {

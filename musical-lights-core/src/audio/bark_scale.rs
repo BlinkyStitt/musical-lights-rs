@@ -1,6 +1,6 @@
 use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
-use super::amplitudes::{AggregatedBins, AggregatedAmplitudesBuilder};
+use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 
 const BARK_SCALE_OUT: usize = 24;
 
@@ -47,7 +47,7 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
     }
 }
 
-impl<const IN: usize> AggregatedAmplitudesBuilder<IN, BARK_SCALE_OUT> for BarkScaleBuilder<IN> {
+impl<const IN: usize> AggregatedBinsBuilder<IN, BARK_SCALE_OUT> for BarkScaleBuilder<IN> {
     type Output = BarkScaleAmplitudes;
 
     // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {

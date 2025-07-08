@@ -28,7 +28,7 @@ pub struct WeightedAmplitudes<const N: usize>(pub [f32; N]);
 pub struct AggregatedBins<const N: usize>(pub [f32; N]);
 
 /// TODO: i am summing up bins, but i should be doing more advanced math there. either rms the power, or take the average of the amplitudes
-pub trait AggregatedAmplitudesBuilder<const IN: usize, const OUT: usize> {
+pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
     type Output;
 
     // // NOTE: you maybe want something like this
