@@ -78,6 +78,10 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
 sx1262 = { version = "0.2.1", features = ["defmt"] }
 ws2812-async = "0.3.0"
 
+# TODO: use bleps or trouble? the bleps docs say if you want async to use trouble, but bleps also has async :shrug:
+# <https://github.com/embassy-rs/trouble/tree/main/examples/esp32>
+#trouble-host = { git = "https://github.com/embassy-rs/trouble.git", version = "0.2.3" }
+
 # TODO: this is incompatible with the current esp-hal version (1.0.0-beta.0). its on main, but not released yet
 # TODO: i think its only a blocking method of writing though. so i don't know if we want it. maybe its okay if we keep it on core 1?
 # esp-hal-smartled = { version = "*", features = ["esp32"] }
