@@ -7,8 +7,8 @@ use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{
-        AWeighting, AggregatedBins, AggregatedBinsBuilder, AudioBuffer, ExponentialScaleBuilder,
-        FFT,
+        AWeighting, AggregatedBins, AggregatedBinsBuilder, AudioBuffer, BufferedFFT,
+        ExponentialScaleBuilder, FFT, FlatWeighting,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -17,32 +17,35 @@ use musical_lights_core::{
 use std::env;
 
 const MIC_SAMPLES: usize = 512;
-const FFT_INPUTS: usize = 2048;
+
+/// TODO: 2048 or 4096? we need a macro for multiple sizes
+const FFT_INPUTS: usize = 4096;
 
 /// equal temperment == 120?
 const NUM_BANDS: usize = 20;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
+type MyBufferedFFT = BufferedFFT<MIC_SAMPLES, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>;
+type ScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>;
+
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
 /// TODO: use BufferedFFT instead of three seperate types.
 #[embassy_executor::task]
 async fn audio_task(
     mic_stream: MicrophoneStream,
-    mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS>,
-    fft: FFT<FFT_INPUTS, FFT_OUTPUTS>,
-    scale_builder: ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>,
+    mut fft: MyBufferedFFT,
+    scale_builder: ScaleBuilder,
     tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
-        audio_buffer.push_samples(&samples);
+        fft.push_samples(&samples);
 
-        let samples = audio_buffer.samples();
+        let fft_outputs = fft.fft();
 
-        let amplitudes = fft.weighted_amplitudes(samples);
+        let x = fft_outputs.iter_mean_square_power_density();
 
-        let mut loudness = AggregatedBins([0.0; NUM_BANDS]);
-        scale_builder.sum_into(&amplitudes.0, &mut loudness.0);
+        let loudness = scale_builder.sum_spectrum(fft_outputs.iter_mean_square_power_density());
 
         // TODO: decibels here?
 
@@ -50,7 +53,7 @@ async fn audio_task(
         // TODO: beat detection
         // TODO: peak detection
 
-        tx_loudness.send_async(loudness).await.unwrap();
+        tx_loudness.send_async(loudness.0).await.unwrap();
     }
 
     info!("audio task complete");
@@ -97,24 +100,19 @@ async fn main(spawner: Spawner) {
     let sample_rate = mic_stream.sample_rate.0 as f32;
 
     // TODO: a-weighting probably isn't what we want. also, our microphone frequency response is definitely not flat
-    let weighting = AWeighting::new(sample_rate);
+    // let weighting = AWeighting::new(sample_rate);
+    let weighting: FlatWeighting<4096> = FlatWeighting {};
 
     // TODO: rewrite this to use the BufferedFFT
-    let fft = FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(weighting);
+    let fft = BufferedFFT::<_, _, _, HanningWindow<_>>::new();
 
     // TODO: have multiple scales and compare them. is "scale" the right term?
     // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
     // TODO: I'm never seeing anything in bin 0. that means its working right?
     // TODO: i'm also never seeing anything in bucket 0. that doesn't seem right. need to think more about bass
-    let scale_builder = ExponentialScaleBuilder::new(0.0, 20_000.0, sample_rate);
+    let scale_builder = ExponentialScaleBuilder::new(20.0, 20_000.0, sample_rate);
 
-    spawner.must_spawn(audio_task(
-        mic_stream,
-        audio_buffer,
-        fft,
-        scale_builder,
-        loudness_tx,
-    ));
+    spawner.must_spawn(audio_task(mic_stream, fft, scale_builder, loudness_tx));
     spawner.must_spawn(lights_task(loudness_rx));
 
     debug!("all tasks spawned");

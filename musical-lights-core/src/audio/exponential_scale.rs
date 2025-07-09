@@ -1,4 +1,6 @@
 //! todo: better name
+use core::borrow::Borrow;
+
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
@@ -10,39 +12,81 @@ use micromath::F32Ext;
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
+    /// TODO: these used to be args on new, but its easier to keep them here. maybe we can think of a better const builder pattern
+    min_freq: f32,
+    max_freq: f32,
+    sample_rate_hz: f32,
     /// index is the input id. the value is the output id. if none, the input is ignored
     /// TODO: do something fancy with ranges instead
     map: [Option<usize>; IN],
 }
 
 /// TODO: should this be a trait instead?
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
 pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedBins<OUT>);
 
 /// bins in, bands/channels out
 impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
-    pub const fn uninit() -> Self {
-        Self { map: [None; IN] }
+    pub const fn uninit(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
+        Self {
+            min_freq,
+            max_freq,
+            sample_rate_hz,
+            map: [None; IN],
+        }
     }
 
+    pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
+        let mut x = Self::uninit(min_freq, max_freq, sample_rate_hz);
+        x.init();
+        x
+    }
+}
+
+impl<const IN: usize, const OUT: usize> AggregatedBinsBuilder<IN, OUT>
+    for ExponentialScaleBuilder<IN, OUT>
+{
+    type Output = ExponentialScaleAmplitudes<OUT>;
+
+    // /// TODO: rename this function
+    // fn aggregate(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
+    //     todo!("refactor");
+
+    //     // let x = AggregatedAmplitudes::rms(&self.map, &self.scaling, x);
+
+    //     // ExponentialScaleAmplitudes(x)
+    // }
+
+    /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
+    /// TODO: Output should require a trait that returns a &mut [f32; OUT]
+    #[inline]
+    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<f32>,
+    {
+        AggregatedBins::sum_power_into(&self.map, input, &mut output.0.0)
+    }
+
+    /// TODO: this needs to be const and done during the new.
     /// TODO: how can we use types to be sure this init gets called
-    pub fn init(&mut self, min_freq: f32, max_freq: f32, sample_rate_hz: f32) {
+    fn init(&mut self) {
         assert!(
-            sample_rate_hz / 2.0 >= max_freq,
+            self.sample_rate_hz / 2.0 >= self.max_freq,
             "sample rate too low. must be at least double the maximum frequency"
         );
 
         // always skip the very first bin. it is too noisy
         // TODO: actually the very first bin isn't noise. its the average across all bins (i think)
-        let min_bin = frequency_to_bin(min_freq, sample_rate_hz, IN);
+        let min_bin = frequency_to_bin(self.min_freq, self.sample_rate_hz, IN);
 
         // TODO: off by 1?
-        let max_bin = frequency_to_bin(max_freq, sample_rate_hz, IN) + 1;
+        let max_bin = frequency_to_bin(self.max_freq, self.sample_rate_hz, IN) + 1;
 
         // TODO: this info doesn't show on start for some reason.
-        let frequency_resolution = sample_rate_hz / 2.0 / (IN as f32);
+        let frequency_resolution = self.sample_rate_hz / 2.0 / (IN as f32);
         info!("frequency resolution = {}", frequency_resolution);
 
         let e = find_e(OUT as u32, min_bin as u32, max_bin as u32).unwrap();
@@ -78,38 +122,39 @@ impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
             start_bin = end_bin;
         }
     }
-
-    pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
-        let mut x = Self::uninit();
-        x.init(min_freq, max_freq, sample_rate_hz);
-        x
-    }
 }
 
-impl<const IN: usize, const OUT: usize> AggregatedBinsBuilder<IN, OUT>
-    for ExponentialScaleBuilder<IN, OUT>
-{
-    type Output = ExponentialScaleAmplitudes<OUT>;
-
-    // /// TODO: rename this function
-    // fn aggregate(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-    //     todo!("refactor");
-
-    //     // let x = AggregatedAmplitudes::rms(&self.map, &self.scaling, x);
-
-    //     // ExponentialScaleAmplitudes(x)
-    // }
-
-    /// TODO: rename this function?
-    /// TODO: use iters?
-    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; OUT]) {
-        AggregatedBins::sum_into(&self.map, input, output)
+/// exponentiation by-squaring in a `const fn`
+/// TODO: i wish i could use ext_fn
+/// TODO: tests that compare this to powif
+pub const fn const_powf(mut base: f32, mut exp: i32) -> f32 {
+    if exp == 0 {
+        return 1.0;
     }
+    // handle negative exponents
+    if exp < 0 {
+        base = 1.0 / base;
+        exp = -exp;
+    }
+
+    let mut acc = 1.0;
+    let mut b = base;
+    let mut e = exp as u32;
+
+    // while-in-const is stable
+    while e != 0 {
+        if e & 1 == 1 {
+            acc *= b;
+        }
+        b *= b;
+        e >>= 1;
+    }
+    acc
 }
 
 /// Find E through brute force calculations
 /// <https://forum.pjrc.com/threads/32677-Is-there-a-logarithmic-function-for-FFT-bin-selection-for-any-given-of-bands?p=133842&viewfull=1#post133842>
-fn find_e(bands: u32, min_bin: u32, max_bin: u32) -> Option<f32> {
+const fn find_e(bands: u32, min_bin: u32, max_bin: u32) -> Option<f32> {
     let mut increment = 0.1;
     let mut e_test = 1.0;
 
@@ -117,27 +162,27 @@ fn find_e(bands: u32, min_bin: u32, max_bin: u32) -> Option<f32> {
         let mut count = min_bin;
 
         // Calculate full log values
-        for b in 0..bands {
-            let n = e_test.powi(b as i32);
+        let mut b = 0;
+        while b < bands {
+            let n = const_powf(e_test, b as i32);
             // round up
-            let d = n.ceil() as u32;
+            let d = (n + 0.5) as u32;
             count += d;
+
+            b += 1;
         }
 
-        match count.cmp(&max_bin) {
-            core::cmp::Ordering::Greater => {
-                e_test -= increment;
-                increment /= 10.0;
+        if count > max_bin {
+            e_test -= increment;
+            increment /= 10.0;
 
-                if increment < 0.0000001 {
-                    return Some(e_test - increment);
-                }
+            if increment < 0.0000001 {
+                return Some(e_test - increment);
             }
-            core::cmp::Ordering::Equal => {
-                return Some(e_test);
-            }
-            core::cmp::Ordering::Less => {}
+        } else if count == max_bin {
+            return Some(e_test);
         }
+
         e_test += increment;
     }
 

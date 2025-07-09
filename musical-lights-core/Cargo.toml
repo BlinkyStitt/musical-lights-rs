@@ -37,6 +37,7 @@ serde = { version = "1.0.219", default-features = false }
 smart-leds = "0.4.0"
 thiserror = { version = "2", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
+extfn = "0.1.1"
 
 
 # TODO: these need std

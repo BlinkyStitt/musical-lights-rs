@@ -447,6 +447,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "extfn"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "211dfd0b9348445dab51d4f3ff779882b05fb617ff4282999930813b8f435875"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -668,6 +679,7 @@ dependencies = [
  "embedded-io 0.6.1",
  "embedded-io-async",
  "enterpolation",
+ "extfn",
  "heapless 0.8.0",
  "i24",
  "itertools",

@@ -8,13 +8,22 @@ use std::fmt::Display;
 use std::thread::yield_now;
 
 use itertools::{Itertools, MinMaxResult};
-use musical_lights_core::audio::FftOutputs;
-use musical_lights_core::logging::info;
+use musical_lights_core::audio::{AggregatedBinsBuilder, FftOutputs};
 use musical_lights_core::remap;
 
 /// TODO: i'm not sure where the code that turns this heat into a XY matrix belongs. or code for rotating the matrix by frame count
 /// TODO: this doesn't work exactly the same as Fire2012. maybe i should have kept it more similar at the start?
-pub struct MicLoudnessPattern<const N: usize, const X: usize, const Y: usize> {
+pub struct MicLoudnessPattern<
+    const FFT_OUTPUTS: usize,
+    const N: usize,
+    const X: usize,
+    const Y: usize,
+    S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
+> {
+    fft_out_buf: [f32; FFT_OUTPUTS],
+    weights: [f32; FFT_OUTPUTS],
+    scale_builder: S,
+    scale_out_buf: [f32; X],
     /// how many rows are lit up for each column of the matrix. range of 0-Y
     loudness: [u8; X],
     /// TODO: what should floor_db be? should it be dynamic for each X?
@@ -38,26 +47,18 @@ pub struct MicLoudnessTick<'a, const X: usize, const Y: usize> {
     pub sparkle: &'a [bool; X],
 }
 
-/// TODO: this could be much better i'm sure. but it works for now.
-impl<const X: usize, const Y: usize> Display for MicLoudnessTick<'_, X, Y> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (x, y_height) in self.loudness.iter().enumerate() {
-            match (self.sparkle[x], y_height) {
-                (_, 0) => {
-                    f.write_str("   |")?;
-                }
-                // TODO: make this work with more than 9
-                (true, x) => f.write_fmt(format_args!("*{}*|", x))?,
-                (false, x) => f.write_fmt(format_args!(" {} |", x))?,
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y> {
-    pub const fn new(floor_db: f32, floor_peak_db: f32, sparkle_chance: f32) -> Self {
+impl<const FFT_OUTPUTS: usize, const N: usize, const X: usize, const Y: usize, S>
+    MicLoudnessPattern<FFT_OUTPUTS, N, X, Y, S>
+where
+    S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
+{
+    /// TODO: weights aren't right. need to do more
+    pub const fn new(
+        uninit_scale_builder: S,
+        floor_db: f32,
+        floor_peak_db: f32,
+        sparkle_chance: f32,
+    ) -> Self {
         assert!(X * Y == N, "wrong dimensions");
         assert!(sparkle_chance == 1.0, "only 1.0 is currently supported");
 
@@ -65,6 +66,10 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
         let peak_ema_max_dbfs = floor_peak_db;
 
         Self {
+            fft_out_buf: [0.0; FFT_OUTPUTS],
+            weights: [2.0; FFT_OUTPUTS],
+            scale_builder: uninit_scale_builder,
+            scale_out_buf: [0.0; X],
             loudness: [0; X],
             floor_db,
             floor_peak_db,
@@ -75,52 +80,10 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
         }
     }
 
-    /*
-    /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
-    pub fn tick_fft_outputs<'fft, const NUM_FFT_OUTPUTS: usize>(
-        &mut self,
-        spectrum: FftOutputs<'fft, NUM_FFT_OUTPUTS>,
-    ) -> MicLoudnessTick<'_, X, Y> {
-        self.fft_outputs_buf
-            .iter_mut()
-            .set_from(spectrum.iter_mean_square_power_density());
-
-        // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
-        // also apply weigthing (a-weighting or some other equal loudness countour)
-        // TODO: double check this. too much cargo culting
-        for (x, w) in self
-            .fft_outputs_buf
-            .iter_mut()
-            .zip(weights.iter())
-            .take(FFT_OUTPUTS - 1)
-            .skip(1)
-        {
-            *x *= 2.0 * w;
-        }
-
-        // calculating the weights can be slow. yield now
-        // TODO: do some analysis to see if this is always needed. this one can probably be removed
-        yield_now();
-
-        // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
-        // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
-        self.scale_builder
-            .sum_into(self.fft_outputs_buf, self.scale_outputs_buf);
-        // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
-
-        // Convert each band energy to RMS amplitude in dbfs
-        for x in scale_outputs_buf.iter_mut() {
-            let rms = x.sqrt();
-            *x = 20. * rms.log10();
-        }
-
-        // calculating the exponential scale can be slow. yield now
-        // TODO: do some analysis to see if this is always needed. this one can probably be removed
-        yield_now();
-
-        self.tick_dbfs(exponential_scale_outputs)
+    /// You must call this before using new!
+    pub fn init(&mut self) {
+        self.scale_builder.init();
     }
-     */
 
     /// TODO: i need to learn more about AGC because I think that's the right thing to use here
     fn update_max(&mut self, max: f32) {
@@ -151,19 +114,60 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
         self.peak_ema_min_dbfs = self.peak_ema_min_dbfs.min(self.floor_db);
     }
 
-    fn update_ema(&mut self, dbfs: &[f32; X]) {
+    fn update_ema(&mut self /*, dbfs: &[f32; X] */) {
         const ALPHA: f32 = 0.1;
 
         // TODO: is there an "average" iter?
         // TODO: should we just take the midpoint of the min and max? probably not
         // TODO: should this be a real average instead of an ema?
-        let avg_dbfs = dbfs.iter().sum::<f32>() / dbfs.len() as f32;
+        let avg_dbfs = self.scale_out_buf.iter().sum::<f32>() / self.scale_out_buf.len() as f32;
 
         todo!();
     }
 
-    /// TODO: this will probably make someone that actually knows things cry.
-    pub fn tick_dbfs(&mut self, dbfs: &[f32; X]) -> MicLoudnessTick<'_, X, Y> {
+    /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
+    pub fn tick_fft_outputs<'fft, const NUM_FFT_OUTPUTS: usize>(
+        &mut self,
+        spectrum: FftOutputs<'fft, NUM_FFT_OUTPUTS>,
+    ) -> MicLoudnessTick<'_, X, Y> {
+        self.fft_out_buf
+            .iter_mut()
+            .set_from(spectrum.iter_mean_square_power_density());
+
+        // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
+        // also apply weigthing (a-weighting or some other equal loudness countour)
+        // TODO: double check this. too much cargo culting
+        for (x, w) in self
+            .fft_out_buf
+            .iter_mut()
+            .zip(&self.weights)
+            .take(FFT_OUTPUTS - 1)
+            .skip(1)
+        {
+            // *x *= 2.0 * w;
+            *x *= w;
+        }
+
+        // calculating the weights can be slow. yield now
+        // TODO: do some analysis to see if this is always needed. this one can probably be removed
+        yield_now();
+
+        // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
+        // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
+        self.scale_builder
+            .sum_into(&self.fft_out_buf, &mut self.scale_out_buf);
+        // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
+
+        // Convert each band energy to RMS amplitude in dbfs
+        for x in self.scale_out_buf.iter_mut() {
+            let rms = x.sqrt();
+            *x = 20. * rms.log10();
+        }
+
+        // calculating the exponential scale can be slow. yield now
+        // TODO: do some analysis to see if this is always needed. this one can probably be removed
+        yield_now();
+
         // TODO: how should we use an AGC?
         // self.agc.process(dbfs);
 
@@ -171,7 +175,7 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
 
         // EMA for tracking the min/avg/max
         // TODO: this is not right
-        match dbfs.iter().minmax() {
+        match self.scale_out_buf.iter().minmax() {
             MinMaxResult::NoElements => todo!(),
             MinMaxResult::OneElement(&x) => {
                 self.update_min(x);
@@ -183,14 +187,14 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             }
         }
 
-        self.update_ema(dbfs);
+        self.update_ema();
 
         yield_now();
 
         for ((loudness, x), sparkle) in self
             .loudness
             .iter_mut()
-            .zip(dbfs.iter().copied())
+            .zip(self.scale_out_buf.iter().copied())
             .zip(self.sparkle.iter_mut())
         {
             // capture the previous loudness so we can compare
@@ -209,5 +213,23 @@ impl<const N: usize, const X: usize, const Y: usize> MicLoudnessPattern<N, X, Y>
             loudness: &self.loudness,
             sparkle: &self.sparkle,
         }
+    }
+}
+
+/// TODO: this could be much better i'm sure. but it works for now.
+impl<const X: usize, const Y: usize> Display for MicLoudnessTick<'_, X, Y> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (x, y_height) in self.loudness.iter().enumerate() {
+            match (self.sparkle[x], y_height) {
+                (_, 0) => {
+                    f.write_str("   |")?;
+                }
+                // TODO: make this work with more than 9
+                (true, x) => f.write_fmt(format_args!("*{}*|", x))?,
+                (false, x) => f.write_fmt(format_args!(" {} |", x))?,
+            }
+        }
+
+        Ok(())
     }
 }

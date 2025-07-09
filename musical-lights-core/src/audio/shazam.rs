@@ -1,5 +1,7 @@
 //! TODO: i don't think this is actually how shazam works
 
+use core::borrow::Borrow;
+
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 use crate::audio::bin_to_frequency;
 
@@ -10,7 +12,7 @@ pub struct ShazamScaleBuilder<const FFT_OUT: usize> {
 }
 
 /// TODO: should this be a trait instead?
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
 pub struct ShazamAmplitudes(pub AggregatedBins<SHAZAM_SCALE_OUT>);
@@ -54,8 +56,14 @@ impl<const IN: usize> AggregatedBinsBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScal
     //     // ShazamAmplitudes(x)
     // }
 
-    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; SHAZAM_SCALE_OUT]) {
-        AggregatedBins::sum_into(&self.map, input, output);
+    /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
+    #[inline]
+    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<f32>,
+    {
+        AggregatedBins::sum_power_into(&self.map, input, &mut output.0.0)
     }
 }
 

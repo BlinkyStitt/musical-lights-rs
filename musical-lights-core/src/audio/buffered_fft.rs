@@ -17,7 +17,8 @@ pub struct BufferedFFT<
     /// TODO: need a test that adds to the circular buffer and makes sure it wraps around like we want
     sample_buf: CircularBuffer<FFT_IN, f32>,
     /// TODO: this should be the existing FFT object so we can reuse that code. it wasn't built with buffers in mind most of the time though. not a terrible refactor
-    fft_buf: [f32; FFT_IN],
+    fft_in_buf: [f32; FFT_IN],
+    fft_out_buf: [f32; FFT_OUT],
     input_window: PhantomData<WI>,
     window_scale_inputs: [f32; FFT_IN],
     /// scaling to correct for the windowing function
@@ -45,7 +46,8 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Wind
 
         Self {
             sample_buf: CircularBuffer::new(),
-            fft_buf: [0.0; FFT_IN],
+            fft_in_buf: [0.0; FFT_IN],
+            fft_out_buf: [0.0; FFT_OUT],
             input_window: PhantomData::<WI>,
             window_scale_inputs: [1.0; FFT_IN],
             window_scale_outputs: 1.0,
@@ -93,10 +95,14 @@ impl<const SAMPLE_IN: usize, WI: Window<HARD_CODED_FFT_INPUTS>>
     fn fill_fft_buf_with_windows(&mut self) {
         // first, we load buffer up with the samples (TODO: move this to a helper function?)
         let (a, b) = self.sample_buf.as_slices();
-        self.fft_buf[..a.len()].copy_from_slice(a);
-        self.fft_buf[a.len()..].copy_from_slice(b);
+        self.fft_in_buf[..a.len()].copy_from_slice(a);
+        self.fft_in_buf[a.len()..].copy_from_slice(b);
 
-        for (x, w) in self.fft_buf.iter_mut().zip(self.window_scale_inputs.iter()) {
+        for (x, w) in self
+            .fft_in_buf
+            .iter_mut()
+            .zip(self.window_scale_inputs.iter())
+        {
             *x *= w;
         }
     }
@@ -111,7 +117,7 @@ impl<const SAMPLE_IN: usize, WI: Window<HARD_CODED_FFT_INPUTS>>
         #[cfg(feature = "std")]
         yield_now();
 
-        let spectrum = microfft::real::rfft_4096(&mut self.fft_buf);
+        let spectrum = microfft::real::rfft_4096(&mut self.fft_in_buf);
 
         // TODO: yield here with a specific compile time feature
         #[cfg(feature = "std")]
@@ -147,6 +153,11 @@ pub struct FftOutputs<'fft, const FFT_OUTPUT: usize> {
 }
 
 impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
+    #[inline]
+    pub fn spectrum(&self) -> &[Complex<f32>; FFT_OUTPUT] {
+        &self.spectrum
+    }
+
     /// TODO: really not sure about this
     #[inline]
     pub fn iter_amplitude(&self) -> impl Iterator<Item = f32> {

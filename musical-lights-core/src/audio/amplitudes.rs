@@ -3,6 +3,8 @@
 
 // use crate::logging::info;
 
+use core::borrow::Borrow;
+
 /// N = number of amplitudes
 /// IF N > S/2, there is an error
 /// If N == S/2, there is no aggregation
@@ -27,15 +29,43 @@ pub struct WeightedAmplitudes<const N: usize>(pub [f32; N]);
 #[repr(transparent)]
 pub struct AggregatedBins<const N: usize>(pub [f32; N]);
 
+impl<const N: usize> Default for AggregatedBins<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const N: usize> AggregatedBins<N> {
+    const fn new() -> Self {
+        Self([0.; N])
+    }
+}
+
 /// TODO: i am summing up bins, but i should be doing more advanced math there. either rms the power, or take the average of the amplitudes
 pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
-    type Output;
+    type Output: Default;
 
-    // // NOTE: you maybe want something like this
-    // map: [Option<usize>; IN],
+    fn sum_spectrum<I>(&self, input: I) -> Self::Output
+    where
+        I: IntoIterator,
+        I::Item: Borrow<f32>,
+    {
+        let mut output = Self::Output::default();
 
-    /// TODO: this output should use Self::Output
-    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; OUT]);
+        self.sum_power_into(input, &mut output);
+
+        output
+    }
+
+    /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
+    /// TODO: use iters?
+    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<f32>;
+
+    /// do setup that can't be done in a const context. defaults to a noop.
+    fn init(&mut self) {}
 }
 
 /// TODO: From trait won't work because we need some state (the precomputed equal loudness curves)
@@ -59,17 +89,20 @@ impl<const OUT: usize> AggregatedBins<OUT> {
     ///
     /// TODO: i don't think this is amplitudes anymore. cuz we are using power now
     #[inline]
-    pub fn sum_into<const IN: usize>(
+    pub fn sum_power_into<const IN: usize, I>(
         map: &[Option<usize>; IN],
-        input_power: &[f32; IN],
-        output_power: &mut [f32; OUT],
-    ) {
+        input_power: I,
+        output: &mut [f32; OUT],
+    ) where
+        I: IntoIterator,
+        I::Item: Borrow<f32>,
+    {
         // TODO: should we require fill be called outside this function?
-        output_power.fill(0.0);
+        output.fill(0.0);
 
-        for (x, &i) in input_power.iter().zip(map.iter()) {
+        for (x, &i) in input_power.into_iter().zip(map.iter()) {
             if let Some(i) = i {
-                output_power[i] += x;
+                output[i] += *x.borrow();
             }
         }
     }
@@ -103,7 +136,7 @@ mod tests {
         // let bin_counts = bin_counts_from_map(&map);
         let mut output = [0.0; 2];
 
-        AggregatedBins::sum_into(&map, &[1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
+        AggregatedBins::sum_power_into(&map, &[1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
 
         assert_eq!(output, [2.0, 12.0]);
     }

@@ -22,8 +22,7 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
-use itertools::Itertools;
-use musical_lights_core::audio::{ExponentialScaleBuilder, Weighting};
+use musical_lights_core::audio::{ExponentialScaleBuilder, FlatWeighting, Weighting};
 use musical_lights_core::{
     audio::{
         parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedBinsBuilder, BufferedFFT, Samples,
@@ -443,17 +442,11 @@ fn mic_task(
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
-    static EXPONENTIAL_SCALE_BUILDER: ConstStaticCell<
-        ExponentialScaleBuilder<FFT_OUTPUTS, AGGREGATED_OUTPUTS>,
-    > = ConstStaticCell::new(ExponentialScaleBuilder::uninit());
-    let exponential_scale_builder = EXPONENTIAL_SCALE_BUILDER.take();
-    exponential_scale_builder.init(200.0, 16_000.0, I2S_SAMPLE_RATE_HZ as f32);
-    info!("exponential_scale_builder created");
-
     // TODO: i don't like doing this here. move this inside the buffered fft or something
     // TODO: i don't think a-weighting is actually what we want
     // TODO: maybe k-weighting? maybe something much more advanced?
-    const WEIGHTING: AWeighting<FFT_OUTPUTS> = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
+    // const WEIGHTING: AWeighting<FFT_OUTPUTS> = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
+    const WEIGHTING: FlatWeighting<FFT_OUTPUTS> = FlatWeighting {};
     static WEIGHTS: ConstStaticCell<[f32; FFT_OUTPUTS]> = ConstStaticCell::new([0.0; FFT_OUTPUTS]);
     let weights = WEIGHTS.take();
     WEIGHTING.curve_in_place(weights);
@@ -476,20 +469,26 @@ fn mic_task(
     let i2s_sample_buf = I2S_SAMPLE_BUF.take();
     info!("i2s_sample_buf created");
 
-    static FFT_OUTPUTS_BUF: ConstStaticCell<[f32; FFT_OUTPUTS]> =
-        ConstStaticCell::new([0.0; FFT_OUTPUTS]);
-    let fft_outputs_buf = FFT_OUTPUTS_BUF.take();
-    info!("fft_outputs_buf created");
-
-    static EXPONENTIAL_SCALE_OUTPUTS: ConstStaticCell<[f32; AGGREGATED_OUTPUTS]> =
-        ConstStaticCell::new([0.0; AGGREGATED_OUTPUTS]);
-    let exponential_scale_outputs = EXPONENTIAL_SCALE_OUTPUTS.take();
-    info!("exponential_scale_outputs created");
+    type MyScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, AGGREGATED_OUTPUTS>;
+    const SCALE_BUILDER: MyScaleBuilder =
+        MyScaleBuilder::uninit(200., 16_000., I2S_SAMPLE_RATE_HZ as f32);
 
     static MIC_LOUDNESS: ConstStaticCell<
-        MicLoudnessPattern<DEBUGGING_N, AGGREGATED_OUTPUTS, DEBUGGING_Y>,
-    > = ConstStaticCell::new(MicLoudnessPattern::new(FLOOR_DB, FLOOR_PEAK_DB, 1.0));
+        MicLoudnessPattern<
+            FFT_OUTPUTS,
+            DEBUGGING_N,
+            AGGREGATED_OUTPUTS,
+            DEBUGGING_Y,
+            MyScaleBuilder,
+        >,
+    > = ConstStaticCell::new(MicLoudnessPattern::new(
+        SCALE_BUILDER,
+        FLOOR_DB,
+        FLOOR_PEAK_DB,
+        1.0,
+    ));
     let mic_loudness = MIC_LOUDNESS.take();
+    mic_loudness.init();
     info!("mic_loudness created");
 
     // TODO: what dma frame counts? what buffer count?
@@ -567,45 +566,8 @@ fn mic_task(
         // TODO: do some analysis to see if this is always needed
         yield_now();
 
-        // TODO: power? amplitude? rms? so many choices.
-        // TODO: pass spectrum to mic_loudness and have it do all of this
-        fft_outputs_buf
-            .iter_mut()
-            .set_from(spectrum.iter_mean_square_power_density());
-
-        // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
-        // also apply weigthing (a-weighting or some other equal loudness countour)
-        // TODO: double check this. it seems to push the bass down too far now
-        for (x, w) in fft_outputs_buf
-            .iter_mut()
-            .zip(weights.iter())
-            .take(FFT_OUTPUTS - 1)
-            .skip(1)
-        {
-            *x *= 2.0 * w;
-        }
-
-        // calculating the weights can be slow. yield now
-        // TODO: do some analysis to see if this is always needed. this one can probably be removed
-        yield_now();
-
-        // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
-        // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
-        exponential_scale_builder.sum_into(fft_outputs_buf, exponential_scale_outputs);
-        // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
-
-        // Convert each band energy to RMS amplitude in dbfs
-        for x in exponential_scale_outputs.iter_mut() {
-            let rms = x.sqrt();
-            *x = 20. * rms.log10();
-        }
-
-        // calculating the exponential scale can be slow. yield now
-        // TODO: do some analysis to see if this is always needed. this one can probably be removed
-        yield_now();
-
         // TODO: still lots to think about on this
-        let mic_loudness_tick = mic_loudness.tick_dbfs(exponential_scale_outputs);
+        let mic_loudness_tick = mic_loudness.tick_fft_outputs(spectrum);
 
         // calculating the mic_loudness_tick can be slow. yield now
         // TODO: do some analysis to see if this is always needed

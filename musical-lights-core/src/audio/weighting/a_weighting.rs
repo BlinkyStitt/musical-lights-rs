@@ -40,3 +40,13 @@ pub fn a_weighting(f: f32) -> f32 {
 
     10.0f32.powf(a_weighted_decibels / 20.0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_a_weighting() {
+        assert_eq!(a_weighting(0.0), 0.0);
+    }
+}

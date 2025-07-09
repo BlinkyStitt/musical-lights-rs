@@ -1,3 +1,5 @@
+use core::borrow::Borrow;
+
 use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
@@ -12,7 +14,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 }
 
 /// TODO: should this be a trait instead?
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
 pub struct BarkScaleAmplitudes(pub AggregatedBins<BARK_SCALE_OUT>);
@@ -50,15 +52,13 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
 impl<const IN: usize> AggregatedBinsBuilder<IN, BARK_SCALE_OUT> for BarkScaleBuilder<IN> {
     type Output = BarkScaleAmplitudes;
 
-    // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-    //     todo!("refactor");
-    //     // let x = AggregatedAmplitudes::<BARK_SCALE_OUT>::rms::<IN>(&self.map, &self.weights, x);
-
-    //     // BarkScaleAmplitudes(x)
-    // }
-
-    fn sum_into(&self, input: &[f32; IN], output: &mut [f32; BARK_SCALE_OUT]) {
-        AggregatedBins::<BARK_SCALE_OUT>::sum_into(&self.map, input, output);
+    #[inline]
+    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<f32>,
+    {
+        AggregatedBins::<BARK_SCALE_OUT>::sum_power_into(&self.map, input, &mut output.0.0);
     }
 }
 
