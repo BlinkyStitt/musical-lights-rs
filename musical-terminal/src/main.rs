@@ -20,11 +20,12 @@ const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 2048;
 
 /// equal temperment == 120?
-const NUM_BANDS: usize = 8;
+const NUM_BANDS: usize = 20;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
+/// TODO: use BufferedFFT instead of three seperate types.
 #[embassy_executor::task]
 async fn audio_task(
     mic_stream: MicrophoneStream,
