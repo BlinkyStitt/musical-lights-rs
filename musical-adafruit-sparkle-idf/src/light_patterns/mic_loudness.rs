@@ -130,6 +130,7 @@ where
         &mut self,
         spectrum: &FftOutputs<'fft, NUM_FFT_OUTPUTS>,
     ) {
+        // TODO: iter_mean_square_power_density?
         self.fft_out_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());

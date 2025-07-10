@@ -73,10 +73,10 @@ pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
         self.sum_power_into(spectrum.iter_mean_square_power_density(), output_inner);
 
         // // TODO: convert to dbfs here?
-        // for x in output_inner.iter_mut() {
-        //     let rms = x.sqrt();
-        //     *x = 20. * rms.log10();
-        // }
+        for x in output_inner.iter_mut() {
+            let rms = x.sqrt();
+            *x = 20. * rms.log10();
+        }
     }
 
     /// TODO: hmmm. need to think more about this
