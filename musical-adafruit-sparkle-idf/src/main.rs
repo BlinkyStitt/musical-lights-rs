@@ -89,10 +89,10 @@ const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 /// TODO: with 24-bit audio, this should use `size_of::<i32>`
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
-const AGGREGATED_OUTPUTS: usize = 24;
+const AGGREGATED_OUTPUTS: usize = 10;
 
 /// TODO: the mic's floor is -90, but I think we should ignore under 60. or maybe even 30. but we need dbfs calculated correctly first!
-const FLOOR_DB: f32 = -65.;
+const FLOOR_DB: f32 = -90.;
 /// TODO: what should this be? whats the minimum range that we want?
 const FLOOR_PEAK_DB: f32 = FLOOR_DB + 12.;
 
@@ -219,6 +219,7 @@ fn main() -> eyre::Result<()> {
     let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
+    // TODO: thread priority?
     let blink_neopixels_handle = thread::Builder::new()
         .name("blink_neopixels".to_string())
         .spawn(move || {
@@ -447,12 +448,11 @@ fn mic_task(
     let i2s_sample_buf = I2S_SAMPLE_BUF.take();
     info!("i2s_sample_buf created");
 
-    // type MyScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, AGGREGATED_OUTPUTS>;
-    // const SCALE_BUILDER: MyScaleBuilder =
-    //     MyScaleBuilder::uninit(200., 16_000., I2S_SAMPLE_RATE_HZ as f32);
+    type MyScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, AGGREGATED_OUTPUTS>;
+    const SCALE_BUILDER: MyScaleBuilder = MyScaleBuilder::uninit(200., 16_000.);
 
-    type MyScaleBuilder = BarkScaleBuilder<FFT_OUTPUTS>;
-    const SCALE_BUILDER: MyScaleBuilder = MyScaleBuilder::uninit();
+    // type MyScaleBuilder = BarkScaleBuilder<FFT_OUTPUTS>;
+    // const SCALE_BUILDER: MyScaleBuilder = MyScaleBuilder::uninit();
 
     static MIC_LOUDNESS: ConstStaticCell<
         MicLoudnessPattern<
@@ -477,11 +477,12 @@ fn mic_task(
         .frames_per_buffer(I2S_SAMPLE_SIZE as u32)
         .dma_buffer_count(4);
 
-    let clk_cfg = i2s::config::StdClkConfig::new(
-        I2S_SAMPLE_RATE_HZ,
-        i2s::config::ClockSource::Apll,
-        i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
-    );
+    // let clk_cfg = i2s::config::StdClkConfig::new(
+    //     I2S_SAMPLE_RATE_HZ,
+    //     i2s::config::ClockSource::Apll,
+    //     i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
+    // );
+    let clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
 
     // TODO: really not sure about mono or stereo. it seems like all the default setup uses stereo
     // 24 bit audio is padded to 32 bits. how do they pad the sign though?

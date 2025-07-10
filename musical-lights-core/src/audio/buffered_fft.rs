@@ -154,6 +154,7 @@ impl<
         // TODO: this is causing a stack overflow. can't we just give more task size?
         // correct for the windowing function
         // TODO: is there a simd or something for this?
+        // TODO: doing this here uses a bunch of staack space. maybe better to do after we make the conversion to magnitude
         for (s, we) in spectrum.iter_mut().zip(self.scale_outputs) {
             *s *= we;
         }

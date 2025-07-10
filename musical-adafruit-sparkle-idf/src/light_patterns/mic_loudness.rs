@@ -115,8 +115,7 @@ where
         self.peak_ema_min_dbfs = self.peak_ema_min_dbfs.min(self.floor_db);
     }
 
-    /// this should be
-    fn update_ema(&mut self /*, dbfs: &[f32; X] */) {
+    fn update_ema(&mut self) {
         const ALPHA: f32 = 0.1;
 
         // TODO: is there an "average" iter?
@@ -134,9 +133,6 @@ where
         self.fft_out_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());
-
-        // calculating the weights can be slow. yield now
-        // TODO: do some analysis to see if this is always needed. this one can probably be removed
         yield_now();
     }
 
@@ -151,16 +147,15 @@ where
         // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
         self.scale_builder
             .sum_power_into(&self.fft_out_buf, &mut self.scale_out_buf);
+        yield_now();
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
         // Convert each band energy to RMS amplitude in dbfs
+        // TODO: this should maybe be 10. * rms.log10, but I'm really just guessing. read more
         for x in self.scale_out_buf.iter_mut() {
             let rms = x.sqrt();
             *x = 20. * rms.log10();
         }
-
-        // calculating the exponential scale can be slow. yield now
-        // TODO: do some analysis to see if this is always needed. this one can probably be removed
         yield_now();
 
         // TODO: how should we use an AGC?
@@ -181,9 +176,7 @@ where
                 self.update_max(max);
             }
         }
-
         self.update_ema();
-
         yield_now();
 
         for ((loudness, x), sparkle) in self
@@ -196,13 +189,15 @@ where
             let old_loudness = *loudness;
 
             // TODO: scale this on the average instead of the floor? or maybe the midpoint?
-            *loudness = (remap(x, self.floor_db, self.peak_ema_max_dbfs, 0.0, 1.0).clamp(0.0, 1.0)
+            *loudness = (remap(x, self.peak_ema_min_dbfs, self.peak_ema_max_dbfs, 0.0, 1.0)
+                .clamp(0.0, 1.0)
                 * Y as f32) as u8;
 
             // TODO: only sparkle if its the top-most band overall
             // TODO: "band" or "channel"? I'm inconsistent
             *sparkle = *loudness > old_loudness;
         }
+        yield_now();
 
         MicLoudnessTick {
             loudness: &self.loudness,

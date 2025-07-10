@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Bryan Stitt <bryan@stitthappens.com>"]
 edition = "2021"
 resolver = "2"
-rust-version = "1.77"
 
 [[bin]]
 name = "musical-adafruit-sparkle-idf"

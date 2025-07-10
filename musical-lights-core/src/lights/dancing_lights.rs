@@ -91,19 +91,15 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
     }
 
     /// TODO: this X/Y is the opposite of how i usually think of things
-    pub fn update(&mut self, mut loudness: AggregatedBins<Y>) {
+    pub fn update(&mut self, loudness: AggregatedBins<Y>) {
         trace!("{:?}", loudness);
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
         // TODO: what default?
-        let mut current_max = 0.1f32;
+        let mut current_max = 0.0f32;
 
-        // TODO: .0.0 is weird. loudness should be Iter
-        for loudness in loudness.0.iter_mut() {
-            // // TODO: convert loudness to decibels?
-            // *loudness = 20.0 * (*loudness).log10();
-
-            current_max = current_max.max(*loudness);
+        for loudness in loudness.0.iter().copied() {
+            current_max = current_max.max(loudness);
         }
 
         // TODO: decay how fast?

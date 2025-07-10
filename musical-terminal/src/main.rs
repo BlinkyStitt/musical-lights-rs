@@ -23,6 +23,7 @@ const FFT_INPUTS: usize = 4096;
 
 /// equal temperment == 120?
 const NUM_BANDS: usize = 24;
+// const NUM_BANDS: usize = 10;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
