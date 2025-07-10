@@ -7,8 +7,8 @@ use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{
-        AWeighting, AggregatedBins, AggregatedBinsBuilder, BufferedFFT, ExponentialScaleBuilder,
-        FlatWeighting,
+        AWeighting, AggregatedBins, AggregatedBinsBuilder, BarkScaleBuilder, BufferedFFT,
+        ExponentialScaleBuilder, FlatWeighting,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -22,7 +22,7 @@ const MIC_SAMPLES: usize = 512;
 const FFT_INPUTS: usize = 4096;
 
 /// equal temperment == 120?
-const NUM_BANDS: usize = 20;
+const NUM_BANDS: usize = 24;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
@@ -34,7 +34,8 @@ type MyBufferedFFT = BufferedFFT<
     AWeighting<FFT_OUTPUTS>,
     // FlatWeighting<FFT_OUTPUTS>,
 >;
-type ScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>;
+// type ScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>;
+type ScaleBuilder = BarkScaleBuilder<FFT_OUTPUTS>;
 
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
 /// TODO: use BufferedFFT instead of three seperate types.
@@ -79,6 +80,7 @@ async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
 
     // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple bands
     while let Ok(loudness) = rx_loudness.recv_async().await {
+        // debug!("loudness: {:?}", loudness);
         dancing_lights.update(loudness);
     }
 }
@@ -115,7 +117,8 @@ async fn main(spawner: Spawner) {
     // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
     // TODO: I'm never seeing anything in bin 0. that means its working right?
     // TODO: i'm also never seeing anything in bucket 0. that doesn't seem right. need to think more about bass
-    let scale_builder = ExponentialScaleBuilder::new(80.0, 20_000.0, sample_rate);
+    // let scale_builder = ExponentialScaleBuilder::new(80.0, 20_000.0, sample_rate);
+    let scale_builder = BarkScaleBuilder::new(sample_rate);
 
     spawner.must_spawn(audio_task(mic_stream, fft, scale_builder, loudness_tx));
     spawner.must_spawn(lights_task(loudness_rx));

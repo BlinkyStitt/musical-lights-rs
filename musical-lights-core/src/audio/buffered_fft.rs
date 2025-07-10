@@ -85,9 +85,12 @@ impl<
 
         self.weighting.curve_buf(&mut self.scale_outputs);
 
-        for we in self.scale_outputs.iter_mut().take(FFT_OUT - 1).skip(1) {
+        // TODO: i think we should skip the last bin, but that's not looking right
+        for we in self.scale_outputs.iter_mut() {
             *we *= window_output_scaling;
         }
+
+        self.scale_outputs[0] = 1.0;
     }
 
     /// fill the fft buffer with the latest samples and then apply the windowing function
@@ -148,14 +151,15 @@ impl<
 
         trace!("dc bin: {}", spectrum[0].re);
 
+        // TODO: this is causing a stack overflow. can't we just give more task size?
         // correct for the windowing function
+        // TODO: is there a simd or something for this?
         for (s, we) in spectrum.iter_mut().zip(self.scale_outputs) {
             *s *= we;
         }
 
         // correct for the weighting function
         // TODO: i'm really unsure if we should be doing this now or later. i think a-weighting is actually the wrong thing to use since we aren't measuring in SPL
-
         FftOutputs { spectrum }
     }
 }
@@ -163,6 +167,7 @@ impl<
 /// Convert a spectrum into channels made up of varying amounts of bins
 /// TODO: something special for the first bin?
 /// TODO: i'm not really liking this. its spaghetti now. this probably belons on the aggregated amplitude builders.
+#[repr(transparent)]
 pub struct FftOutputs<'fft, const FFT_OUTPUT: usize> {
     spectrum: &'fft [Complex<f32>; FFT_OUTPUT],
 }

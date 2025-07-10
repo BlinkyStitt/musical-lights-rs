@@ -10,7 +10,6 @@ mod light_patterns;
 mod sensor_uart;
 
 use biski64::Biski64Rng;
-use esp_idf_svc::hal::task::thread::ThreadSpawnConfiguration;
 use esp_idf_svc::{
     hal::{
         gpio::{AnyIOPin, Gpio25, Gpio26, Gpio33},
@@ -219,54 +218,42 @@ fn main() -> eyre::Result<()> {
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
     let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
 
-    let blink_neopixels_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"blink_neopixels\0"),
-        priority: 2,
-        ..Default::default()
-    };
-    // blink_neopixels_thread_cfg.stack_size += 1024;
-    blink_neopixels_thread_cfg.set()?;
-
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
-    let blink_neopixels_handle = thread::spawn(move || {
-        blink_neopixels_task(
-            &mut neopixel_onboard,
-            &mut neopixel_external2,
-            rng_1,
-            &STATE,
-            fft_ready_rx,
-        )
-        .inspect_err(|err| {
-            error!("Error in blink_neopixels_task");
-            error!("{err:?}");
-        })
-    });
+    let blink_neopixels_handle = thread::Builder::new()
+        .name("blink_neopixels".to_string())
+        .spawn(move || {
+            blink_neopixels_task(
+                &mut neopixel_onboard,
+                &mut neopixel_external2,
+                rng_1,
+                &STATE,
+                fft_ready_rx,
+            )
+            .inspect_err(|err| {
+                error!("Error in blink_neopixels_task");
+                error!("{err:?}");
+            })
+        })?;
 
     // TODO: is this a good idea? i want the light code running ASAP
     // yield_now();
 
-    let mic_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"mic\0"),
-        priority: 2,
-        ..Default::default()
-    };
-    // TODO: this size does not match what i'm actually seeing. i'm confused
-    // mic_thread_cfg.stack_size += 1024 * 71; // TODO: how much bigger do we actually need? changing this doesn't behave like i expected. i must be missing something
-    mic_thread_cfg.set()?;
-
     // TODO: make sure this has the highest priority?
-    let mic_handle = thread::spawn(move || {
-        mic_task(
-            peripherals.i2s0,
-            pins.gpio26,
-            pins.gpio33,
-            pins.gpio25,
-            &mut fft_ready_tx,
-        )
-        .inspect_err(|err| {
-            error!("Error in mic task: {err}");
-        })
-    });
+    let mic_handle = thread::Builder::new()
+        .name("mic".to_string())
+        .stack_size(16_000)
+        .spawn(move || {
+            mic_task(
+                peripherals.i2s0,
+                pins.gpio26,
+                pins.gpio33,
+                pins.gpio25,
+                &mut fft_ready_tx,
+            )
+            .inspect_err(|err| {
+                error!("Error in mic task: {err}");
+            })
+        })?;
 
     // TODO: is this a good idea? i want the mic code running ASAP
     // yield_now();
@@ -274,46 +261,37 @@ fn main() -> eyre::Result<()> {
     // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
-    let read_from_sensors_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"read_from_sensors\0"),
-        priority: 2,
-        ..Default::default()
-    };
-    // read_from_sensors_thread_cfg.stack_size += 1024 * 64; // TODO: how much bigger do we actually need? this doesn't seem to do anything
-    read_from_sensors_thread_cfg.set()?;
+    let read_from_sensors_handle = thread::Builder::new()
+        .name("read_from_sensors".to_string())
+        .spawn(move || {
+            read_from_sensors_task(
+                message_for_sensors_tx,
+                &PONG_RECEIVED,
+                &STATE,
+                &mut uart_from_sensors,
+            )
+            .inspect_err(|err| {
+                error!("Error in sensor_rx_task");
+                error!("{err:?}");
+            })
+        })?;
 
-    let read_from_sensors_handle = thread::spawn(move || {
-        read_from_sensors_task(
-            message_for_sensors_tx,
-            &PONG_RECEIVED,
-            &STATE,
-            &mut uart_from_sensors,
-        )
-        .inspect_err(|err| {
-            error!("Error in sensor_rx_task");
-            error!("{err:?}");
-        })
-    });
-
-    let send_to_sensors_thread_cfg = ThreadSpawnConfiguration {
-        name: Some(b"send_to_sensors\0"),
-        priority: 2,
-        ..Default::default()
-    };
-    send_to_sensors_thread_cfg.set()?;
-
-    let send_to_sensors_handle = thread::spawn(move || {
-        send_to_sensors_task(
-            message_for_sensors_rx,
-            &PONG_RECEIVED,
-            uart_to_sensors.as_mut(),
-        )
-        .inspect_err(|err| {
-            error!("Error in sensor_tx_task: {err}");
-        })
-    });
+    let send_to_sensors_handle = thread::Builder::new()
+        .name("send_to_sensors".to_string())
+        .spawn(move || {
+            send_to_sensors_task(
+                message_for_sensors_rx,
+                &PONG_RECEIVED,
+                uart_to_sensors.as_mut(),
+            )
+            .inspect_err(|err| {
+                error!("Error in sensor_tx_task: {err}");
+            })
+        })?;
 
     mic_handle.join().unwrap().unwrap();
+    read_from_sensors_handle.join().unwrap().unwrap();
+    send_to_sensors_handle.join().unwrap().unwrap();
 
     Ok(())
 }
@@ -540,6 +518,8 @@ fn mic_task(
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
+        yield_now();
+
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
 
@@ -560,6 +540,7 @@ fn mic_task(
         yield_now();
 
         // TODO: only do the FFT if the sample buffer has the right number of elements
+        // TODO: this is giving a stack overflow
         let spectrum = buffered_fft.fft();
 
         // running the fft can be slow. yield now
@@ -577,6 +558,9 @@ fn mic_task(
         info!("loudness: {}", &mic_loudness_tick);
 
         // TODO: copy loudness into a mutex?
+
+        // TODO: do some analysis to see if this is always needed
+        yield_now();
 
         // TODO: beat detection?
         // TODO: what else? shazam? steve had some ideas
