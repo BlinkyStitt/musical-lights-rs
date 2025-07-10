@@ -5,6 +5,8 @@
 
 use core::borrow::Borrow;
 
+use crate::audio::FftOutputs;
+
 /// N = number of amplitudes
 /// IF N > S/2, there is an error
 /// If N == S/2, there is no aggregation
@@ -35,6 +37,7 @@ impl<const N: usize> Default for AggregatedBins<N> {
     }
 }
 
+/// TODO: I kind of wnat this to be a trait, but a trait can't have const functions
 impl<const N: usize> AggregatedBins<N> {
     const fn new() -> Self {
         Self([0.; N])
@@ -45,24 +48,41 @@ impl<const N: usize> AggregatedBins<N> {
 pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
     type Output: Default;
 
-    fn sum_spectrum<I>(&self, input: I) -> Self::Output
-    where
-        I: IntoIterator,
-        I::Item: Borrow<f32>,
-    {
+    /// return the inner of the output as mut
+    fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; OUT];
+
+    /// TODO: should this be a `bin` function or `bin_map`
+    fn bin_map(&self) -> &[Option<usize>; IN];
+
+    fn loudness(&self, spectrum: &FftOutputs<'_, IN>) -> Self::Output {
         let mut output = Self::Output::default();
 
-        self.sum_power_into(input, &mut output);
+        self.loudness_into(spectrum, &mut output);
 
         output
     }
 
     /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
     /// TODO: use iters?
-    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
+    /// TODO: this should probably be marked as #[inline]
+    /// TODO: this feels derivable. need to practice macros
+    #[inline]
+    fn loudness_into(&self, spectrum: &FftOutputs<IN>, output: &mut Self::Output) {
+        self.sum_power_into(
+            spectrum.iter_mean_square_power_density(),
+            self.as_inner_mut(output),
+        );
+    }
+
+    /// TODO: hmmm. need to think more about this
+    #[inline]
+    fn sum_power_into<I>(&self, input_power: I, output: &mut [f32; OUT])
     where
         I: IntoIterator,
-        I::Item: Borrow<f32>;
+        I::Item: Borrow<f32>,
+    {
+        AggregatedBins::<OUT>::sum_power_into(self.bin_map(), input_power, output);
+    }
 
     /// do setup that can't be done in a const context. defaults to a noop.
     fn init(&mut self) {}
@@ -88,6 +108,7 @@ impl<const OUT: usize> AggregatedBins<OUT> {
     /// The `map` should be something like a Bark Scale or some other exponentially increasing scale
     ///
     /// TODO: i don't think this is amplitudes anymore. cuz we are using power now
+    /// TODO: is a generic iterator on this actually what we want?
     #[inline]
     pub fn sum_power_into<const IN: usize, I>(
         map: &[Option<usize>; IN],

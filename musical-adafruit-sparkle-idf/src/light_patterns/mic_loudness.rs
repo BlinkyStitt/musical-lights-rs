@@ -5,10 +5,11 @@
 //! make it work, make it right, make it fast. don't get caught up making perfect iterators on this first pass!
 use core::f32;
 use std::fmt::Display;
+use std::marker::PhantomData;
 use std::thread::yield_now;
 
 use itertools::{Itertools, MinMaxResult};
-use musical_lights_core::audio::{AggregatedBinsBuilder, FftOutputs};
+use musical_lights_core::audio::{AggregatedBinsBuilder, FftOutputs, Weighting};
 use musical_lights_core::remap;
 
 /// TODO: i'm not sure where the code that turns this heat into a XY matrix belongs. or code for rotating the matrix by frame count
@@ -19,6 +20,7 @@ pub struct MicLoudnessPattern<
     const X: usize,
     const Y: usize,
     S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
+    W: Weighting<FFT_OUTPUTS>,
 > {
     fft_out_buf: [f32; FFT_OUTPUTS],
     weights: [f32; FFT_OUTPUTS],
@@ -37,6 +39,8 @@ pub struct MicLoudnessPattern<
     sparkle_chance: f32,
     peak_ema_min_dbfs: f32,
     peak_ema_max_dbfs: f32,
+    ema_dbfs: f32,
+    _weighting: PhantomData<W>,
 }
 
 /// TODO: i'm not sure the bet way to pack this. not worth optimizing at this point, so lets KISS.
@@ -47,12 +51,12 @@ pub struct MicLoudnessTick<'a, const X: usize, const Y: usize> {
     pub sparkle: &'a [bool; X],
 }
 
-impl<const FFT_OUTPUTS: usize, const N: usize, const X: usize, const Y: usize, S>
-    MicLoudnessPattern<FFT_OUTPUTS, N, X, Y, S>
+impl<const FFT_OUTPUTS: usize, const N: usize, const X: usize, const Y: usize, S, W>
+    MicLoudnessPattern<FFT_OUTPUTS, N, X, Y, S, W>
 where
     S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
+    W: Weighting<FFT_OUTPUTS>,
 {
-    /// TODO: weights aren't right. need to do more
     pub const fn new(
         uninit_scale_builder: S,
         floor_db: f32,
@@ -64,6 +68,8 @@ where
 
         let peak_ema_min_dbfs = floor_db;
         let peak_ema_max_dbfs = floor_peak_db;
+
+        let ema_dbfs = (floor_db + floor_peak_db) / 2.0;
 
         Self {
             fft_out_buf: [0.0; FFT_OUTPUTS],
@@ -77,11 +83,16 @@ where
             sparkle_chance,
             peak_ema_min_dbfs,
             peak_ema_max_dbfs,
+            ema_dbfs,
+            _weighting: PhantomData::<W>,
         }
     }
 
     /// You must call this before using new!
-    pub fn init(&mut self) {
+    pub fn init(&mut self, weighting: W) {
+        // TODO: we have two different patterns here now. i don't like that much. should have weighting be a struct with the map inside of it
+        weighting.curve_buf(&mut self.weights);
+
         self.scale_builder.init();
     }
 
@@ -114,22 +125,22 @@ where
         self.peak_ema_min_dbfs = self.peak_ema_min_dbfs.min(self.floor_db);
     }
 
+    /// this should be
     fn update_ema(&mut self /*, dbfs: &[f32; X] */) {
         const ALPHA: f32 = 0.1;
 
         // TODO: is there an "average" iter?
         // TODO: should we just take the midpoint of the min and max? probably not
-        // TODO: should this be a real average instead of an ema?
-        let avg_dbfs = self.scale_out_buf.iter().sum::<f32>() / self.scale_out_buf.len() as f32;
+        // TODO: should this be a real average instead of an ema? sum the samples buffer
+        let avg_dbfs = self.fft_out_buf.iter().sum::<f32>() / self.fft_out_buf.len() as f32;
 
-        todo!();
+        self.ema_dbfs = (self.ema_dbfs * (1. - ALPHA)) + avg_dbfs * ALPHA;
     }
 
-    /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
-    pub fn tick_fft_outputs<'fft, const NUM_FFT_OUTPUTS: usize>(
+    fn fill_fft_out_buf<'fft, const NUM_FFT_OUTPUTS: usize>(
         &mut self,
-        spectrum: FftOutputs<'fft, NUM_FFT_OUTPUTS>,
-    ) -> MicLoudnessTick<'_, X, Y> {
+        spectrum: &FftOutputs<'fft, NUM_FFT_OUTPUTS>,
+    ) {
         self.fft_out_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());
@@ -137,25 +148,27 @@ where
         // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
         // also apply weigthing (a-weighting or some other equal loudness countour)
         // TODO: double check this. too much cargo culting
-        for (x, w) in self
-            .fft_out_buf
-            .iter_mut()
-            .zip(&self.weights)
-            .take(FFT_OUTPUTS - 1)
-            .skip(1)
-        {
-            // *x *= 2.0 * w;
+        for (i, (x, w)) in self.fft_out_buf.iter_mut().zip(&self.weights).enumerate() {
+            // the 2x is already included
             *x *= w;
         }
 
         // calculating the weights can be slow. yield now
         // TODO: do some analysis to see if this is always needed. this one can probably be removed
         yield_now();
+    }
+
+    /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
+    pub fn tick_fft_outputs<'fft, const NUM_FFT_OUTPUTS: usize>(
+        &mut self,
+        spectrum: &FftOutputs<'fft, NUM_FFT_OUTPUTS>,
+    ) -> MicLoudnessTick<'_, X, Y> {
+        self.fill_fft_out_buf(spectrum);
 
         // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
         // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
         self.scale_builder
-            .sum_into(&self.fft_out_buf, &mut self.scale_out_buf);
+            .sum_power_into(&self.fft_out_buf, &mut self.scale_out_buf);
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
         // Convert each band energy to RMS amplitude in dbfs

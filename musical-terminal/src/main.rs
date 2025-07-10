@@ -7,8 +7,8 @@ use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{
-        AWeighting, AggregatedBins, AggregatedBinsBuilder, AudioBuffer, BufferedFFT,
-        ExponentialScaleBuilder, FFT, FlatWeighting,
+        AggregatedBins, AggregatedBinsBuilder, AudioBuffer, BufferedFFT, ExponentialScaleBuilder,
+        FlatWeighting,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -43,9 +43,7 @@ async fn audio_task(
 
         let fft_outputs = fft.fft();
 
-        let x = fft_outputs.iter_mean_square_power_density();
-
-        let loudness = scale_builder.sum_spectrum(fft_outputs.iter_mean_square_power_density());
+        let loudness = scale_builder.loudness(&fft_outputs);
 
         // TODO: decibels here?
 
@@ -63,10 +61,13 @@ async fn audio_task(
 async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
     // TODO: what should these be?
     let gradient = Gradient::new_mermaid();
-    let peak_decay = 0.99;
+    let peak_decay = 0.90;
 
     let mut dancing_lights =
         DancingLights::<8, NUM_BANDS, { 8 * NUM_BANDS }>::new(gradient, peak_decay);
+
+    // TODO: this is in the idf code. need to more to core
+    // let mut mic_loudness = MicLoudnessPattern::new();
 
     // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple bands
     while let Ok(loudness) = rx_loudness.recv_async().await {

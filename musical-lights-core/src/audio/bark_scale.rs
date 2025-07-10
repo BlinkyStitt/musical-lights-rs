@@ -1,6 +1,4 @@
-use core::borrow::Borrow;
-
-use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
+use crate::audio::{FftOutputs, amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 
@@ -53,12 +51,13 @@ impl<const IN: usize> AggregatedBinsBuilder<IN, BARK_SCALE_OUT> for BarkScaleBui
     type Output = BarkScaleAmplitudes;
 
     #[inline]
-    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<f32>,
-    {
-        AggregatedBins::<BARK_SCALE_OUT>::sum_power_into(&self.map, input, &mut output.0.0);
+    fn bin_map(&self) -> &[Option<usize>; IN] {
+        &self.map
+    }
+
+    #[inline]
+    fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; BARK_SCALE_OUT] {
+        &mut output.0.0
     }
 }
 

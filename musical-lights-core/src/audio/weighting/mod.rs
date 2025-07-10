@@ -12,16 +12,23 @@ pub trait Weighting<const N: usize> {
     fn weight(&self, n: usize) -> f32;
 
     /// bin 0 is special. we want to leave it alone
-    /// TODO: think more about this
-    fn weight_skip_0(&self, n: usize) -> f32 {
-        if n == 0 { 1.0 } else { self.weight(n) }
+    /// the last bin is also apparently special.
+    /// we also double it because the fft outputs are only half the wave. i think thats correct.
+    /// TODO: think more about this. read more
+    /// TODO: this can't be const because we are in a trait. noooo
+    fn weight_skip_ends(&self, n: usize) -> f32 {
+        if n == 0 || n == N - 1 {
+            1.0
+        } else {
+            self.weight(n) * 2.0
+        }
     }
 
     #[inline]
     fn curve(&self) -> [f32; N] {
         let mut window = [0.0; N];
 
-        self.curve_in_place(&mut window);
+        self.curve_buf(&mut window);
 
         window
     }
@@ -29,13 +36,13 @@ pub trait Weighting<const N: usize> {
     /// TODO: whats the rusty name for this?
     /// TODO: what if we want the decibels adjustment instead of the
     #[inline]
-    fn curve_in_place(&self, output: &mut [f32; N]) {
+    fn curve_buf(&self, output: &mut [f32; N]) {
         output.iter_mut().set_from(self.curve_iter());
     }
 
-    /// Iterators are cool.
+    /// Iterators are cool. They aren't const, but traits aren't either so I guess its fine.
     #[inline]
     fn curve_iter(&self) -> impl Iterator<Item = f32> {
-        (0..N).map(|x| self.weight(x))
+        (0..N).map(|x| self.weight_skip_ends(x))
     }
 }

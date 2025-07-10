@@ -95,9 +95,9 @@ const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 const AGGREGATED_OUTPUTS: usize = 20;
 
 /// TODO: the mic's floor is -90, but I think we should ignore under 60. or maybe even 30. but we need dbfs calculated correctly first!
-const FLOOR_DB: f32 = -65.;
+const FLOOR_DB: f32 = -90.;
 /// TODO: what should this be? whats the minimum range that we want?
-const FLOOR_PEAK_DB: f32 = FLOOR_DB + 24.;
+const FLOOR_PEAK_DB: f32 = FLOOR_DB + 12.;
 
 // TODO: 20/24 buckets don't fit inside of 256 or 400!
 // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
@@ -446,10 +446,7 @@ fn mic_task(
     // TODO: i don't think a-weighting is actually what we want
     // TODO: maybe k-weighting? maybe something much more advanced?
     // const WEIGHTING: AWeighting<FFT_OUTPUTS> = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
-    const WEIGHTING: FlatWeighting<FFT_OUTPUTS> = FlatWeighting {};
-    static WEIGHTS: ConstStaticCell<[f32; FFT_OUTPUTS]> = ConstStaticCell::new([0.0; FFT_OUTPUTS]);
-    let weights = WEIGHTS.take();
-    WEIGHTING.curve_in_place(weights);
+    type MyWeighting = FlatWeighting<FFT_OUTPUTS>;
 
     type MyBufferedFFT =
         BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>;
@@ -480,6 +477,7 @@ fn mic_task(
             AGGREGATED_OUTPUTS,
             DEBUGGING_Y,
             MyScaleBuilder,
+            MyWeighting,
         >,
     > = ConstStaticCell::new(MicLoudnessPattern::new(
         SCALE_BUILDER,
@@ -488,7 +486,7 @@ fn mic_task(
         1.0,
     ));
     let mic_loudness = MIC_LOUDNESS.take();
-    mic_loudness.init();
+    mic_loudness.init(MyWeighting {});
     info!("mic_loudness created");
 
     // TODO: what dma frame counts? what buffer count?
@@ -567,7 +565,9 @@ fn mic_task(
         yield_now();
 
         // TODO: still lots to think about on this
-        let mic_loudness_tick = mic_loudness.tick_fft_outputs(spectrum);
+        let mic_loudness_tick = mic_loudness.tick_fft_outputs(&spectrum);
+
+        drop(spectrum);
 
         // calculating the mic_loudness_tick can be slow. yield now
         // TODO: do some analysis to see if this is always needed

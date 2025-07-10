@@ -1,9 +1,6 @@
 //! TODO: i don't think this is actually how shazam works
-
-use core::borrow::Borrow;
-
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
-use crate::audio::bin_to_frequency;
+use crate::audio::{FftOutputs, bin_to_frequency};
 
 pub const SHAZAM_SCALE_OUT: usize = 4;
 
@@ -49,6 +46,14 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
 impl<const IN: usize> AggregatedBinsBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScaleBuilder<IN> {
     type Output = ShazamAmplitudes;
 
+    fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; SHAZAM_SCALE_OUT] {
+        &mut output.0.0
+    }
+
+    fn bin_map(&self) -> &[Option<usize>; IN] {
+        &self.map
+    }
+
     // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
     //     todo!("refactor");
     //     // let x = AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::rms::<IN>(&self.map, &self.scaling, x);
@@ -58,12 +63,12 @@ impl<const IN: usize> AggregatedBinsBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScal
 
     /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
     #[inline]
-    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<f32>,
-    {
-        AggregatedBins::sum_power_into(&self.map, input, &mut output.0.0)
+    fn loudness_into(&self, spectrum: &FftOutputs<IN>, output: &mut Self::Output) {
+        AggregatedBins::sum_power_into(
+            &self.map,
+            spectrum.iter_mean_square_power_density(),
+            &mut output.0.0,
+        )
     }
 }
 

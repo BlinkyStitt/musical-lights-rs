@@ -1,14 +1,12 @@
-//! todo: better name
-use core::borrow::Borrow;
-
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
-use crate::audio::frequency_to_bin;
+use crate::audio::{FftOutputs, frequency_to_bin};
 use crate::logging::info;
 
 #[allow(unused_imports)]
 use micromath::F32Ext;
 
 /// TODO: do this more efficiently?
+/// todo: better name?
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
@@ -50,24 +48,12 @@ impl<const IN: usize, const OUT: usize> AggregatedBinsBuilder<IN, OUT>
 {
     type Output = ExponentialScaleAmplitudes<OUT>;
 
-    // /// TODO: rename this function
-    // fn aggregate(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-    //     todo!("refactor");
+    fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; OUT] {
+        &mut output.0.0
+    }
 
-    //     // let x = AggregatedAmplitudes::rms(&self.map, &self.scaling, x);
-
-    //     // ExponentialScaleAmplitudes(x)
-    // }
-
-    /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
-    /// TODO: Output should require a trait that returns a &mut [f32; OUT]
-    #[inline]
-    fn sum_power_into<I>(&self, input: I, output: &mut Self::Output)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<f32>,
-    {
-        AggregatedBins::sum_power_into(&self.map, input, &mut output.0.0)
+    fn bin_map(&self) -> &[Option<usize>; IN] {
+        &self.map
     }
 
     /// TODO: this needs to be const and done during the new.

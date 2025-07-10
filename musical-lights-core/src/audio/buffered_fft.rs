@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use std::thread::yield_now;
 
-use crate::{audio::Samples, logging::debug, windows::Window};
+use crate::{audio::Samples, logging::trace, windows::Window};
 use circular_buffer::CircularBuffer;
 use num::Complex;
 
@@ -18,7 +18,6 @@ pub struct BufferedFFT<
     sample_buf: CircularBuffer<FFT_IN, f32>,
     /// TODO: this should be the existing FFT object so we can reuse that code. it wasn't built with buffers in mind most of the time though. not a terrible refactor
     fft_in_buf: [f32; FFT_IN],
-    fft_out_buf: [f32; FFT_OUT],
     input_window: PhantomData<WI>,
     window_scale_inputs: [f32; FFT_IN],
     /// scaling to correct for the windowing function
@@ -47,7 +46,6 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Wind
         Self {
             sample_buf: CircularBuffer::new(),
             fft_in_buf: [0.0; FFT_IN],
-            fft_out_buf: [0.0; FFT_OUT],
             input_window: PhantomData::<WI>,
             window_scale_inputs: [1.0; FFT_IN],
             window_scale_outputs: 1.0,
@@ -57,6 +55,7 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Wind
     /// create an initialized buffered fft.
     /// useful if you don't need this statically allocated.
     /// `init` is called for you.
+    /// TODO: refactor the window to be const and then we can make this const
     pub fn new() -> Self {
         let mut x = Self::uninit();
 
@@ -128,13 +127,13 @@ impl<const SAMPLE_IN: usize, WI: Window<HARD_CODED_FFT_INPUTS>>
         //>  imaginary part of the DC bin, it must be cleared before computing the amplitudes
         // TODO: what does this even mean?
         // TODO: print this once per second. need an every_n_milliseconds macro like fastled has
-        debug!(
+        trace!(
             "real-valued coefficient at nyquist frequency: {}",
             spectrum[0].im
         );
         spectrum[0].im = 0.0;
 
-        debug!("dc bin: {}", spectrum[0].re);
+        trace!("dc bin: {}", spectrum[0].re);
 
         // correct for the windowing function
         for s in spectrum.iter_mut() {
@@ -158,24 +157,22 @@ impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
         &self.spectrum
     }
 
+    /// calculate the magnitude of the sample
     /// TODO: really not sure about this
     #[inline]
     pub fn iter_amplitude(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| {
-            // calculate the magnitude of the sample
-            s.norm()
-        })
+        self.spectrum.iter().map(|s| s.norm())
     }
 
+    /// calculate the square of the magnitude of the sample (this is faster because norm needs a sqrt)
     /// TODO: really not sure about this
     #[inline]
     pub fn iter_power(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| {
-            // calculate the square of the magnitude of the sample (this is faster because norm needs a sqrt)
-            s.norm_sqr()
-        })
+        self.spectrum.iter().map(|s| s.norm_sqr())
     }
 
+    /// i think this is what we actually want to use. but i'm really not sure
+    /// TODO: read more
     #[inline]
     pub fn iter_mean_square_power_density(&self) -> impl Iterator<Item = f32> {
         self.iter_power()
