@@ -92,9 +92,9 @@ const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 const AGGREGATED_OUTPUTS: usize = 10;
 
 /// TODO: the mic's floor is -90, but I think we should ignore under 60. or maybe even 30. but we need dbfs calculated correctly first!
-const FLOOR_DB: f32 = -90.;
+const FLOOR_DB: f32 = -65.;
 /// TODO: what should this be? whats the minimum range that we want?
-const FLOOR_PEAK_DB: f32 = FLOOR_DB + 12.;
+const FLOOR_PEAK_DB: f32 = FLOOR_DB + 24.;
 
 // TODO: 20/24 buckets don't fit inside of 256 or 400!
 // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
