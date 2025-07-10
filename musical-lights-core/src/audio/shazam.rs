@@ -33,10 +33,12 @@ impl<const FFT_OUT: usize> AggregatedBinsBuilder<FFT_OUT, SHAZAM_SCALE_OUT>
 {
     type Output = ShazamAmplitudes;
 
+    #[inline]
     fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; SHAZAM_SCALE_OUT] {
         &mut output.0.0
     }
 
+    #[inline]
     fn bin_map(&self) -> &[Option<usize>; FFT_OUT] {
         &self.map
     }

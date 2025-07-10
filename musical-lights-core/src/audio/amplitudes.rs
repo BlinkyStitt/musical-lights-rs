@@ -48,7 +48,7 @@ impl<const N: usize> AggregatedBins<N> {
 pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
     type Output: Default;
 
-    /// return the inner of the output as mut
+    /// return the inner floats of the output so they can be mutated
     fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; OUT];
 
     /// TODO: should this be a `bin` function or `bin_map`
@@ -70,13 +70,12 @@ pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
     fn loudness_into(&self, spectrum: &FftOutputs<IN>, output: &mut Self::Output) {
         let output_inner = self.as_inner_mut(output);
 
-        self.sum_power_into(spectrum.iter_power(), output_inner);
+        self.sum_power_into(spectrum.iter_mean_square_power_density(), output_inner);
 
         // // TODO: convert to dbfs here?
         for x in output_inner.iter_mut() {
             let rms = x.sqrt();
-            // *x = 20. * rms.log10();
-            *x = rms;
+            *x = 20. * rms.log10();
         }
     }
 

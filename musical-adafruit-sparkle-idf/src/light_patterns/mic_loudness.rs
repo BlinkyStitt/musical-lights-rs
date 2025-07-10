@@ -130,7 +130,7 @@ where
         &mut self,
         spectrum: &FftOutputs<'fft, NUM_FFT_OUTPUTS>,
     ) {
-        // TODO: iter_mean_square_power_density?
+        // TODO: iter_mean_square_power_density? or just iter_power?
         self.fft_out_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());
@@ -142,6 +142,7 @@ where
         &mut self,
         spectrum: &FftOutputs<'fft, NUM_FFT_OUTPUTS>,
     ) -> MicLoudnessTick<'_, X, Y> {
+        // TODO: use loudness_into instead?
         self.fill_fft_out_buf(spectrum);
 
         // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
@@ -153,6 +154,7 @@ where
 
         // Convert each band energy to RMS amplitude in dbfs
         // TODO: this should maybe be 10. * rms.log10, but I'm really just guessing. read more
+        // TODO: if this is a big buf, we might need to yield more often
         for x in self.scale_out_buf.iter_mut() {
             let rms = x.sqrt();
             *x = 20. * rms.log10();
@@ -189,10 +191,9 @@ where
             // capture the previous loudness so we can compare
             let old_loudness = *loudness;
 
-            // TODO: scale this on the average instead of the floor? or maybe the midpoint?
-            *loudness = (remap(x, self.peak_ema_min_dbfs, self.peak_ema_max_dbfs, 0.0, 1.0)
-                .clamp(0.0, 1.0)
-                * Y as f32) as u8;
+            // TODO: scale this on the average instead of the floor? or maybe cut the bottom 25%? `a` and `c` definitely need thought
+            *loudness = (remap(x, self.floor_db, self.peak_ema_max_dbfs, 0.0, Y as f32)
+                .clamp(0.0, Y as f32)) as u8;
 
             // TODO: only sparkle if its the top-most band overall
             // TODO: "band" or "channel"? I'm inconsistent

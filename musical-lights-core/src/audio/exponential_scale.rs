@@ -46,10 +46,12 @@ impl<const IN: usize, const OUT: usize> AggregatedBinsBuilder<IN, OUT>
 {
     type Output = ExponentialScaleAmplitudes<OUT>;
 
+    #[inline]
     fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; OUT] {
         &mut output.0.0
     }
 
+    #[inline]
     fn bin_map(&self) -> &[Option<usize>; IN] {
         &self.map
     }
