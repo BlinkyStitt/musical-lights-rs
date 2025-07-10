@@ -85,7 +85,7 @@ pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
     }
 
     /// do setup that can't be done in a const context. defaults to a noop.
-    fn init(&mut self) {}
+    fn init(&mut self, sample_rate_hz: f32);
 }
 
 /// TODO: From trait won't work because we need some state (the precomputed equal loudness curves)

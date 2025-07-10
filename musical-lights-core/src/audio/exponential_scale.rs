@@ -13,7 +13,6 @@ pub struct ExponentialScaleBuilder<const IN: usize, const OUT: usize> {
     /// TODO: these used to be args on new, but its easier to keep them here. maybe we can think of a better const builder pattern
     min_freq: f32,
     max_freq: f32,
-    sample_rate_hz: f32,
     /// index is the input id. the value is the output id. if none, the input is ignored
     /// TODO: do something fancy with ranges instead
     map: [Option<usize>; IN],
@@ -27,18 +26,17 @@ pub struct ExponentialScaleAmplitudes<const OUT: usize>(pub AggregatedBins<OUT>)
 
 /// bins in, bands/channels out
 impl<const IN: usize, const OUT: usize> ExponentialScaleBuilder<IN, OUT> {
-    pub const fn uninit(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
+    pub const fn uninit(min_freq: f32, max_freq: f32) -> Self {
         Self {
             min_freq,
             max_freq,
-            sample_rate_hz,
             map: [None; IN],
         }
     }
 
     pub fn new(min_freq: f32, max_freq: f32, sample_rate_hz: f32) -> Self {
-        let mut x = Self::uninit(min_freq, max_freq, sample_rate_hz);
-        x.init();
+        let mut x = Self::uninit(min_freq, max_freq);
+        x.init(sample_rate_hz);
         x
     }
 }
@@ -58,21 +56,21 @@ impl<const IN: usize, const OUT: usize> AggregatedBinsBuilder<IN, OUT>
 
     /// TODO: this needs to be const and done during the new.
     /// TODO: how can we use types to be sure this init gets called
-    fn init(&mut self) {
+    fn init(&mut self, sample_rate_hz: f32) {
         assert!(
-            self.sample_rate_hz / 2.0 >= self.max_freq,
+            sample_rate_hz / 2.0 >= self.max_freq,
             "sample rate too low. must be at least double the maximum frequency"
         );
 
         // always skip the very first bin. it is too noisy
         // TODO: actually the very first bin isn't noise. its the average across all bins (i think)
-        let min_bin = frequency_to_bin(self.min_freq, self.sample_rate_hz, IN);
+        let min_bin = frequency_to_bin(self.min_freq, sample_rate_hz, IN);
 
         // TODO: off by 1?
-        let max_bin = frequency_to_bin(self.max_freq, self.sample_rate_hz, IN) + 1;
+        let max_bin = frequency_to_bin(self.max_freq, sample_rate_hz, IN) + 1;
 
         // TODO: this info doesn't show on start for some reason.
-        let frequency_resolution = self.sample_rate_hz / 2.0 / (IN as f32);
+        let frequency_resolution = sample_rate_hz / 2.0 / (IN as f32);
         info!("frequency resolution = {}", frequency_resolution);
 
         let e = find_e(OUT as u32, min_bin as u32, max_bin as u32).unwrap();

@@ -30,21 +30,6 @@ impl<const BINS: usize> BarkScaleBuilder<BINS> {
 
         BarkScaleBuilder { map, bin_counts }
     }
-
-    pub fn init(&mut self, sample_rate_hz: f32) {
-        for (i, x) in self.map.iter_mut().enumerate() {
-            let f = bin_to_frequency(i, sample_rate_hz, BINS);
-
-            // bark is 1-24, but we want 0-23
-            let b = bark_scale(f).map(|x| x - 1);
-
-            // trace!("{} {} = {:?}", i, f, b);
-
-            *x = b;
-        }
-
-        bin_counts_from_map_buf(&self.map, &mut self.bin_counts);
-    }
 }
 
 impl<const IN: usize> AggregatedBinsBuilder<IN, BARK_SCALE_OUT> for BarkScaleBuilder<IN> {
@@ -58,6 +43,22 @@ impl<const IN: usize> AggregatedBinsBuilder<IN, BARK_SCALE_OUT> for BarkScaleBui
     #[inline]
     fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; BARK_SCALE_OUT] {
         &mut output.0.0
+    }
+
+    fn init(&mut self, sample_rate_hz: f32) {
+        for (i, x) in self.map.iter_mut().enumerate() {
+            let f = bin_to_frequency(i, sample_rate_hz, IN);
+
+            // bark is 1-24, but we want 0-23
+            // TODO: do we want a 25th bin thats all the highest frequencies?
+            let b = bark_scale(f).map(|x| x - 1);
+
+            // trace!("{} {} = {:?}", i, f, b);
+
+            *x = b;
+        }
+
+        bin_counts_from_map_buf(&self.map, &mut self.bin_counts);
     }
 }
 

@@ -82,8 +82,8 @@ where
     }
 
     /// You must call this before using new!
-    pub fn init(&mut self) {
-        self.scale_builder.init();
+    pub fn init(&mut self, sample_rate_hz: f32) {
+        self.scale_builder.init(sample_rate_hz);
     }
 
     /// TODO: i need to learn more about AGC because I think that's the right thing to use here

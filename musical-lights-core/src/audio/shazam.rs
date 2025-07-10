@@ -21,8 +21,28 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
         Self { map }
     }
 
+    pub fn new(sample_rate_hz: f32) -> Self {
+        let mut x = Self::uninit();
+        x.init(sample_rate_hz);
+        x
+    }
+}
+
+impl<const FFT_OUT: usize> AggregatedBinsBuilder<FFT_OUT, SHAZAM_SCALE_OUT>
+    for ShazamScaleBuilder<FFT_OUT>
+{
+    type Output = ShazamAmplitudes;
+
+    fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; SHAZAM_SCALE_OUT] {
+        &mut output.0.0
+    }
+
+    fn bin_map(&self) -> &[Option<usize>; FFT_OUT] {
+        &self.map
+    }
+
     /// TODO: how can we use types to be sure this init gets called
-    pub fn init(&mut self, sample_rate_hz: f32) {
+    fn init(&mut self, sample_rate_hz: f32) {
         // TODO: dynamically create weights (its always just 1.0 for now so no need)
 
         for (i, x) in self.map.iter_mut().enumerate() {
@@ -36,34 +56,9 @@ impl<const FFT_OUT: usize> ShazamScaleBuilder<FFT_OUT> {
         }
     }
 
-    pub fn new(sample_rate_hz: f32) -> Self {
-        let mut x = Self::uninit();
-        x.init(sample_rate_hz);
-        x
-    }
-}
-
-impl<const IN: usize> AggregatedBinsBuilder<IN, SHAZAM_SCALE_OUT> for ShazamScaleBuilder<IN> {
-    type Output = ShazamAmplitudes;
-
-    fn as_inner_mut<'a>(&self, output: &'a mut Self::Output) -> &'a mut [f32; SHAZAM_SCALE_OUT] {
-        &mut output.0.0
-    }
-
-    fn bin_map(&self) -> &[Option<usize>; IN] {
-        &self.map
-    }
-
-    // fn mean_square_power_densisty(&self, x: WeightedAmplitudes<IN>) -> Self::Output {
-    //     todo!("refactor");
-    //     // let x = AggregatedAmplitudes::<SHAZAM_SCALE_OUT>::rms::<IN>(&self.map, &self.scaling, x);
-
-    //     // ShazamAmplitudes(x)
-    // }
-
     /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
     #[inline]
-    fn loudness_into(&self, spectrum: &FftOutputs<IN>, output: &mut Self::Output) {
+    fn loudness_into(&self, spectrum: &FftOutputs<FFT_OUT>, output: &mut Self::Output) {
         AggregatedBins::sum_power_into(
             &self.map,
             spectrum.iter_mean_square_power_density(),

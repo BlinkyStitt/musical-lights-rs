@@ -469,7 +469,7 @@ fn mic_task(
         1.0,
     ));
     let mic_loudness = MIC_LOUDNESS.take();
-    mic_loudness.init();
+    mic_loudness.init(I2S_SAMPLE_RATE_HZ as f32);
     info!("mic_loudness created");
 
     // TODO: what dma frame counts? what buffer count?
