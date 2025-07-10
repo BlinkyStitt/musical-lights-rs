@@ -8,6 +8,7 @@ use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{
         AWeighting, AggregatedBins, AggregatedBinsBuilder, BufferedFFT, ExponentialScaleBuilder,
+        FlatWeighting,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -31,6 +32,7 @@ type MyBufferedFFT = BufferedFFT<
     FFT_OUTPUTS,
     HanningWindow<FFT_INPUTS>,
     AWeighting<FFT_OUTPUTS>,
+    // FlatWeighting<FFT_OUTPUTS>,
 >;
 type ScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>;
 

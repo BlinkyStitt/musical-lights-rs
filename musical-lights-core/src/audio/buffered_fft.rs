@@ -24,15 +24,13 @@ pub struct BufferedFFT<
     /// TODO: this should be the existing FFT object so we can reuse that code. it wasn't built with buffers in mind most of the time though. not a terrible refactor
     fft_in_buf: [f32; FFT_IN],
     input_window: PhantomData<WI>,
-    window_scale_inputs: [f32; FFT_IN],
-    /// scaling to correct for the windowing function
-    window_scale_outputs: f32,
-    /// Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
-    /// also apply weigthing (a-weighting or some other equal loudness countour)
+    scale_inputs: [f32; FFT_IN],
+    /// scaling to correct for the windowing function and equal loudness countours.
+    /// Collapses to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
     /// TODO: double check this. too much cargo culting
     /// TODO: WE should just own weights itself
     weighting: WE,
-    weights: [f32; FFT_OUT],
+    scale_outputs: [f32; FFT_OUT],
 }
 
 impl<
@@ -55,10 +53,9 @@ impl<
             sample_buf: CircularBuffer::new(),
             fft_in_buf: [0.0; FFT_IN],
             input_window: PhantomData::<WI>,
-            window_scale_inputs: [1.0; FFT_IN],
-            window_scale_outputs: 1.0,
+            scale_inputs: [1.0; FFT_IN],
             weighting,
-            weights: [1.0; FFT_OUT],
+            scale_outputs: [1.0; FFT_OUT],
         }
     }
 
@@ -80,28 +77,28 @@ impl<
     pub fn init(&mut self) {
         self.sample_buf.fill(0.0);
 
-        // use this to undo the reduction from the window scaling
-        self.window_scale_outputs = WI::output_scaling();
+        // the inputs are reduced by the windowing function
+        WI::apply_windows(&mut self.scale_inputs);
 
-        WI::apply_windows(&mut self.window_scale_inputs);
+        // this undoes the reduction from the window scaling
+        let window_output_scaling = WI::output_scaling();
 
-        // TODO: weights works differently than windows. make them work the same?
-        self.weighting.curve_buf(&mut self.weights);
+        self.weighting.curve_buf(&mut self.scale_outputs);
+
+        for we in self.scale_outputs.iter_mut().take(FFT_OUT - 1).skip(1) {
+            *we *= window_output_scaling;
+        }
     }
 
     /// fill the fft buffer with the latest samples and then apply the windowing function
     /// remember to apply window scaling later!
-    fn fill_fft_buf_with_windows(&mut self) {
+    fn fill_fft_in_buf(&mut self) {
         // first, we load buffer up with the samples (TODO: move this to a helper function?)
         let (a, b) = self.sample_buf.as_slices();
         self.fft_in_buf[..a.len()].copy_from_slice(a);
         self.fft_in_buf[a.len()..].copy_from_slice(b);
 
-        for (x, wi) in self
-            .fft_in_buf
-            .iter_mut()
-            .zip(self.window_scale_inputs.iter())
-        {
+        for (x, wi) in self.fft_in_buf.iter_mut().zip(self.scale_inputs.iter()) {
             *x *= wi;
         }
     }
@@ -125,7 +122,7 @@ impl<
     /// TODO: not sure what type to put here for the output? WeightedOutputs?
     /// TODO: what should this function be called?
     pub fn fft(&mut self) -> FftOutputs<'_, HARD_CODED_FFT_OUTPUTS> {
-        self.fill_fft_buf_with_windows();
+        self.fill_fft_in_buf();
 
         // TODO: yield here with a specific compile time feature
         // TODO: test if we need this and where
@@ -152,14 +149,14 @@ impl<
         trace!("dc bin: {}", spectrum[0].re);
 
         // correct for the windowing function
-        for s in spectrum.iter_mut() {
-            *s *= self.window_scale_outputs;
+        for (s, we) in spectrum.iter_mut().zip(self.scale_outputs) {
+            *s *= we;
         }
 
-        FftOutputs {
-            spectrum,
-            weights: &self.weights,
-        }
+        // correct for the weighting function
+        // TODO: i'm really unsure if we should be doing this now or later. i think a-weighting is actually the wrong thing to use since we aren't measuring in SPL
+
+        FftOutputs { spectrum }
     }
 }
 
@@ -168,7 +165,6 @@ impl<
 /// TODO: i'm not really liking this. its spaghetti now. this probably belons on the aggregated amplitude builders.
 pub struct FftOutputs<'fft, const FFT_OUTPUT: usize> {
     spectrum: &'fft [Complex<f32>; FFT_OUTPUT],
-    weights: &'fft [f32; FFT_OUTPUT],
 }
 
 impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
@@ -176,11 +172,6 @@ impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
     #[inline]
     pub fn spectrum(&self) -> &[Complex<f32>; FFT_OUTPUT] {
         self.spectrum
-    }
-
-    #[inline]
-    pub fn weights(&self) -> &[f32; FFT_OUTPUT] {
-        self.weights
     }
 
     /// calculate the magnitude of the sample
@@ -204,8 +195,7 @@ impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
     #[inline]
     pub fn iter_mean_square_power_density(&self) -> impl Iterator<Item = f32> {
         self.iter_power()
-            .zip(self.weights)
-            .map(|(p, we)| p / (FFT_OUTPUT * FFT_OUTPUT) as f32 * we)
+            .map(|p| p / (FFT_OUTPUT * FFT_OUTPUT) as f32)
     }
 
     /*
@@ -222,23 +212,23 @@ impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
     }
 
     pub fn weighted_sound_pressure_level(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
+        self.spectrum.iter().map(|s| todo!())
     }
 
     pub fn weighted_amplitude_rms(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
+        self.spectrum.iter().map(|s| todo!())
     }
 
     pub fn weighted_power_rms(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
+        self.spectrum.iter().map(|s| todo!())
     }
 
     pub fn weighted_peak(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
+        self.spectrum.iter().map(|s| todo!())
     }
 
     pub fn weighted_peak_rms(&mut self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
+        self.spectrum.iter().map(|s| todo!())
     }
      */
 }
