@@ -70,12 +70,13 @@ pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
     fn loudness_into(&self, spectrum: &FftOutputs<IN>, output: &mut Self::Output) {
         let output_inner = self.as_inner_mut(output);
 
-        self.sum_power_into(spectrum.iter_mean_square_power_density(), output_inner);
+        self.sum_power_into(spectrum.iter_power(), output_inner);
 
         // // TODO: convert to dbfs here?
         for x in output_inner.iter_mut() {
             let rms = x.sqrt();
-            *x = 20. * rms.log10();
+            // *x = 20. * rms.log10();
+            *x = rms;
         }
     }
 
