@@ -512,6 +512,7 @@ fn mic_task(
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_u8_buf)?;
+        yield_now();
 
         // trace!(
         //     "Read i2s: {} {} {} {} ...",
@@ -520,7 +521,6 @@ fn mic_task(
 
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
-
         yield_now();
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
@@ -534,35 +534,22 @@ fn mic_task(
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
         // TODO: move most everything under this into a helper function so that we can test individual pieces easier
         buffered_fft.push_samples(i2s_sample_buf);
+        yield_now();
 
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
-        // running the fft can be slow. yield now
-        // TODO: do some analysis to see if this is always needed
-        yield_now();
-
         // TODO: only do the FFT if the sample buffer has the right number of elements
         // TODO: this is giving a stack overflow
         let spectrum = buffered_fft.fft();
-
-        // running the fft can be slow. yield now
-        // TODO: do some analysis to see if this is always needed
         yield_now();
 
         // TODO: still lots to think about on this
         let mic_loudness_tick = mic_loudness.tick_fft_outputs(&spectrum);
-
-        // calculating the mic_loudness_tick can be slow. yield now
-        // TODO: do some analysis to see if this is always needed
         yield_now();
 
         // info!("num_lights: {}", mic_loudness_tick.num_lights());
         info!("loudness: {}", &mic_loudness_tick);
-
-        // TODO: copy loudness into a mutex?
-
-        // TODO: do some analysis to see if this is always needed
         yield_now();
 
         // TODO: beat detection?
