@@ -96,16 +96,20 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         // TODO: we want a recent min/max (with decay), not just the min/max from the current frame
         // TODO: what default?
-        let mut current_max = 0.0f32;
+        let mut current_max = -100.0f32;
+        let mut current_min = 100.0f32;
 
         for loudness in loudness.0.iter().copied() {
             current_max = current_max.max(loudness);
+            current_min = current_min.min(loudness);
         }
 
         // TODO: decay how fast?
         let decayed_peak = self.peak_max * self.decay_alpha;
 
         self.peak_max = current_max.max(decayed_peak);
+
+        // TODO: set a peak_min too.
 
         // this needs to be atleast one because thats how i currently store the color. that won't work if we change it to zoom into part of the spectrum
         const BOTTOM_BORDER: usize = 1;
@@ -117,7 +121,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
         {
             // TODO: log scale?
             let scaled =
-                remap(loudness, 0.0, self.peak_max, 0.0, (X - BORDERS) as f32).round() as u8;
+                remap(loudness, -65., self.peak_max, 0.0, (X - BORDERS) as f32).round() as u8;
 
             let last = *channel;
 

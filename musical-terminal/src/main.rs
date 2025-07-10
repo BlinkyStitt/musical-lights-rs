@@ -81,7 +81,7 @@ async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
 
     // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple bands
     while let Ok(loudness) = rx_loudness.recv_async().await {
-        // debug!("loudness: {:?}", loudness);
+        // debug!("loudness: {loudness:?}");
         dancing_lights.update(loudness);
     }
 }
