@@ -7,8 +7,7 @@ use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{
-        AggregatedBins, AggregatedBinsBuilder, AudioBuffer, BufferedFFT, ExponentialScaleBuilder,
-        FlatWeighting,
+        AWeighting, AggregatedBins, AggregatedBinsBuilder, BufferedFFT, ExponentialScaleBuilder,
     },
     lights::{DancingLights, Gradient},
     logging::{debug, info},
@@ -26,7 +25,13 @@ const NUM_BANDS: usize = 20;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 
-type MyBufferedFFT = BufferedFFT<MIC_SAMPLES, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>;
+type MyBufferedFFT = BufferedFFT<
+    MIC_SAMPLES,
+    FFT_INPUTS,
+    FFT_OUTPUTS,
+    HanningWindow<FFT_INPUTS>,
+    AWeighting<FFT_OUTPUTS>,
+>;
 type ScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, NUM_BANDS>;
 
 /// TODO: should this involve a trait? mac needs to spawn a thread, but others have async io
@@ -95,23 +100,19 @@ async fn main(spawner: Spawner) {
 
     let mic_stream = audio::MicrophoneStream::try_new().unwrap();
 
-    let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
-    audio_buffer.init();
-
     let sample_rate = mic_stream.sample_rate.0 as f32;
 
-    // TODO: a-weighting probably isn't what we want. also, our microphone frequency response is definitely not flat
-    // let weighting = AWeighting::new(sample_rate);
-    let weighting: FlatWeighting<4096> = FlatWeighting {};
+    let weighting = AWeighting::new(sample_rate);
+    // let weighting = FlatWeighting {};
 
     // TODO: rewrite this to use the BufferedFFT
-    let fft = BufferedFFT::<_, _, _, HanningWindow<_>>::new();
+    let fft = MyBufferedFFT::new(weighting);
 
     // TODO: have multiple scales and compare them. is "scale" the right term?
     // let bark_scale_builder = BarkScaleBuilder::new(sample_rate);
     // TODO: I'm never seeing anything in bin 0. that means its working right?
     // TODO: i'm also never seeing anything in bucket 0. that doesn't seem right. need to think more about bass
-    let scale_builder = ExponentialScaleBuilder::new(20.0, 20_000.0, sample_rate);
+    let scale_builder = ExponentialScaleBuilder::new(80.0, 20_000.0, sample_rate);
 
     spawner.must_spawn(audio_task(mic_stream, fft, scale_builder, loudness_tx));
     spawner.must_spawn(lights_task(loudness_rx));

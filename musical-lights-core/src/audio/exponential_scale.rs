@@ -1,5 +1,5 @@
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
-use crate::audio::{FftOutputs, frequency_to_bin};
+use crate::audio::frequency_to_bin;
 use crate::logging::info;
 
 #[allow(unused_imports)]

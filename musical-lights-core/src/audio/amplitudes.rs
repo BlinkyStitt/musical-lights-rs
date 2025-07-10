@@ -138,6 +138,7 @@ pub fn bin_counts_from_map_buf<const OUT: usize>(map: &[Option<usize>], counts: 
     }
 }
 
+/*
 pub fn bin_counts_from_map<const OUT: usize>(map: &[Option<usize>]) -> [usize; OUT] {
     let mut bin_counts = [0; OUT];
 
@@ -145,6 +146,7 @@ pub fn bin_counts_from_map<const OUT: usize>(map: &[Option<usize>]) -> [usize; O
 
     bin_counts
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -157,7 +159,7 @@ mod tests {
         // let bin_counts = bin_counts_from_map(&map);
         let mut output = [0.0; 2];
 
-        AggregatedBins::sum_power_into(&map, &[1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
+        AggregatedBins::sum_power_into(&map, [1.0, 2.0, 4.0, 8.0, 16.0], &mut output);
 
         assert_eq!(output, [2.0, 12.0]);
     }

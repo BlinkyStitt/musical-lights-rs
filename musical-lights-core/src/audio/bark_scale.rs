@@ -1,4 +1,4 @@
-use crate::audio::{FftOutputs, amplitudes::bin_counts_from_map_buf, bin_to_frequency};
+use crate::audio::{amplitudes::bin_counts_from_map_buf, bin_to_frequency};
 
 use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 

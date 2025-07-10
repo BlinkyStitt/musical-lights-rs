@@ -43,8 +43,7 @@ pub trait Window<const N: usize> {
         (0..N).map(|i| Self::input_window(i))
     }
 
-    /// TODO: is this a good name?
-    /// TODO: do we even use this? we usually save the window weights in an array and zip that up
+    /// TODO: is this a good name? is this the best way to arrange this?
     #[inline]
     fn apply_windows(x: &mut [f32; N]) {
         for (sample, multiplier) in x.iter_mut().zip(Self::input_windows_iter()) {

@@ -3,7 +3,11 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use std::thread::yield_now;
 
-use crate::{audio::Samples, logging::trace, windows::Window};
+use crate::{
+    audio::{Samples, Weighting},
+    logging::trace,
+    windows::Window,
+};
 use circular_buffer::CircularBuffer;
 use num::Complex;
 
@@ -13,6 +17,7 @@ pub struct BufferedFFT<
     const FFT_IN: usize,
     const FFT_OUT: usize,
     WI: Window<FFT_IN>,
+    WE: Weighting<FFT_OUT>,
 > {
     /// TODO: need a test that adds to the circular buffer and makes sure it wraps around like we want
     sample_buf: CircularBuffer<FFT_IN, f32>,
@@ -22,23 +27,23 @@ pub struct BufferedFFT<
     window_scale_inputs: [f32; FFT_IN],
     /// scaling to correct for the windowing function
     window_scale_outputs: f32,
+    /// TODO: WE should just own weights itself
+    weighting: WE,
+    weights: [f32; FFT_OUT],
 }
 
-impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Window<FFT_IN>> Default
-    for BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, WI>
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Window<FFT_IN>>
-    BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, WI>
+impl<
+    const SAMPLE_IN: usize,
+    const FFT_IN: usize,
+    const FFT_OUT: usize,
+    WI: Window<FFT_IN>,
+    WE: Weighting<FFT_OUT>,
+> BufferedFFT<SAMPLE_IN, FFT_IN, FFT_OUT, WI, WE>
 {
     /// Use this when you want the buffered fft to be statically allocated.
     /// You MUST call `init` on this before using it!
     /// TODO: figure out how to call init on this from const. or at least how to make sure init gets called
-    pub const fn uninit() -> Self {
+    pub const fn uninit(weighting: WE) -> Self {
         assert!(SAMPLE_IN > 0);
         assert!(FFT_IN / 2 == FFT_OUT);
         assert!(FFT_IN % SAMPLE_IN == 0);
@@ -49,6 +54,8 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Wind
             input_window: PhantomData::<WI>,
             window_scale_inputs: [1.0; FFT_IN],
             window_scale_outputs: 1.0,
+            weighting,
+            weights: [1.0; FFT_OUT],
         }
     }
 
@@ -56,8 +63,8 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Wind
     /// useful if you don't need this statically allocated.
     /// `init` is called for you.
     /// TODO: refactor the window to be const and then we can make this const
-    pub fn new() -> Self {
-        let mut x = Self::uninit();
+    pub fn new(weighting: WE) -> Self {
+        let mut x = Self::uninit(weighting);
 
         x.init();
 
@@ -74,6 +81,27 @@ impl<const SAMPLE_IN: usize, const FFT_IN: usize, const FFT_OUT: usize, WI: Wind
         self.window_scale_outputs = WI::output_scaling();
 
         WI::apply_windows(&mut self.window_scale_inputs);
+
+        // TODO: weights works differently than windows. make them work the same?
+        self.weighting.curve_buf(&mut self.weights);
+    }
+
+    /// fill the fft buffer with the latest samples and then apply the windowing function
+    /// remember to apply window scaling later!
+    fn fill_fft_buf_with_windows(&mut self) {
+        // first, we load buffer up with the samples (TODO: move this to a helper function?)
+        let (a, b) = self.sample_buf.as_slices();
+        self.fft_in_buf[..a.len()].copy_from_slice(a);
+        self.fft_in_buf[a.len()..].copy_from_slice(b);
+
+        for (x, wi) in self
+            .fft_in_buf
+            .iter_mut()
+            .zip(self.window_scale_inputs.iter())
+        {
+            // TODO: i think we want to skip the first bin
+            *x *= wi;
+        }
     }
 
     pub fn push_samples(&mut self, samples: &Samples<SAMPLE_IN>) {
@@ -86,26 +114,12 @@ const HARD_CODED_FFT_INPUTS: usize = 4096;
 const HARD_CODED_FFT_OUTPUTS: usize = HARD_CODED_FFT_INPUTS / 2;
 
 /// TODO: macro for this so we can support multiple rfft sizes. or maybe a different library that does more at runtime?
-impl<const SAMPLE_IN: usize, WI: Window<HARD_CODED_FFT_INPUTS>>
-    BufferedFFT<SAMPLE_IN, HARD_CODED_FFT_INPUTS, HARD_CODED_FFT_OUTPUTS, WI>
+impl<
+    const SAMPLE_IN: usize,
+    WI: Window<HARD_CODED_FFT_INPUTS>,
+    WE: Weighting<HARD_CODED_FFT_OUTPUTS>,
+> BufferedFFT<SAMPLE_IN, HARD_CODED_FFT_INPUTS, HARD_CODED_FFT_OUTPUTS, WI, WE>
 {
-    /// fill the fft buffer with the latest samples and then apply the windowing function
-    /// remember to apply window scaling later!
-    fn fill_fft_buf_with_windows(&mut self) {
-        // first, we load buffer up with the samples (TODO: move this to a helper function?)
-        let (a, b) = self.sample_buf.as_slices();
-        self.fft_in_buf[..a.len()].copy_from_slice(a);
-        self.fft_in_buf[a.len()..].copy_from_slice(b);
-
-        for (x, w) in self
-            .fft_in_buf
-            .iter_mut()
-            .zip(self.window_scale_inputs.iter())
-        {
-            *x *= w;
-        }
-    }
-
     /// TODO: not sure what type to put here for the output? WeightedOutputs?
     /// TODO: what should this function be called?
     pub fn fft(&mut self) -> FftOutputs<'_, HARD_CODED_FFT_OUTPUTS> {
@@ -140,7 +154,10 @@ impl<const SAMPLE_IN: usize, WI: Window<HARD_CODED_FFT_INPUTS>>
             *s *= self.window_scale_outputs;
         }
 
-        FftOutputs { spectrum }
+        FftOutputs {
+            spectrum,
+            weights: &self.weights,
+        }
     }
 }
 
@@ -149,12 +166,19 @@ impl<const SAMPLE_IN: usize, WI: Window<HARD_CODED_FFT_INPUTS>>
 /// TODO: i'm not really liking this. its spaghetti now. this probably belons on the aggregated amplitude builders.
 pub struct FftOutputs<'fft, const FFT_OUTPUT: usize> {
     spectrum: &'fft [Complex<f32>; FFT_OUTPUT],
+    weights: &'fft [f32; FFT_OUTPUT],
 }
 
 impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
+    /// TODO: the weights aren't included! is that okay?
     #[inline]
     pub fn spectrum(&self) -> &[Complex<f32>; FFT_OUTPUT] {
-        &self.spectrum
+        self.spectrum
+    }
+
+    #[inline]
+    pub fn weights(&self) -> &[f32; FFT_OUTPUT] {
+        self.weights
     }
 
     /// calculate the magnitude of the sample
@@ -166,17 +190,20 @@ impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
 
     /// calculate the square of the magnitude of the sample (this is faster because norm needs a sqrt)
     /// TODO: really not sure about this
+    /// TODO: THIS IS NOT WEIGHTED! BE SURE TO ADD THAT!
     #[inline]
     pub fn iter_power(&self) -> impl Iterator<Item = f32> {
         self.spectrum.iter().map(|s| s.norm_sqr())
     }
 
     /// i think this is what we actually want to use. but i'm really not sure
+    /// This **IS** Weighted. Maybe this should be another function?
     /// TODO: read more
     #[inline]
     pub fn iter_mean_square_power_density(&self) -> impl Iterator<Item = f32> {
         self.iter_power()
-            .map(|p| p / (FFT_OUTPUT * FFT_OUTPUT) as f32)
+            .zip(self.weights)
+            .map(|(p, we)| p / (FFT_OUTPUT * FFT_OUTPUT) as f32 * we)
     }
 
     /*
@@ -193,23 +220,23 @@ impl<'a, const FFT_OUTPUT: usize> FftOutputs<'a, FFT_OUTPUT> {
     }
 
     pub fn weighted_sound_pressure_level(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| todo!())
+        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
     }
 
     pub fn weighted_amplitude_rms(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| todo!())
+        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
     }
 
     pub fn weighted_power_rms(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| todo!())
+        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
     }
 
     pub fn weighted_peak(&self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| todo!())
+        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
     }
 
     pub fn weighted_peak_rms(&mut self) -> impl Iterator<Item = f32> {
-        self.spectrum.iter().map(|s| todo!())
+        self.spectrum.iter().zip(self.weights).map(|(s, we)| todo!())
     }
      */
 }

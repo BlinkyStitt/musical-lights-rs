@@ -1,10 +1,11 @@
 use core::iter::Cycle;
 use itertools::Either;
 
-#[derive(Debug, Clone)]
 /// return some items from the left, then some items from the right
+/// TODO: what should we name this? UnevenInterleave?
 /// TODO: shouldn't L and R be constrainted to Iterator here? Take doesn't, so I won't. But I'm not sure why.
 /// TODO: for my use, i want both to cycle forever. i'm not sure if that's what we actually want though.
+#[derive(Debug, Clone)]
 pub struct LeftRightIter<L, R> {
     left_iter: Cycle<L>,
     left_n_start: usize,

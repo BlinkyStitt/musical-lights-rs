@@ -1,3 +1,4 @@
+/*
 use super::{
     FlatWeighting,
     amplitudes::WeightedAmplitudes,
@@ -24,6 +25,7 @@ pub struct FFT<const IN: usize, const OUT: usize> {
     equal_loudness_curve: [f32; OUT],
 }
 
+/// TODO: delete this and always use the buffered fft?
 impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
     pub const fn new(window_multipliers: [f32; IN], equal_loudness_curve: [f32; OUT]) -> Self {
         assert!(IN / 2 == OUT);
@@ -59,12 +61,7 @@ impl<const IN: usize, const OUT: usize> FFT<IN, OUT> {
 
 impl<const IN: usize, const OUT: usize> Default for FFT<IN, OUT> {
     fn default() -> Self {
-        let window_multipliers = HanningWindow::input_windows();
-
-        // TODO: I think spotify and others use "k-weighting" for their visualizers
-        let equal_loudness_curve: [f32; OUT] = [1.0; OUT];
-
-        Self::new(window_multipliers, equal_loudness_curve)
+        Self::new_with_window::<HanningWindow<IN>>()
     }
 }
 
@@ -95,6 +92,7 @@ macro_rules! impl_fft {
         }
 
         impl Amplitudes<{ $in_size / 2 }> {
+            /// TODO: i don't think we want to divide by /2. thats just nonsense from chatgpt i think. but maybe its onto something
             #[deprecated(note = "this doesn't divide the magnitude by N/2")]
             pub fn fft_windowed_samples(x: WindowedSamples<$in_size>) -> Self {
                 let mut fft_input = x.0;
@@ -111,7 +109,8 @@ macro_rules! impl_fft {
                 // TODO: i'm really not sure what to do with the spectrum here.
                 // TODO: theres some code duplication now. one of them should probably be deleted
                 for (x, &spectrum) in amplitudes.iter_mut().zip(fft_output.iter()) {
-                    *x = spectrum.norm() / { $in_size / 2 } as f32;
+                    // *x = spectrum.norm() / { $in_size / 2 } as f32;
+                    *x = spectrum.norm_sqr();
                 }
 
                 Self(amplitudes)
@@ -124,6 +123,7 @@ impl_fft!(512, rfft_512);
 impl_fft!(1024, rfft_1024);
 impl_fft!(2048, rfft_2048);
 impl_fft!(4096, rfft_4096);
+*/
 
 pub const fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
     (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)

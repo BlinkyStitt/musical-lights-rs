@@ -59,22 +59,6 @@ pub fn flag_pattern<const STAR_X: usize, const STRIPE_X: usize, const X: usize>(
     })
 }
 
-// /// like Take, but is not a "fused" iterator. this will return None and then come back.
-// /// Something tells me this is not the right way to solve my problem of merging two iterators like i'm doing.
-// /// maybe i should have a more specific iterator that takes two iterators and does different amounts from each until they both end (or maybe only take cycles?)
-// #[inline]
-// fn take_every_n(self, n: usize) -> Take<Self>
-// where
-//     Self: Sized,
-// {
-//     TakeEveryN::new(self, n)
-// }
-
-// #[derive(Clone, Debug)]
-// struct TakeEveryN {
-
-// })
-
 #[cfg(test)]
 mod tests {
     use super::*;
