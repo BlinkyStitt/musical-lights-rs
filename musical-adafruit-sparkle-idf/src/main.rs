@@ -480,7 +480,6 @@ fn mic_task(
             AGGREGATED_OUTPUTS,
             DEBUGGING_Y,
             MyScaleBuilder,
-            MyWeighting,
         >,
     > = ConstStaticCell::new(MicLoudnessPattern::new(
         SCALE_BUILDER,
@@ -489,7 +488,7 @@ fn mic_task(
         1.0,
     ));
     let mic_loudness = MIC_LOUDNESS.take();
-    mic_loudness.init(MyWeighting::new(I2S_SAMPLE_RATE_HZ as f32));
+    mic_loudness.init();
     info!("mic_loudness created");
 
     // TODO: what dma frame counts? what buffer count?

@@ -27,6 +27,9 @@ pub struct BufferedFFT<
     window_scale_inputs: [f32; FFT_IN],
     /// scaling to correct for the windowing function
     window_scale_outputs: f32,
+    /// Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
+    /// also apply weigthing (a-weighting or some other equal loudness countour)
+    /// TODO: double check this. too much cargo culting
     /// TODO: WE should just own weights itself
     weighting: WE,
     weights: [f32; FFT_OUT],
@@ -99,7 +102,6 @@ impl<
             .iter_mut()
             .zip(self.window_scale_inputs.iter())
         {
-            // TODO: i think we want to skip the first bin
             *x *= wi;
         }
     }

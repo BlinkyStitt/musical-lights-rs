@@ -5,11 +5,10 @@
 //! make it work, make it right, make it fast. don't get caught up making perfect iterators on this first pass!
 use core::f32;
 use std::fmt::Display;
-use std::marker::PhantomData;
 use std::thread::yield_now;
 
 use itertools::{Itertools, MinMaxResult};
-use musical_lights_core::audio::{AggregatedBinsBuilder, FftOutputs, Weighting};
+use musical_lights_core::audio::{AggregatedBinsBuilder, FftOutputs};
 use musical_lights_core::remap;
 
 /// TODO: i'm not sure where the code that turns this heat into a XY matrix belongs. or code for rotating the matrix by frame count
@@ -20,10 +19,8 @@ pub struct MicLoudnessPattern<
     const X: usize,
     const Y: usize,
     S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
-    W: Weighting<FFT_OUTPUTS>,
 > {
     fft_out_buf: [f32; FFT_OUTPUTS],
-    weights: [f32; FFT_OUTPUTS],
     scale_builder: S,
     scale_out_buf: [f32; X],
     /// how many rows are lit up for each column of the matrix. range of 0-Y
@@ -40,7 +37,6 @@ pub struct MicLoudnessPattern<
     peak_ema_min_dbfs: f32,
     peak_ema_max_dbfs: f32,
     ema_dbfs: f32,
-    _weighting: PhantomData<W>,
 }
 
 /// TODO: i'm not sure the bet way to pack this. not worth optimizing at this point, so lets KISS.
@@ -51,11 +47,10 @@ pub struct MicLoudnessTick<'a, const X: usize, const Y: usize> {
     pub sparkle: &'a [bool; X],
 }
 
-impl<const FFT_OUTPUTS: usize, const N: usize, const X: usize, const Y: usize, S, W>
-    MicLoudnessPattern<FFT_OUTPUTS, N, X, Y, S, W>
+impl<const FFT_OUTPUTS: usize, const N: usize, const X: usize, const Y: usize, S>
+    MicLoudnessPattern<FFT_OUTPUTS, N, X, Y, S>
 where
     S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
-    W: Weighting<FFT_OUTPUTS>,
 {
     pub const fn new(
         uninit_scale_builder: S,
@@ -73,7 +68,6 @@ where
 
         Self {
             fft_out_buf: [0.0; FFT_OUTPUTS],
-            weights: [2.0; FFT_OUTPUTS],
             scale_builder: uninit_scale_builder,
             scale_out_buf: [0.0; X],
             loudness: [0; X],
@@ -84,15 +78,11 @@ where
             peak_ema_min_dbfs,
             peak_ema_max_dbfs,
             ema_dbfs,
-            _weighting: PhantomData::<W>,
         }
     }
 
     /// You must call this before using new!
-    pub fn init(&mut self, weighting: W) {
-        // TODO: we have two different patterns here now. i don't like that much. should have weighting be a struct with the map inside of it
-        weighting.curve_buf(&mut self.weights);
-
+    pub fn init(&mut self) {
         self.scale_builder.init();
     }
 
@@ -144,14 +134,6 @@ where
         self.fft_out_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());
-
-        // Collapse to a single-sided spectrum (bins 1…N/2-1) by doubling power there; leave DC (k = 0) and Nyquist (k = N/2) unchanged.
-        // also apply weigthing (a-weighting or some other equal loudness countour)
-        // TODO: double check this. too much cargo culting
-        for (i, (x, w)) in self.fft_out_buf.iter_mut().zip(&self.weights).enumerate() {
-            // the 2x is already included
-            *x *= w;
-        }
 
         // calculating the weights can be slow. yield now
         // TODO: do some analysis to see if this is always needed. this one can probably be removed

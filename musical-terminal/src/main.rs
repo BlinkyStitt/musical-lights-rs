@@ -66,7 +66,8 @@ async fn audio_task(
 async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
     // TODO: what should these be?
     let gradient = Gradient::new_mermaid();
-    let peak_decay = 0.90;
+    // TODO: set decay based on time?
+    let peak_decay = 0.5;
 
     let mut dancing_lights =
         DancingLights::<8, NUM_BANDS, { 8 * NUM_BANDS }>::new(gradient, peak_decay);
