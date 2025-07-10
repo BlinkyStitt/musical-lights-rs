@@ -135,7 +135,7 @@ where
         self.fft_out_buf
             .iter_mut()
             .set_from(spectrum.iter_mean_square_power_density());
-        yield_now();
+        // yield_now();
     }
 
     /// TODO: keep refactoring this. some of this probably belongs on FftOutputs
@@ -150,7 +150,7 @@ where
         // TODO: exponential scale_builder should give us dbfs? or should the FftOutput? too many types
         self.scale_builder
             .sum_power_into(&self.fft_out_buf, &mut self.scale_out_buf);
-        yield_now();
+        // yield_now();
         // info!("exponential_scale_outputs: {:?}", exponential_scale_outputs);
 
         // Convert each band energy to RMS amplitude in dbfs
@@ -160,7 +160,7 @@ where
             let rms = x.sqrt();
             *x = 20. * rms.log10();
         }
-        yield_now();
+        // yield_now();
 
         // TODO: how should we use an AGC?
         // self.agc.process(dbfs);
@@ -181,7 +181,7 @@ where
             }
         }
         self.update_ema();
-        yield_now();
+        // yield_now();
 
         for ((loudness, x), sparkle) in self
             .loudness
@@ -200,7 +200,7 @@ where
             // TODO: "band" or "channel"? I'm inconsistent
             *sparkle = *loudness > old_loudness;
         }
-        yield_now();
+        // yield_now();
 
         MicLoudnessTick {
             loudness: &self.loudness,
