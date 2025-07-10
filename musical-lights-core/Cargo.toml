@@ -9,7 +9,7 @@ circular-buffer = { version = "1.1.0", default-features = false }
 cobs = { version = "0.4.0", default-features = false }
 crc = "3.3.0"
 defmt = { version = "1.0.1", default-features = false, optional = true }
-ed25519-dalek = { version = "2.1.1", default-features = false, features = [
+ed25519-dalek = { version = "2.2.0", default-features = false, features = [
     "fast",
     "serde",
     "zeroize",

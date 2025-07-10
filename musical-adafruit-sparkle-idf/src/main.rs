@@ -22,11 +22,9 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
-use musical_lights_core::audio::{ExponentialScaleBuilder, FlatWeighting, Weighting};
+use musical_lights_core::audio::ExponentialScaleBuilder;
 use musical_lights_core::{
-    audio::{
-        parse_i2s_16_bit_mono_to_f32_array, AWeighting, AggregatedBinsBuilder, BufferedFFT, Samples,
-    },
+    audio::{parse_i2s_16_bit_mono_to_f32_array, AWeighting, BufferedFFT, Samples},
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
@@ -445,13 +443,18 @@ fn mic_task(
     // TODO: i don't like doing this here. move this inside the buffered fft or something
     // TODO: i don't think a-weighting is actually what we want
     // TODO: maybe k-weighting? maybe something much more advanced?
-    // const WEIGHTING: AWeighting<FFT_OUTPUTS> = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
-    type MyWeighting = FlatWeighting<FFT_OUTPUTS>;
+    type MyWeighting = AWeighting<FFT_OUTPUTS>;
+    const WEIGHTING: MyWeighting = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
 
-    type MyBufferedFFT =
-        BufferedFFT<I2S_SAMPLE_SIZE, FFT_INPUTS, FFT_OUTPUTS, HanningWindow<FFT_INPUTS>>;
+    type MyBufferedFFT = BufferedFFT<
+        I2S_SAMPLE_SIZE,
+        FFT_INPUTS,
+        FFT_OUTPUTS,
+        HanningWindow<FFT_INPUTS>,
+        MyWeighting,
+    >;
     static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> =
-        ConstStaticCell::new(BufferedFFT::uninit());
+        ConstStaticCell::new(BufferedFFT::uninit(WEIGHTING));
     let buffered_fft = BUFFERED_FFT.take();
     buffered_fft.init();
     info!("buffered_fft created");
@@ -486,7 +489,7 @@ fn mic_task(
         1.0,
     ));
     let mic_loudness = MIC_LOUDNESS.take();
-    mic_loudness.init(MyWeighting {});
+    mic_loudness.init(MyWeighting::new(I2S_SAMPLE_RATE_HZ as f32));
     info!("mic_loudness created");
 
     // TODO: what dma frame counts? what buffer count?
@@ -566,8 +569,6 @@ fn mic_task(
 
         // TODO: still lots to think about on this
         let mic_loudness_tick = mic_loudness.tick_fft_outputs(&spectrum);
-
-        drop(spectrum);
 
         // calculating the mic_loudness_tick can be slow. yield now
         // TODO: do some analysis to see if this is always needed
