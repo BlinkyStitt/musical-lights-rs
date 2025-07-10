@@ -39,7 +39,7 @@ impl<const N: usize> Default for AggregatedBins<N> {
 
 /// TODO: I kind of wnat this to be a trait, but a trait can't have const functions
 impl<const N: usize> AggregatedBins<N> {
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self([0.; N])
     }
 }

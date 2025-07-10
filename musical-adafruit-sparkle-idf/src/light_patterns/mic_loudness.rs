@@ -22,6 +22,7 @@ pub struct MicLoudnessPattern<
 > {
     fft_out_buf: [f32; FFT_OUTPUTS],
     scale_builder: S,
+    /// TODO: how can we make this an AggregatedBins?
     scale_out_buf: [f32; X],
     /// how many rows are lit up for each column of the matrix. range of 0-Y
     loudness: [u8; X],
@@ -142,7 +143,7 @@ where
         &mut self,
         spectrum: &FftOutputs<'fft, NUM_FFT_OUTPUTS>,
     ) -> MicLoudnessTick<'_, X, Y> {
-        // TODO: use loudness_into instead?
+        // TODO: use loudness_into instead? it needs output to be the S::Output type though and I'm not sure how to do that
         self.fill_fft_out_buf(spectrum);
 
         // TODO: i'm not sure that i like this. can't decide if sum is the right way to do human perceived loudness
