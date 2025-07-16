@@ -1,19 +1,14 @@
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 
-mod audio;
-
-use audio::MicrophoneStream;
 use embassy_executor::Spawner;
 use musical_lights_core::{
-    audio::{
-        AWeighting, AggregatedBins, AggregatedBinsBuilder, BarkScaleBuilder, BufferedFFT,
-        ExponentialScaleBuilder, FlatWeighting,
-    },
+    audio::{AWeighting, AggregatedBins, AggregatedBinsBuilder, BarkScaleBuilder, BufferedFFT},
     lights::{DancingLights, Gradient},
     logging::{debug, info},
     windows::HanningWindow,
 };
+use musical_terminal::MicrophoneStream;
 use std::env;
 
 const MIC_SAMPLES: usize = 512;
@@ -104,7 +99,7 @@ async fn main(spawner: Spawner) {
 
     let (loudness_tx, loudness_rx) = flume::bounded(2);
 
-    let mic_stream = audio::MicrophoneStream::try_new().unwrap();
+    let mic_stream = musical_terminal::MicrophoneStream::try_new().unwrap();
 
     let sample_rate = mic_stream.sample_rate.0 as f32;
 

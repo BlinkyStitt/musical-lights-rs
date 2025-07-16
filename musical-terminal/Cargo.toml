@@ -1,7 +1,8 @@
 [package]
-name = "terminal_mac"
+name = "musical_terminal"
 version = "0.1.0"
 edition = "2024"
+default-run = "filter_bank"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

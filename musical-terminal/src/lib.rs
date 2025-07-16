@@ -1,5 +1,3 @@
-//! TODO: refactor this to use the types in microphone.rs
-
 use cpal::{
     SampleRate, Stream,
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -7,6 +5,7 @@ use cpal::{
 use musical_lights_core::audio::Samples;
 use musical_lights_core::logging::{error, info, trace};
 
+/// This is set by Apple. this should probably be a setting.
 const SAMPLES: usize = 512;
 
 /// TODO: i think this should be a trait. then we could have the i2s mic on embedded and the cpal input use mo

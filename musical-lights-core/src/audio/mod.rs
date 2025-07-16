@@ -20,11 +20,10 @@ mod weighting;
 
 pub use amplitudes::{AggregatedBins, AggregatedBinsBuilder, Amplitudes, WeightedAmplitudes};
 pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
-pub use buffered_fft::{BufferedFFT, FftOutputs};
+pub use buffered_fft::{BufferedFFT, FftOutputs, bin_to_frequency, frequency_to_bin};
 pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
-pub use fft::{bin_to_frequency, frequency_to_bin};
 pub use i2s::{parse_i2s_16_bit_mono_to_f32_array, parse_i2s_24_bit_mono_to_f32_array};
 pub use peak_scaled::PeakScaledBuilder;
 pub use samples::{Samples, WindowedSamples};
