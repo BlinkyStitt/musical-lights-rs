@@ -26,8 +26,8 @@ impl<const N: usize> Weighting<N> for AWeighting<N> {
 
 pub fn a_weighting_decibels(f: f32) -> f32 {
     let numerator = (12194f32.powi(2)) * f.powi(4);
-    let denominator = (f.powi(2) + 20.6.powi(2))
-        * ((f.powi(2) + 107.7.powi(2)) * (f.powi(2) + 737.9.powi(2))).sqrt()
+    let denominator = (f.powi(2) + 20.6f32.powi(2))
+        * ((f.powi(2) + 107.7f32.powi(2)) * (f.powi(2) + 737.9f32.powi(2))).sqrt()
         * (f.powi(2) + 12194f32.powi(2));
 
     let ra = numerator / denominator;
