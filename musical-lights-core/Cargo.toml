@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ahrs = { version = "0.7.0", default-features = false }
+biquad = { version = "0.5.0", default-features = false }
 circular-buffer = { version = "1.1.0", default-features = false }
 cobs = { version = "0.4.0", default-features = false }
 crc = "3.3.0"
@@ -21,8 +22,10 @@ enterpolation = { version = "0.3.0", default-features = false, features = [
     "bspline",
     "linear",
 ] }
+extfn = "0.1.2"
 heapless = { version = "0.8.0", features = ["serde"] }
 i24 = { version = "2.1.0", default-features = false }
+itertools = { version = "0.14.0", default-features = false }
 log = { version = "*", default-features = false, optional = true }
 microfft = { version = "0.6.0", default-features = false, features = [
     "size-4096",
@@ -36,8 +39,6 @@ postcard = { version = "1.1.2", features = ["experimental-derive", "use-crc"] }
 serde = { version = "1.0.219", default-features = false }
 smart-leds = "0.4.0"
 thiserror = { version = "2", default-features = false }
-itertools = { version = "0.14.0", default-features = false }
-extfn = "0.1.2"
 
 # TODO: these need std
 # eyre = { version = "0.6.12", default-features = false, features = [] }

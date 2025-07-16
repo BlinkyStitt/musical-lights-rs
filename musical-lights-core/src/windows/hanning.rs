@@ -1,8 +1,6 @@
 use core::f32::consts::PI;
 
-// TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
-// TODO: use libm instead?
-#[allow(unused_imports)]
+#[cfg(not(feature = "std"))]
 use micromath::F32Ext;
 
 use super::Window;

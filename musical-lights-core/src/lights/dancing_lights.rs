@@ -9,9 +9,11 @@ use crate::remap;
 use smart_leds::RGB8;
 use smart_leds::colors::{BLACK, SILVER};
 
-/// TODO: do we need this?
-#[cfg(feature = "libm")]
+#[cfg(not(feature = "std"))]
 use micromath::F32Ext;
+
+#[cfg(feature = "defmt")]
+use defmt::write as defmt_write;
 
 /// TODO: i'm not sure i actually need this. i'm rewritting this for the net and not using this code. but maybe i should keep using it?
 /// TODO: at this point, should this be scaled 0-255? right now its the number of lights
@@ -20,7 +22,7 @@ pub struct Bands<const N: usize>([u8; N]);
 
 impl<const N: usize> Display for Bands<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        for y_height in self.0.iter() {
+        for &y_height in self.0.iter() {
             match y_height {
                 0 => {
                     f.write_str("   |")?;
@@ -31,6 +33,21 @@ impl<const N: usize> Display for Bands<N> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<const N: usize> defmt::Format for Bands<N> {
+    fn format(&self, fmt: defmt::Formatter) {
+        for &y_height in self.0.iter() {
+            if y_height == 0 {
+                defmt_write!(fmt, "   |");
+            } else {
+                // Print single-digit numbers directly.
+                // If y_height can exceed 9, truncate or pad manually
+                defmt_write!(fmt, " {} |", y_height);
+            }
+        }
     }
 }
 

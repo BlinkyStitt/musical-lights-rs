@@ -1,5 +1,5 @@
-// #[allow(unused_imports)]
-// use micromath::F32Ext;
+#[allow(unused_imports)]
+use micromath::F32Ext;
 
 // use crate::logging::info;
 

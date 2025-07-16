@@ -1,5 +1,6 @@
 use crate::audio::bin_to_frequency;
 
+#[cfg(not(feature = "std"))]
 use micromath::F32Ext;
 
 use super::Weighting;

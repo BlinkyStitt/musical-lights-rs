@@ -59,6 +59,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "biquad"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8580925877eb35ab50f987a1c2c193eb46000c8827c871bc3425070f086408cc"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "bitfield"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -399,9 +408,9 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
+checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
@@ -1007,6 +1016,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "extfn"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f69b693398e2cb040e6217abcfe8b6e1977524b1c900c4ec21c31c46d59493c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
 name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1381,6 +1401,7 @@ name = "musical-lights-core"
 version = "1.0.0"
 dependencies = [
  "ahrs",
+ "biquad",
  "circular-buffer",
  "cobs 0.4.0",
  "crc",
@@ -1390,6 +1411,7 @@ dependencies = [
  "embedded-io",
  "embedded-io-async",
  "enterpolation",
+ "extfn",
  "heapless 0.8.0",
  "i24",
  "itertools",
