@@ -6,12 +6,12 @@
 //! TODO: bucket by note
 mod amplitudes;
 mod bark_scale;
-// mod buffer;
 mod buffered_fft;
 mod decibels;
 mod down_resistance_builder;
 mod exponential_scale;
 mod fft;
+mod filter_bank;
 mod i2s;
 mod peak_scaled;
 mod samples;
@@ -20,7 +20,6 @@ mod weighting;
 
 pub use amplitudes::{AggregatedBins, AggregatedBinsBuilder, Amplitudes, WeightedAmplitudes};
 pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
-// pub use buffer::AudioBuffer;
 pub use buffered_fft::{BufferedFFT, FftOutputs};
 pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;

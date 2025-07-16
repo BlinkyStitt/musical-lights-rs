@@ -124,35 +124,3 @@ impl_fft!(1024, rfft_1024);
 impl_fft!(2048, rfft_2048);
 impl_fft!(4096, rfft_4096);
 */
-
-pub const fn bin_to_frequency(bin_index: usize, sample_rate_hz: f32, num_bins: usize) -> f32 {
-    (bin_index as f32) * sample_rate_hz / ((num_bins * 2) as f32)
-}
-
-pub const fn frequency_to_bin(frequency: f32, sample_rate_hz: f32, num_bins: usize) -> usize {
-    // // NOTE: this can't be const because of round
-    // ((frequency * (num_bins * 2) as f32) / sample_rate_hz).round() as usize
-    (((frequency * (num_bins * 2) as f32) / sample_rate_hz) + 0.5) as usize
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::audio::{bin_to_frequency, frequency_to_bin};
-
-    #[test]
-    fn test_bin_and_frequency() {
-        let sample_rate_hz = 44_100.0;
-
-        let num_bins = 2048;
-
-        for i in 0..num_bins {
-            let frequency = bin_to_frequency(i, sample_rate_hz, num_bins);
-
-            let j = frequency_to_bin(frequency, sample_rate_hz, num_bins);
-
-            println!("{i} = {frequency} = {j}");
-
-            assert_eq!(i, j);
-        }
-    }
-}
