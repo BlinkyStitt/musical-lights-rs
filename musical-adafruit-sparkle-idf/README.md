@@ -69,3 +69,5 @@ The 4 [fibonnaci256](https://www.evilgeniuslabs.org/fibonacci256) panels that i 
 [eventloop](https://github.com/esp-rs/esp-idf-svc/blob/master/examples/eventloop.rs) or flume?
 
 rmt-legacy was needed to get a RxRmtDriver struct. Is there an issue tracking using the v5 idf for rmt?
+
+Compare to WLED: <https://learn.adafruit.com/adafruit-sparkle-motion/wled-software-2>

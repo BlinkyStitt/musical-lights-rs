@@ -1,8 +1,6 @@
 //! TODO: totally unsure of prioritites. i should just start with everything on the same priority probably
 //! TODO: move this to a lib and then have multiple bins. one for the hat, one for the necklace, one for the net, etc. they should try to share code in the crate or in musical-lights-core.
-#![feature(type_alias_impl_trait)]
-#![feature(slice_as_array)]
-#![feature(cmp_minmax)]
+#![feature(cmp_minmax, slice_as_array, type_alias_impl_trait)]
 // #![feature(thread_sleep_until)]
 
 mod debug;
