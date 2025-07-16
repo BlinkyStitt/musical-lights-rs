@@ -51,7 +51,7 @@ impl<
     pub const fn uninit(weighting: WE) -> Self {
         assert!(SAMPLE_IN > 0);
         assert!(FFT_IN / 2 == FFT_OUT);
-        assert!(FFT_IN % SAMPLE_IN == 0);
+        assert!(FFT_IN.is_multiple_of(SAMPLE_IN));
 
         Self {
             sample_buf: CircularBuffer::new(),

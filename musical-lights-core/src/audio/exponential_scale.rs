@@ -2,7 +2,7 @@ use super::amplitudes::{AggregatedBins, AggregatedBinsBuilder};
 use crate::audio::frequency_to_bin;
 use crate::logging::info;
 
-#[cfg(not(feature = "std"))]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 
 /// TODO: do this more efficiently?

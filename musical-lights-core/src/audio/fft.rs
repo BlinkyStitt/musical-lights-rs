@@ -10,7 +10,7 @@ use crate::{logging::trace, windows::HanningWindow};
 
 use microfft::real::{rfft_512, rfft_1024, rfft_2048, rfft_4096};
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
-#[allow(unused_imports)]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 
 pub struct FFT<const IN: usize, const OUT: usize> {

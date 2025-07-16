@@ -9,7 +9,7 @@ use crate::remap;
 use smart_leds::RGB8;
 use smart_leds::colors::{BLACK, SILVER};
 
-#[cfg(not(feature = "std"))]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 
 #[cfg(feature = "defmt")]

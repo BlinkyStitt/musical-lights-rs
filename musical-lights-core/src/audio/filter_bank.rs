@@ -11,7 +11,7 @@ use biquad::{
 };
 // use static_cell::{ConstStaticCell, StaticCell};
 
-#[cfg(not(feature = "std"))]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 
 /*─────────────────────────── Tables ────────────────────────────*/
@@ -40,8 +40,8 @@ pub struct BarkBank {
 
 impl BarkBank {
     /// Build filters for `sr_hz`.
-    pub fn new(sr_hz: u32) -> Self {
-        let fs = (sr_hz as f32).hz();
+    pub fn new(sr_hz: f32) -> Self {
+        let fs = (sr_hz).hz();
         let dummy = DirectForm2Transposed::<f32>::new(
             Coefficients::from_params(Type::BandPass, fs, 1_000.0.hz(), 1.0).unwrap(),
         );
@@ -58,10 +58,11 @@ impl BarkBank {
     }
 
     /// Mean power per Bark band from `pcm`; writes into `dst`.
-    pub fn power_block_into(&mut self, pcm: &[i16], dst: &mut [f32; 24], scale: f32) {
+    /// TODO: can't decide if pcm should be i16 or i24 or f32
+    pub fn power_block_into(&mut self, pcm: &[f32], dst: &mut [f32; 24], scale: f32) {
         dst.fill(0.0);
         for &s in pcm {
-            let x = (s as f32) * scale;
+            let x = s * scale;
             for (k, f) in self.filters.iter_mut().enumerate() {
                 let y = f.run(x);
                 dst[k] += y * y;
@@ -74,8 +75,7 @@ impl BarkBank {
     }
 }
 
-/*──────────────────── Helper Functions ────────────────────────*/
-
+/// TODO: document this more. whats the powf doing?
 #[inline(always)]
 pub fn loudness_in_place(buf: &mut [f32; 24]) {
     for (b, g) in buf.iter_mut().zip(ISO60_GAIN) {
@@ -83,12 +83,12 @@ pub fn loudness_in_place(buf: &mut [f32; 24]) {
     }
 }
 
+/// TODO: document this better. do we need it to be const? probably not
 #[inline(always)]
-pub const fn ema_update<const N: usize>(input: &[f32; N], ema: &mut [f32; N], alpha: f32) {
-    let mut i = 0;
-    while i < N {
-        ema[i] = alpha * ema[i] + (1.0 - alpha) * input[i];
-        i += 1;
+pub fn ema_in_place<const N: usize>(buf: &mut [f32; N], state: &mut [f32; N], alpha: f32) {
+    for (x, e) in buf.iter_mut().zip(state.iter_mut()) {
+        *e = alpha * *e + (1.0 - alpha) * *x;
+        *x = *e;
     }
 }
 
@@ -99,9 +99,10 @@ mod tests {
     #[test]
     fn ema_converges() {
         let mut state = [0.0f32; 3];
-        let input = [1.0f32, 1.0, 1.0];
         for _ in 0..20 {
-            ema_update(&input, &mut state, 0.6);
+            let mut input = [1.0f32, 1.0, 1.0];
+
+            ema_in_place(&mut input, &mut state, 0.6);
 
             dbg!(state);
         }
@@ -119,7 +120,7 @@ mod tests {
 
     #[test]
     fn filterbank_len() {
-        let b = BarkBank::new(48_000);
+        let b = BarkBank::new(48_000.);
         assert_eq!(b.filters.len(), 24);
     }
 }

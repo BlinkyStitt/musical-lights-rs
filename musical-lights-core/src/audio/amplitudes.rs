@@ -1,4 +1,4 @@
-#[allow(unused_imports)]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 
 // use crate::logging::info;

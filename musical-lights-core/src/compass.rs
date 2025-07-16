@@ -1,6 +1,6 @@
 // declination calculator for magnetic bearing
 // TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
-#[cfg(not(feature = "std"))]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};

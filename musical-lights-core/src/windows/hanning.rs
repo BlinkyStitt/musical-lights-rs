@@ -1,6 +1,6 @@
 use core::f32::consts::PI;
 
-#[cfg(not(feature = "std"))]
+#[cfg(not(any(feature = "std", feature = "libm")))]
 use micromath::F32Ext;
 
 use super::Window;
