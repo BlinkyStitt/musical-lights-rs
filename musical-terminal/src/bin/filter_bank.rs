@@ -1,69 +1,48 @@
 //! instead of an FFT, use a bank of 24 filters. I think this will better match human hearing.
 #![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
+#![feature(impl_trait_in_assoc_type, iterator_try_collect)]
 
 use std::env;
 
 use embassy_executor::Spawner;
-use musical_lights_core::audio::{AggregatedBins, BarkBank, ema_in_place, loudness_in_place};
-use musical_lights_core::lights::{DancingLights, Gradient};
-use musical_lights_core::logging::{debug, info};
+use musical_lights_core::audio::{AggregatedBins, BarkBank};
+use musical_lights_core::fps::FpsTracker;
+use musical_lights_core::lights::{Bands, DancingLights, Gradient};
+use musical_lights_core::logging::{debug, info, trace};
 use musical_terminal::MicrophoneStream;
-use static_cell::ConstStaticCell;
-
-/* frame & smoothing constants scoped to this task */
-const SR_HZ: u32 = 48_000;
-const BLOCK: usize = 480;
-const I16_SCALE: f32 = 1.0 / 32_768.0;
-const TAU_S: f32 = 0.030;
 
 const NUM_BANDS: usize = 24;
 
 #[embassy_executor::task]
 async fn audio_task(
-    mic_stream: MicrophoneStream,
+    mic_stream: MicrophoneStream<480>,
     mut bank: BarkBank,
-    tx_loudness: flume::Sender<AggregatedBins<24>>,
+    tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,
 ) {
-    // TODO: EMA should be a part of the bank. we always want both together
-    static EMA: ConstStaticCell<[f32; NUM_BANDS]> = ConstStaticCell::new([0.0; NUM_BANDS]); // state/out
-    let ema = EMA.take();
-
-    let ema_alpha: f32 = (-((BLOCK as f32) / (SR_HZ as f32) / TAU_S)).exp(); // ≈ 0.7165
-
     while let Ok(samples) = mic_stream.stream.recv_async().await {
-        let mut buf = [0.0; NUM_BANDS];
+        let x = bank.process_block(&samples.0);
 
-        // TODO: I16_SCALE should be saved on the bank
-        bank.power_block_into(&samples.0, &mut buf, I16_SCALE);
+        let mut buf = AggregatedBins([0.0; NUM_BANDS]);
+        buf.0.copy_from_slice(x);
 
-        // TODO: should all these calls be on the bank? then we just get back a buf and don't have to think about the middle steps?
-        loudness_in_place(&mut buf);
-        ema_in_place(&mut buf, ema, ema_alpha); // ema = smoothed loudness. it is copied into the buf, too
-
-        tx_loudness.send_async(AggregatedBins(buf)).await.unwrap();
+        tx_loudness.send_async(buf).await.unwrap();
     }
 }
 
 /// TODO: rewrite this whole thing. its just an easy way to get some legible logs for now
 #[embassy_executor::task]
 async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
-    // TODO: what should these be?
-    // let gradient = Gradient::new_mermaid();
-    // TODO: set decay based on time?
-    // TODO: its already got an EMA so I don't think decay here is what we want
-    // let peak_decay = 0.5;
+    let mut bands = Bands([0; NUM_BANDS]);
+    let mut fps = FpsTracker::new("lights");
 
-    // let mut dancing_lights =
-    //     DancingLights::<8, NUM_BANDS, { 8 * NUM_BANDS }>::new(gradient, peak_decay);
-
-    // TODO: this is in the idf code. need to more to core
-    // let mut mic_loudness = MicLoudnessPattern::new();
-
-    // TODO: this channel should be an enum with anything that might modify the lights. or select on multiple bands
     while let Ok(loudness) = rx_loudness.recv_async().await {
-        debug!("loudness: {loudness:?}");
-        // dancing_lights.update(loudness);
+        for (&x, b) in loudness.0.iter().zip(bands.0.iter_mut()) {
+            *b = (x * 9.) as u8;
+        }
+
+        info!("bands: {bands}");
+
+        fps.tick();
     }
 }
 

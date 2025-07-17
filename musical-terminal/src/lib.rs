@@ -1,15 +1,15 @@
 use cpal::{
-    SampleRate, Stream,
+    SampleRate, Stream, StreamConfig,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use musical_lights_core::audio::Samples;
 use musical_lights_core::logging::{error, info, trace};
 
 /// This is set by Apple. this should probably be a setting.
-const SAMPLES: usize = 512;
+// const SAMPLES: usize = 480;
 
 /// TODO: i think this should be a trait. then we could have the i2s mic on embedded and the cpal input use mo
-pub struct MicrophoneStream {
+pub struct MicrophoneStream<const SAMPLES: usize> {
     pub sample_rate: SampleRate,
     pub stream: flume::Receiver<Samples<SAMPLES>>,
 
@@ -17,7 +17,7 @@ pub struct MicrophoneStream {
     _stream: Stream,
 }
 
-impl MicrophoneStream {
+impl<const SAMPLES: usize> MicrophoneStream<SAMPLES> {
     pub fn try_new() -> anyhow::Result<Self> {
         let host = cpal::default_host();
 
@@ -26,52 +26,39 @@ impl MicrophoneStream {
             .default_input_device()
             .expect("Failed to get default input device");
 
-        let config = device.default_input_config().unwrap();
+        // let mut config = device.default_input_config().unwrap();
+
+        let sample_rate = SampleRate(48_000);
+
+        let config = StreamConfig {
+            channels: 1,
+            sample_rate,
+            buffer_size: cpal::BufferSize::Fixed(SAMPLES as u32),
+        };
 
         let err_fn = move |err| {
             error!("an error occurred on stream: {err:?}");
         };
 
-        // samples per second
-        let sample_rate = config.sample_rate();
-        info!("sample rate = {}", sample_rate.0);
+        // // samples per second
+        // let sample_rate = config.sample_rate();
+        // info!("sample rate = {}", sample_rate.0);
 
-        let buffer_size = config.buffer_size();
-        info!("buffer size = {buffer_size:?}");
+        // // TODO: how do we set this size? we want 48kHz and 480 samples for 100FPS. its doing 48kHz and 512 samples
+        // let buffer_size = config.buffer_size();
+        // info!("buffer size = {buffer_size:?}");
 
         // TODO: what capacity channel? i think we want to discard old samples if we are lagging, so probably a watch
         let (tx, rx) = flume::bounded(2);
 
-        let stream = match config.sample_format() {
-            // cpal::SampleFormat::I8 => device.build_input_stream(
-            //     &config.into(),
-            //     err_fn,
-            //     None,
-            // )?,
-            // cpal::SampleFormat::I16 => device.build_input_stream(
-            //     &config.into(),
-            //     move |data, _: &_| write_input_data::<i16>(data, &audio_processing),
-            //     err_fn,
-            //     None,
-            // )?,
-            // cpal::SampleFormat::I32 => device.build_input_stream(
-            //     &config.into(),
-            //     move |data, _: &_| write_input_data::<i32>(data, &audio_processing),
-            //     err_fn,
-            //     None,
-            // )?,
-            cpal::SampleFormat::F32 => device.build_input_stream(
-                &config.into(),
+        let stream = device
+            .build_input_stream(
+                &config,
                 move |data, _: &_| Self::send_mic_data(data, &tx),
                 err_fn,
                 None,
-            )?,
-            sample_format => {
-                return Err(anyhow::anyhow!(
-                    "Unsupported sample format '{sample_format}'"
-                ));
-            }
-        };
+            )
+            .unwrap();
 
         stream.play()?;
 

@@ -16,6 +16,6 @@ mod pattern;
 mod visualizer;
 
 pub use color_correction::convert_color;
-pub use dancing_lights::DancingLights;
+pub use dancing_lights::{Bands, DancingLights};
 pub use gradient::Gradient;
 pub use matrix::{Layout, SimpleXY, SnakeXY};

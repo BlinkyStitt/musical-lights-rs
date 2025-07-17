@@ -37,7 +37,7 @@ type ScaleBuilder = BarkScaleBuilder<FFT_OUTPUTS>;
 /// TODO: use BufferedFFT instead of three seperate types.
 #[embassy_executor::task]
 async fn audio_task(
-    mic_stream: MicrophoneStream,
+    mic_stream: MicrophoneStream<512>,
     mut fft: MyBufferedFFT,
     scale_builder: ScaleBuilder,
     tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,

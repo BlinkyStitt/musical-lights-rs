@@ -18,7 +18,7 @@ use defmt::write as defmt_write;
 /// TODO: i'm not sure i actually need this. i'm rewritting this for the net and not using this code. but maybe i should keep using it?
 /// TODO: at this point, should this be scaled 0-255? right now its the number of lights
 /// TODO: this used to be called "channels" but i don't think thats correct
-pub struct Bands<const N: usize>([u8; N]);
+pub struct Bands<const N: usize>(pub [u8; N]);
 
 impl<const N: usize> Display for Bands<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
