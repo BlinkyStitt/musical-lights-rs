@@ -1,4 +1,4 @@
-#[cfg(not(any(feature = "std", feature = "libm")))]
+#[allow(unused_imports)]
 use micromath::F32Ext;
 
 use super::amplitudes::{AggregatedBins, Amplitudes};

@@ -1,19 +1,18 @@
 //! Use a bank of filters for audio processing.
 //!
-//! An alternative to the code in [`BufferedFFT`].
-//!
-//! My original design (inspired by things built with a Teensy Audio Board) used an FFT.
+//! This is an alternative to the code in [`BufferedFFT`].
+use crate::logging::trace;
 use biquad::{
     Biquad, DirectForm2Transposed,
     coefficients::{Coefficients, Type},
     frequency::ToHertz,
 };
 use core::mem::{MaybeUninit, transmute};
-// use static_cell::{ConstStaticCell, StaticCell};
 
-#[cfg(not(any(feature = "std", feature = "libm")))]
+#[allow(unused_imports)]
 use micromath::F32Ext;
 
+/// normally this is 24, but maybe i want to capture the highest frequencies and do 25?
 const BARK_BANDS: usize = 24;
 
 /// 30 ms @ 100 FPS. TODO: need to tune this based on real fps
@@ -39,6 +38,7 @@ const BARK_EDGES: [f32; BARK_BANDS + 1] = [
 /// Inverse 60‑phon equal‑loudness gains (ISO‑226 2023, smoothed).
 ///
 /// TODO: this is just from an LLM. check the math
+/// TODO: I'm turning up the bass a bunch because the mac laptop mic drops it. this isn't really the right way to do it
 const ISO60_GAIN: [f32; BARK_BANDS] = [
     0.0891, 0.1259, 0.1585, 0.1995, 0.2985, 0.3548, 0.4217, 0.4729, 0.5311, 0.5964, 0.6309, 0.6683,
     0.7079, 0.7499, 0.7943, 0.8412, 0.8909, 0.9433, 1.0000, 1.1220, 1.2589, 1.4125, 1.6768, 2.1060,
@@ -53,24 +53,32 @@ pub struct BarkBank {
     /// 2nd biquad (identical)
     sec2: [MaybeUninit<DirectForm2Transposed<f32>>; BARK_BANDS],
     /// smoothed loudness (0‑1)
-    bars: [f32; BARK_BANDS],
+    /// The first 5 bands are combined
+    bars: [f32; BARK_BANDS - 4],
+    map: [usize; BARK_BANDS],
     peak: f32,
 }
 
+/// /Ihavenoideawhatimdoingdog.jpg
 type Section = DirectForm2Transposed<f32>;
 
 impl BarkBank {
     pub const fn uninit() -> Self {
         let filters = [MaybeUninit::uninit(); BARK_BANDS];
 
-        let bars = [0.0; BARK_BANDS];
+        let bars = [0.0; BARK_BANDS - 4];
 
         let peak = 0.0;
+
+        let map = [
+            0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        ];
 
         Self {
             sec1: filters,
             sec2: filters,
             bars,
+            map,
             peak,
         }
     }
@@ -98,33 +106,42 @@ impl BarkBank {
     }
 
     #[inline(always)]
-    fn sections(&mut self) -> (&mut [Section; 24], &mut [Section; 24]) {
+    fn sections(
+        &mut self,
+    ) -> (
+        &mut [Section; BARK_BANDS],
+        &mut [Section; BARK_BANDS],
+        &[usize; BARK_BANDS],
+    ) {
         // assert!(self.ready, "BarkBank::init() not called");
         unsafe {
             (
-                transmute::<&mut [std::mem::MaybeUninit<Section>; 24], &mut [Section; 24]>(
-                    &mut self.sec1,
-                ),
-                transmute::<&mut [std::mem::MaybeUninit<Section>; 24], &mut [Section; 24]>(
-                    &mut self.sec2,
-                ),
+                transmute::<
+                    &mut [std::mem::MaybeUninit<Section>; BARK_BANDS],
+                    &mut [Section; BARK_BANDS],
+                >(&mut self.sec1),
+                transmute::<
+                    &mut [std::mem::MaybeUninit<Section>; BARK_BANDS],
+                    &mut [Section; BARK_BANDS],
+                >(&mut self.sec2),
+                &self.map,
             )
         }
     }
 
     /// TODO: can't decide if pcm should be i16 or i24 or f32
-    pub fn process_block<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; 24] {
-        let (sec1, sec2) = self.sections();
+    pub fn process_block<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARK_BANDS - 4] {
+        let (sec1, sec2, map) = self.sections();
 
         // TODO: have this be allocated during the `new`?
-        let mut tmp = [0.0f32; BARK_BANDS];
+        let mut tmp = [0.0f32; BARK_BANDS - 4];
 
         /* 1. 4‑pole Bark power */
         for &x in pcm {
-            for ((s1, s2), t) in sec1.iter_mut().zip(sec2.iter_mut()).zip(tmp.iter_mut()) {
+            for ((s1, s2), &i) in sec1.iter_mut().zip(sec2.iter_mut()).zip(map.iter()) {
                 // cascade
                 let y = s2.run(s1.run(x));
-                *t += y * y;
+                tmp[i] += y * y;
             }
         }
 
@@ -134,31 +151,30 @@ impl BarkBank {
         }
 
         /* 2. ISO weighting + cube‑root */
-        for i in 0..BARK_BANDS {
-            tmp[i] = (tmp[i] * ISO60_GAIN[i]).powf(0.33);
+        for (t, g) in tmp.iter_mut().zip(ISO60_GAIN.iter()) {
+            *t = (*t * g).powf(0.33);
         }
 
-        // TODO: I'm not actually sure about this. i think we might want a "peak" tracker here too.
-        // TODO: should this track peaks better?
         /* 3. 30 ms EMA */
-        (0..BARK_BANDS).for_each(|i| {
+        // TODO: I'm not actually sure about this. i think we might want a "peak" tracker here too.
+        (0..BARK_BANDS - 4).for_each(|i| {
             self.bars[i] = EMA_ALPHA * self.bars[i] + (1.0 - EMA_ALPHA) * tmp[i];
         });
 
         /* 4. auto‑gain (peak‑hold with decay) */
         self.peak *= PEAK_DECAY;
 
-        let frame_peak = self.bars.iter().copied().fold(0.0, f32::max);
+        // TODO: need to think more about this init value. 1.0 seems to look okay
+        let frame_peak = self.bars.iter().copied().fold(1.0, f32::max);
 
         self.peak = self.peak.max(frame_peak);
 
-        // TODO: also track min? do we even need the peak here?
-        // info!("peak: {}", self.peak);
+        trace!("peak: {}", self.peak);
 
-        // // scale everything from 0-1? its already scaled where 1 is full scale i think. so i don't think
-        // for v in &mut self.bars {
-        //     *v /= self.peak;
-        // }
+        // scale everything from 0-1?
+        for v in &mut self.bars {
+            *v /= self.peak;
+        }
 
         &self.bars
     }
@@ -215,7 +231,7 @@ mod tests {
     #[test]
     fn filterbank_len() {
         let b = BarkBank::new(48_000.);
-        assert_eq!(b.sec1.len(), 24);
-        assert_eq!(b.sec2.len(), 24);
+        assert_eq!(b.sec1.len(), BARK_BANDS);
+        assert_eq!(b.sec2.len(), BARK_BANDS);
     }
 }

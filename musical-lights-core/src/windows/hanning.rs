@@ -1,6 +1,6 @@
 use core::f32::consts::PI;
 
-#[cfg(not(any(feature = "std", feature = "libm")))]
+#[allow(unused_imports)]
 use micromath::F32Ext;
 
 use super::Window;

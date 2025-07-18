@@ -564,6 +564,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "display-interface"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ba2aab1ef3793e6f7804162debb5ac5edb93b3d650fbcc5aeb72fcd0e6c03a0"
+
+[[package]]
 name = "document-features"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1468,6 +1474,7 @@ dependencies = [
  "postcard",
  "rand",
  "smart-leds",
+ "smart-leds-matrix",
  "smart-leds-trait",
  "static_cell",
  "ws2812-esp32-rmt-driver",
@@ -2146,6 +2153,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "smart-leds-matrix"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b9687c65af427b336f178f72b64eb5c52b8a42c4c0385e1d457c34367098efa"
+dependencies = [
+ "display-interface",
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "smart-leds",
+ "smart-leds-trait",
+]
+
+[[package]]
 name = "smart-leds-trait"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2742,6 +2762,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56c578740a03455e0a88e01c7233384c4e1c1fa9e181898547110b4911e98b69"
 dependencies = [
+ "embedded-graphics-core",
  "embuild 0.32.0",
  "esp-idf-hal",
  "esp-idf-sys",

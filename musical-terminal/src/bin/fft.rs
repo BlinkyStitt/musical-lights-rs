@@ -99,7 +99,7 @@ async fn main(spawner: Spawner) {
 
     let (loudness_tx, loudness_rx) = flume::bounded(2);
 
-    let mic_stream = musical_terminal::MicrophoneStream::try_new().unwrap();
+    let mic_stream = musical_terminal::MicrophoneStream::try_new(48_000).unwrap();
 
     let sample_rate = mic_stream.sample_rate.0 as f32;
 

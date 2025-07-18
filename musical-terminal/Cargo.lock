@@ -508,6 +508,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "display-interface"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ba2aab1ef3793e6f7804162debb5ac5edb93b3d650fbcc5aeb72fcd0e6c03a0"
+
+[[package]]
 name = "document-features"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1174,6 +1180,7 @@ dependencies = [
  "flume",
  "log",
  "musical-lights-core",
+ "smart-leds-matrix",
  "static_cell",
 ]
 
@@ -1859,6 +1866,19 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66df34e571fa9993fa6f99131a374d58ca3d694b75f9baac93458fe0d6057bf0"
 dependencies = [
+ "smart-leds-trait",
+]
+
+[[package]]
+name = "smart-leds-matrix"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b9687c65af427b336f178f72b64eb5c52b8a42c4c0385e1d457c34367098efa"
+dependencies = [
+ "display-interface",
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "smart-leds",
  "smart-leds-trait",
 ]
 

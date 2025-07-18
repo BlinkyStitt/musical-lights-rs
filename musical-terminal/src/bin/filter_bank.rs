@@ -7,11 +7,13 @@ use std::env;
 use embassy_executor::Spawner;
 use musical_lights_core::audio::{AggregatedBins, BarkBank};
 use musical_lights_core::fps::FpsTracker;
-use musical_lights_core::lights::{Bands, DancingLights, Gradient};
-use musical_lights_core::logging::{debug, info, trace};
+use musical_lights_core::lights::Bands;
+use musical_lights_core::logging::{debug, info};
+use musical_lights_core::remap;
 use musical_terminal::MicrophoneStream;
 
-const NUM_BANDS: usize = 24;
+/// TODO: import this from the core code
+const NUM_BANDS: usize = 20;
 
 #[embassy_executor::task]
 async fn audio_task(
@@ -37,7 +39,7 @@ async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
 
     while let Ok(loudness) = rx_loudness.recv_async().await {
         for (&x, b) in loudness.0.iter().zip(bands.0.iter_mut()) {
-            *b = (x * 9.) as u8;
+            *b = remap(x, 0., 1., 0., 9.) as u8;
         }
 
         info!("bands: {bands}");
@@ -64,7 +66,7 @@ async fn main(spawner: Spawner) {
 
     let (loudness_tx, loudness_rx) = flume::bounded(2);
 
-    let mic_stream = musical_terminal::MicrophoneStream::try_new().unwrap();
+    let mic_stream = musical_terminal::MicrophoneStream::try_new(48_000).unwrap();
 
     let sample_rate = mic_stream.sample_rate.0 as f32;
 

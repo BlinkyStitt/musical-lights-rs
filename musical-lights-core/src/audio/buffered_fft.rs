@@ -1,6 +1,8 @@
 //! Use an FFT and a circular buffer to process audio.
 //!
-//! I don't think this is actually what I want. Refactoring now with [`FilterBank`]
+//! I don't think this is actually what I want. Refactoring now with [`FilterBank`].
+//!
+//! This is the first design I used (inspired by things built with a Teensy Audio Board).
 
 use core::marker::PhantomData;
 

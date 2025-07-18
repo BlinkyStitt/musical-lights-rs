@@ -46,7 +46,8 @@ rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
 smart-leds = "0.4"
 smart-leds-trait = "0.3.1"
 static_cell = { version = "2.1.1", features = ["nightly"] }
-ws2812-esp32-rmt-driver = { version = "*", features = ["smart-leds-trait"] }
+ws2812-esp32-rmt-driver = { version = "*", features = ["embedded-graphics-core", "smart-leds-trait"] }
+smart-leds-matrix = "0.2.0"
 
 [patch.crates-io]
 # TODO: not sure about this
