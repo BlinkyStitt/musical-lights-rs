@@ -13,7 +13,7 @@ pub struct BarkScaleBuilder<const IN: usize> {
 
 /// TODO: should this be a trait instead?
 #[derive(Debug, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+// #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(transparent)]
 pub struct BarkScaleAmplitudes(pub AggregatedBins<BARK_SCALE_OUT>);
 

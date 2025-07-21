@@ -105,8 +105,7 @@ checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
 [[package]]
 name = "biquad"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8580925877eb35ab50f987a1c2c193eb46000c8827c871bc3425070f086408cc"
+source = "git+https://github.com/korken89/biquad-rs?rev=34ee4986e7f8426e91112e4171e2a8bfbd7262c7#34ee4986e7f8426e91112e4171e2a8bfbd7262c7"
 dependencies = [
  "num-traits",
 ]

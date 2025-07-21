@@ -32,3 +32,7 @@ musical-lights-core = { path = "../musical-lights-core", features = [
 ] }
 smart-leds-matrix = "0.2.0"
 static_cell = { version = "2.1.1", features = ["nightly"] }
+
+[patch.crates-io]
+# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
+biquad = { git = "https://github.com/korken89/biquad-rs", rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7" }

@@ -19,12 +19,12 @@ use esp_idf_svc::{
     io::Read,
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
-use musical_lights_core::audio::{BarkScaleBuilder, ExponentialScaleBuilder};
 use musical_lights_core::{
-    audio::{parse_i2s_16_bit_mono_to_f32_array, AWeighting, BufferedFFT, Samples},
+    audio::{parse_i2s_16_bit_mono_to_f32_array, AggregatedBins, BarkBank, Samples},
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
+    lights::Bands,
     logging::{debug, error, info, warn},
     message::{Message, PeerId, MESSAGE_BAUD_RATE},
     orientation::Orientation,
@@ -214,7 +214,7 @@ fn main() -> eyre::Result<()> {
     // unsafe { heap_caps_dump_all() };
 
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
-    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<()>(1);
+    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<AggregatedBins<20>>(1);
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     // TODO: thread priority?
@@ -301,7 +301,7 @@ fn blink_neopixels_task(
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
     mut rng: Biski64Rng,
     state: &'static Mutex<State>,
-    fft_ready: flume::Receiver<()>,
+    audio_ready: flume::Receiver<AggregatedBins<20>>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
@@ -329,7 +329,9 @@ fn blink_neopixels_task(
         // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
         // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
         // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
-        fft_ready.recv()?;
+        let loudness = audio_ready.recv()?;
+
+        // TODO: convert loudness to u8s and Bands or just let it be?
 
         // let start = Instant::now();
 
@@ -395,6 +397,7 @@ fn blink_neopixels_task(
 
         // TODO: do we want the async driver? do we want write_no_copy?
         // TODO: this should be an embedded_graphics display i think. though the fibonacci disk is rather different from a grid
+        // TODO: use embedded graphics matrix here instead of the simpler writer. I'm not sure the layout of the nets
         neopixel_external
             .write(brightness(gamma(fibonacci_data.iter().cloned()), 25))
             .unwrap();
@@ -413,28 +416,9 @@ fn mic_task(
     bclk: Gpio26,
     ws: Gpio33,
     din: Gpio25,
-    fft_ready: &mut flume::Sender<()>,
+    audio_ready: &mut flume::Sender<AggregatedBins<20>>,
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
-
-    // TODO: i don't like doing this here. move this inside the buffered fft or something
-    // TODO: i don't think a-weighting is actually what we want
-    // TODO: maybe k-weighting? maybe something much more advanced?
-    type MyWeighting = AWeighting<FFT_OUTPUTS>;
-    const WEIGHTING: MyWeighting = AWeighting::new(I2S_SAMPLE_RATE_HZ as f32);
-
-    type MyBufferedFFT = BufferedFFT<
-        I2S_SAMPLE_SIZE,
-        FFT_INPUTS,
-        FFT_OUTPUTS,
-        HanningWindow<FFT_INPUTS>,
-        MyWeighting,
-    >;
-    static BUFFERED_FFT: ConstStaticCell<MyBufferedFFT> =
-        ConstStaticCell::new(BufferedFFT::uninit(WEIGHTING));
-    let buffered_fft = BUFFERED_FFT.take();
-    buffered_fft.init();
-    info!("buffered_fft created");
 
     static I2S_BUF: ConstStaticCell<[u8; I2S_U8_BUFFER_SIZE]> =
         ConstStaticCell::new([0u8; I2S_U8_BUFFER_SIZE]);
@@ -446,57 +430,33 @@ fn mic_task(
     let i2s_sample_buf = I2S_SAMPLE_BUF.take();
     info!("i2s_sample_buf created");
 
-    type MyScaleBuilder = ExponentialScaleBuilder<FFT_OUTPUTS, AGGREGATED_OUTPUTS>;
-    const SCALE_BUILDER: MyScaleBuilder = MyScaleBuilder::uninit(200., 16_000.);
-
-    // type MyScaleBuilder = BarkScaleBuilder<FFT_OUTPUTS>;
-    // const SCALE_BUILDER: MyScaleBuilder = MyScaleBuilder::uninit();
-
-    static MIC_LOUDNESS: ConstStaticCell<
-        MicLoudnessPattern<
-            FFT_OUTPUTS,
-            DEBUGGING_N,
-            AGGREGATED_OUTPUTS,
-            DEBUGGING_Y,
-            MyScaleBuilder,
-        >,
-    > = ConstStaticCell::new(MicLoudnessPattern::new(
-        SCALE_BUILDER,
-        FLOOR_DB,
-        FLOOR_PEAK_DB,
-        1.0,
-    ));
-    let mic_loudness = MIC_LOUDNESS.take();
-    mic_loudness.init(I2S_SAMPLE_RATE_HZ as f32);
-    info!("mic_loudness created");
-
-    // TODO: what dma frame counts? what buffer count?
-    let channel_cfg = i2s::config::Config::default()
+    let i2s_channel_cfg = i2s::config::Config::default()
         .frames_per_buffer(I2S_SAMPLE_SIZE as u32)
         .dma_buffer_count(4);
 
-    // let clk_cfg = i2s::config::StdClkConfig::new(
+    // let i2s_clk_cfg = i2s::config::StdClkConfig::new(
     //     I2S_SAMPLE_RATE_HZ,
     //     i2s::config::ClockSource::Apll,
     //     i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
     // );
-    let clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
+    let i2s_clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
 
     // TODO: really not sure about mono or stereo. it seems like all the default setup uses stereo
     // 24 bit audio is padded to 32 bits. how do they pad the sign though?
     // TODO: do we want to use 8 or 16 or 24 bit audio?
-    let slot_cfg = i2s::config::StdSlotConfig::philips_slot_default(
+    let i2s_slot_cfg = i2s::config::StdSlotConfig::philips_slot_default(
         i2s::config::DataBitWidth::Bits16,
         i2s::config::SlotMode::Mono,
     );
 
-    let gpio_cfg = i2s::config::StdGpioConfig::default();
+    let i2s_gpio_cfg = i2s::config::StdGpioConfig::default();
 
     // philips doesn't let us set the clocks
     // let i2s_config =
     //     i2s::config::StdConfig::philips(I2S_SAMPLE_RATE_HZ, i2s::config::DataBitWidth::Bits16);
 
-    let i2s_config = i2s::config::StdConfig::new(channel_cfg, clk_cfg, slot_cfg, gpio_cfg);
+    let i2s_config =
+        i2s::config::StdConfig::new(i2s_channel_cfg, i2s_clk_cfg, i2s_slot_cfg, i2s_gpio_cfg);
 
     // TODO: do we want the mclk pin?
     // TODO: DMA? i think thats handled for us
@@ -504,6 +464,9 @@ fn mic_task(
 
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
+
+    // TODO: const setup
+    let mut filter_bank = BarkBank::new(I2S_SAMPLE_RATE_HZ as f32);
 
     log_stack_high_water_mark("mic", None);
 
@@ -532,23 +495,14 @@ fn mic_task(
 
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
         // TODO: move most everything under this into a helper function so that we can test individual pieces easier
-        buffered_fft.push_samples(i2s_sample_buf);
+        let spectrum = filter_bank.push_samples(&i2s_sample_buf.0);
         yield_now();
 
         // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
         // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
 
-        // TODO: only do the FFT if the sample buffer has the right number of elements
-        // TODO: this is giving a stack overflow
-        let spectrum = buffered_fft.fft();
-        yield_now();
-
-        // TODO: still lots to think about on this
-        let mic_loudness_tick = mic_loudness.tick_fft_outputs(&spectrum);
-        yield_now();
-
         // info!("num_lights: {}", mic_loudness_tick.num_lights());
-        info!("loudness: {}", &mic_loudness_tick);
+        info!("loudness: {:?}", &spectrum);
         yield_now();
 
         // TODO: beat detection?
@@ -556,11 +510,14 @@ fn mic_task(
 
         // fps.tick();
 
+        let mut aggregated_bins = AggregatedBins([0.0; 20]);
+        aggregated_bins.0.copy_from_slice(spectrum);
+
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
         // TODO: is this the best way to notify the other thread to run? it might miss frames, but i don't think we actually want backpressure here
         // TODO: this needs to clone light_scale_outputs into a Box and then send that
         // TODO: how do we turn exponential_scale_outputs into light_scale_outputs, and do we even want to do that here? i think that might belong in the light task!
-        if fft_ready.try_send(()).is_err() {
+        if audio_ready.try_send(aggregated_bins).is_err() {
             // TODO: count how many times this errors?
             warn!("fft was faster than the pixels");
         }

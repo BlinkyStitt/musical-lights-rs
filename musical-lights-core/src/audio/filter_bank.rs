@@ -130,7 +130,7 @@ impl BarkBank {
     }
 
     /// TODO: can't decide if pcm should be i16 or i24 or f32
-    pub fn process_block<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARK_BANDS - 4] {
+    pub fn push_samples<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARK_BANDS - 4] {
         let (sec1, sec2, map) = self.sections();
 
         // TODO: have this be allocated during the `new`?

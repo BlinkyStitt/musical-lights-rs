@@ -22,7 +22,7 @@ async fn audio_task(
     tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
-        let x = bank.process_block(&samples.0);
+        let x = bank.push_samples(&samples.0);
 
         let mut buf = AggregatedBins([0.0; NUM_BANDS]);
         buf.0.copy_from_slice(x);

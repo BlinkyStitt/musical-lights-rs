@@ -126,8 +126,7 @@ dependencies = [
 [[package]]
 name = "biquad"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8580925877eb35ab50f987a1c2c193eb46000c8827c871bc3425070f086408cc"
+source = "git+https://github.com/korken89/biquad-rs?rev=34ee4986e7f8426e91112e4171e2a8bfbd7262c7#34ee4986e7f8426e91112e4171e2a8bfbd7262c7"
 dependencies = [
  "num-traits",
 ]
@@ -564,12 +563,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "display-interface"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ba2aab1ef3793e6f7804162debb5ac5edb93b3d650fbcc5aeb72fcd0e6c03a0"
-
-[[package]]
 name = "document-features"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -894,7 +887,7 @@ dependencies = [
 [[package]]
 name = "esp-idf-hal"
 version = "0.45.2"
-source = "git+https://github.com/esp-rs/esp-idf-hal.git?rev=71179237888568453fa5eb129b4971d5ec54c90a#71179237888568453fa5eb129b4971d5ec54c90a"
+source = "git+https://github.com/esp-rs/esp-idf-hal.git?rev=eb29eb087fc033e71bb1c3cf929a0dc5520db9b8#eb29eb087fc033e71bb1c3cf929a0dc5520db9b8"
 dependencies = [
  "atomic-waker",
  "critical-section",
@@ -912,7 +905,6 @@ dependencies = [
  "heapless 0.8.0",
  "log",
  "nb 1.1.0",
- "num_enum",
 ]
 
 [[package]]
@@ -1474,7 +1466,6 @@ dependencies = [
  "postcard",
  "rand",
  "smart-leds",
- "smart-leds-matrix",
  "smart-leds-trait",
  "static_cell",
  "ws2812-esp32-rmt-driver",
@@ -2149,19 +2140,6 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66df34e571fa9993fa6f99131a374d58ca3d694b75f9baac93458fe0d6057bf0"
 dependencies = [
- "smart-leds-trait",
-]
-
-[[package]]
-name = "smart-leds-matrix"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b9687c65af427b336f178f72b64eb5c52b8a42c4c0385e1d457c34367098efa"
-dependencies = [
- "display-interface",
- "embedded-graphics-core",
- "embedded-hal 1.0.0",
- "smart-leds",
  "smart-leds-trait",
 ]
 

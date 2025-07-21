@@ -15,6 +15,9 @@ exclude = [
 ]
 
 [patch.crates-io]
+# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
+biquad = { git = "https://github.com/korken89/biquad-rs", rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7" }
+
 # we patch all embassy crates to the current main. this is because they haven't released versions of everything that use the newest embassy-sync
 # TODO: embassy feature on musical-lights-core that handles this?
 # embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }

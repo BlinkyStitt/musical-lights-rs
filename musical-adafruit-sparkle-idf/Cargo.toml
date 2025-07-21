@@ -46,13 +46,15 @@ rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
 smart-leds = "0.4"
 smart-leds-trait = "0.3.1"
 static_cell = { version = "2.1.1", features = ["nightly"] }
-ws2812-esp32-rmt-driver = { version = "*", features = ["embedded-graphics-core", "smart-leds-trait"] }
-smart-leds-matrix = "0.2.0"
+ws2812-esp32-rmt-driver = { version = "*", features = ["embedded-graphics-core", "smart-leds-trait", "std", "alloc"] }
 
 [patch.crates-io]
+# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
+biquad = { git = "https://github.com/korken89/biquad-rs", rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7"}
+
 # TODO: not sure about this
 esp-idf-svc = { git = "https://github.com/esp-rs/esp-idf-svc.git", rev = "e0d9c76e83122ac991526a6c6f296b12cf698258" }
-esp-idf-hal = { git = "https://github.com/esp-rs/esp-idf-hal.git", rev = "71179237888568453fa5eb129b4971d5ec54c90a" }
+esp-idf-hal = { git = "https://github.com/esp-rs/esp-idf-hal.git", rev = "eb29eb087fc033e71bb1c3cf929a0dc5520db9b8" }
 
 # Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
 i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
