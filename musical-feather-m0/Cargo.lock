@@ -45,9 +45,9 @@ dependencies = [
 
 [[package]]
 name = "atsamd-hal"
-version = "0.21.3"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b0ab6f6ba897a7f46f64397873e4b44bd28d4ec479a59496e57218fc6339ee8"
+checksum = "0943a1a3f7f84d98565abd66e7a451cd189f2e6c7e925a4cd0f3d42b2e0021d8"
 dependencies = [
  "aes",
  "atsamd-hal-macros",
@@ -68,18 +68,18 @@ dependencies = [
  "num-traits",
  "opaque-debug",
  "paste",
- "rand_core",
+ "rand_core 0.9.3",
  "seq-macro",
+ "sorted-hlist",
  "typenum",
- "vcell",
  "void",
 ]
 
 [[package]]
 name = "atsamd-hal-macros"
-version = "0.2.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bdbb03564f9aa7bea914a9a9de39ba59eeaecc8a02e5733f770da0f2bb0c789"
+checksum = "ae9d1e473cf24a5deb7966c2e2559e0d739ca7734c0f1b9a058ef31e8188e9f4"
 dependencies = [
  "litrs",
  "phf",
@@ -589,9 +589,9 @@ checksum = "dd2e7510819d6fbf51a5545c8f922716ecfb14df168a3242f7d33e0239efe6a1"
 
 [[package]]
 name = "feather_m0"
-version = "0.18.4"
+version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ad7e99cc059823444628fd4c07fbccd317b0f55c0d3c97ebab6ff9de31d38f"
+checksum = "c6f0ad6bfcf316109225b561ac48a7075e3576e31568edcc08a86c423f917686"
 dependencies = [
  "atsamd-hal",
  "cortex-m",
@@ -1198,7 +1198,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -1211,6 +1211,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_core"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
+
+[[package]]
 name = "rawpointer"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1218,9 +1224,9 @@ checksum = "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
 
 [[package]]
 name = "rgb"
-version = "0.8.51"
+version = "0.8.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a457e416a0f90d246a4c3288bd7a25b2304ca727f253f95be383dd17af56be8f"
+checksum = "0c6a884d2998352bb4daf0183589aec883f16a6da1f4dde84d8e2e9a5409a1ce"
 dependencies = [
  "bytemuck",
 ]
@@ -1341,7 +1347,7 @@ version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -1380,6 +1386,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edeb89c73244414bb0568611690dd095b2358b3fda5bae65ad784806cca00157"
 dependencies = [
  "rgb",
+]
+
+[[package]]
+name = "sorted-hlist"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3b3c9d254b6644002aecb837882062fbca9af420d2cd4c2f0e4da248d80571b"
+dependencies = [
+ "typenum",
 ]
 
 [[package]]

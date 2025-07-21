@@ -17,7 +17,7 @@ chip = "ATSAMD21G18A"
 [dependencies]
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
-feather_m0 = "0.18.4"
+feather_m0 = "0.19.2"
 embassy-executor = { version = "0.7.0", features = [
     "arch-cortex-m",
     "executor-thread",

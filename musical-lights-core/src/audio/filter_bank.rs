@@ -117,11 +117,11 @@ impl BarkBank {
         unsafe {
             (
                 transmute::<
-                    &mut [std::mem::MaybeUninit<Section>; BARK_BANDS],
+                    &mut [core::mem::MaybeUninit<Section>; BARK_BANDS],
                     &mut [Section; BARK_BANDS],
                 >(&mut self.sec1),
                 transmute::<
-                    &mut [std::mem::MaybeUninit<Section>; BARK_BANDS],
+                    &mut [core::mem::MaybeUninit<Section>; BARK_BANDS],
                     &mut [Section; BARK_BANDS],
                 >(&mut self.sec2),
                 &self.map,

@@ -42,7 +42,7 @@ musical-lights-core = { path = "../musical-lights-core", default-features = fals
 ] }
 once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
 postcard = "1.1.2"
-rand = { version = "0.9.1", default-features = false, features = ["nightly"] }
+rand = { version = "0.9.2", default-features = false, features = ["nightly"] }
 smart-leds = "0.4"
 smart-leds-trait = "0.3.1"
 static_cell = { version = "2.1.1", features = ["nightly"] }

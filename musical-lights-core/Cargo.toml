@@ -95,7 +95,3 @@ std = [
     "serde/std",
     "thiserror/std",
 ]
-
-[patch.crates-io]
-# Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
-i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }

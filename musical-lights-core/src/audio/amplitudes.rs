@@ -64,7 +64,6 @@ pub trait AggregatedBinsBuilder<const IN: usize, const OUT: usize> {
 
     /// TODO: rename this function? should sum_power_into just be here and not as a builder in Aggregated Bins at all?
     /// TODO: use iters?
-    /// TODO: this should probably be marked as #[inline]
     /// TODO: this feels derivable. need to practice macros
     #[inline]
     fn loudness_into(&self, spectrum: &FftOutputs<IN>, output: &mut Self::Output) {
