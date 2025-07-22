@@ -40,7 +40,10 @@ use smart_leds::{
 };
 use smart_leds_trait::SmartLedsWrite;
 use static_cell::ConstStaticCell;
-use std::time::Instant;
+use std::{
+    iter::{self, repeat, repeat_n},
+    time::Instant,
+};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -88,7 +91,7 @@ const AGGREGATED_OUTPUTS: usize = 20;
 // TODO: 20/24 buckets don't fit inside of 256 or 400!
 // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
 // Y is currently set to 9 because the terminal logging looks better. but that should change to fit the actual leds
-const DEBUGGING_Y: usize = 4;
+const DEBUGGING_Y: usize = 255;
 const DEBUGGING_N: usize = AGGREGATED_OUTPUTS * DEBUGGING_Y;
 
 const _SAFETY_CHECKS: () = {
@@ -364,19 +367,31 @@ fn blink_neopixels_task(
         // TODO: gamma and brightness correct now?
         onboard_rgb_data[0] = hsv2rgb(base_hsv);
 
+        // TODO: maybe we should average bands together so that a sound between two bands looks better?
+        let bands_iter = bands
+            .0
+            .iter() // 20 items
+            .flat_map(
+                move |&band|           // for each band...
+                repeat_n(band, AGGREGATED_OUTPUTS), // …but only take `repeat` items (20) from it
+            );
+
         // add the loudness to the lights and then convert the hsv data into rgb data
-        for (rgb, hsv) in fibonacci_rgb_data
+        for ((rgb, hsv), loudness) in fibonacci_rgb_data
             .iter_mut()
             .zip(fibonacci_hsv_data.iter_mut())
+            .zip(bands_iter)
         {
-            // TODO: use bands to set the value inside fibonacci_hsv_data
+            hsv.val = loudness;
             *rgb = hsv2rgb(*hsv);
         }
 
         // slide the rgb data slowly
-        let fibonacci_rgb_iter = fibonacci_rgb_data[slide_offset..]
+        // TODO: this is sliding too fast. we need a divisor on this
+        let slow_slide_offset = slide_offset / 4;
+        let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
-            .chain(fibonacci_rgb_data[..slide_offset].iter())
+            .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
             .copied();
 
         /*
@@ -424,15 +439,15 @@ fn blink_neopixels_task(
         // TODO: check that this is the right gamma correction for our leds
         // TODO: dithering
         // TODO: the docs for brightness and gamma are confusing. they say opposite things unless I just can't read?
+        // TODO: brightness isn't right. we want fastled's modified brightness helper that is meant for video (never fade to 0. always display some)
         neopixel_onboard.write(brightness(gamma(onboard_rgb_data.iter().cloned()), 8))?;
 
-        neopixel_external
-            .write(brightness(gamma(fibonacci_rgb_iter), 29))
-            .unwrap();
+        // TODO: gamma?
+        neopixel_external.write(fibonacci_rgb_iter).unwrap();
 
         // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
         g_hue = g_hue.wrapping_add(1);
-        slide_offset = (slide_offset + 1) % NUM_FIBONACCI_NEOPIXELS;
+        slide_offset = (slide_offset + 1) % (NUM_FIBONACCI_NEOPIXELS * 4);
 
         fps.tick();
     }
@@ -533,7 +548,7 @@ fn mic_task(
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.iter().zip(bands.0.iter_mut()) {
-            *b = remap(x, 0., 1., 0., DEBUGGING_Y as f32) as u8;
+            *b = remap(x, 0., 1., 10., 64.) as u8;
         }
 
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
