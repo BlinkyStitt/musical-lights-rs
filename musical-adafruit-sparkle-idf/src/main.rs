@@ -306,18 +306,17 @@ fn blink_neopixels_task(
     // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with the other art?
     // let mut g_hue = rng.next_u32() as u8;
     let mut g_hue = 0;
+    let mut slide_offset: usize = 0;
 
     // TODO: do we want these boxed? they are large. maybe they should be statics instead?
-    static ONBOARD_DATA: ConstStaticCell<[RGB8; NUM_ONBOARD_NEOPIXELS]> =
-        ConstStaticCell::new([GREEN; NUM_ONBOARD_NEOPIXELS]);
-    let onboard_data = ONBOARD_DATA.take();
+    static ONBOARD_RGB_DATA: ConstStaticCell<[RGB8; NUM_ONBOARD_NEOPIXELS]> =
+        ConstStaticCell::new([BLACK; NUM_ONBOARD_NEOPIXELS]);
+    let onboard_rgb_data = ONBOARD_RGB_DATA.take();
 
-    // TODO: use embedded_graphics crate
-    static FIBONACCI_DATA: ConstStaticCell<[RGB8; NUM_FIBONACCI_NEOPIXELS]> =
-        ConstStaticCell::new([GREEN; NUM_FIBONACCI_NEOPIXELS]);
-    let fibonacci_data = FIBONACCI_DATA.take();
-
-    info!("should be all red");
+    // TODO: use embedded_graphics crate?
+    static FIBONACCI_RGB_DATA: ConstStaticCell<[RGB8; NUM_FIBONACCI_NEOPIXELS]> =
+        ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
+    let fibonacci_rgb_data = FIBONACCI_RGB_DATA.take();
 
     // TODO: Hsl instead of Hsv?
     let mut base_hsv = Hsv {
@@ -327,7 +326,7 @@ fn blink_neopixels_task(
     };
 
     // TODO: this will need some more refactoring to work with the compasses, but lets just get it working with the audio now
-    rainbow(base_hsv, fibonacci_data.as_mut_slice());
+    rainbow(base_hsv, fibonacci_rgb_data.as_mut_slice(), 1);
 
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
     // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
@@ -353,7 +352,7 @@ fn blink_neopixels_task(
         // let start = Instant::now();
 
         // TODO: gamma and brightness correct now?
-        onboard_data[0] = hsv2rgb(base_hsv);
+        onboard_rgb_data[0] = hsv2rgb(base_hsv);
 
         /*
         // TODO: do something to force a faked state for the first 5 seconds. during that time, we should play the "startup" pattern
@@ -400,23 +399,22 @@ fn blink_neopixels_task(
         // TODO: check that this is the right gamma correction for our leds
         // TODO: dithering
         // TODO: the docs for brightness and gamma are confusing. they say opposite things unless I just can't read?
-        neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
+        neopixel_onboard.write(brightness(gamma(onboard_rgb_data.iter().cloned()), 8))?;
 
-        // TODO: yield or watchdog reset?
-        // yield_now();
+        let fibonacci_iter = fibonacci_rgb_data
+            .iter()
+            .cycle()
+            .skip(slide_offset)
+            .take(NUM_FIBONACCI_NEOPIXELS)
+            .copied();
 
-        // TODO: do we want the async driver? do we want write_no_copy?
-        // TODO: this should be an embedded_graphics display i think. though the fibonacci disk is rather different from a grid
-        // TODO: use embedded graphics matrix here instead of the simpler writer. I'm not sure the layout of the nets
-        // TODO: or maybe just track the starting point and have it shift using the g_hue variable?
         neopixel_external
-            .write(brightness(gamma(fibonacci_data.iter().cloned()), 25))
+            .write(brightness(gamma(fibonacci_iter), 29))
             .unwrap();
 
-        // yield_now();
-
         // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
-        // g_hue = g_hue.wrapping_add(1);
+        g_hue = g_hue.wrapping_add(1);
+        slide_offset = (slide_offset + 1) % NUM_FIBONACCI_NEOPIXELS;
 
         fps.tick();
     }
