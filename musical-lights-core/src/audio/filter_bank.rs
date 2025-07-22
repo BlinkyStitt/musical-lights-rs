@@ -1,7 +1,10 @@
 //! Use a bank of filters for audio processing.
 //!
 //! This is an alternative to the code in [`BufferedFFT`].
-use crate::logging::trace;
+use crate::{
+    logging::{info, trace},
+    remap,
+};
 use biquad::{
     Biquad, DirectForm2Transposed,
     coefficients::{Coefficients, Type},
@@ -14,14 +17,6 @@ use micromath::F32Ext;
 
 /// normally this is 24, but maybe i want to capture the highest frequencies and do 25?
 const BARK_BANDS: usize = 24;
-
-/// 30 ms @ 100 FPS. TODO: need to tune this based on real fps
-const EMA_ALPHA: f32 = 0.716_531;
-
-/// ≈2 s fall
-///
-/// TODO: tune this
-const PEAK_DECAY: f32 = 0.995;
 
 /// ≈⅓ Bark
 const Q_BOOST: f32 = 3.0;
@@ -44,7 +39,16 @@ const ISO60_GAIN: [f32; BARK_BANDS] = [
     0.7079, 0.7499, 0.7943, 0.8412, 0.8909, 0.9433, 1.0000, 1.1220, 1.2589, 1.4125, 1.6768, 2.1060,
 ];
 
-/*──────────────────── Filter‑bank Struct ───────────────────────*/
+#[inline]
+pub fn ema_alpha(fps: f32, tau_ms: f32) -> f32 {
+    // frame duration
+    let dt = 1.0 / fps;
+
+    // ms → s
+    let tau = tau_ms * 1e-3;
+
+    (-dt / tau).exp()
+}
 
 /// 24‑band Bark filter‑bank (Direct‑Form II Transposed biquads).
 pub struct BarkBank {
@@ -57,6 +61,10 @@ pub struct BarkBank {
     bars: [f32; BARK_BANDS - 4],
     map: [usize; BARK_BANDS],
     peak: f32,
+    /// TODO: is an EMA actually what we want? don't we actually just want to average the last 30ms
+    ema_alpha: f32,
+    /// TODO: replace this with a dagc
+    peak_decay: f32,
 }
 
 /// /Ihavenoideawhatimdoingdog.jpg
@@ -80,12 +88,22 @@ impl BarkBank {
             bars,
             map,
             peak,
+            ema_alpha: 1.0,
+            peak_decay: 1.0,
         }
     }
 
     /// Build filters for a given sample rate.
-    pub fn init(&mut self, sample_hz: f32) {
+    pub fn init(&mut self, fps_target: f32, sample_hz: f32) {
         let sample_hz = (sample_hz).hz();
+
+        // TODO: let tau_ms be configurable to? i think we always want 30ms since thats human-centric number
+        // TODO: should it update the fps target based on the actual
+        self.ema_alpha = ema_alpha(fps_target, 30.);
+        self.peak_decay = ema_alpha(fps_target, 2_000.);
+
+        info!("ema_alpha: {}", self.ema_alpha);
+        info!("peak_decay: {}", self.peak_decay);
 
         for band in 0..BARK_BANDS {
             let (lo, hi) = (BARK_EDGES[band], BARK_EDGES[band + 1]);
@@ -98,9 +116,9 @@ impl BarkBank {
         }
     }
 
-    pub fn new(sample_hz: f32) -> Self {
+    pub fn new(fps_target: f32, sample_hz: f32) -> Self {
         let mut x = Self::uninit();
-        x.init(sample_hz);
+        x.init(fps_target, sample_hz);
 
         x
     }
@@ -116,14 +134,12 @@ impl BarkBank {
         // assert!(self.ready, "BarkBank::init() not called");
         unsafe {
             (
-                transmute::<
-                    &mut [core::mem::MaybeUninit<Section>; BARK_BANDS],
-                    &mut [Section; BARK_BANDS],
-                >(&mut self.sec1),
-                transmute::<
-                    &mut [core::mem::MaybeUninit<Section>; BARK_BANDS],
-                    &mut [Section; BARK_BANDS],
-                >(&mut self.sec2),
+                transmute::<&mut [MaybeUninit<Section>; BARK_BANDS], &mut [Section; BARK_BANDS]>(
+                    &mut self.sec1,
+                ),
+                transmute::<&mut [MaybeUninit<Section>; BARK_BANDS], &mut [Section; BARK_BANDS]>(
+                    &mut self.sec2,
+                ),
                 &self.map,
             )
         }
@@ -133,7 +149,7 @@ impl BarkBank {
     pub fn push_samples<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARK_BANDS - 4] {
         let (sec1, sec2, map) = self.sections();
 
-        // TODO: have this be allocated during the `new`?
+        // TODO: move this onto self and just call .fill(0.0) here?
         let mut tmp = [0.0f32; BARK_BANDS - 4];
 
         /* 1. 4‑pole Bark power */
@@ -141,39 +157,46 @@ impl BarkBank {
             for ((s1, s2), &i) in sec1.iter_mut().zip(sec2.iter_mut()).zip(map.iter()) {
                 // cascade
                 let y = s2.run(s1.run(x));
+                // sume the squares
                 tmp[i] += y * y;
             }
         }
 
+        /* 2. Take the average + ISO weighting + cube‑root */
         let norm = 1.0 / pcm.len() as f32;
-        for v in &mut tmp {
-            *v *= norm;
-        }
-
-        /* 2. ISO weighting + cube‑root */
         for (t, g) in tmp.iter_mut().zip(ISO60_GAIN.iter()) {
-            *t = (*t * g).powf(0.33);
+            // TODO: include `.powf(1.0 / 3.0)`? we want to do it AFTER we do the AGC!
+            // *t = ((*t * norm).sqrt() * g).powf(1.0 / 3.0);
+
+            // TODO: include sqrt so that we have RMS? I think that is the right thing to calculate, but a tone sweep looks worse
+            *t = (*t * norm * g).powf(1.0 / 3.0);
         }
 
         /* 3. 30 ms EMA */
-        // TODO: I'm not actually sure about this. i think we might want a "peak" tracker here too.
+        // TODO: I'm not actually sure about this. i think we might want a "peak" tracker here too. but some audio papers said to use an EMA
+        // TODO: but also we have an AGC and that does some averaging too. I have no idea what i'm doing!
+        // TODO: self.ema_alpha isn't a const anymore. is this `1 - ema_alpha` fast enough or do we need to cache that?
         (0..BARK_BANDS - 4).for_each(|i| {
-            self.bars[i] = EMA_ALPHA * self.bars[i] + (1.0 - EMA_ALPHA) * tmp[i];
+            self.bars[i] = self.ema_alpha * self.bars[i] + (1.0 - self.ema_alpha) * tmp[i];
         });
 
         /* 4. auto‑gain (peak‑hold with decay) */
-        self.peak *= PEAK_DECAY;
+        // TODO: use a real AGC
+        self.peak *= self.peak_decay;
 
-        // TODO: need to think more about this init value. 1.0 seems to look okay
-        let frame_peak = self.bars.iter().copied().fold(1.0, f32::max);
+        // TODO: need to think more about this init value. 1.0 seems to look okay on the mac terminal, but the esp32 doesn't hear anything
+        // TODO: change init to a config value. make pressing a button move it up or down?
+        // TODO: init with some calculated value instead of a hard coded value. the mac and arduino mics are definitely different
+        let frame_peak = self.bars.iter().copied().fold(0.4, f32::max);
 
+        // TODO: still unsure if we should do an EMA on this or have it use the peak
         self.peak = self.peak.max(frame_peak);
-
+        // self.peak = self.peak_decay * self.peak + (1.0 - self.peak_decay) * frame_peak;
         trace!("peak: {}", self.peak);
 
         // scale everything from 0-1?
         for v in &mut self.bars {
-            *v /= self.peak;
+            *v = remap(*v, 0.0, self.peak, 0.0, 1.0);
         }
 
         &self.bars
@@ -229,8 +252,16 @@ mod tests {
     */
 
     #[test]
+    fn test_ema_alpha() {
+        // TODO: approx_eq float helper
+        assert_eq!(ema_alpha(100., 30.), 0.716_531_34);
+        assert_eq!(ema_alpha(100., 2_000.), 0.99501246);
+        assert_eq!(ema_alpha(100., 5_000.), 0.998002);
+    }
+
+    #[test]
     fn filterbank_len() {
-        let b = BarkBank::new(48_000.);
+        let b = BarkBank::new(100.0, 48_000.);
         assert_eq!(b.sec1.len(), BARK_BANDS);
         assert_eq!(b.sec2.len(), BARK_BANDS);
     }

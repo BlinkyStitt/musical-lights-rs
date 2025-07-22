@@ -19,5 +19,5 @@ pub fn stack_high_water_mark(task: Option<TaskHandle_t>) -> usize {
 #[inline]
 pub fn log_stack_high_water_mark(label: &'static str, task: Option<TaskHandle_t>) {
     let high_water_mark = stack_high_water_mark(task);
-    info!("high water for {}: {} bytes", label, high_water_mark);
+    info!("high water for {label}: {high_water_mark} bytes");
 }

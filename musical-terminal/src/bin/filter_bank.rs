@@ -15,9 +15,17 @@ use musical_terminal::MicrophoneStream;
 /// TODO: import this from the core code
 const NUM_BANDS: usize = 20;
 
+const FPS_TARGET: f32 = 55.;
+
+const MIC_SAMPLE_RATE: u32 = 44_100;
+
+const MIC_SAMPLE_SIZE: usize = (MIC_SAMPLE_RATE as f32 / FPS_TARGET) as usize;
+
+const DEBUGGING_Y: usize = 4;
+
 #[embassy_executor::task]
 async fn audio_task(
-    mic_stream: MicrophoneStream<480>,
+    mic_stream: MicrophoneStream<MIC_SAMPLE_SIZE>,
     mut bank: BarkBank,
     tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,
 ) {
@@ -39,7 +47,7 @@ async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
 
     while let Ok(loudness) = rx_loudness.recv_async().await {
         for (&x, b) in loudness.0.iter().zip(bands.0.iter_mut()) {
-            *b = remap(x, 0., 1., 0., 9.) as u8;
+            *b = remap(x, 0., 1., 0., DEBUGGING_Y as f32) as u8;
         }
 
         info!("bands: {bands}");
@@ -66,11 +74,12 @@ async fn main(spawner: Spawner) {
 
     let (loudness_tx, loudness_rx) = flume::bounded(2);
 
-    let mic_stream = musical_terminal::MicrophoneStream::try_new(48_000).unwrap();
+    let mic_stream =
+        musical_terminal::MicrophoneStream::<MIC_SAMPLE_SIZE>::try_new(MIC_SAMPLE_RATE).unwrap();
 
     let sample_rate = mic_stream.sample_rate.0 as f32;
 
-    let filter_bank = BarkBank::new(sample_rate);
+    let filter_bank = BarkBank::new(FPS_TARGET, sample_rate);
 
     spawner.must_spawn(audio_task(mic_stream, filter_bank, loudness_tx));
     spawner.must_spawn(lights_task(loudness_rx));

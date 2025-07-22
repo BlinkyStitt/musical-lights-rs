@@ -5,7 +5,6 @@
 //! make it work, make it right, make it fast. don't get caught up making perfect iterators on this first pass!
 use core::f32;
 use std::fmt::Display;
-use std::thread::yield_now;
 
 use itertools::{Itertools, MinMaxResult};
 use musical_lights_core::audio::{AggregatedBinsBuilder, FftOutputs};
@@ -53,6 +52,7 @@ impl<const FFT_OUTPUTS: usize, const N: usize, const X: usize, const Y: usize, S
 where
     S: AggregatedBinsBuilder<FFT_OUTPUTS, X>,
 {
+    #[deprecated(note = "i like the filter bank way more")]
     pub const fn new(
         uninit_scale_builder: S,
         floor_db: f32,
@@ -218,8 +218,8 @@ impl<const X: usize, const Y: usize> Display for MicLoudnessTick<'_, X, Y> {
                     f.write_str("   |")?;
                 }
                 // TODO: make this work with more than 9
-                (true, x) => f.write_fmt(format_args!("*{}*|", x))?,
-                (false, x) => f.write_fmt(format_args!(" {} |", x))?,
+                (true, x) => f.write_fmt(format_args!("*{x}*|"))?,
+                (false, x) => f.write_fmt(format_args!(" {x} |"))?,
             }
         }
 

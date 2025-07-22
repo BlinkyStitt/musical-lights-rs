@@ -20,7 +20,7 @@ use esp_idf_svc::{
 };
 use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
 use musical_lights_core::{
-    audio::{parse_i2s_16_bit_mono_to_f32_array, AggregatedBins, BarkBank, Samples},
+    audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Samples},
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
@@ -28,7 +28,7 @@ use musical_lights_core::{
     logging::{debug, error, info, warn},
     message::{Message, PeerId, MESSAGE_BAUD_RATE},
     orientation::Orientation,
-    windows::HanningWindow,
+    remap,
 };
 use once_cell::sync::Lazy;
 use rand::RngCore;
@@ -40,7 +40,6 @@ use smart_leds::{
 };
 use smart_leds_trait::SmartLedsWrite;
 use static_cell::ConstStaticCell;
-use std::thread::yield_now;
 use std::time::Instant;
 use std::{
     sync::{
@@ -53,7 +52,7 @@ use std::{
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
 
 use crate::debug::log_stack_high_water_mark;
-use crate::light_patterns::{loading, MicLoudnessPattern};
+use crate::light_patterns::loading;
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -70,40 +69,32 @@ const NUM_ONBOARD_NEOPIXELS: usize = 1;
 const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 
 /// TODO: 44.1kHz? 48kHz? 96Khz?
-const I2S_SAMPLE_RATE_HZ: u32 = 44100;
+const I2S_SAMPLE_RATE_HZ: u32 = 44_100;
 
-/// TODO: what size FFT? i want to have 4096, but 2048 is probably fine. the teensy had 1024 i think.
-const FFT_INPUTS: usize = 4096;
-
-/// TODO: not sure if this should be 1, 2, or 4
-const I2S_SAMPLE_OVERLAP: usize = 4;
+// TODO: if this isn't perfectly divisible, then the target will probably be off. maybe make it easy to round up?
+const FPS_TARGET: f32 = 55.;
 
 /// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
 /// different sample rates and FFT_INPUTS are a good idea here!
-const I2S_SAMPLE_SIZE: usize = FFT_INPUTS / I2S_SAMPLE_OVERLAP;
-
-const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
+///
+/// TODO: refactored. fft isn't relevant anymore. scale this based off a desired FPS
+const I2S_SAMPLE_SIZE: usize = (I2S_SAMPLE_RATE_HZ as f32 / FPS_TARGET) as usize;
 
 /// TODO: with 24-bit audio, this should use `size_of::<i32>`
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
-const AGGREGATED_OUTPUTS: usize = 10;
-
-/// TODO: the mic's floor is -90, but I think we should ignore under 60. or maybe even 30. but we need dbfs calculated correctly first!
-const FLOOR_DB: f32 = -65.;
-/// TODO: what should this be? whats the minimum range that we want?
-const FLOOR_PEAK_DB: f32 = FLOOR_DB + 24.;
+const AGGREGATED_OUTPUTS: usize = 20;
 
 // TODO: 20/24 buckets don't fit inside of 256 or 400!
 // TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
 // Y is currently set to 9 because the terminal logging looks better. but that should change to fit the actual leds
-const DEBUGGING_Y: usize = 9;
+const DEBUGGING_Y: usize = 4;
 const DEBUGGING_N: usize = AGGREGATED_OUTPUTS * DEBUGGING_Y;
 
 const _SAFETY_CHECKS: () = {
-    assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
+    // assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
     assert!(I2S_SAMPLE_SIZE > 1);
-    assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
+    // assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
 };
 
 /// TODO: add a lot more to this
@@ -135,7 +126,7 @@ fn main() -> eyre::Result<()> {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     info!("Hello, world!");
-    info!("NUM LEDS: {}", NUM_FIBONACCI_NEOPIXELS);
+    info!("NUM LEDS: {NUM_FIBONACCI_NEOPIXELS}");
 
     // TODO: static_cell? arc? something else? LazyLock from std? RwLock?
     static STATE: Lazy<Mutex<State>> = Lazy::new(|| Mutex::new(State::default()));
@@ -209,12 +200,12 @@ fn main() -> eyre::Result<()> {
     // TODO: where should we use this rng?
     let rng_1_hello = rng_1.next_u64();
     let rng_2_hello = rng_2.next_u64();
-    debug!("rng {} {}", rng_1_hello, rng_2_hello);
+    debug!("rng {rng_1_hello} {rng_2_hello}");
 
     // unsafe { heap_caps_dump_all() };
 
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
-    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<AggregatedBins<20>>(1);
+    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<Bands<AGGREGATED_OUTPUTS>>(1);
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     // TODO: thread priority?
@@ -289,6 +280,7 @@ fn main() -> eyre::Result<()> {
         })?;
 
     mic_handle.join().unwrap().unwrap();
+    blink_neopixels_handle.join().unwrap().unwrap();
     read_from_sensors_handle.join().unwrap().unwrap();
     send_to_sensors_handle.join().unwrap().unwrap();
 
@@ -301,7 +293,7 @@ fn blink_neopixels_task(
     neopixel_external: &mut Ws2812Esp32Rmt<'_>,
     mut rng: Biski64Rng,
     state: &'static Mutex<State>,
-    audio_ready: flume::Receiver<AggregatedBins<20>>,
+    audio_ready: flume::Receiver<Bands<AGGREGATED_OUTPUTS>>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
@@ -329,13 +321,12 @@ fn blink_neopixels_task(
         // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
         // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
         // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
-        let loudness = audio_ready.recv()?;
-
-        // TODO: convert loudness to u8s and Bands or just let it be?
+        let bands = audio_ready.recv()?;
 
         // let start = Instant::now();
 
         debug!("Hue: {g_hue}");
+        info!("{bands}");
 
         // TODO: Hsl instead of Hsv?
         let base_hsv = Hsv {
@@ -393,7 +384,7 @@ fn blink_neopixels_task(
         neopixel_onboard.write(brightness(gamma(onboard_data.iter().cloned()), 8))?;
 
         // TODO: yield or watchdog reset?
-        yield_now();
+        // yield_now();
 
         // TODO: do we want the async driver? do we want write_no_copy?
         // TODO: this should be an embedded_graphics display i think. though the fibonacci disk is rather different from a grid
@@ -402,7 +393,7 @@ fn blink_neopixels_task(
             .write(brightness(gamma(fibonacci_data.iter().cloned()), 25))
             .unwrap();
 
-        yield_now();
+        // yield_now();
 
         // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
         g_hue = g_hue.wrapping_add(1);
@@ -416,7 +407,7 @@ fn mic_task(
     bclk: Gpio26,
     ws: Gpio33,
     din: Gpio25,
-    audio_ready: &mut flume::Sender<AggregatedBins<20>>,
+    audio_ready: &mut flume::Sender<Bands<AGGREGATED_OUTPUTS>>,
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
@@ -434,12 +425,12 @@ fn mic_task(
         .frames_per_buffer(I2S_SAMPLE_SIZE as u32)
         .dma_buffer_count(4);
 
-    // let i2s_clk_cfg = i2s::config::StdClkConfig::new(
-    //     I2S_SAMPLE_RATE_HZ,
-    //     i2s::config::ClockSource::Apll,
-    //     i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
-    // );
-    let i2s_clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
+    let i2s_clk_cfg = i2s::config::StdClkConfig::new(
+        I2S_SAMPLE_RATE_HZ,
+        i2s::config::ClockSource::Apll,
+        i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
+    );
+    // let i2s_clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
 
     // TODO: really not sure about mono or stereo. it seems like all the default setup uses stereo
     // 24 bit audio is padded to 32 bits. how do they pad the sign though?
@@ -466,7 +457,7 @@ fn mic_task(
     info!("I2S mic driver enabled");
 
     // TODO: const setup
-    let mut filter_bank = BarkBank::new(I2S_SAMPLE_RATE_HZ as f32);
+    let mut filter_bank = BarkBank::new(FPS_TARGET, I2S_SAMPLE_RATE_HZ as f32);
 
     log_stack_high_water_mark("mic", None);
 
@@ -474,7 +465,7 @@ fn mic_task(
         // TODO: read with a timeout? read_exact?
         // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_u8_buf)?;
-        yield_now();
+        // yield_now();
 
         // trace!(
         //     "Read i2s: {} {} {} {} ...",
@@ -483,7 +474,7 @@ fn mic_task(
 
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
-        yield_now();
+        // yield_now();
 
         // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
         // info!("num f32s: {}", samples.0.len());
@@ -496,28 +487,24 @@ fn mic_task(
         // this passes by ref because they are coming out of a buffer that we need to re-use next loop
         // TODO: move most everything under this into a helper function so that we can test individual pieces easier
         let spectrum = filter_bank.push_samples(&i2s_sample_buf.0);
-        yield_now();
-
-        // TODO: actually do things with the buffer. maybe only if the size is %512 or %1024 or %2048
-        // well we know the buffer has grown by 512. so we should just do it without bothering to track the size
-
-        // info!("num_lights: {}", mic_loudness_tick.num_lights());
-        info!("loudness: {:?}", &spectrum);
-        yield_now();
+        // yield_now();
 
         // TODO: beat detection?
         // TODO: what else? shazam? steve had some ideas
 
-        // fps.tick();
+        // TODO: this is slow! don't run this unless we need to!
+        // debug!("sum_spectrum: {:.2}", spectrum.iter().sum::<f32>());
 
-        let mut aggregated_bins = AggregatedBins([0.0; 20]);
-        aggregated_bins.0.copy_from_slice(spectrum);
+        let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
+        for (&x, b) in spectrum.iter().zip(bands.0.iter_mut()) {
+            *b = remap(x, 0., 1., 0., DEBUGGING_Y as f32) as u8;
+        }
 
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
         // TODO: is this the best way to notify the other thread to run? it might miss frames, but i don't think we actually want backpressure here
         // TODO: this needs to clone light_scale_outputs into a Box and then send that
         // TODO: how do we turn exponential_scale_outputs into light_scale_outputs, and do we even want to do that here? i think that might belong in the light task!
-        if audio_ready.try_send(aggregated_bins).is_err() {
+        if audio_ready.try_send(bands).is_err() {
             // TODO: count how many times this errors?
             warn!("fft was faster than the pixels");
         }
@@ -564,7 +551,7 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
                 if let Err((peer_id, peer_coord)) =
                     state.peer_coordinate.insert(peer_id, coordinate)
                 {
-                    error!("too many peers: {:?} @ {:?}", peer_id, peer_coord);
+                    error!("too many peers: {peer_id:?} @ {peer_coord:?}");
                 };
             }
             Message::SelfCoordinate(coordinate) => {
