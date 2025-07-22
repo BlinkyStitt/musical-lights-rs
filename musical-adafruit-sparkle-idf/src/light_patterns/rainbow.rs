@@ -4,7 +4,7 @@ use smart_leds::{
 };
 
 /// Fill `light_data` with a full 0..255 hue cycle, repeating each hue `repeat` times.
-pub fn rainbow(base_hsv: Hsv, light_data: &mut [RGB8], repeat: usize) {
+pub fn rainbow(base_hsv: Hsv, light_data: &mut [Hsv], repeat: usize) {
     let len = light_data.len();
     if len == 0 {
         return;
@@ -29,6 +29,6 @@ pub fn rainbow(base_hsv: Hsv, light_data: &mut [RGB8], repeat: usize) {
             sat,
             val,
         };
-        *px = hsv2rgb(hsv);
+        *px = hsv;
     }
 }

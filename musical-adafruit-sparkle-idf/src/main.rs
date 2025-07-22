@@ -308,6 +308,13 @@ fn blink_neopixels_task(
     let mut g_hue = 0;
     let mut slide_offset: usize = 0;
 
+    // TODO: Hsl instead of Hsv?
+    let mut base_hsv = Hsv {
+        hue: g_hue,
+        sat: 255,
+        val: 255,
+    };
+
     // TODO: do we want these boxed? they are large. maybe they should be statics instead?
     static ONBOARD_RGB_DATA: ConstStaticCell<[RGB8; NUM_ONBOARD_NEOPIXELS]> =
         ConstStaticCell::new([BLACK; NUM_ONBOARD_NEOPIXELS]);
@@ -318,15 +325,18 @@ fn blink_neopixels_task(
         ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
     let fibonacci_rgb_data = FIBONACCI_RGB_DATA.take();
 
-    // TODO: Hsl instead of Hsv?
-    let mut base_hsv = Hsv {
-        hue: g_hue,
-        sat: 255,
-        val: 255,
-    };
+    static FIBONACCI_HSV_DATA: ConstStaticCell<[Hsv; NUM_FIBONACCI_NEOPIXELS]> =
+        ConstStaticCell::new(
+            [Hsv {
+                hue: 0,
+                sat: 0,
+                val: 0,
+            }; NUM_FIBONACCI_NEOPIXELS],
+        );
+    let fibonacci_hsv_data = FIBONACCI_HSV_DATA.take();
 
     // TODO: this will need some more refactoring to work with the compasses, but lets just get it working with the audio now
-    rainbow(base_hsv, fibonacci_rgb_data.as_mut_slice(), 1);
+    rainbow(base_hsv, fibonacci_hsv_data.as_mut_slice(), 1);
 
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
     // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
@@ -353,6 +363,21 @@ fn blink_neopixels_task(
 
         // TODO: gamma and brightness correct now?
         onboard_rgb_data[0] = hsv2rgb(base_hsv);
+
+        // add the loudness to the lights and then convert the hsv data into rgb data
+        for (rgb, hsv) in fibonacci_rgb_data
+            .iter_mut()
+            .zip(fibonacci_hsv_data.iter_mut())
+        {
+            // TODO: use bands to set the value inside fibonacci_hsv_data
+            *rgb = hsv2rgb(*hsv);
+        }
+
+        // slide the rgb data slowly
+        let fibonacci_rgb_iter = fibonacci_rgb_data[slide_offset..]
+            .iter()
+            .chain(fibonacci_rgb_data[..slide_offset].iter())
+            .copied();
 
         /*
         // TODO: do something to force a faked state for the first 5 seconds. during that time, we should play the "startup" pattern
@@ -401,15 +426,8 @@ fn blink_neopixels_task(
         // TODO: the docs for brightness and gamma are confusing. they say opposite things unless I just can't read?
         neopixel_onboard.write(brightness(gamma(onboard_rgb_data.iter().cloned()), 8))?;
 
-        let fibonacci_iter = fibonacci_rgb_data
-            .iter()
-            .cycle()
-            .skip(slide_offset)
-            .take(NUM_FIBONACCI_NEOPIXELS)
-            .copied();
-
         neopixel_external
-            .write(brightness(gamma(fibonacci_iter), 29))
+            .write(brightness(gamma(fibonacci_rgb_iter), 29))
             .unwrap();
 
         // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
