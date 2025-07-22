@@ -119,7 +119,6 @@ impl BarkBank {
     pub fn new(fps_target: f32, sample_hz: f32) -> Self {
         let mut x = Self::uninit();
         x.init(fps_target, sample_hz);
-
         x
     }
 
@@ -165,11 +164,12 @@ impl BarkBank {
         /* 2. Take the average + ISO weighting + cube‑root */
         let norm = 1.0 / pcm.len() as f32;
         for (t, g) in tmp.iter_mut().zip(ISO60_GAIN.iter()) {
-            // TODO: include `.powf(1.0 / 3.0)`? we want to do it AFTER we do the AGC!
-            // *t = ((*t * norm).sqrt() * g).powf(1.0 / 3.0);
-
             // TODO: include sqrt so that we have RMS? I think that is the right thing to calculate, but a tone sweep looks worse
-            *t = (*t * norm * g).powf(1.0 / 3.0);
+            // *t = ((*t * norm).sqrt() * g).powf(1.0 / 3.0);
+            // *t = (*t * norm * g).powf(1.0 / 3.0);
+            // *t = (*t * norm * g).powf(0.2);
+            // *t = ((*t * norm).sqrt() * g).powf(0.2);
+            *t = (*t * norm).sqrt() * g;
         }
 
         /* 3. 30 ms EMA */
@@ -187,7 +187,7 @@ impl BarkBank {
         // TODO: need to think more about this init value. 1.0 seems to look okay on the mac terminal, but the esp32 doesn't hear anything
         // TODO: change init to a config value. make pressing a button move it up or down?
         // TODO: init with some calculated value instead of a hard coded value. the mac and arduino mics are definitely different
-        let frame_peak = self.bars.iter().copied().fold(0.4, f32::max);
+        let frame_peak = self.bars.iter().copied().fold(0.5, f32::max);
 
         // TODO: still unsure if we should do an EMA on this or have it use the peak
         self.peak = self.peak.max(frame_peak);

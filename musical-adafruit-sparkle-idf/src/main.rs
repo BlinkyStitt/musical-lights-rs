@@ -32,7 +32,7 @@ use musical_lights_core::{
 };
 use once_cell::sync::Lazy;
 use rand::RngCore;
-use smart_leds::colors::BLACK;
+use smart_leds::colors::{BLACK, BLUE, GREEN, RED};
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -49,7 +49,7 @@ use std::{
     thread::{self, sleep},
     time::Duration,
 };
-use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
+use ws2812_esp32_rmt_driver::{driver::color::LedPixelColorImpl, LedPixelEsp32Rmt, Ws2812Esp32Rmt};
 
 use crate::debug::log_stack_high_water_mark;
 use crate::light_patterns::loading;
@@ -148,9 +148,11 @@ fn main() -> eyre::Result<()> {
 
     // TODO: set up bluetooth or wifi. not sure what to do with them. but they give us a true rng
 
-    let mut neopixel_onboard = Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
+    let mut neopixel_onboard: Ws2812Esp32Rmt<'_> =
+        Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
     // let mut neopixel_external1 = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio21)?;
-    let mut neopixel_external2 = Ws2812Esp32Rmt::new(peripherals.rmt.channel2, pins.gpio22)?;
+    let mut neopixel_external2: AdafruitNet<'_> =
+        AdafruitNet::new(peripherals.rmt.channel2, pins.gpio22)?;
     // let mut neopixel_external3 = Ws2812Esp32Rmt::new(peripherals.rmt.channel3, pins.gpio19)?;
     // let mut neopixel_external4 = Ws2812Esp32Rmt::new(peripherals.rmt.channel4, pins.gpio23)?;
 
@@ -287,10 +289,14 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
+/// I expected this to be GRB, but apparently the nets are RGB.
+pub type AdafruitNet<'a> =
+    LedPixelEsp32Rmt<'a, smart_leds::RGB<u8>, LedPixelColorImpl<3, 0, 1, 2, 255>>;
+
 // TODO: i'd really love to do this without locking state, but i think we need to.
 fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
-    neopixel_external: &mut Ws2812Esp32Rmt<'_>,
+    neopixel_external: &mut AdafruitNet<'_>,
     mut rng: Biski64Rng,
     state: &'static Mutex<State>,
     audio_ready: flume::Receiver<Bands<AGGREGATED_OUTPUTS>>,
@@ -298,17 +304,30 @@ fn blink_neopixels_task(
     info!("Start NeoPixel rainbow!");
 
     // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with the other art?
-    let mut g_hue = rng.next_u32() as u8;
+    // let mut g_hue = rng.next_u32() as u8;
+    let mut g_hue = 0;
 
     // TODO: do we want these boxed? they are large. maybe they should be statics instead?
     static ONBOARD_DATA: ConstStaticCell<[RGB8; NUM_ONBOARD_NEOPIXELS]> =
-        ConstStaticCell::new([BLACK; NUM_ONBOARD_NEOPIXELS]);
+        ConstStaticCell::new([GREEN; NUM_ONBOARD_NEOPIXELS]);
     let onboard_data = ONBOARD_DATA.take();
 
     // TODO: use embedded_graphics crate
     static FIBONACCI_DATA: ConstStaticCell<[RGB8; NUM_FIBONACCI_NEOPIXELS]> =
-        ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
+        ConstStaticCell::new([GREEN; NUM_FIBONACCI_NEOPIXELS]);
     let fibonacci_data = FIBONACCI_DATA.take();
+
+    info!("should be all red");
+
+    // TODO: Hsl instead of Hsv?
+    let mut base_hsv = Hsv {
+        hue: g_hue,
+        sat: 255,
+        val: 255,
+    };
+
+    // TODO: this will need some more refactoring to work with the compasses, but lets just get it working with the audio now
+    rainbow(base_hsv, fibonacci_data.as_mut_slice());
 
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
     // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
@@ -316,28 +335,27 @@ fn blink_neopixels_task(
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
     loop {
+        base_hsv = Hsv {
+            hue: g_hue,
+            sat: 255,
+            val: 255,
+        };
+        debug!("Hue: {g_hue}");
+
         // TODO: think more about this sleep/recv.
         // sleep_until will give us a consistent framerate. but we might show multiple frames for the same data
         // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
         // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
         // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
         let bands = audio_ready.recv()?;
+        info!("{bands}");
 
         // let start = Instant::now();
 
-        debug!("Hue: {g_hue}");
-        info!("{bands}");
-
-        // TODO: Hsl instead of Hsv?
-        let base_hsv = Hsv {
-            hue: g_hue,
-            sat: 255,
-            val: 255,
-        };
-
-        // TODO: gamme correct now?
+        // TODO: gamma and brightness correct now?
         onboard_data[0] = hsv2rgb(base_hsv);
 
+        /*
         // TODO: do something to force a faked state for the first 5 seconds. during that time, we should play the "startup" pattern
         // TODO: this clone is too slow, but a critical section mutex also shouldn't be held open for long
         let unlocked_state = state.lock().map_err(|_| MyError::PoisonLock)?;
@@ -377,6 +395,7 @@ fn blink_neopixels_task(
                 clock(base_hsv, fibonacci_data.as_mut_slice());
             }
         }
+        */
 
         // TODO: check that this is the right gamma correction for our leds
         // TODO: dithering
@@ -389,6 +408,7 @@ fn blink_neopixels_task(
         // TODO: do we want the async driver? do we want write_no_copy?
         // TODO: this should be an embedded_graphics display i think. though the fibonacci disk is rather different from a grid
         // TODO: use embedded graphics matrix here instead of the simpler writer. I'm not sure the layout of the nets
+        // TODO: or maybe just track the starting point and have it shift using the g_hue variable?
         neopixel_external
             .write(brightness(gamma(fibonacci_data.iter().cloned()), 25))
             .unwrap();
@@ -396,7 +416,7 @@ fn blink_neopixels_task(
         // yield_now();
 
         // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
-        g_hue = g_hue.wrapping_add(1);
+        // g_hue = g_hue.wrapping_add(1);
 
         fps.tick();
     }
