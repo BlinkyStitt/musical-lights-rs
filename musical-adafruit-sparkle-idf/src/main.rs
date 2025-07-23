@@ -130,8 +130,10 @@ fn main() -> eyre::Result<()> {
     // TODO: static_cell? arc? something else? LazyLock from std? RwLock?
     static STATE: Lazy<Mutex<State>> = Lazy::new(|| Mutex::new(State::default()));
 
+    /*
     // TODO: what size? do we need an arc around this? or is a static okay?
     static PONG_RECEIVED: AtomicBool = AtomicBool::new(false);
+    */
 
     let peripherals = Peripherals::take()?;
     let pins = peripherals.pins;
@@ -155,7 +157,8 @@ fn main() -> eyre::Result<()> {
     // let mut neopixel_external3 = Ws2812Esp32Rmt::new(peripherals.rmt.channel3, pins.gpio19)?;
     // let mut neopixel_external4 = Ws2812Esp32Rmt::new(peripherals.rmt.channel4, pins.gpio23)?;
 
-    // TODO: this baud rate needs to match the sensory board
+    /*
+    // TODO: this baud rate needs to match the sensor board
     let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
 
     let uart_to_sensors: UartDriver = UartDriver::new(
@@ -177,6 +180,7 @@ fn main() -> eyre::Result<()> {
         Box::new(UartFromSensors::new(uart_to_sensors_rx));
     let mut uart_to_sensors: Box<UartToSensors<'_, 256>> =
         Box::new(UartToSensors::new(uart_to_sensors_tx));
+    */
 
     // TODO: do we need two cores? how do we set them up?
 
