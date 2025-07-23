@@ -243,6 +243,7 @@ fn main() -> eyre::Result<()> {
             })
         })?;
 
+    /*
     // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too?
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
@@ -273,11 +274,14 @@ fn main() -> eyre::Result<()> {
                 error!("Error in sensor_tx_task: {err}");
             })
         })?;
+    */
 
     mic_handle.join().unwrap().unwrap();
     blink_neopixels_handle.join().unwrap().unwrap();
-    read_from_sensors_handle.join().unwrap().unwrap();
-    send_to_sensors_handle.join().unwrap().unwrap();
+
+    // TODO: turn this on once we actually have more sensors plugged in
+    // read_from_sensors_handle.join().unwrap().unwrap();
+    // send_to_sensors_handle.join().unwrap().unwrap();
 
     Ok(())
 }
