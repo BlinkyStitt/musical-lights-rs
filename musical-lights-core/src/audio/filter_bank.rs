@@ -18,6 +18,9 @@ use micromath::F32Ext;
 /// normally this is 24, but maybe i want to capture the highest frequencies and do 25?
 const BARK_BANDS: usize = 24;
 
+/// combine the bottom 5 bands into a single bass band
+const BARKISH_BANDS: usize = BARK_BANDS - 4;
+
 /// ≈⅓ Bark
 const Q_BOOST: f32 = 3.0;
 
@@ -50,6 +53,42 @@ pub fn ema_alpha(fps: f32, tau_ms: f32) -> f32 {
     (-dt / tau).exp()
 }
 
+/// Generic attack–release envelope
+#[derive(Copy, Clone)]
+pub struct Envelope {
+    value: f32,
+    attack: f32,
+    release: f32,
+}
+impl Envelope {
+    pub fn new(atk_ms: f32, rel_ms: f32, fps: f32) -> Self {
+        let dt = 1.0 / fps;
+        let tau_a = atk_ms * 1e-3;
+        let tau_r = rel_ms * 1e-3;
+        let attack = if atk_ms <= 0.0 {
+            1.0
+        } else {
+            (-dt / tau_a).exp()
+        };
+        let release = (-dt / tau_r).exp();
+        Envelope {
+            value: 0.0,
+            attack,
+            release,
+        }
+    }
+
+    #[inline]
+    pub fn update(&mut self, x: f32) {
+        let α = if x > self.value {
+            self.attack
+        } else {
+            self.release
+        };
+        self.value = α * self.value + (1.0 - α) * x;
+    }
+}
+
 /// 24‑band Bark filter‑bank (Direct‑Form II Transposed biquads).
 pub struct BarkBank {
     /// 1st biquad per band
@@ -58,7 +97,7 @@ pub struct BarkBank {
     sec2: [MaybeUninit<DirectForm2Transposed<f32>>; BARK_BANDS],
     /// smoothed loudness (0‑1)
     /// The first 5 bands are combined
-    bars: [f32; BARK_BANDS - 4],
+    bars: [f32; BARKISH_BANDS],
     map: [usize; BARK_BANDS],
     peak: f32,
     /// TODO: is an EMA actually what we want? don't we actually just want to average the last 30ms
@@ -74,7 +113,7 @@ impl BarkBank {
     pub const fn uninit() -> Self {
         let filters = [MaybeUninit::uninit(); BARK_BANDS];
 
-        let bars = [0.0; BARK_BANDS - 4];
+        let bars = [0.0; BARKISH_BANDS];
 
         let peak = 0.0;
 
@@ -145,11 +184,11 @@ impl BarkBank {
     }
 
     /// TODO: can't decide if pcm should be i16 or i24 or f32
-    pub fn push_samples<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARK_BANDS - 4] {
+    pub fn push_samples<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARKISH_BANDS] {
         let (sec1, sec2, map) = self.sections();
 
         // TODO: move this onto self and just call .fill(0.0) here?
-        let mut tmp = [0.0f32; BARK_BANDS - 4];
+        let mut tmp = [0.0f32; BARKISH_BANDS];
 
         /* 1. 4‑pole Bark power */
         for &x in pcm {
@@ -161,7 +200,7 @@ impl BarkBank {
             }
         }
 
-        /* 2. Take the average + ISO weighting + cube‑root */
+        /* 2. Take the average + Root-mean-square + ISO weighting + compression */
         let norm = 1.0 / pcm.len() as f32;
         for (t, g) in tmp.iter_mut().zip(ISO60_GAIN.iter()) {
             // TODO: include sqrt so that we have RMS? I think that is the right thing to calculate, but a tone sweep looks worse
@@ -176,7 +215,7 @@ impl BarkBank {
         // TODO: I'm not actually sure about this. i think we might want a "peak" tracker here too. but some audio papers said to use an EMA
         // TODO: but also we have an AGC and that does some averaging too. I have no idea what i'm doing!
         // TODO: self.ema_alpha isn't a const anymore. is this `1 - ema_alpha` fast enough or do we need to cache that?
-        (0..BARK_BANDS - 4).for_each(|i| {
+        (0..BARKISH_BANDS).for_each(|i| {
             self.bars[i] = self.ema_alpha * self.bars[i] + (1.0 - self.ema_alpha) * tmp[i];
         });
 
