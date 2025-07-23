@@ -32,7 +32,7 @@ use musical_lights_core::{
 };
 use once_cell::sync::Lazy;
 use rand::RngCore;
-use smart_leds::colors::{BLACK, BLUE, GREEN, RED};
+use smart_leds::colors::BLACK;
 use smart_leds::{
     brightness, gamma,
     hsv::{hsv2rgb, Hsv},
@@ -40,10 +40,7 @@ use smart_leds::{
 };
 use smart_leds_trait::SmartLedsWrite;
 use static_cell::ConstStaticCell;
-use std::{
-    iter::{self, repeat, repeat_n},
-    time::Instant,
-};
+use std::{iter::repeat_n, time::Instant};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -55,7 +52,6 @@ use std::{
 use ws2812_esp32_rmt_driver::{driver::color::LedPixelColorImpl, LedPixelEsp32Rmt, Ws2812Esp32Rmt};
 
 use crate::debug::log_stack_high_water_mark;
-use crate::light_patterns::loading;
 use crate::{
     light_patterns::{clock, compass, flashlight, rainbow},
     sensor_uart::{UartFromSensors, UartToSensors},
@@ -339,6 +335,7 @@ fn blink_neopixels_task(
     let fibonacci_hsv_data = FIBONACCI_HSV_DATA.take();
 
     // TODO: this will need some more refactoring to work with the compasses, but lets just get it working with the audio now
+    // TODO: what should repeat be?
     rainbow(base_hsv, fibonacci_hsv_data.as_mut_slice(), 1);
 
     // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
@@ -387,8 +384,8 @@ fn blink_neopixels_task(
         }
 
         // slide the rgb data slowly
-        // TODO: this is sliding too fast. we need a divisor on this
-        let slow_slide_offset = slide_offset / 4;
+        // TODO: divide first to slow things down. multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
+        let slow_slide_offset = (slide_offset / 30 * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
             .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
@@ -447,7 +444,7 @@ fn blink_neopixels_task(
 
         // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
         g_hue = g_hue.wrapping_add(1);
-        slide_offset = (slide_offset + 1) % (NUM_FIBONACCI_NEOPIXELS * 4);
+        slide_offset = slide_offset.wrapping_add(1);
 
         fps.tick();
     }
@@ -548,7 +545,7 @@ fn mic_task(
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.iter().zip(bands.0.iter_mut()) {
-            *b = remap(x, 0., 1., 10., 64.) as u8;
+            *b = remap(x, 0., 1., 8., 64.) as u8;
         }
 
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
