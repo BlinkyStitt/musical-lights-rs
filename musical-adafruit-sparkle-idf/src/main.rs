@@ -226,9 +226,6 @@ fn main() -> eyre::Result<()> {
             })
         })?;
 
-    // TODO: is this a good idea? i want the light code running ASAP
-    // yield_now();
-
     // TODO: make sure this has the highest priority?
     let mic_handle = thread::Builder::new()
         .name("mic".to_string())
@@ -246,10 +243,7 @@ fn main() -> eyre::Result<()> {
             })
         })?;
 
-    // TODO: is this a good idea? i want the mic code running ASAP
-    // yield_now();
-
-    // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too
+    // TODO: use the channels that come with idf instead? should they be static? what size should we do? we need to measure the high water mark on these too?
     let (message_for_sensors_tx, message_for_sensors_rx) = flume::bounded(4);
 
     let read_from_sensors_handle = thread::Builder::new()
@@ -324,7 +318,7 @@ fn blink_neopixels_task(
         ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
     let fibonacci_rgb_data = FIBONACCI_RGB_DATA.take();
 
-    static FIBONACCI_HSV_DATA: ConstStaticCell<[Hsv; NUM_FIBONACCI_NEOPIXELS]> =
+    static FIBINACCI_HSV_RAINBOW_DATA: ConstStaticCell<[Hsv; NUM_FIBONACCI_NEOPIXELS]> =
         ConstStaticCell::new(
             [Hsv {
                 hue: 0,
@@ -332,34 +326,26 @@ fn blink_neopixels_task(
                 val: 0,
             }; NUM_FIBONACCI_NEOPIXELS],
         );
-    let fibonacci_hsv_data = FIBONACCI_HSV_DATA.take();
+    let fibonacci_hsv_rainbow_data = FIBINACCI_HSV_RAINBOW_DATA.take();
+    rainbow(base_hsv, fibonacci_hsv_rainbow_data.as_mut_slice(), 1);
 
-    // TODO: this will need some more refactoring to work with the compasses, but lets just get it working with the audio now
-    // TODO: what should repeat be?
-    rainbow(base_hsv, fibonacci_hsv_data.as_mut_slice(), 1);
-
-    // TODO: for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
-    // TODO: for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
+    // TODO: we need a helper binary for testing led panels:
+    // - for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
+    // - for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
 
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
     loop {
+        debug!("Hue: {g_hue}");
+
         base_hsv = Hsv {
             hue: g_hue,
             sat: 255,
             val: 255,
         };
-        debug!("Hue: {g_hue}");
 
-        // TODO: think more about this sleep/recv.
-        // sleep_until will give us a consistent framerate. but we might show multiple frames for the same data
-        // waiting until the fft is ready makes sense for the light patterns, but I'm not sure it makes sense for the others
-        // the fft should update consistently regardless of mode and we don't want two frames of the same data, so i think i like the fft_ready.recv above
-        // sleep_until(start + Duration::from_nanos(1_000_000_000 / 80));
         let bands = audio_ready.recv()?;
         info!("{bands}");
-
-        // let start = Instant::now();
 
         // TODO: gamma and brightness correct now?
         onboard_rgb_data[0] = hsv2rgb(base_hsv);
@@ -374,17 +360,21 @@ fn blink_neopixels_task(
             );
 
         // add the loudness to the lights and then convert the hsv data into rgb data
+        // TODO: move the slide offset code here so that we don't slide all patterns. we only want to slide the pretty patterns. the compass things shouldn't slide
         for ((rgb, hsv), loudness) in fibonacci_rgb_data
             .iter_mut()
-            .zip(fibonacci_hsv_data.iter_mut())
+            .zip(fibonacci_hsv_rainbow_data.iter_mut())
             .zip(bands_iter)
         {
+            // TODO: apply min/max brightness here?
+            // TODO: do some sort of blending to prevent flickering?
+            // TODO: dither here?
             hsv.val = loudness;
             *rgb = hsv2rgb(*hsv);
         }
 
-        // slide the rgb data slowly
-        // TODO: divide first to slow things down. multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
+        // slide the rgb data slowly. divide to slow things down. wrap it so we don't get an out of bounds error
+        // TODO? multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
         let slow_slide_offset = (slide_offset / 3) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
@@ -398,39 +388,49 @@ fn blink_neopixels_task(
 
         // TODO: have a way to smoothly transition between patterns
         // TODO: new random g_hue whenever the pattern changes?
-        match unlocked_state.orientation {
+        let fibonacci_rgb_iter = match unlocked_state.orientation {
             Orientation::FaceDown => {
                 // state isn't needed in this orientation. drop it now
                 drop(unlocked_state);
 
-                flashlight(fibonacci_data.as_mut_slice());
+                flashlight(fibonacci_rgb_data.as_mut_slice());
+
+                todo!();
             }
             Orientation::FaceUp => {
                 // TODO: clone it into a box?
-                compass(base_hsv, fibonacci_data.as_mut_slice(), &unlocked_state);
+                compass(base_hsv, fibonacci_rgb_data.as_mut_slice(), &unlocked_state);
 
                 drop(unlocked_state);
+
+                todo!();
             }
             Orientation::LeftUp | Orientation::RightUp | Orientation::TopUp => {
                 // TODO: some state might be useful here. clone just whats needed
                 drop(unlocked_state);
 
                 // TODO: if we have mic data, display one of the musical patterns
-                rainbow(base_hsv, fibonacci_data.as_mut_slice());
+                rainbow(base_hsv, fibonacci_rgb_data.as_mut_slice());
+
+                todo!();
             }
             Orientation::Unknown => {
                 // TODO: cycle between different patterns
-                loading(base_hsv, fibonacci_data.as_mut_slice(), &unlocked_state);
+                loading(base_hsv, fibonacci_rgb_data.as_mut_slice(), &unlocked_state);
 
                 drop(unlocked_state);
+
+                todo!();
             }
             Orientation::TopDown => {
                 // TODO: some state might be useful here. clone just whats needed
                 drop(unlocked_state);
 
-                clock(base_hsv, fibonacci_data.as_mut_slice());
+                clock(base_hsv, fibonacci_rgb_data.as_mut_slice());
+
+                todo!();
             }
-        }
+        };
         */
 
         // TODO: check that this is the right gamma correction for our leds
@@ -439,10 +439,12 @@ fn blink_neopixels_task(
         // TODO: brightness isn't right. we want fastled's modified brightness helper that is meant for video (never fade to 0. always display some)
         neopixel_onboard.write(brightness(gamma(onboard_rgb_data.iter().cloned()), 8))?;
 
-        // TODO: gamma?
-        neopixel_external.write(fibonacci_rgb_iter).unwrap();
+        // TODO: gamma? brightness?
+        neopixel_external.write(fibonacci_rgb_iter)?;
 
-        // TODO: better to base on time or on frame counts? time means that we can run different hardware and they will match better
+        // TODO: better to change things based on time or on frame counts?
+        // - time means that we can run different hardware and they will match better
+        // - frame counts mean that there won't be any rounding errors
         g_hue = g_hue.wrapping_add(1);
         slide_offset = slide_offset.wrapping_add(1);
 
@@ -480,9 +482,6 @@ fn mic_task(
     );
     // let i2s_clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
 
-    // TODO: really not sure about mono or stereo. it seems like all the default setup uses stereo
-    // 24 bit audio is padded to 32 bits. how do they pad the sign though?
-    // TODO: do we want to use 8 or 16 or 24 bit audio?
     let i2s_slot_cfg = i2s::config::StdSlotConfig::philips_slot_default(
         i2s::config::DataBitWidth::Bits16,
         i2s::config::SlotMode::Mono,
@@ -498,50 +497,23 @@ fn mic_task(
         i2s::config::StdConfig::new(i2s_channel_cfg, i2s_clk_cfg, i2s_slot_cfg, i2s_gpio_cfg);
 
     // TODO: do we want the mclk pin?
-    // TODO: DMA? i think thats handled for us
     let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
 
-    // TODO: const setup
+    // TODO: const setup?
     let mut filter_bank = BarkBank::new(FPS_TARGET, I2S_SAMPLE_RATE_HZ as f32);
 
     log_stack_high_water_mark("mic", None);
 
     loop {
-        // TODO: read with a timeout? read_exact?
-        // TODO: this isn't ever returning. what are we doing wrong with the init/config?
         i2s_driver.read_exact(i2s_u8_buf)?;
-        // yield_now();
-
-        // trace!(
-        //     "Read i2s: {} {} {} {} ...",
-        //     i2s_u8_buf[0], i2s_u8_buf[1], i2s_u8_buf[2], i2s_u8_buf[3]
-        // );
 
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
-        // yield_now();
 
-        // TODO: logging the i2s buffer was causing it to crash. i guess writing floats is hard
-        // info!("num f32s: {}", samples.0.len());
-
-        // trace!(
-        //     "i2s_sample_buf: {} {} {} {} ...",
-        //     i2s_sample_buf.0[0], i2s_sample_buf.0[1], i2s_sample_buf.0[2], i2s_sample_buf.0[3]
-        // );
-
-        // this passes by ref because they are coming out of a buffer that we need to re-use next loop
-        // TODO: move most everything under this into a helper function so that we can test individual pieces easier
         let spectrum = filter_bank.push_samples(&i2s_sample_buf.0);
-        // yield_now();
-
-        // TODO: beat detection?
-        // TODO: what else? shazam? steve had some ideas
-
-        // TODO: this is slow! don't run this unless we need to!
-        // debug!("sum_spectrum: {:.2}", spectrum.iter().sum::<f32>());
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.iter().zip(bands.0.iter_mut()) {
@@ -549,9 +521,6 @@ fn mic_task(
         }
 
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
-        // TODO: is this the best way to notify the other thread to run? it might miss frames, but i don't think we actually want backpressure here
-        // TODO: this needs to clone light_scale_outputs into a Box and then send that
-        // TODO: how do we turn exponential_scale_outputs into light_scale_outputs, and do we even want to do that here? i think that might belong in the light task!
         if audio_ready.try_send(bands).is_err() {
             // TODO: count how many times this errors?
             warn!("fft was faster than the pixels");
@@ -614,7 +583,6 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
     };
 
     // TODO: no idea what the timeout should be
-    // TODO: this read loop is causing a stack overflow. how?!
     // TODO: i think maybe we should use the async reader? we don't want a timeout
     if let Err(err) = uart_from_sensors.read_loop(process_message, 10) {
         error!("failed reading from uart");
@@ -623,9 +591,7 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
 
     // TODO: once the read loop exits, what should we do? it exits when it isn't connected
 
-    // // TODO: stack overflow here?
-    // // uart errored or disconnected
-    // // TODO: ONLY in debug mode, run a mock loop. otherwise just set the state to something useful
+    // TODO: ONLY in debug mode, run a mock loop. otherwise just set the state to something useful
     uart_from_sensors.mock_loop(process_message)?;
 
     Ok(())
