@@ -385,7 +385,7 @@ fn blink_neopixels_task(
 
         // slide the rgb data slowly
         // TODO: divide first to slow things down. multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
-        let slow_slide_offset = (slide_offset / 30 * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
+        let slow_slide_offset = (slide_offset / 3) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
             .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
