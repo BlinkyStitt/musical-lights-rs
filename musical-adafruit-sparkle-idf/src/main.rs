@@ -499,11 +499,11 @@ fn mic_task(
     // TODO: do we want the mclk pin?
     let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
-    i2s_driver.rx_enable()?;
-    info!("I2S mic driver enabled");
-
     // TODO: const setup?
     let mut filter_bank = BarkBank::new(FPS_TARGET, I2S_SAMPLE_RATE_HZ as f32);
+
+    i2s_driver.rx_enable()?;
+    info!("I2S mic driver enabled");
 
     log_stack_high_water_mark("mic", None);
 
