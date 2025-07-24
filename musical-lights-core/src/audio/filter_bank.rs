@@ -1,7 +1,11 @@
 //! Use a bank of filters for audio processing.
 //!
 //! This is an alternative to the code in [`BufferedFFT`].
-use crate::{audio::AggregatedBins, logging::trace, remap};
+use crate::{
+    audio::AggregatedBins,
+    logging::{error, trace},
+    remap,
+};
 use biquad::{
     Biquad, DirectForm2Transposed,
     coefficients::{Coefficients, Type},
@@ -131,7 +135,11 @@ impl Envelope {
         let alpha = match x.partial_cmp(&self.value) {
             Some(Ordering::Greater) => self.attack,
             Some(Ordering::Less) => self.release,
-            None | Some(Ordering::Equal) => return,
+            Some(Ordering::Equal) => return,
+            None => {
+                error!("weird value from the mic!");
+                return;
+            }
         };
         self.value = alpha * self.value + (1.0 - alpha) * x;
     }
