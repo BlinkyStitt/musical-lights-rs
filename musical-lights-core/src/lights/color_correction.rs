@@ -5,6 +5,7 @@ use palette::{Hsluv, IsWithinBounds, LinSrgb, chromatic_adaptation::AdaptInto, w
 
 /// TODO: generic input color (and whitepoint)
 /// TODO: linear srgb or no? i have no idea what i am doing
+/// TODO: return a generic rgb struct that we can give to
 pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
     // TODO: this used to have a debug format, but it was removed
     // info!("hsluv color: {:?}", color);

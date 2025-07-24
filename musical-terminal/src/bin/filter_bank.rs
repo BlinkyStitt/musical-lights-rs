@@ -7,7 +7,7 @@ use std::env;
 use embassy_executor::Spawner;
 use musical_lights_core::audio::{AggregatedBins, BarkBank};
 use musical_lights_core::fps::FpsTracker;
-use musical_lights_core::lights::Bands;
+use musical_lights_core::lights::{Bands, Gradient};
 use musical_lights_core::logging::{debug, info};
 use musical_lights_core::remap;
 use musical_terminal::MicrophoneStream;
@@ -76,6 +76,10 @@ async fn main(spawner: Spawner) {
     let sample_rate = mic_stream.sample_rate.0 as f32;
 
     let filter_bank = BarkBank::new(FPS_TARGET, sample_rate);
+
+    let gradient: Gradient<400> = Gradient::new_greg_caitlin_wedding();
+
+    // TODO: how can we print this
 
     spawner.must_spawn(audio_task(mic_stream, filter_bank, loudness_tx));
     spawner.must_spawn(lights_task(loudness_rx));

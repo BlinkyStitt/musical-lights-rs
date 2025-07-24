@@ -1,10 +1,10 @@
 use enterpolation::{
+    Curve, Equidistant, Merge,
     bspline::{BSpline, BorderBuffer},
     linear::Linear,
-    Curve, Equidistant, Merge,
 };
-use palette::{white_point, Hsluv, Mix};
-use smart_leds::{colors::BLACK, RGB8};
+use palette::{Hsluv, Mix, white_point};
+use smart_leds::{RGB8, colors::BLACK};
 
 use super::convert_color;
 
@@ -43,9 +43,18 @@ impl<const N: usize> Gradient<N> {
         Self { colors }
     }
 
-    // TODO: put this behind a feature?
+    // TODO: put this behind a feature? maybe it should be a function that takes a spline and goes into a Gradient?
     pub fn new_mermaid() -> Self {
         let spline = mermaid_spline();
+
+        let color_iter = spline.take(N).map(|x| convert_color(x.0).into());
+
+        Self::new(color_iter)
+    }
+
+    // TODO: put this behind a feature?
+    pub fn new_greg_caitlin_wedding() -> Self {
+        let spline = greg_caitlin_wedding_spline();
 
         let color_iter = spline.take(N).map(|x| convert_color(x.0).into());
 
@@ -83,6 +92,38 @@ impl<const N: usize> Gradient<N> {
 
     //     convert_color(hsluv)
     // }
+}
+
+type GregCaitlinWeddingSpline = BSpline<
+    BorderBuffer<Equidistant<f32>>,
+    [CustomColor<Hsluv<white_point::E>>; 7],
+    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 7>,
+>;
+
+/// TODO: pick colors
+fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
+    //generate #128CF6
+    let dusty_blue: CustomColor<_> = Hsluv::<white_point::E>::new(208., 92.7, 96.5).into();
+
+    // generate #FB3936
+    let pastel_red: CustomColor<_> = Hsluv::new(1.0, 78.5, 98.4).into();
+
+    // generate #875F9A
+    let purple: CustomColor<_> = Hsluv::new(281., 38.3, 60.4).into();
+
+    // we want to use a bspline with degree 3 i think. that needs at least 4 colors
+    // we also want the colors to wrap back around.
+    BSpline::builder()
+        .clamped()
+        .elements([
+            dusty_blue, pastel_red, pastel_red, dusty_blue, purple, purple, dusty_blue,
+        ])
+        .equidistant::<f32>()
+        .degree(3)
+        .normalized()
+        .constant::<_>()
+        .build()
+        .expect("As the curve is hardcoded, this should always work")
 }
 
 /// TODO: return traits to make this easier to change

@@ -185,11 +185,11 @@ impl BarkBank {
 
         let sample_hz = (sample_hz).hz();
 
-        // TODO: think more about these timings
-        let peak_env = Envelope::new(0.022, 10.0, fps_target, 1.0);
+        // TODO: think more about these timings and the init. we don't want to start at 0 because then it starts too bright
+        let peak_env = Envelope::new(0.022, 10.0, fps_target, 2.0);
 
-        // TODO: think more about these timings
-        let floor_env = Floor::new(0.0, 10.0, fps_target, 0.2);
+        // TODO: think more about these timings and the init
+        let floor_env = Floor::new(0.0, 10.0, fps_target, 0.);
 
         let bands: [BandState; BARK_BANDS] = array::from_fn(|band| {
             let (lo, hi) = (BARK_EDGES[band], BARK_EDGES[band + 1]);

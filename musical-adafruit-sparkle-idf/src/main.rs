@@ -335,6 +335,8 @@ fn blink_neopixels_task(
             }; NUM_FIBONACCI_NEOPIXELS],
         );
     let fibonacci_hsv_rainbow_data = FIBINACCI_HSV_RAINBOW_DATA.take();
+
+    // TODO: instead of rainbow, we want a gradient
     rainbow(base_hsv, fibonacci_hsv_rainbow_data.as_mut_slice(), 1);
 
     // TODO: we need a helper binary for testing led panels:

@@ -15,7 +15,7 @@ use micromath::F32Ext;
 #[cfg(feature = "defmt")]
 use defmt::write as defmt_write;
 
-const RAMP_SHADE: &[char] = &[' ', '░', '▒', '▓', '█']; // U+2591..2593 :contentReference[oaicite:2]{index=2}
+const RAMP_SHADE: &[char] = &[' ', '.', ':', '░', '▒', '▓', '█']; // U+2591..2593 :contentReference[oaicite:2]{index=2}
 
 #[inline]
 fn glyph(val: u8, max: u8, ramp: &[char]) -> char {
