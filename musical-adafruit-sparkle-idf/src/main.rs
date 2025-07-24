@@ -96,6 +96,8 @@ const _SAFETY_CHECKS: () = {
     // assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
 };
 
+type MyBands = Bands<AGGREGATED_OUTPUTS, 48>;
+
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
 /// TODO: include self in the main peer_coordinate map?
@@ -210,7 +212,7 @@ fn main() -> eyre::Result<()> {
     // unsafe { heap_caps_dump_all() };
 
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
-    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<Bands<AGGREGATED_OUTPUTS>>(1);
+    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<MyBands>(1);
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     // TODO: thread priority?
@@ -300,7 +302,7 @@ fn blink_neopixels_task(
     neopixel_external: &mut AdafruitNet<'_>,
     mut rng: Biski64Rng,
     state: &'static Mutex<State>,
-    audio_ready: flume::Receiver<Bands<AGGREGATED_OUTPUTS>>,
+    audio_ready: flume::Receiver<MyBands>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
@@ -313,7 +315,7 @@ fn blink_neopixels_task(
     let mut base_hsv = Hsv {
         hue: g_hue,
         sat: 255,
-        val: 255,
+        val: 8, // TODO: get this initial val from config
     };
 
     // TODO: do we want these boxed? they are large. maybe they should be statics instead?
@@ -379,7 +381,11 @@ fn blink_neopixels_task(
             // TODO: apply min/max brightness here?
             // TODO: do some sort of blending to prevent flickering?
             // TODO: dither here?
-            hsv.val = loudness;
+
+            // TODO! this needs an EMA. it is way too jumpy!
+            // hsv.val = (hsv.val as u16 + loudness as u16 / 2) as u8;
+
+            // TODO: instead of hsv, do hsluv?
             *rgb = hsv2rgb(*hsv);
         }
 
@@ -456,6 +462,8 @@ fn blink_neopixels_task(
         // - time means that we can run different hardware and they will match better
         // - frame counts mean that there won't be any rounding errors
         g_hue = g_hue.wrapping_add(1);
+
+        // TODO: make this a config option?
         slide_offset = slide_offset.wrapping_add(1);
 
         fps.tick();
@@ -467,7 +475,7 @@ fn mic_task(
     bclk: Gpio26,
     ws: Gpio33,
     din: Gpio25,
-    audio_ready: &mut flume::Sender<Bands<AGGREGATED_OUTPUTS>>,
+    audio_ready: &mut flume::Sender<Bands<AGGREGATED_OUTPUTS, 48>>,
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
@@ -527,7 +535,7 @@ fn mic_task(
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.0.iter().zip(bands.0.iter_mut()) {
-            *b = remap(x, 0., 1., 8., 64.) as u8;
+            *b = remap(x, 0., 1., 8., 48.) as u8;
         }
 
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.

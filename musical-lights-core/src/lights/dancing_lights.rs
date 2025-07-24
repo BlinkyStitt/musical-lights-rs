@@ -18,7 +18,7 @@ use defmt::write as defmt_write;
 const RAMP_SHADE: &[char] = &[' ', '.', ':', '░', '▒', '▓', '█']; // U+2591..2593 :contentReference[oaicite:2]{index=2}
 
 #[inline]
-fn glyph(val: u8, max: u8, ramp: &[char]) -> char {
+const fn glyph(val: u8, max: u8, ramp: &[char]) -> char {
     let idx = (val as usize * (ramp.len() - 1)) / (max as usize);
     ramp[idx]
 }
@@ -34,7 +34,6 @@ impl<const N: usize, const MAX: u8> Display for Bands<N, MAX> {
         for &v in self.0.iter() {
             f.write_fmt(format_args!(" {} |", glyph(v, MAX, RAMP_SHADE)))?
         }
-
         Ok(())
     }
 }
