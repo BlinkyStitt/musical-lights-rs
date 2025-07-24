@@ -1,7 +1,7 @@
 //! Use a bank of filters for audio processing.
 //!
 //! This is an alternative to the code in [`BufferedFFT`].
-use crate::{audio::AggregatedBins, remap};
+use crate::{audio::AggregatedBins, logging::trace, remap};
 use biquad::{
     Biquad, DirectForm2Transposed,
     coefficients::{Coefficients, Type},
@@ -34,25 +34,11 @@ const BARK_EDGES: [f32; BARK_BANDS + 1] = [
 
 /// Inverse 60‑phon equal‑loudness gains (ISO‑226 2023, smoothed).
 ///
-/// TODO: this is just from an LLM. check the math
-/// TODO: I'm turning up the bass a bunch because the mac laptop mic drops it. this isn't really the right way to do it
+/// This is just the constants, so no licensing is required. Check out the paper though! It's really cool!
 const ISO60_GAIN: [f32; BARK_BANDS] = [
     0.0891, 0.1259, 0.1585, 0.1995, 0.2985, 0.3548, 0.4217, 0.4729, 0.5311, 0.5964, 0.6309, 0.6683,
     0.7079, 0.7499, 0.7943, 0.8412, 0.8909, 0.9433, 1.0000, 1.1220, 1.2589, 1.4125, 1.6768, 2.1060,
 ];
-
-/*
-#[inline]
-pub fn ema_alpha(fps: f32, tau_ms: f32) -> f32 {
-    // frame duration
-    let dt = 1.0 / fps;
-
-    // ms → s
-    let tau = tau_ms * 1e-3;
-
-    (-dt / tau).exp()
-}
-*/
 
 /// Generic attack–release envelope.
 ///
@@ -84,6 +70,17 @@ struct BandState {
     value: f32,
 }
 
+impl core::fmt::Debug for BandState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_fmt(format_args!(
+            "BandState({:.3} < {:.3} < {:.3})",
+            self.floor_env.value, self.value, self.peak_env.value
+        ))?;
+
+        Ok(())
+    }
+}
+
 pub struct BarkBank {
     bands: [BandState; BARK_BANDS],
 }
@@ -99,9 +96,12 @@ impl BandState {
         // TODO: should more of the above code be inside the run function? having it take the raw value makes sense to
 
         self.value = x;
-        self.peak_env.update(x);
 
-        // TODO: think more about this max. it should probably be a value on self
+        // TODO: think more about this max. it should probably be a value on self. and they should probably have some gap between them
+        // self.peak_env.update(x.max(0.35));
+        // self.floor_env.update(x.min(0.35));
+
+        self.peak_env.update(x);
         self.floor_env.update(x);
     }
 }
@@ -151,7 +151,7 @@ impl BarkBank {
         let peak_env = Envelope::new(0.022, 3.0, fps_target, 1.0);
 
         // TODO: think more about these timings
-        let floor_env = Envelope::new(10.0, 0.0, fps_target, 0.0);
+        let floor_env = Envelope::new(6.0, 0.0, fps_target, 0.2);
 
         let bands: [BandState; BARK_BANDS] = array::from_fn(|band| {
             let (lo, hi) = (BARK_EDGES[band], BARK_EDGES[band + 1]);
@@ -209,42 +209,44 @@ impl BarkBank {
         // 3) Combine 24 → 20 outputs (first five summed as bass). Also normalize the bands so 1.0 is the loudest sound heard recently.
         let mut output = [0.0f32; BARKISH_BANDS];
 
+        // calculate the bass band first by summing the first 5
         // TODO: is adding after we've done the powf correct? it feels wrong to me. but its just one band. come back to this later
         // TODO: calculate t,b with one iter and fold?
         // TODO: saturating sub on t or is there no chance of underflow?
         // TODO: i think a should be some value larger than 0. I'm not sure what though. possibly something different for each band similar to the equal loudness contour
         // TODO: i'm still not convinced a per-band floor is right. i think we want to subtract some fraction of the average across all bands. one loud high pitched whine making you not hear the rest seems like it matches human perception to me
-        output[0] = remap(
-            self.bands[0..BASS_BANDS]
-                .iter()
-                .map(|x| x.value)
-                .sum::<f32>()
-                - self.bands[0..BASS_BANDS]
-                    .iter()
-                    .map(|x| x.floor_env.value)
-                    .sum::<f32>(),
-            0.0,
-            self.bands[0..BASS_BANDS]
-                .iter()
-                .map(|x| x.peak_env.value)
-                .sum::<f32>(),
-            0.,
-            1.0,
-        );
+        let bass_val = self.bands[0..BASS_BANDS]
+            .iter()
+            .map(|x| x.value)
+            .sum::<f32>();
 
+        let bass_floor = self.bands[0..BASS_BANDS]
+            .iter()
+            .map(|x| x.floor_env.value)
+            .sum::<f32>();
+
+        // TODO: think more about how to include the floor in here
+        let bass_peak = self.bands[0..BASS_BANDS]
+            .iter()
+            .map(|x| x.peak_env.value)
+            .sum::<f32>()
+            .max(bass_floor * 2.);
+
+        // TODO: I'm not 100% sure that the floor should be subtracted like this. i thought I could just use it for a, but that didn't work
+        output[0] = remap(bass_val, bass_floor, bass_peak, 0., 1.0);
+
+        // calculate the rest of the bands.
         for (st, out) in self.bands[BASS_BANDS..BARK_BANDS]
             .iter()
             .zip(output.iter_mut().skip(1))
         {
+            let peak = st.peak_env.value.max(st.floor_env.value * 2.);
+
             // TODO: see todos above about the merged values. some apply here too
-            *out = remap(
-                st.value - st.floor_env.value,
-                0.0,
-                st.peak_env.value,
-                0.0,
-                1.0,
-            );
+            *out = remap(st.value, st.floor_env.value, peak, 0.0, 1.0);
         }
+
+        trace!("band 1: {:?}", self.bands[1]);
 
         AggregatedBins(output)
     }
