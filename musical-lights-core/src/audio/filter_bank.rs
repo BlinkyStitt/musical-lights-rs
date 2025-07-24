@@ -15,8 +15,10 @@ use micromath::F32Ext;
 /// normally this is 24, but maybe i want to capture the highest frequencies and do 25?
 const BARK_BANDS: usize = 24;
 
+const BASS_BANDS: usize = 5;
+
 /// combine the bottom 5 bands into a single bass band
-const BARKISH_BANDS: usize = BARK_BANDS - 4;
+const BARKISH_BANDS: usize = BARK_BANDS - BASS_BANDS + 1;
 
 /// ≈⅓ Bark
 const Q_BOOST: f32 = 3.0;
@@ -149,7 +151,7 @@ impl BarkBank {
         let peak_env = Envelope::new(0.022, 3.0, fps_target, 1.0);
 
         // TODO: think more about these timings
-        let floor_env = Envelope::new(6.0, 0.0, fps_target, 0.0);
+        let floor_env = Envelope::new(10.0, 0.0, fps_target, 0.0);
 
         let bands: [BandState; BARK_BANDS] = array::from_fn(|band| {
             let (lo, hi) = (BARK_EDGES[band], BARK_EDGES[band + 1]);
@@ -209,16 +211,20 @@ impl BarkBank {
 
         // TODO: is adding after we've done the powf correct? it feels wrong to me. but its just one band. come back to this later
         // TODO: calculate t,b with one iter and fold?
+        // TODO: saturating sub on t or is there no chance of underflow?
         // TODO: i think a should be some value larger than 0. I'm not sure what though. possibly something different for each band similar to the equal loudness contour
         // TODO: i'm still not convinced a per-band floor is right. i think we want to subtract some fraction of the average across all bands. one loud high pitched whine making you not hear the rest seems like it matches human perception to me
         output[0] = remap(
-            self.bands[0..5].iter().map(|x| x.value).sum::<f32>()
-                - self.bands[0..5]
+            self.bands[0..BASS_BANDS]
+                .iter()
+                .map(|x| x.value)
+                .sum::<f32>()
+                - self.bands[0..BASS_BANDS]
                     .iter()
                     .map(|x| x.floor_env.value)
                     .sum::<f32>(),
             0.0,
-            self.bands[0..5]
+            self.bands[0..BASS_BANDS]
                 .iter()
                 .map(|x| x.peak_env.value)
                 .sum::<f32>(),
@@ -226,9 +232,12 @@ impl BarkBank {
             1.0,
         );
 
-        for (i, st) in self.bands[5..BARK_BANDS].iter().enumerate() {
+        for (st, out) in self.bands[BASS_BANDS..BARK_BANDS]
+            .iter()
+            .zip(output.iter_mut().skip(1))
+        {
             // TODO: see todos above about the merged values. some apply here too
-            output[i + 1] = remap(
+            *out = remap(
                 st.value - st.floor_env.value,
                 0.0,
                 st.peak_env.value,
