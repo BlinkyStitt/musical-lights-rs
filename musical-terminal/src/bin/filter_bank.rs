@@ -21,7 +21,7 @@ const MIC_SAMPLE_RATE: u32 = 44_100;
 
 const MIC_SAMPLE_SIZE: usize = (MIC_SAMPLE_RATE as f32 / FPS_TARGET) as usize;
 
-const DEBUGGING_Y: usize = 4;
+const DEBUGGING_Y: usize = 255;
 
 #[embassy_executor::task]
 async fn audio_task(
@@ -38,7 +38,7 @@ async fn audio_task(
 /// TODO: rewrite this whole thing. its just an easy way to get some legible logs for now
 #[embassy_executor::task]
 async fn lights_task(rx_loudness: flume::Receiver<AggregatedBins<NUM_BANDS>>) {
-    let mut bands = Bands([0; NUM_BANDS]);
+    let mut bands: Bands<_, { DEBUGGING_Y as u8 }> = Bands([0; NUM_BANDS]);
     let mut fps = FpsTracker::new("lights");
 
     while let Ok(loudness) = rx_loudness.recv_async().await {

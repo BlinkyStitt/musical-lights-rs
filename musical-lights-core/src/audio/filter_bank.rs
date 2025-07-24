@@ -55,6 +55,13 @@ pub struct Envelope {
     release: f32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Floor {
+    value: f32,
+    fall: f32, // fast when signal drops
+    rise: f32, // slow when it rises
+}
+
 type BiquadStage = DirectForm2Transposed<f32>;
 
 /// per‑bar state (no display value here. but maybe we should have it here)
@@ -66,7 +73,7 @@ struct BandState {
     /// keep track of how loud this band has been over a medium time
     peak_env: Envelope,
     /// keep track of the quietst this band has been over a long time
-    floor_env: Envelope,
+    floor_env: Floor,
     /// equal loudness countour weighting
     /// TODO: probably 60‑phon weight is the best for this, but we should think more about it
     a_coeff: f32,
@@ -87,6 +94,29 @@ impl core::fmt::Debug for BandState {
 
 pub struct BarkBank {
     bands: [BandState; BARK_BANDS],
+}
+
+impl Floor {
+    pub fn new(fall_s: f32, rise_s: f32, fps: f32, init: f32) -> Self {
+        let dt = 1.0 / fps;
+
+        // TODO: should we force this to 1 if the fall/rise is 0?
+
+        let fall = (-dt / (fall_s)).exp(); // fast   (e.g.  50 ms)
+        let rise = (-dt / (rise_s)).exp(); // really slow (e.g. 2000 ms)
+        Self {
+            value: init,
+            fall,
+            rise,
+        }
+    }
+
+    /// returns updated floor
+    #[inline]
+    pub fn update(&mut self, x: f32) {
+        let a = if x < self.value { self.fall } else { self.rise };
+        self.value = a * self.value + (1.0 - a) * x;
+    }
 }
 
 impl BandState {
@@ -156,10 +186,10 @@ impl BarkBank {
         let sample_hz = (sample_hz).hz();
 
         // TODO: think more about these timings
-        let peak_env = Envelope::new(0.022, 3.0, fps_target, 1.0);
+        let peak_env = Envelope::new(0.022, 10.0, fps_target, 1.0);
 
         // TODO: think more about these timings
-        let floor_env = Envelope::new(6.0, 0.0, fps_target, 0.2);
+        let floor_env = Floor::new(0.0, 10.0, fps_target, 0.2);
 
         let bands: [BandState; BARK_BANDS] = array::from_fn(|band| {
             let (lo, hi) = (BARK_EDGES[band], BARK_EDGES[band + 1]);
