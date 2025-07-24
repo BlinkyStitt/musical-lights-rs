@@ -1,16 +1,13 @@
 //! Use a bank of filters for audio processing.
 //!
 //! This is an alternative to the code in [`BufferedFFT`].
-use crate::{
-    logging::{info, trace},
-    remap,
-};
+use crate::{audio::AggregatedBins, remap};
 use biquad::{
     Biquad, DirectForm2Transposed,
     coefficients::{Coefficients, Type},
     frequency::ToHertz,
 };
-use core::mem::{MaybeUninit, transmute};
+use core::{array, cmp::Ordering};
 
 #[allow(unused_imports)]
 use micromath::F32Ext;
@@ -42,6 +39,7 @@ const ISO60_GAIN: [f32; BARK_BANDS] = [
     0.7079, 0.7499, 0.7943, 0.8412, 0.8909, 0.9433, 1.0000, 1.1220, 1.2589, 1.4125, 1.6768, 2.1060,
 ];
 
+/*
 #[inline]
 pub fn ema_alpha(fps: f32, tau_ms: f32) -> f32 {
     // frame duration
@@ -52,27 +50,75 @@ pub fn ema_alpha(fps: f32, tau_ms: f32) -> f32 {
 
     (-dt / tau).exp()
 }
+*/
 
-/// Generic attack–release envelope
+/// Generic attack–release envelope.
+///
+/// Mostly from chat gpt.
+/// Todo: should i be using <https://docs.rs/dasp_envelope>?
 #[derive(Copy, Clone)]
 pub struct Envelope {
     value: f32,
     attack: f32,
     release: f32,
 }
+
+type BiquadStage = DirectForm2Transposed<f32>;
+
+/// per‑bar state (no display value here. but maybe we should have it here)
+struct BandState {
+    /// 1st biquad per band
+    filter1: BiquadStage,
+    /// 2nd biquad (identical to the first)
+    filter2: BiquadStage,
+    /// keep track of how loud this band has been over a medium time
+    peak_env: Envelope,
+    /// keep track of the quietst this band has been over a long time
+    floor_env: Envelope,
+    /// equal loudness countour weighting
+    /// TODO: probably 60‑phon weight is the best for this, but we should think more about it
+    a_coeff: f32,
+    /// last raw value
+    value: f32,
+}
+
+pub struct BarkBank {
+    bands: [BandState; BARK_BANDS],
+}
+
+impl BandState {
+    /// `x` must be the sum of squares for all the samples divided by the number of samples in this block.
+    fn run(&mut self, mut x: f32) {
+        // RMS amplitude
+        // apply equal loudness curve
+        // Zwicker exponent for perceived loudness (TODO: i'm not sure about this. i think we want it here. we definitely want it somewhere in the pipeline)
+        x = (x.sqrt() * self.a_coeff).powf(0.23);
+
+        // TODO: should more of the above code be inside the run function? having it take the raw value makes sense to
+
+        self.value = x;
+        self.peak_env.update(x);
+
+        // TODO: think more about this max. it should probably be a value on self
+        self.floor_env.update(x);
+    }
+}
+
 impl Envelope {
-    pub fn new(atk_ms: f32, rel_ms: f32, fps: f32) -> Self {
+    pub fn new(atk_s: f32, rel_s: f32, fps: f32, init: f32) -> Self {
         let dt = 1.0 / fps;
-        let tau_a = atk_ms * 1e-3;
-        let tau_r = rel_ms * 1e-3;
-        let attack = if atk_ms <= 0.0 {
-            1.0
+        let attack = if atk_s <= 0.0 {
+            0.0
         } else {
-            (-dt / tau_a).exp()
+            (-dt / atk_s).exp()
         };
-        let release = (-dt / tau_r).exp();
+        let release = if rel_s <= 0.0 {
+            0.0
+        } else {
+            (-dt / rel_s).exp()
+        };
         Envelope {
-            value: 0.0,
+            value: init,
             attack,
             release,
         }
@@ -80,165 +126,118 @@ impl Envelope {
 
     #[inline]
     pub fn update(&mut self, x: f32) {
-        let α = if x > self.value {
-            self.attack
-        } else {
-            self.release
+        let alpha = match x.partial_cmp(&self.value) {
+            Some(Ordering::Greater) => self.attack,
+            Some(Ordering::Less) => self.release,
+            None | Some(Ordering::Equal) => return,
         };
-        self.value = α * self.value + (1.0 - α) * x;
+        self.value = alpha * self.value + (1.0 - alpha) * x;
     }
 }
-
-/// 24‑band Bark filter‑bank (Direct‑Form II Transposed biquads).
-pub struct BarkBank {
-    /// 1st biquad per band
-    sec1: [MaybeUninit<DirectForm2Transposed<f32>>; BARK_BANDS],
-    /// 2nd biquad (identical)
-    sec2: [MaybeUninit<DirectForm2Transposed<f32>>; BARK_BANDS],
-    /// smoothed loudness (0‑1)
-    /// The first 5 bands are combined
-    bars: [f32; BARKISH_BANDS],
-    map: [usize; BARK_BANDS],
-    peak: f32,
-    /// TODO: is an EMA actually what we want? don't we actually just want to average the last 30ms
-    ema_alpha: f32,
-    /// TODO: replace this with a dagc
-    peak_decay: f32,
-}
-
-/// /Ihavenoideawhatimdoingdog.jpg
-type Section = DirectForm2Transposed<f32>;
 
 impl BarkBank {
-    pub const fn uninit() -> Self {
-        let filters = [MaybeUninit::uninit(); BARK_BANDS];
-
-        let bars = [0.0; BARKISH_BANDS];
-
-        let peak = 0.0;
-
-        let map = [
-            0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-        ];
-
-        Self {
-            sec1: filters,
-            sec2: filters,
-            bars,
-            map,
-            peak,
-            ema_alpha: 1.0,
-            peak_decay: 1.0,
-        }
-    }
-
     /// Build filters for a given sample rate.
-    pub fn init(&mut self, fps_target: f32, sample_hz: f32) {
+    ///
+    /// TODO: some of the float math makes this not work with const
+    /// TODO: result type instead of unwrap?
+    pub fn new(fps_target: f32, sample_hz: f32) -> Self {
+        assert!(fps_target > 0.0 && sample_hz > 0.0);
+
         let sample_hz = (sample_hz).hz();
 
-        // TODO: let tau_ms be configurable to? i think we always want 30ms since thats human-centric number
-        // TODO: should it update the fps target based on the actual
-        self.ema_alpha = ema_alpha(fps_target, 30.);
-        self.peak_decay = ema_alpha(fps_target, 2_000.);
+        // TODO: think more about these timings
+        let peak_env = Envelope::new(0.022, 3.0, fps_target, 1.0);
 
-        info!("ema_alpha: {}", self.ema_alpha);
-        info!("peak_decay: {}", self.peak_decay);
+        // TODO: think more about these timings
+        let floor_env = Envelope::new(6.0, 0.0, fps_target, 0.0);
 
-        for band in 0..BARK_BANDS {
+        let bands: [BandState; BARK_BANDS] = array::from_fn(|band| {
             let (lo, hi) = (BARK_EDGES[band], BARK_EDGES[band + 1]);
             let fc = if lo > 0.0 { (lo * hi).sqrt() } else { hi * 0.5 };
             let q = (fc / (hi - lo)) * Q_BOOST;
             let c = Coefficients::from_params(Type::BandPass, sample_hz, fc.hz(), q).unwrap();
 
-            self.sec1[band].write(DirectForm2Transposed::<f32>::new(c));
-            self.sec2[band].write(DirectForm2Transposed::<f32>::new(c));
-        }
-    }
+            let filter = BiquadStage::new(c);
 
-    pub fn new(fps_target: f32, sample_hz: f32) -> Self {
-        let mut x = Self::uninit();
-        x.init(fps_target, sample_hz);
-        x
-    }
+            let a_coeff = ISO60_GAIN[band];
 
-    #[inline(always)]
-    fn sections(
-        &mut self,
-    ) -> (
-        &mut [Section; BARK_BANDS],
-        &mut [Section; BARK_BANDS],
-        &[usize; BARK_BANDS],
-    ) {
-        // assert!(self.ready, "BarkBank::init() not called");
-        unsafe {
-            (
-                transmute::<&mut [MaybeUninit<Section>; BARK_BANDS], &mut [Section; BARK_BANDS]>(
-                    &mut self.sec1,
-                ),
-                transmute::<&mut [MaybeUninit<Section>; BARK_BANDS], &mut [Section; BARK_BANDS]>(
-                    &mut self.sec2,
-                ),
-                &self.map,
-            )
-        }
+            BandState {
+                filter1: filter.clone(),
+                filter2: filter,
+                peak_env: peak_env.clone(),
+                floor_env: floor_env.clone(),
+                a_coeff,
+                value: 0.,
+            }
+        });
+
+        // let map = [
+        //     0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        // ];
+
+        Self { bands }
     }
 
     /// TODO: can't decide if pcm should be i16 or i24 or f32
-    pub fn push_samples<'a>(&'a mut self, pcm: &[f32]) -> &'a [f32; BARKISH_BANDS] {
-        let (sec1, sec2, map) = self.sections();
+    /// Process one frame of `pcm` samples and return a fresh array of 20 normalized band outputs.
+    /// 0.0 is the quietest sound heard recently. 1.0 is the loudest sound heard recently
+    pub fn push_samples(&mut self, pcm: &[f32]) -> AggregatedBins<BARKISH_BANDS> {
+        // 1) Accumulate raw power per analysis band (24 bands)
+        let mut tmp24 = [0.0f32; BARK_BANDS];
 
-        // TODO: move this onto self and just call .fill(0.0) here?
-        let mut tmp = [0.0f32; BARKISH_BANDS];
+        // TODO: can we make this a compile time check?
+        debug_assert_eq!(tmp24.len(), self.bands.len());
 
-        /* 1. 4‑pole Bark power */
-        for &x in pcm {
-            for ((s1, s2), &i) in sec1.iter_mut().zip(sec2.iter_mut()).zip(map.iter()) {
-                // cascade
-                let y = s2.run(s1.run(x));
-                // sume the squares
-                tmp[i] += y * y;
+        // do the division once. multiplication is faster on an esp32
+        let inv_n = 1.0 / pcm.len() as f32;
+
+        for (st, t) in self.bands.iter_mut().zip(tmp24.iter_mut()) {
+            for &x in pcm {
+                let y = st.filter2.run(st.filter1.run(x));
+                *t += y * y;
             }
+            *t *= inv_n;
         }
 
-        /* 2. Take the average + Root-mean-square + ISO weighting + compression */
-        let norm = 1.0 / pcm.len() as f32;
-        for (t, g) in tmp.iter_mut().zip(ISO60_GAIN.iter()) {
-            // TODO: include sqrt so that we have RMS? I think that is the right thing to calculate, but a tone sweep looks worse
-            // *t = ((*t * norm).sqrt() * g).powf(1.0 / 3.0);
-            // *t = (*t * norm * g).powf(1.0 / 3.0);
-            // *t = (*t * norm * g).powf(0.2);
-            // *t = ((*t * norm).sqrt() * g).powf(0.2);
-            *t = (*t * norm).sqrt() * g;
+        // 2) Update all 24 peak and floor envelopes
+        for (st, x) in self.bands.iter_mut().zip(tmp24.iter().copied()) {
+            st.run(x);
         }
 
-        /* 3. 30 ms EMA */
-        // TODO: I'm not actually sure about this. i think we might want a "peak" tracker here too. but some audio papers said to use an EMA
-        // TODO: but also we have an AGC and that does some averaging too. I have no idea what i'm doing!
-        // TODO: self.ema_alpha isn't a const anymore. is this `1 - ema_alpha` fast enough or do we need to cache that?
-        (0..BARKISH_BANDS).for_each(|i| {
-            self.bars[i] = self.ema_alpha * self.bars[i] + (1.0 - self.ema_alpha) * tmp[i];
-        });
+        // 3) Combine 24 → 20 outputs (first five summed as bass). Also normalize the bands so 1.0 is the loudest sound heard recently.
+        let mut output = [0.0f32; BARKISH_BANDS];
 
-        /* 4. auto‑gain (peak‑hold with decay) */
-        // TODO: use a real AGC
-        self.peak *= self.peak_decay;
+        // TODO: is adding after we've done the powf correct? it feels wrong to me. but its just one band. come back to this later
+        // TODO: calculate t,b with one iter and fold?
+        // TODO: i think a should be some value larger than 0. I'm not sure what though. possibly something different for each band similar to the equal loudness contour
+        // TODO: i'm still not convinced a per-band floor is right. i think we want to subtract some fraction of the average across all bands. one loud high pitched whine making you not hear the rest seems like it matches human perception to me
+        output[0] = remap(
+            self.bands[0..5].iter().map(|x| x.value).sum::<f32>()
+                - self.bands[0..5]
+                    .iter()
+                    .map(|x| x.floor_env.value)
+                    .sum::<f32>(),
+            0.0,
+            self.bands[0..5]
+                .iter()
+                .map(|x| x.peak_env.value)
+                .sum::<f32>(),
+            0.,
+            1.0,
+        );
 
-        // TODO: need to think more about this init value. 1.0 seems to look okay on the mac terminal, but the esp32 doesn't hear anything
-        // TODO: change init to a config value. make pressing a button move it up or down?
-        // TODO: init with some calculated value instead of a hard coded value. the mac and arduino mics are definitely different
-        let frame_peak = self.bars.iter().copied().fold(0.5, f32::max);
-
-        // TODO: still unsure if we should do an EMA on this or have it use the peak
-        self.peak = self.peak.max(frame_peak);
-        // self.peak = self.peak_decay * self.peak + (1.0 - self.peak_decay) * frame_peak;
-        trace!("peak: {}", self.peak);
-
-        // scale everything from 0-1?
-        for v in &mut self.bars {
-            *v = remap(*v, 0.0, self.peak, 0.0, 1.0);
+        for (i, st) in self.bands[5..BARK_BANDS].iter().enumerate() {
+            // TODO: see todos above about the merged values. some apply here too
+            output[i + 1] = remap(
+                st.value - st.floor_env.value,
+                0.0,
+                st.peak_env.value,
+                0.0,
+                1.0,
+            );
         }
 
-        &self.bars
+        AggregatedBins(output)
     }
 }
 
@@ -301,7 +300,7 @@ mod tests {
     #[test]
     fn filterbank_len() {
         let b = BarkBank::new(100.0, 48_000.);
-        assert_eq!(b.sec1.len(), BARK_BANDS);
-        assert_eq!(b.sec2.len(), BARK_BANDS);
+        assert_eq!(b.filter1.len(), BARK_BANDS);
+        assert_eq!(b.filter2.len(), BARK_BANDS);
     }
 }

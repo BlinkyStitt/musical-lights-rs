@@ -524,7 +524,7 @@ fn mic_task(
         let spectrum = filter_bank.push_samples(&i2s_sample_buf.0);
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
-        for (&x, b) in spectrum.iter().zip(bands.0.iter_mut()) {
+        for (&x, b) in spectrum.0.iter().zip(bands.0.iter_mut()) {
             *b = remap(x, 0., 1., 8., 64.) as u8;
         }
 
