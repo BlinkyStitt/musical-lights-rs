@@ -20,10 +20,14 @@ impl<const SAMPLES: usize> MicrophoneStream<SAMPLES> {
 
         let host = cpal::default_host();
 
-        // TODO: host.input_devices()?.find(|x| x.name().map(|y| y == opt.device).unwrap_or(false))
+        for device in host.input_devices()? {
+            info!("device default config: {:?}", device.name());
+        }
+
         let device = host
-            .default_input_device()
-            .expect("Failed to get default input device");
+            .input_devices()?
+            .find(|x| x.name() == Ok("MacBook Pro Microphone".to_string()))
+            .unwrap_or_else(|| host.default_input_device().unwrap());
 
         // let mut config = device.default_input_config().unwrap();
 

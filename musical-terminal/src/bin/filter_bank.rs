@@ -31,11 +31,7 @@ async fn audio_task(
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
         let x = bank.push_samples(&samples.0);
-
-        let mut buf = AggregatedBins([0.0; NUM_BANDS]);
-        buf.0.copy_from_slice(x);
-
-        tx_loudness.send_async(buf).await.unwrap();
+        tx_loudness.send_async(x).await.unwrap();
     }
 }
 
