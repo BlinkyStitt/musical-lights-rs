@@ -21,12 +21,17 @@ impl<const SAMPLES: usize> MicrophoneStream<SAMPLES> {
         let host = cpal::default_host();
 
         for device in host.input_devices()? {
-            info!("device default config: {:?}", device.name());
+            info!("host input device: {:?}", device.name());
         }
 
         let device = host
             .input_devices()?
-            .find(|x| x.name() == Ok("MacBook Pro Microphone".to_string()))
+            .find(|x| x.name() == Ok("Loopback Audio".to_string()))
+            .or_else(|| {
+                host.input_devices()
+                    .unwrap()
+                    .find(|x| x.name() == Ok("MacBook Pro Microphone".to_string()))
+            })
             .unwrap_or_else(|| host.default_input_device().unwrap());
 
         // let mut config = device.default_input_config().unwrap();
