@@ -24,7 +24,7 @@ use musical_lights_core::{
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
-    lights::Bands,
+    lights::{apply_greg_caitlin_wedding_spline, Bands, Gradient},
     logging::{debug, error, info, warn},
     message::{Message, PeerId, MESSAGE_BAUD_RATE},
     orientation::Orientation,
@@ -325,6 +325,7 @@ fn blink_neopixels_task(
         ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
     let fibonacci_rgb_data = FIBONACCI_RGB_DATA.take();
 
+    /// TODO: use the hsluv color space longer? or maybe one of the others. theres soooo many options
     static FIBINACCI_HSV_RAINBOW_DATA: ConstStaticCell<[Hsv; NUM_FIBONACCI_NEOPIXELS]> =
         ConstStaticCell::new(
             [Hsv {
@@ -336,7 +337,10 @@ fn blink_neopixels_task(
     let fibonacci_hsv_rainbow_data = FIBINACCI_HSV_RAINBOW_DATA.take();
 
     // TODO: instead of rainbow, we want a gradient
-    rainbow(base_hsv, fibonacci_hsv_rainbow_data.as_mut_slice(), 1);
+    info!("applying the gradient");
+    // rainbow(base_hsv, fibonacci_hsv_rainbow_data.as_mut_slice(), 1);
+    apply_greg_caitlin_wedding_spline(fibonacci_hsv_rainbow_data);
+    info!("done");
 
     // TODO: we need a helper binary for testing led panels:
     // - for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
@@ -414,7 +418,7 @@ fn blink_neopixels_task(
         // slide the rgb data slowly. divide to slow things down. wrap it so we don't get an out of bounds error
         // TODO? multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
         let slow_slide_offset =
-            (slide_offset / 3 / AGGREGATED_OUTPUTS * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
+            (slide_offset / 4 / AGGREGATED_OUTPUTS * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
             .chain(fibonacci_rgb_data[..slow_slide_offset].iter())

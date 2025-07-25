@@ -3,15 +3,22 @@ use enterpolation::{
     bspline::{BSpline, BorderBuffer},
     linear::Linear,
 };
-use palette::{Hsluv, Mix, white_point};
-use smart_leds::{RGB8, colors::BLACK};
+use palette::{
+    FromColor, Hsluv, Hsva, IntoColor, LinSrgb, Mix, Srgb,
+    chromatic_adaptation::AdaptInto,
+    convert::IntoColorUnclamped,
+    white_point::{self, E},
+};
+use smart_leds::{RGB8, colors::BLACK, hsv::Hsv};
 
 use super::convert_color;
 
 /// As pallete colors neither implement multiplication with a scalar nor the merge trait in `topology-traits` crate,
 /// we need to use a newtype pattern
+///
+/// TODO: I have no memory of this place.gif
 #[derive(Debug, Copy, Clone, Default)]
-struct CustomColor<C: Mix>(C);
+pub struct CustomColor<C: Mix>(C);
 
 impl<C: Mix> From<C> for CustomColor<C> {
     fn from(from: C) -> Self {
@@ -29,7 +36,21 @@ impl<C: Mix<Scalar = f32>> Merge<f32> for CustomColor<C> {
 #[derive(Copy, Clone)]
 pub struct Gradient<const N: usize> {
     /// TODO: colors should probably be hsluv and convert later. then its easier to modify brightness and shift the color. but this is easier for now
-    pub colors: [RGB8; N],
+    pub rgb_colors: [RGB8; N],
+}
+
+/// TODO: keep this in hsluv?
+pub fn apply_greg_caitlin_wedding_spline<const N: usize>(buf: &mut [Hsv; N]) {
+    let spline = greg_caitlin_wedding_spline();
+
+    let color_iter = spline.take(N);
+
+    for (x, color) in buf.iter_mut().zip(color_iter) {
+        x.hue = ((color.0.hue.into_inner() / 360.0) * 255.0).round() as u8;
+        x.sat = (color.0.saturation * 255.0) as u8;
+        // TODO: whats the right way to convert luv to v?
+        x.val = (color.0.l * 255.0) as u8;
+    }
 }
 
 impl<const N: usize> Gradient<N> {
@@ -40,7 +61,7 @@ impl<const N: usize> Gradient<N> {
             *x = color
         }
 
-        Self { colors }
+        Self { rgb_colors: colors }
     }
 
     // TODO: put this behind a feature? maybe it should be a function that takes a spline and goes into a Gradient?
@@ -96,12 +117,12 @@ impl<const N: usize> Gradient<N> {
 
 type GregCaitlinWeddingSpline = BSpline<
     BorderBuffer<Equidistant<f32>>,
-    [CustomColor<Hsluv<white_point::E>>; 7],
-    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 7>,
+    [CustomColor<Hsluv<white_point::E>>; 8],
+    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 8>,
 >;
 
 /// TODO: pick colors
-fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
+pub fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
     //generate #128CF6
     let dusty_blue: CustomColor<_> = Hsluv::<white_point::E>::new(208., 92.7, 96.5).into();
 
@@ -116,7 +137,7 @@ fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
     BSpline::builder()
         .clamped()
         .elements([
-            dusty_blue, pastel_red, pastel_red, dusty_blue, purple, purple, dusty_blue,
+            dusty_blue, pastel_red, pastel_red, dusty_blue, dusty_blue, purple, purple, dusty_blue,
         ])
         .equidistant::<f32>()
         .degree(3)

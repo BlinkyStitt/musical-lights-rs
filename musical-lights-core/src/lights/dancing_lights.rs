@@ -76,7 +76,7 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         for y in 0..Y {
             // TODO: something is wrong with this gradient code. it always gives nearly off numbers
-            let rgb_color = gradient.colors[y];
+            let rgb_color = gradient.rgb_colors[y];
 
             // TODO: handle different layouts
             let inside = SnakeXY::xy_to_n(0, y, X);

@@ -1496,6 +1496,7 @@ dependencies = [
  "num",
  "num-complex",
  "palette",
+ "pallete",
  "postcard",
  "serde",
  "smart-leds",
@@ -1726,6 +1727,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.104",
+]
+
+[[package]]
+name = "pallete"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cb50621669ebc1eef4671a1f590f6575cfe1b41f930d19b49bbee35c25a5349"
+dependencies = [
+ "termcolor",
 ]
 
 [[package]]
@@ -2281,6 +2291,15 @@ dependencies = [
  "once_cell",
  "rustix 1.0.8",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
 ]
 
 [[package]]

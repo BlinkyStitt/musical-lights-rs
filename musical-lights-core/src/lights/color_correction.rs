@@ -2,6 +2,7 @@
 
 use crate::logging::warn;
 use palette::{Hsluv, IsWithinBounds, LinSrgb, chromatic_adaptation::AdaptInto, white_point};
+use smart_leds::hsv::Hsv;
 
 /// TODO: generic input color (and whitepoint)
 /// TODO: linear srgb or no? i have no idea what i am doing

@@ -17,5 +17,5 @@ mod visualizer;
 
 pub use color_correction::convert_color;
 pub use dancing_lights::{Bands, DancingLights};
-pub use gradient::Gradient;
+pub use gradient::{Gradient, apply_greg_caitlin_wedding_spline};
 pub use matrix::{Layout, SimpleXY, SnakeXY};
