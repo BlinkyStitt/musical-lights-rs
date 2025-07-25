@@ -71,7 +71,7 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 const I2S_SAMPLE_RATE_HZ: u32 = 44_100;
 
 // TODO: if this isn't perfectly divisible, then the target will probably be off. maybe make it easy to round up?
-const FPS_TARGET: f32 = 25.;
+const FPS_TARGET: f32 = 55.5;
 
 /// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
 /// different sample rates and FFT_INPUTS are a good idea here!
@@ -91,7 +91,7 @@ const _SAFETY_CHECKS: () = {
     // assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
 };
 
-const MY_BAND_MAX: u8 = 64;
+const MY_BAND_MAX: u8 = 128;
 
 type MyBands = Bands<AGGREGATED_OUTPUTS, MY_BAND_MAX>;
 
@@ -345,12 +345,22 @@ fn blink_neopixels_task(
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
     // Calculate α once at startup:
-    let window_ms = 60.0_f32; // EMA window in ms
-    let dt = 1.0 / FPS_TARGET; // seconds per update
-    let tau = window_ms * 1e-3; // seconds
-    let alpha = (-dt / tau).exp(); // runtime α
-    let alpha_q8 = (alpha * 256.0).round() as u16;
-    let one_minus_q8 = 256 - alpha_q8;
+    // TODO: re-use envelope code
+    // attack alpha
+    let atk_window_ms = 0.0_f32; // EMA window in ms
+    let atk_dt = 1.0 / FPS_TARGET; // seconds per update
+    let atk_tau = atk_window_ms * 1e-3; // seconds
+    let atk_alpha = (-atk_dt / atk_tau).exp(); // runtime α
+    let atk_alpha_q8 = (atk_alpha * 256.0).round() as u16;
+    let atk_one_minus_q8 = 256 - atk_alpha_q8;
+
+    // decay alpha
+    let decay_window_ms = 120.0_f32; // EMA window in ms
+    let decay_dt = 1.0 / FPS_TARGET; // seconds per update
+    let decay_tau = decay_window_ms * 1e-3; // seconds
+    let decay_alpha = (-decay_dt / decay_tau).exp(); // runtime α
+    let decay_alpha_q8 = (decay_alpha * 256.0).round() as u16;
+    let decay_one_minus_q8 = 256 - decay_alpha_q8;
 
     loop {
         debug!("Hue: {g_hue}");
@@ -388,8 +398,14 @@ fn blink_neopixels_task(
             let prev = hsv.val as u16;
             let inp = loudness as u16;
             // fixed‑point EMA: (α*prev + (1–α)*inp + ½LSB) >> 8
-            let smooth = (alpha_q8 * prev + one_minus_q8 * inp + 128) >> 8;
-            hsv.val = smooth as u8;
+            let smooth = if inp > prev {
+                // attack
+                (atk_alpha_q8 * prev + atk_one_minus_q8 * inp + 128) >> 8
+            } else {
+                // decay
+                (decay_alpha_q8 * prev + decay_one_minus_q8 * inp + 128) >> 8
+            } as u8;
+            hsv.val = smooth;
 
             // TODO: instead of hsv, do hsluv?
             *rgb = hsv2rgb(*hsv);
@@ -398,7 +414,7 @@ fn blink_neopixels_task(
         // slide the rgb data slowly. divide to slow things down. wrap it so we don't get an out of bounds error
         // TODO? multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
         let slow_slide_offset =
-            (slide_offset / AGGREGATED_OUTPUTS * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
+            (slide_offset / 3 / AGGREGATED_OUTPUTS * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
             .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
