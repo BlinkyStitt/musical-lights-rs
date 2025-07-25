@@ -71,7 +71,7 @@ const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 const I2S_SAMPLE_RATE_HZ: u32 = 44_100;
 
 // TODO: if this isn't perfectly divisible, then the target will probably be off. maybe make it easy to round up?
-const FPS_TARGET: f32 = 55.;
+const FPS_TARGET: f32 = 25.;
 
 /// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
 /// different sample rates and FFT_INPUTS are a good idea here!
@@ -82,13 +82,8 @@ const I2S_SAMPLE_SIZE: usize = (I2S_SAMPLE_RATE_HZ as f32 / FPS_TARGET) as usize
 /// TODO: with 24-bit audio, this should use `size_of::<i32>`
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
+// 24 buckets don't fit inside of 400! we collapse to 20 to fit in 400
 const AGGREGATED_OUTPUTS: usize = 20;
-
-// TODO: 20/24 buckets don't fit inside of 256 or 400!
-// TODO: do 10 buckets and have them be 2 wide and 1 tall? then we can show 20 frames?
-// Y is currently set to 9 because the terminal logging looks better. but that should change to fit the actual leds
-const DEBUGGING_Y: usize = 255;
-const DEBUGGING_N: usize = AGGREGATED_OUTPUTS * DEBUGGING_Y;
 
 const _SAFETY_CHECKS: () = {
     // assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
@@ -96,7 +91,9 @@ const _SAFETY_CHECKS: () = {
     // assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
 };
 
-type MyBands = Bands<AGGREGATED_OUTPUTS, 48>;
+const MY_BAND_MAX: u8 = 64;
+
+type MyBands = Bands<AGGREGATED_OUTPUTS, MY_BAND_MAX>;
 
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
@@ -347,6 +344,14 @@ fn blink_neopixels_task(
 
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
+    // Calculate α once at startup:
+    let window_ms = 60.0_f32; // EMA window in ms
+    let dt = 1.0 / FPS_TARGET; // seconds per update
+    let tau = window_ms * 1e-3; // seconds
+    let alpha = (-dt / tau).exp(); // runtime α
+    let alpha_q8 = (alpha * 256.0).round() as u16;
+    let one_minus_q8 = 256 - alpha_q8;
+
     loop {
         debug!("Hue: {g_hue}");
 
@@ -373,17 +378,18 @@ fn blink_neopixels_task(
 
         // add the loudness to the lights and then convert the hsv data into rgb data
         // TODO: move the slide offset code here so that we don't slide all patterns. we only want to slide the pretty patterns. the compass things shouldn't slide
+        // TODO: dither here? i don't think neopixels are fast enough
         for ((rgb, hsv), loudness) in fibonacci_rgb_data
             .iter_mut()
             .zip(fibonacci_hsv_rainbow_data.iter_mut())
             .zip(bands_iter)
         {
-            // TODO: apply min/max brightness here?
-            // TODO: do some sort of blending to prevent flickering?
-            // TODO: dither here?
-
-            // TODO! this needs an EMA. it is way too jumpy!
-            // hsv.val = (hsv.val as u16 + loudness as u16 / 2) as u8;
+            // TODO! this needs an EMA/Envelope! it is way too jumpy!
+            let prev = hsv.val as u16;
+            let inp = loudness as u16;
+            // fixed‑point EMA: (α*prev + (1–α)*inp + ½LSB) >> 8
+            let smooth = (alpha_q8 * prev + one_minus_q8 * inp + 128) >> 8;
+            hsv.val = smooth as u8;
 
             // TODO: instead of hsv, do hsluv?
             *rgb = hsv2rgb(*hsv);
@@ -391,7 +397,8 @@ fn blink_neopixels_task(
 
         // slide the rgb data slowly. divide to slow things down. wrap it so we don't get an out of bounds error
         // TODO? multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
-        let slow_slide_offset = (slide_offset / 3) % NUM_FIBONACCI_NEOPIXELS;
+        let slow_slide_offset =
+            (slide_offset / AGGREGATED_OUTPUTS * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
             .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
@@ -475,7 +482,7 @@ fn mic_task(
     bclk: Gpio26,
     ws: Gpio33,
     din: Gpio25,
-    audio_ready: &mut flume::Sender<Bands<AGGREGATED_OUTPUTS, 48>>,
+    audio_ready: &mut flume::Sender<MyBands>,
 ) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
@@ -535,7 +542,7 @@ fn mic_task(
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.0.iter().zip(bands.0.iter_mut()) {
-            *b = remap(x, 0., 1., 8., 48.) as u8;
+            *b = remap(x, 0., 1., 8., MY_BAND_MAX as f32) as u8;
         }
 
         // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
