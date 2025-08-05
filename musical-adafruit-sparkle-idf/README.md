@@ -71,3 +71,5 @@ The 4 [fibonnaci256](https://www.evilgeniuslabs.org/fibonacci256) panels that i 
 rmt-legacy was needed to get a RxRmtDriver struct. Is there an issue tracking using the v5 idf for rmt?
 
 Compare to WLED: <https://learn.adafruit.com/adafruit-sparkle-motion/wled-software-2>
+
+Pressing the button should reset a global counter. That way two devices can be easily synced. Some sort of wireless communication between multiple devices would be better. But this is much simpler to build. Other ideas for the button are changing the brightness or

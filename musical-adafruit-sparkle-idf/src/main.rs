@@ -336,11 +336,9 @@ fn blink_neopixels_task(
         );
     let fibonacci_hsv_rainbow_data = FIBINACCI_HSV_RAINBOW_DATA.take();
 
-    // TODO: instead of rainbow, we want a gradient
-    info!("applying the gradient");
+    // TODO: make this configurable at run time.
     // rainbow(base_hsv, fibonacci_hsv_rainbow_data.as_mut_slice(), 1);
     apply_greg_caitlin_wedding_spline(fibonacci_hsv_rainbow_data);
-    info!("done");
 
     // TODO: we need a helper binary for testing led panels:
     // - for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
