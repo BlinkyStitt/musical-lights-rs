@@ -1,11 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(not(test), no_main)]
-#![feature(
-    type_alias_impl_trait,
-    duration_millis_float,
-    iter_next_chunk,
-    generic_arg_infer
-)]
+#![feature(type_alias_impl_trait, duration_millis_float, iter_next_chunk)]
 
 pub mod audio;
 pub mod battery;

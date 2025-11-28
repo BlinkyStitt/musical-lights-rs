@@ -1,5 +1,5 @@
 use js_sys::Float64Array;
-use leptos::*;
+use leptos::prelude::*;
 use log::warn;
 use musical_lights_core::{
     audio::{
@@ -37,7 +37,7 @@ async fn load_media_stream() -> Result<MediaStream, JsValue> {
     let navigator = window().navigator();
 
     let mut constraints = MediaStreamConstraints::new();
-    constraints.audio(&JsValue::from(true));
+    constraints.set_audio(&JsValue::from(true));
 
     let promise = navigator
         .media_devices()
@@ -67,7 +67,7 @@ pub fn DancingLights() -> impl IntoView {
     let gradient = Gradient::<NUM_BANDS>::new_rainbow(100.0, 75.0);
 
     let colors: Vec<_> = gradient
-        .colors
+        .rgb_colors
         .iter()
         .map(|x| format!("#{:02X}{:02X}{:02X}", x.r, x.g, x.b))
         .collect();
@@ -81,9 +81,8 @@ pub fn DancingLights() -> impl IntoView {
             return Ok(None);
         }
 
-        let mut peak_scaled_builder = PeakScaledBuilder::new(0.99);
-
-        let mut fixed_scale_builder = FixedScaleBuilder::new(85.0);
+        // TODO: this needs to come from the browser
+        let mut peak_scaled_builder = BarkScaleBuilder::new(48_000.);
 
         let mut down_resistance_builder = DownResistanceBuilder::<NUM_BANDS>::new(DOWN_RATE);
 

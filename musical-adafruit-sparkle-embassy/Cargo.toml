@@ -1,7 +1,8 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "musical-adafruit-sparkle"
 version = "0.1.0"
+resolver = "2"
 
 [[bin]]
 name = "musical-adafruit-sparkle"

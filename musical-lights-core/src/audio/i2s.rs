@@ -1,4 +1,4 @@
-use i24::i24 as I24;
+use i24::I24;
 
 use crate::remap;
 

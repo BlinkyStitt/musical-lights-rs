@@ -2,8 +2,8 @@ use core::ops::Fn;
 use esp_idf_svc::{
     hal::uart::{UartRxDriver, UartTxDriver},
     io::Write,
+    sys::TickType_t,
 };
-use esp_idf_sys::TickType_t;
 use heapless::Vec;
 use musical_lights_core::{
     errors::{MyError, MyResult},

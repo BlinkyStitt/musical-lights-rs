@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::*;
 
@@ -29,10 +29,10 @@ pub fn App() -> impl IntoView {
         <Meta name="viewport" content="width=device-width, initial-scale=1.0"/>
         <Meta name="description" content="Make some lights blink to your microphone."/>
 
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://blink.stitthappens.com" />
-        <meta property="og:site_name" content="Stitt Happens" />
-        <meta property="og:locale" content="en_US" />
+        <Meta property="og:type" content="website" />
+        <Meta property="og:url" content="https://blink.stitthappens.com" />
+        <Meta property="og:site_name" content="Stitt Happens" />
+        <Meta property="og:locale" content="en_US" />
 
         <div class="container">
             <Router fallback=move || NotFound().into_view()>

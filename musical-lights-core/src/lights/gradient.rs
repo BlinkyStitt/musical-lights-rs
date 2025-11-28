@@ -118,7 +118,7 @@ impl<const N: usize> Gradient<N> {
 type GregCaitlinWeddingSpline = BSpline<
     BorderBuffer<Equidistant<f32>>,
     [CustomColor<Hsluv<white_point::E>>; 8],
-    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 8>,
+    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 4>,
 >;
 
 /// TODO: pick colors
@@ -142,7 +142,7 @@ pub fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
         .equidistant::<f32>()
         .degree(3)
         .normalized()
-        .constant::<_>()
+        .constant::<4>()
         .build()
         .expect("As the curve is hardcoded, this should always work")
 }

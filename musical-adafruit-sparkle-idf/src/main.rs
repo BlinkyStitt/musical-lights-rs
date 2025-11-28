@@ -17,8 +17,8 @@ use esp_idf_svc::{
         units::Hertz,
     },
     io::Read,
+    sys::{bootloader_random_disable, bootloader_random_enable, esp_random},
 };
-use esp_idf_sys::{bootloader_random_disable, bootloader_random_enable, esp_random};
 use musical_lights_core::{
     audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Samples},
     compass::{Coordinate, Magnetometer},
@@ -108,7 +108,7 @@ struct State {
     self_id: Option<PeerId>,
     /// TODO: max peers is so that we dont run out of ram. what does this do when its full though?
     /// TODO: do we want their coordinates, or something else like our bearing to them?
-    peer_coordinate: heapless::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
+    peer_coordinate: heapless::index_map::FnvIndexMap<PeerId, Coordinate, MAX_PEERS>,
     /// the SystemTime is the time from the GPS and the Instant is when we received it.
     /// TODO: There's probably a small offset needed. make a helper for adding them?
     /// TODO: think more about this

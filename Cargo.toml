@@ -1,32 +1,29 @@
 [workspace]
-
-resolver = "2"
-
 members = ["musical-lights-core"]
-
 exclude = [
     "musical-adafruit-sparkle-embassy",
     "musical-adafruit-sparkle-idf",
+    "musical-dioxus",
     "musical-feather-m0",
     "musical-leptos",
     "musical-stm32",
     "musical-terminal",
     "musical-wasm",
 ]
+resolver = "2"
 
-[patch.crates-io]
-# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
-biquad = { git = "https://github.com/korken89/biquad-rs", rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7" }
+# [patch.crates-io.biquad]
+# git = "https://github.com/korken89/biquad-rs"
+# rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7"
 
-# we patch all embassy crates to the current main. this is because they haven't released versions of everything that use the newest embassy-sync
-# TODO: embassy feature on musical-lights-core that handles this?
-# embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-# embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-# embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-# embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-# embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "520945278942c301433c391f63a075227d9e7c84" }
+# [patch.crates-io.embassy-time]
+# git = "https://github.com/embassy-rs/embassy.git"
+# rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463"
 
-# Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
-i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
+# [patch.crates-io.embedded-hal]
+# git = "https://github.com/rust-embedded/embedded-hal"
+# rev = "520945278942c301433c391f63a075227d9e7c84"
+
+# [patch.crates-io.i24]
+# git = "https://github.com/jmg049/i24.git"
+# rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c"
