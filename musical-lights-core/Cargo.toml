@@ -64,7 +64,6 @@ default = ["std", "defmt"]
 alloc = [
     "circular-buffer/alloc",
     "cobs/alloc",
-    "defmt/alloc",
     "i24/alloc",
     "num/alloc",
     "palette/alloc",
@@ -72,7 +71,13 @@ alloc = [
     "serde/alloc",
     "ed25519-dalek/alloc",
 ]
-defmt = ["dep:defmt", "cobs/defmt", "postcard/use-defmt", "heapless/defmt"]
+defmt = [
+    "dep:defmt",
+    "defmt/alloc",
+    "cobs/defmt",
+    "postcard/use-defmt",
+    "heapless/defmt",
+]
 embassy = ["dep:embassy-time"]
 libm = [
     "palette/libm",
