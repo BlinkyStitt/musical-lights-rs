@@ -13,15 +13,15 @@ musical-lights-core = { path = "../musical-lights-core", features = ["log"] }
 console_error_panic_hook = "0.1"
 console_log = "1"
 flume = "0.11.1"
-js-sys = "0.3.82"
+js-sys = "0.3.83"
 leptos = { version = "0.8", features = ["nightly"] }
 leptos_meta = { version = "0.8", features = [] }
 leptos_router = { version = "0.8", features = ["nightly"] }
 log = "0.4"
 terrors = "0.3.3"
-wasm-bindgen = "0.2"
+wasm-bindgen = "0.2.106"
 wasm-bindgen-futures = "0.4.55"
-web-sys = { version = "0.3", features = [
+web-sys = { version = "0.3.83", features = [
     "console",
     "AudioContext",
     "AudioContextOptions",
@@ -47,7 +47,7 @@ num = "0.4.3"
 #serde = { version = "1.0.198", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3"
+wasm-bindgen-test = "0.3.56"
 
 [profile.release]
 opt-level = 'z'

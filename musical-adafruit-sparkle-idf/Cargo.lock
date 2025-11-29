@@ -1519,6 +1519,7 @@ dependencies = [
  "circular-buffer",
  "cobs 0.5.0",
  "crc",
+ "defmt 1.0.1",
  "ed25519-dalek",
  "embedded-io 0.7.1",
  "embedded-io-async 0.7.0",
