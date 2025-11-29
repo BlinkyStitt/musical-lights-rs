@@ -70,10 +70,10 @@ alloc = [
     "postcard/alloc",
     "serde/alloc",
     "ed25519-dalek/alloc",
+    "defmt?/alloc",
 ]
 defmt = [
     "dep:defmt",
-    "defmt/alloc",
     "cobs/defmt",
     "postcard/use-defmt",
     "heapless/defmt",
