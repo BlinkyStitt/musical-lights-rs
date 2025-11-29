@@ -10,6 +10,10 @@ Rust's standard library on a tiny little $25 computer. Amazing.
 
     cargo binstall ldproxy
 
+Upgrade the xtensa rust for esp32:
+
+    espup install
+
 ## Deploying
 
 When flashing, you can specify the default port like this:
