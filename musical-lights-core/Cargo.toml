@@ -78,6 +78,7 @@ defmt = [
     "postcard/use-defmt",
     "heapless/defmt",
 ]
+log = ["dep:log"]
 embassy = ["dep:embassy-time"]
 libm = [
     "palette/libm",
