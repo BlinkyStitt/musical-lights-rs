@@ -15,7 +15,6 @@ console_log = "=1.1.0"
 flume = "=0.12.0"
 js-sys = "=0.3.105"
 leptos = { version = "=0.9.0-beta", features = ["csr"] }
-leptos_meta = { version = "=0.9.0-beta", features = [] }
 leptos_router = { version = "=0.9.0-beta1", features = [] }
 log = "=0.4.34"
 terrors = "=0.3.3"

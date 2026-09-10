@@ -21,6 +21,17 @@ The controls and graph appear directly below navigation. Descriptive text follow
 the app. The vertical labels read Quiet/Loud. Hover or focus a band to see its
 exact frequency edges.
 
+Fullscreen expands the visualizer and keeps the microphone controls available.
+Use Exit fullscreen or the browser's fullscreen exit to return to the page.
+The button follows actual browser state and reports rejected requests.
+
+The visible visualizer requests a [screen wake lock](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API),
+including before microphone access. Its status appears beside the FPS counter.
+The lock releases when the tab is hidden or the view closes, and the page requests
+a new lock when visible again. Browser or power settings can reject or release
+it; the status then reads “Screen may sleep.” This does not change system sleep
+settings or keep a hidden tab awake. Pending requests also release after closure.
+
 The page follows the system's light or dark color scheme, including changes while
 it is open. CSS applies the theme before the Rust application starts. Text,
 surfaces, controls, and tooltips adapt together. Each meter keeps a fixed rainbow
@@ -70,3 +81,19 @@ that still advance filter state. Channel mixing rounds only after averaging.
 See [validation](../docs/validation.md) for routes, microphone, worklet, layout,
 contrast, reduced motion, and display timing checks. The temporary interaction counter
 has been removed.
+
+Share metadata lives in `index.html`, so preview services can read it without
+JavaScript. Trunk copies `public/social-preview.png` to the site root. The PNG
+is 1200×630 and uses the shared rainbow palette. Open Graph and Twitter image
+cards point to its public HTTPS URL. The app does not inject duplicate metadata.
+
+To regenerate the image, build the Leptos application, then run the following
+from `validation/` with the pinned Node and browser tools installed:
+
+```sh
+npm run preview
+```
+
+The renderer reads the actual app colors, draws a static illustration, and saves
+the PNG. Rebuild Leptos after regeneration to copy the updated image into `dist/`.
+Preview services can cache existing cards; check the sharing app after deployment.

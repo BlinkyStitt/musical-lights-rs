@@ -26,7 +26,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 | ESP Embassy | `xtensa-esp32-none-elf` Clippy and release links for the application and priority example |
 | ESP-IDF | `xtensa-esp32-espidf` Clippy and release link with ESP-IDF v6.1 |
 
-All 15 browser tests passed. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
+The original 15 browser tests passed again with the screen and share changes. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
 
 Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. The complete graph is visible without scrolling at these sizes, and descriptive text follows it. Tests check Quiet/Loud labels, every band's exact frequency tooltip, keyboard focus, and removal of the counter and pause/resume controls. Screenshots were inspected, including color-vision simulations. The layout and contrast checks cover both system color schemes at all three widths. Text contrast is at least 4.5:1, and meter contrast against the graph is at least 3:1. Tests switch the system theme in both directions while the page stays open and confirm that the meter nodes remain intact.
 
@@ -58,16 +58,42 @@ percentage point and stays between 4% and 7%. The test also checks compressed
 level against the tone's expected RMS. These checks validate power integration;
 they do not establish equal perceived loudness or physical LED output.
 
-For this repair, `python3 validation/validate.py core` passed. The full Leptos
-validation command and all 13 Leptos browser tests passed in a temporary source
-export containing the audio patch. This excluded pre-existing, uncommitted
-screen-control work. That work had one formatting failure and six browser
-layout/focus failures in the shared checkout. The browser motion test now sends
+The combined `python3 validation/validate.py core leptos browser` command passed
+after the screen controls were finished. Formatting and focus/layout checks now
+include the fullscreen button and wake status. The browser motion test sends
 enough silence to complete an analysis window and allows the documented peak
-hold and damped fall to reach exact zero. Chromium required host access because
-the sandbox blocked its macOS process startup.
+hold and damped fall to reach exact zero. Chromium requires host access because
+the sandbox blocks its macOS process startup.
 
 Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
+
+## Screen controls and share preview
+
+All 27 browser and screen-lifecycle checks passed in the combined suite. The
+separate native wake-lock test also passed in a visible browser window.
+
+Screen lifecycle tests cover grants, system releases, denied requests without
+retry loops, hidden/visible transitions, pending requests invalidated by a tab
+change, and late grants after closure. Browser integration checks the mounted
+view's ownership of its lock even when microphone access fails. Unsupported
+APIs leave the app usable. Native API checks compare the status with the actual
+browser result: headless Chromium can deny the lock, while a visible Chromium
+window granted it and released it when the route closed. No test changes global
+system sleep settings or measures a full operating-system sleep interval.
+
+Fullscreen checks use real browser entry and exit, including an external exit
+event. At 375×812 and 1440×1000, the card fills the viewport and expands the graph
+while controls and FPS stay visible. Both system themes render correctly. Audio
+continues through fullscreen changes and closes when listening stops. Lifecycle
+tests also cover rejected requests and an entry that completes after view closure.
+
+Preview checks load HTML with JavaScript disabled and verify the title, Open
+Graph tags, canonical URL, and large-image Twitter card. The copied PNG returns
+HTTP 200 as `image/png` with 1200×630 dimensions. Mounting and route navigation
+retain one set of metadata. `npm run preview` regenerated the image from the
+actual rainbow palette, and the output was inspected. The preview uses a static
+illustration, not recorded microphone data. Production and sharing-platform
+cache checks remain for deployment after the combined PR merges.
 
 ## Display motion and FPS
 
