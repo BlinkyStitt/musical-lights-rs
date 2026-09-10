@@ -42,6 +42,14 @@ Audio analysis runs at the full input rate. One reusable animation callback draw
 the existing nodes and is cancelled when listening stops or the view closes,
 including pending microphone permission. There is no separate pause/resume state.
 
+The shared processor integrates filtered power over 20 ms windows: 882 samples
+at 44.1 kHz or 960 at 48 kHz. Compression and adaptive normalization update only
+after a complete window. A callback can complete zero, one, or several windows;
+the display receives the latest complete result. Partial windows retain that
+result. A fully silent window produces zero, while filters and envelopes still
+advance. Analysis can add up to one window of delay before the display receives
+a new level.
+
 The FPS counter measures that animation callback over at least one second. It
 includes delayed frames and does not count audio callbacks or depend on bar
 movement. It shows “— FPS” when drawing stops. The browser controls

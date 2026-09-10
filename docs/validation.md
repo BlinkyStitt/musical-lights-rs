@@ -16,7 +16,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 
 | Package | Passed checks |
 | --- | --- |
-| Core | 32 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
+| Core | 35 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
 | Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
 | Leptos | Eight display timing, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
@@ -45,7 +45,27 @@ Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, 
 
 The processor returns one borrowed `BarkFrame`. Its `bands()` output serves the website and terminal; `panel_rows()` serves the fixed LED geometry. Both use the same normalization function and the same filter/envelope state. The panel does not average already-normalized web values or use 16/17-pixel band segments.
 
-The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor now scales each block and its carried filter state, runs the biquads in f32, and restores physical level in f64 before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
+The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor scales each block and its carried filter state and runs the biquads in f32. It accumulates physical power in f64 across callbacks, then computes RMS before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
+
+The callback-size repair uses continuous 20 ms power windows, rounded to the
+nearest sample. Compression, floor, peak, and silence updates use those same
+boundaries. Incomplete windows retain the previous result. Three new tests first
+failed against the callback-sized detector, then passed after the repair. They
+cover 128-sample, 800-sample, and uneven blocks, multiple windows in one callback,
+partial-window retention, silence, and a 30-second 50 Hz tone at amplitude 0.5.
+At both 44.1 and 48 kHz, the bass range during the final second is less than one
+percentage point and stays between 4% and 7%. The test also checks compressed
+level against the tone's expected RMS. These checks validate power integration;
+they do not establish equal perceived loudness or physical LED output.
+
+For this repair, `python3 validation/validate.py core` passed. The full Leptos
+validation command and all 13 Leptos browser tests passed in a temporary source
+export containing the audio patch. This excluded pre-existing, uncommitted
+screen-control work. That work had one formatting failure and six browser
+layout/focus failures in the shared checkout. The browser motion test now sends
+enough silence to complete an analysis window and allows the documented peak
+hold and damped fall to reach exact zero. Chromium required host access because
+the sandbox blocked its macOS process startup.
 
 Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
 
@@ -88,12 +108,17 @@ The latest ten-second microphone check received 3750 blocks at 48000 Hz. The inp
 
 | Sample rate | Samples per block | Wall time per block | Fraction of real-time budget |
 | --- | --- | --- | --- |
-| 44100 Hz | 128 | 8.76 us | 0.30% |
-| 44100 Hz | 794 | 53.60 us | 0.30% |
-| 48000 Hz | 128 | 9.22 us | 0.35% |
-| 48000 Hz | 794 | 54.10 us | 0.33% |
+| 44100 Hz | 128 | 6.52 us | 0.22% |
+| 44100 Hz | 794 | 40.08 us | 0.22% |
+| 48000 Hz | 128 | 6.56 us | 0.25% |
+| 48000 Hz | 794 | 41.23 us | 0.25% |
 
-`size_of::<BarkBank>()` is 2032 bytes on this host. Processing allocates no heap storage and uses a 128-sample scratch array plus 24 mean-square accumulators (608 bytes before compiler optimization). This size excludes caller-owned input/output buffers, other stack variables, browser resources, and firmware drivers. Total firmware memory and CPU cost still need measurements on each device.
+These measurements include the 20 ms power-window repair. `size_of::<BarkBank>()`
+is 2336 bytes on this host, including the persistent f64 power sums. Processing
+allocates no heap storage and uses a 128-sample scratch array (512 bytes before
+compiler optimization). This size excludes caller-owned input/output buffers,
+other stack variables, browser resources, and firmware drivers. Total firmware
+memory and CPU cost still need measurements on each device.
 
 ## Warnings and local setup
 

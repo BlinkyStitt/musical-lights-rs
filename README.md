@@ -11,6 +11,10 @@ and ESP-IDF use the same processor. Weighting, compression, adaptive
 normalization, and bass combination are visual approximations. They do not
 implement or claim compliance with an ISO loudness standard.
 
+The processor integrates filtered power over continuous 20 ms windows before
+compression and normalization. Windows span audio callbacks. Partial windows
+retain the last complete output, including its silence state.
+
 ## Pinned tools
 
 Non-ESP packages use `nightly-2026-09-10`. The toolchain files install rust-src,

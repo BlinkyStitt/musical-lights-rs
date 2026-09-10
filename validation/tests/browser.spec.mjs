@@ -245,9 +245,13 @@ test('meters rise on the next frame, retain live levels, and fall without rapid 
   await page.waitForTimeout(100);
   expect(await page.evaluate(() => window.heights())).toEqual(floor);
   const fall = await page.evaluate(async () => {
-    window.sendAudio(0);
+    // Finish any partial 20 ms power window, then one fully silent window.
+    const blocks = Math.ceil(window.testContext.sampleRate * 0.040 / 128);
+    for (let block = 0; block < blocks; block++) window.sendAudio(0);
     const levels = [];
-    const end = performance.now() + 2200;
+    // The final partial audio window can set a new peak. Allow its 350 ms
+    // hold plus the full-scale damped fall to the 0.0001 settling threshold.
+    const end = performance.now() + 2500;
     while (performance.now() < end) {
       const time = await window.screenFrame();
       levels.push({ time, height: Math.max(...window.heights()) });
