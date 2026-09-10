@@ -79,12 +79,13 @@ impl<const N: usize> Gradient<N> {
         Self::new(color_iter)
     }
 
-    // TODO: put this behind a feature?
+    /// Red through orange, yellow, green, and blue to purple, in linear sRGB.
+    /// Saturation and perceptual lightness use HSLuv's 0–100 scale.
     pub fn new_rainbow(saturation: f32, luminance: f32) -> Self {
-        // TODO: interpolate the correct number of colors in Hsluv space. then convert to RGB8 with convert_color function
+        // HSLuv hue is in degrees, not the LED HSV byte range of 0–255.
         let lin = Linear::builder()
-            .elements([0.0, 255.0])
-            .knots([0.0, 255.0])
+            .elements([12.0, 285.0])
+            .knots([0.0, 1.0])
             .build()
             .unwrap();
 
@@ -189,8 +190,22 @@ fn mermaid_spline() -> MermaidSpline {
 
 #[cfg(test)]
 mod tests {
-    use crate::lights::{convert_color, gradient::mermaid_spline};
+    use crate::lights::{Gradient, convert_color, gradient::mermaid_spline};
     use enterpolation::{Curve, Signal};
+
+    #[test]
+    fn rainbow_runs_from_red_to_purple() {
+        let colors = Gradient::<24>::new_rainbow(90.0, 58.0).rgb_colors;
+        let red = colors[0];
+        assert!(red.r > red.g.saturating_mul(4));
+        assert!(red.r > red.b.saturating_mul(4));
+        let purple = colors[23];
+        assert!(purple.b > purple.r);
+        assert!(purple.r > purple.g.saturating_mul(3));
+        for (i, color) in colors.iter().enumerate() {
+            assert!(!colors[..i].contains(color), "each band has its own color");
+        }
+    }
 
     #[test_log::test]
     fn test_mermaid_spline() {

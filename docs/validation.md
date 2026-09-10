@@ -1,6 +1,6 @@
 # Validation record
 
-Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. Both GitHub workflows passed at commits `6802973`, `cfca78c`, `d9a71ef`, and `de3db52`. After the smoother fall and FPS update, the affected Leptos checks and all 15 browser tests passed again.
+Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. Both GitHub workflows passed at commits `6802973`, `cfca78c`, `d9a71ef`, `de3db52`, and `4331b54`. After adding rainbow bars, `python3 validation/validate.py core leptos browser` passed again.
 
 ## Exact tools
 
@@ -16,7 +16,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 
 | Package | Passed checks |
 | --- | --- |
-| Core | 31 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
+| Core | 32 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
 | Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
 | Leptos | Eight display timing, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
@@ -29,6 +29,15 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 All 15 browser tests passed. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
 
 Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. The complete graph is visible without scrolling at these sizes, and descriptive text follows it. Tests check Quiet/Loud labels, every band's exact frequency tooltip, keyboard focus, and removal of the counter and pause/resume controls. Screenshots were inspected, including color-vision simulations. The layout and contrast checks cover both system color schemes at all three widths. Text contrast is at least 4.5:1, and meter contrast against the graph is at least 3:1. Tests switch the system theme in both directions while the page stays open and confirm that the meter nodes remain intact.
+
+All 24 bars now use the shared rainbow gradient, from red bass to purple treble.
+Its HSLuv hue range is 12–285 degrees; the old endpoint of 255 stopped at blue.
+Native tests check the red and purple endpoints and 24 distinct colors. Browser
+layout tests send noise through a real AudioWorklet so every bar is visible. They
+check all 24 fill colors for 3:1 contrast in each theme, matching baseline colors,
+and fixed colors across audio updates and system theme changes. CSS explicitly
+uses the shared gradient's linear sRGB encoding. Phone and desktop screenshots
+show the rainbow with the existing compact layout, motion, tooltips, and FPS display.
 
 Bars rise on the next screen frame without CSS easing. A new peak holds for 350 ms, then follows a critically damped fall that slows before reaching its live band level. Reduced Motion halves the release speed instead of using a single-step drop. The latest level remains valid between audio callbacks, so an absent callback cannot pull the bar below the live level. Native tests cover exact release timing at 30/60/120/144/240 Hz, short taps, braking when the floor rises during a fall, and reduced motion. FPS tests count actual elapsed animation intervals, including stalls. The browser compares the visible counter with independent animation timestamps while audio callbacks are suspended. The browser checks the actual rendered fast attack, retained live level, continuous fall to silence, and repeated queued taps at 100 heights in every band. The hold limits repeated flashes to at most three in any second, using the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html) as the design criterion. These checks do not provide a medical safety guarantee. Resource tests also verify that animation requests stop on microphone denial, Stop listening, route closure, and closure while permission remains pending.
 
@@ -104,4 +113,4 @@ The Feather application still contains initialization only. The Embassy radio ta
 
 The standalone worklet requires shared WASM memory, rebuilt standard library atomics/TLS exports, and cross-origin isolation headers. The browser tests serve the required headers. Ordinary static hosting without those headers is not a supported worklet deployment.
 
-CI covers every package root plus the browser tests. The automatic system-theme update at `de3db52` passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34468943502) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34468944276). The live page also passed a Chromium check with real worklet peaks above one, 24 meters, centered layout, route navigation, and stream cleanup. Check the smoother-fall commit's workflow results and live page after push.
+CI covers every package root plus the browser tests. The smoother-fall and FPS update at `4331b54` passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34471359337) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34471359398). The live page also passed a Chromium check with real worklet peaks above one, 24 meters, centered layout, route navigation, stream cleanup, and displayed FPS matching measured animation intervals. Check the rainbow commit's workflow results and live page after push.

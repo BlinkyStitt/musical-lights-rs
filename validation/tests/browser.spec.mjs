@@ -110,6 +110,8 @@ for (const rate of [44100, 48000]) {
       };
     }, { rate });
     await page.goto(leptos);
+    await expect(page.getByRole('meter')).toHaveCount(24);
+    const bandColors = await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
     await page.getByRole('button', { name: 'Start listening' }).click();
     await expect(page.getByText(`Sample rate: ${rate} Hz`)).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.inputPeak)).toBeGreaterThan(1);
@@ -122,6 +124,7 @@ for (const rate of [44100, 48000]) {
     await page.evaluate(() => { window.testInputGain.gain.value = 0; });
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     expect(await page.evaluate(() => window.originalMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
+    expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor))).toEqual(bandColors);
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
@@ -315,6 +318,23 @@ for (const colorScheme of ['light', 'dark']) {
     test(`spectrum is centered and readable at ${width}px in ${colorScheme} mode`, async ({ page }) => {
       await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
       await page.emulateMedia({ colorScheme });
+      await page.addInitScript(() => {
+        navigator.mediaDevices.getUserMedia = async () => {
+          const context = new AudioContext();
+          const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+          const samples = buffer.getChannelData(0);
+          let seed = 1;
+          for (let i = 0; i < samples.length; i++) {
+            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+            samples[i] = (seed / 2 ** 32 - 0.5) * 0.6;
+          }
+          const source = context.createBufferSource(); source.buffer = buffer; source.loop = true;
+          const destination = context.createMediaStreamDestination();
+          source.connect(destination); source.start(); await context.resume();
+          window.noiseContext = context;
+          return destination.stream;
+        };
+      });
       await page.goto(leptos);
       const card = await page.locator('.audio-card').boundingBox();
       expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
@@ -344,10 +364,15 @@ for (const colorScheme of ['light', 'dark']) {
       await page.getByRole('button', { name: 'Start listening' }).focus();
       await page.keyboard.press('Tab');
       await expect(meters[0].getByRole('tooltip')).toBeVisible();
+      // Exercise every colored bar through the real audio processor.
+      await page.getByRole('button', { name: 'Start listening' }).click();
+      await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
       // Check actual text colors against the background they use.
       const colors = await page.evaluate(() => {
         const luminance = rgb => {
+          const linear = rgb.startsWith('color(srgb-linear ');
           const channels = rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
+            if (linear) return v;
             v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
           });
           return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
@@ -363,14 +388,21 @@ for (const colorScheme of ['light', 'dark']) {
         });
         const surfaces = [document.documentElement, document.querySelector('.audio-card'), document.querySelector('.spectrum-panel')]
           .map(node => luminance(getComputedStyle(node).backgroundColor));
-        const meter = luminance(getComputedStyle(document.querySelector('.meter-fill')).backgroundColor);
-        return { text, surfaces, meterContrast: contrast(meter, surfaces[2]) };
+        const meters = [...document.querySelectorAll('.meter-fill')].map(node => {
+          const color = getComputedStyle(node).backgroundColor;
+          return { color, ratio: contrast(luminance(color), surfaces[2]), baseline: getComputedStyle(node.parentElement).borderBottomColor };
+        });
+        return { text, surfaces, meters };
       });
       for (const surface of colors.surfaces) {
         if (colorScheme === 'dark') expect(surface).toBeLessThan(.1);
         else expect(surface).toBeGreaterThan(.8);
       }
-      expect(colors.meterContrast).toBeGreaterThanOrEqual(3);
+      expect(new Set(colors.meters.map(meter => meter.color)).size).toBe(24);
+      for (const { color, ratio, baseline } of colors.meters) {
+        expect(ratio, color).toBeGreaterThanOrEqual(3);
+        expect(baseline).toBe(color);
+      }
       for (const { selector, ratio } of colors.text) expect(ratio, selector).toBeGreaterThanOrEqual(4.5);
       await page.screenshot({ path: `test-results/leptos-layout-${width}-${colorScheme}.png`, fullPage: true });
       if (width === 1440) {
@@ -389,8 +421,12 @@ for (const colorScheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: colorScheme === 'dark' ? 'light' : 'dark' });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).not.toBe(background);
       expect(await page.evaluate(() => window.themeMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
+      expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)))
+        .toEqual(colors.meters.map(meter => meter.color));
       await page.emulateMedia({ colorScheme });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(background);
+      await page.getByRole('button', { name: 'Stop listening' }).click();
+      await page.evaluate(() => window.noiseContext.close());
     });
   }
 }

@@ -55,8 +55,8 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .mic-status { font-size: .74rem; color: var(--muted); background: var(--paper); border: 1px solid var(--line); border-radius: 50px; padding: .4rem .8rem; margin: 0; text-align: center; }
 .spectrum-panel { position: relative; padding: 1.8rem 1.5rem 1rem 3.3rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
 #dancinglights { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: clamp(2px, .7vw, 8px); height: clamp(210px, 28vw, 320px); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); }
-.meter { position: relative; height: 100%; min-width: 0; border-bottom: 3px solid var(--primary); }
-.meter-fill { position: absolute; inset: 0; background: var(--primary); border-radius: 5px 5px 0 0; transform-origin: bottom; transform: scaleY(0); }
+.meter { position: relative; height: 100%; min-width: 0; border-bottom: 3px solid var(--band-color); }
+.meter-fill { position: absolute; inset: 0; background: var(--band-color); border-radius: 5px 5px 0 0; transform-origin: bottom; transform: scaleY(0); }
 /* Heights come from the animation envelope; CSS must not delay an attack. */
 .meter-guide { position: absolute; top: 1.8rem; bottom: 2.85rem; left: .7rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .spectrum-labels { display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; padding-top: 1rem; }

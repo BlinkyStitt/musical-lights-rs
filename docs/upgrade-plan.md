@@ -65,3 +65,18 @@ stops. Verify 30/60/120/144/240 Hz timing, a rising floor during descent, both
 motion preferences, and browser agreement between the counter and frame timestamps.
 
 Eight display tests, native/WASM Clippy, the Trunk build, and all 15 browser tests passed. At the same measured 60 FPS, the controlled tap fell at most 6.40 pixels per frame after the repair, compared with 12.10 before. Reduced Motion changed from a 174.35-pixel step to at most 3.21 pixels per frame.
+
+## Rainbow frequency colors
+
+Use the existing shared rainbow gradient for all 24 website bars. Start at red
+for bass and pass through orange, yellow, green, and blue to purple at the highest
+band. Correct the gradient's hue range: HSLuv uses degrees, and its former
+255-degree endpoint stopped at blue. Keep colors fixed while audio changes height.
+Use the same color for each bar and its baseline. Check every color's contrast
+in both system themes, all frequency tooltips, and the existing motion and FPS
+behavior. Keep the LED panel's existing palette and 20-row geometry.
+
+The core feature checks passed with 32 tests in each of four combinations. The
+Leptos checks, release build, and all 15 browser tests passed. Every bar has at
+least 3:1 contrast against the graph in both themes. Noise input checks exercise
+all 24 bars, and theme changes and audio updates preserve their colors.

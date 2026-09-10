@@ -1,6 +1,9 @@
 use crate::{display::DisplayAnimation, wasm_audio::AudioSession};
 use leptos::prelude::*;
-use musical_lights_core::audio::{BARK_EDGES, BarkBank, DISPLAY_BANDS};
+use musical_lights_core::{
+    audio::{BARK_EDGES, BarkBank, DISPLAY_BANDS},
+    lights::Gradient,
+};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -15,6 +18,7 @@ struct SessionOwner {
 
 #[component]
 pub fn DancingLights() -> impl IntoView {
+    let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).rgb_colors;
     let (audio, set_audio) = signal([0.0; DISPLAY_BANDS]);
     let (listening, set_listening) = signal(false);
     let (starting, set_starting) = signal(false);
@@ -164,8 +168,16 @@ pub fn DancingLights() -> impl IntoView {
                     {BARK_EDGES.windows(2).enumerate().map(|(i, edges)| {
                         let label = format!("{}–{} Hz", edges[0], edges[1]);
                         let tooltip = label.clone();
+                        let color = colors[i];
+                        // The shared LED gradient uses linear sRGB channels.
+                        let style = format!(
+                            "--band-color: color(srgb-linear {} {} {});",
+                            f32::from(color.r) / 255.0,
+                            f32::from(color.g) / 255.0,
+                            f32::from(color.b) / 255.0,
+                        );
                         view! {
-                        <div class="meter" role="meter" aria-label=label tabindex="0"
+                        <div class="meter" role="meter" aria-label=label tabindex="0" style=style
                             aria-valuemin="0" aria-valuemax="100"
                             aria-valuenow=move || (audio.get()[i] * 100.0).round() as u32>
                             <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get()[i])></div>

@@ -23,7 +23,12 @@ exact frequency edges.
 
 The page follows the system's light or dark color scheme, including changes while
 it is open. CSS applies the theme before the Rust application starts. Text,
-surfaces, controls, and tooltips adapt together; the meters retain their blue hue.
+surfaces, controls, and tooltips adapt together. Each meter keeps a fixed rainbow
+color from the shared `Gradient::new_rainbow`: red bass, then orange, yellow,
+green, blue, and purple treble. The baseline uses the same color as its bar.
+The gradient uses 90% saturation and 58% perceptual lightness. Its linear sRGB
+channels go directly into CSS `color(srgb-linear …)` so the browser applies the
+correct display encoding. Colors do not change with volume or the system theme.
 
 Meters reach new peaks on the next screen frame. They retain short taps between
 frames and hold each new peak for 350 ms. A critically damped fall then starts
