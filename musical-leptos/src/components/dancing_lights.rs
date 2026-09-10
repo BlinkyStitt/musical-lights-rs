@@ -20,6 +20,7 @@ pub fn DancingLights() -> impl IntoView {
     let (starting, set_starting) = signal(false);
     let (error, set_error) = signal(None::<String>);
     let (sample_rate, set_sample_rate) = signal(0.0);
+    let (frame_rate, set_frame_rate) = signal(None::<f64>);
     let owner = StoredValue::new_local(SessionOwner {
         alive: Rc::new(Cell::new(true)),
         session: Rc::new(RefCell::new(None)),
@@ -41,6 +42,7 @@ pub fn DancingLights() -> impl IntoView {
             return;
         }
         set_error.set(None);
+        set_frame_rate.set(None);
         let session = match AudioSession::new() {
             Ok(session) => session,
             Err(error) => {
@@ -62,9 +64,15 @@ pub fn DancingLights() -> impl IntoView {
         };
         let owner = owner.get_value();
         let alive = owner.alive.clone();
-        let animation = match DisplayAnimation::new(move |values| {
-            if alive.get() && audio.get_untracked() != values {
+        let animation = match DisplayAnimation::new(move |values, fps| {
+            if !alive.get() {
+                return;
+            }
+            if audio.get_untracked() != values {
                 set_audio.set(values);
+            }
+            if let Some(fps) = fps {
+                set_frame_rate.set(Some(fps));
             }
         }) {
             Ok(animation) => animation,
@@ -117,6 +125,7 @@ pub fn DancingLights() -> impl IntoView {
                     if let Some(animation) = owner.animation.borrow_mut().take() {
                         animation.stop();
                     }
+                    set_frame_rate.set(None);
                     set_error.set(Some(format!("Microphone: {error:?}")));
                 }
             }
@@ -133,6 +142,7 @@ pub fn DancingLights() -> impl IntoView {
                                 if let Some(animation) = owner.animation.borrow_mut().take() { animation.stop(); }
                             });
                             set_listening.set(false);
+                            set_frame_rate.set(None);
                             set_error.set(None);
                             set_audio.set([0.0; DISPLAY_BANDS]);
                         }>"Stop listening"</button>
@@ -166,8 +176,12 @@ pub fn DancingLights() -> impl IntoView {
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
             <p class="control-note">{move || if listening.get() {
-                format!("Sample rate: {} Hz · Smooth display", sample_rate.get())
-            } else { "Allow microphone access to begin. No recording.".into() }}</p>
+                format!("Sample rate: {} Hz", sample_rate.get())
+            } else { "Allow microphone access to begin. No recording.".into() }}
+                <span class="frame-rate" aria-label="Frame rate" title="Frames per second">
+                    {move || frame_rate.get().map_or_else(|| "— FPS".into(), |fps| format!("{fps:.0} FPS"))}
+                </span>
+            </p>
             <p class="audio-error" role="alert">{move || error.get()}</p>
         </section>
     }

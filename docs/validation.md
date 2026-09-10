@@ -1,6 +1,6 @@
 # Validation record
 
-Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. Both GitHub workflows passed at commits `6802973`, `cfca78c`, and `d9a71ef`. After adding automatic system themes, the affected Leptos checks and all 15 browser tests passed again.
+Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. Both GitHub workflows passed at commits `6802973`, `cfca78c`, `d9a71ef`, and `de3db52`. After the smoother fall and FPS update, the affected Leptos checks and all 15 browser tests passed again.
 
 ## Exact tools
 
@@ -18,7 +18,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 | --- | --- |
 | Core | 31 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
 | Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
-| Leptos | Six display timing and live-level floor tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
+| Leptos | Eight display timing, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
 | Standalone WASM | WASM Clippy; complete `build.py`; browser execution of the shared-memory worklet with nonzero oscillator output |
 | Feather M0 | `thumbv6m-none-eabi` Clippy; release link with panic-halt and with semihosting |
@@ -30,7 +30,7 @@ All 15 browser tests passed. They use real browser AudioContexts and AudioWorkle
 
 Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. The complete graph is visible without scrolling at these sizes, and descriptive text follows it. Tests check Quiet/Loud labels, every band's exact frequency tooltip, keyboard focus, and removal of the counter and pause/resume controls. Screenshots were inspected, including color-vision simulations. The layout and contrast checks cover both system color schemes at all three widths. Text contrast is at least 4.5:1, and meter contrast against the graph is at least 3:1. Tests switch the system theme in both directions while the page stays open and confirm that the meter nodes remain intact.
 
-Bars rise on the next screen frame without CSS easing. A new peak holds for 350 ms, then falls with increasing speed to its current live band level. The latest level remains valid between audio callbacks, so an absent callback cannot pull the bar below the live level. Native tests cover exact gravity timing across frame rates, short taps, changes in the floor, and reduced motion. The browser checks the actual rendered fast attack, retained live level, continuous fall to silence, and repeated queued taps at 100 heights in every band. The hold limits repeated flashes to at most three in any second, using the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html) as the design criterion. These checks do not provide a medical safety guarantee. Resource tests also verify that animation requests stop on microphone denial, Stop listening, route closure, and closure while permission remains pending.
+Bars rise on the next screen frame without CSS easing. A new peak holds for 350 ms, then follows a critically damped fall that slows before reaching its live band level. Reduced Motion halves the release speed instead of using a single-step drop. The latest level remains valid between audio callbacks, so an absent callback cannot pull the bar below the live level. Native tests cover exact release timing at 30/60/120/144/240 Hz, short taps, braking when the floor rises during a fall, and reduced motion. FPS tests count actual elapsed animation intervals, including stalls. The browser compares the visible counter with independent animation timestamps while audio callbacks are suspended. The browser checks the actual rendered fast attack, retained live level, continuous fall to silence, and repeated queued taps at 100 heights in every band. The hold limits repeated flashes to at most three in any second, using the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html) as the design criterion. These checks do not provide a medical safety guarantee. Resource tests also verify that animation requests stop on microphone denial, Stop listening, route closure, and closure while permission remains pending.
 
 Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, separate outputs including every bass band, rejected input without state changes, silence, zero range, bounded output, sample-duration envelope timing, fractional LED decay to zero, actual frame writes, FFT frequency detection, gradient boundaries, and message CRC/COBS bounds. New tests preserve the expected level ratio above nominal full scale, keep extreme finite transients bounded, and compare changing-level filter history against an unscaled reference. The panel test checks the original five-band sum before normalization and all 19 remaining outputs. Firmware asserts that 20 rows of 20 pixels fill exactly 400 pixels, and retains the row-based scroll step.
 
@@ -39,6 +39,35 @@ The processor returns one borrowed `BarkFrame`. Its `bands()` output serves the 
 The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor now scales each block and its carried filter state, runs the biquads in f32, and restores physical level in f64 before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
 
 Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
+
+## Display motion and FPS
+
+A controlled Chromium comparison used the same 1 kHz tap in both versions:
+20 blocks of 128 samples at gain 4, followed by a silent block. The audio context
+was suspended before this input so ongoing capture could not change the release.
+The capture read computed meter transforms on every animation frame for 2.2 seconds
+with a 320-pixel graph. Both runs delivered 60.00 FPS and a 99th-percentile frame
+interval of 16.67 ms. This isolates the release curve; it does not measure the
+user's browser or prove that a physical display runs at 120 Hz.
+
+| Motion preference | Old largest fall per frame | New largest fall per frame |
+| --- | --- | --- |
+| Normal | 12.10 px | 6.40 px |
+| Reduced Motion | 174.35 px | 3.21 px |
+
+The old free fall accelerated into an abrupt stop. Reduced Motion used one large
+step. The new damped release slows near the live floor and brakes when that floor
+rises during descent. Reduced Motion uses half the release rate. Both retain
+immediate rises and the 350 ms peak hold. A numerical tail below 0.0001 of full
+height settles exactly to the live level; this is less than 0.04 pixels.
+
+The visible FPS counter measures animation intervals over at least one second,
+including delayed callbacks. Native tests cover 30/60/120/144/240 FPS and a full
+second stall. The browser test compares the counter with independent animation
+timestamps while audio callbacks are suspended, checks a gentle landing, and
+verifies that stopping clears the counter. The
+[browser controls animation callback timing](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame).
+The counter does not report audio block rate or physical GPU presentation.
 
 ## Microphone and terminal display
 
@@ -75,4 +104,4 @@ The Feather application still contains initialization only. The Embassy radio ta
 
 The standalone worklet requires shared WASM memory, rebuilt standard library atomics/TLS exports, and cross-origin isolation headers. The browser tests serve the required headers. Ordinary static hosting without those headers is not a supported worklet deployment.
 
-CI covers every package root plus the browser tests. The compact layout and gravity display update at `d9a71ef` passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34467525312) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34467525297). The live page also passed a Chromium check with real worklet peaks above one, 24 meters, centered layout, route navigation, and stream cleanup. Check the system-theme commit's workflow results and live page after push.
+CI covers every package root plus the browser tests. The automatic system-theme update at `de3db52` passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34468943502) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34468944276). The live page also passed a Chromium check with real worklet peaks above one, 24 meters, centered layout, route navigation, and stream cleanup. Check the smoother-fall commit's workflow results and live page after push.

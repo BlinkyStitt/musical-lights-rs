@@ -66,7 +66,8 @@ button { border: 1px solid var(--primary); border-radius: 9px; padding: .75rem 1
 button.primary { background: var(--primary); color: white; }
 button:disabled { cursor: default; color: var(--muted); background: var(--disabled); border-color: var(--line); }
 button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
-.control-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; }
+.control-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; display: flex; justify-content: space-between; gap: 1rem; }
+.frame-rate { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7ch; text-align: right; }
 .audio-error { color: var(--ink); font-size: .82rem; margin: 0; overflow-wrap: anywhere; }
 .audio-error:not(:empty) { border-left: 3px solid var(--alert); padding-left: .75rem; margin-top: .75rem; }
 .how-it-works { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin: 1.25rem .5rem; }

@@ -51,3 +51,17 @@ Six display tests, native/WASM Clippy, the Trunk release build, and all 12 brows
 Follow the user's system light/dark setting on initial load and when it changes. Apply one CSS theme to the complete page, retain the blue meters, and verify text and graph contrast at phone, tablet, and desktop widths.
 
 The Leptos checks and release build passed. All 15 browser tests passed, including both themes at all three widths, contrast, live setting changes, and color-vision simulations.
+
+## Smoother falls and a frame-rate counter
+
+Replace the hard gravity landing and the single-step Reduced Motion drop with a
+damped fall that slows before reaching the live level. Keep immediate rises,
+the live-level floor, and the 350 ms flashing guard. Measure the old and new
+rendered motion with the same audio input and browser frame timing.
+
+Add a visible FPS counter based on actual animation callbacks and elapsed time.
+Update its text once per second, include stalled frames, and reset it when drawing
+stops. Verify 30/60/120/144/240 Hz timing, a rising floor during descent, both
+motion preferences, and browser agreement between the counter and frame timestamps.
+
+Eight display tests, native/WASM Clippy, the Trunk build, and all 15 browser tests passed. At the same measured 60 FPS, the controlled tap fell at most 6.40 pixels per frame after the repair, compared with 12.10 before. Reduced Motion changed from a 174.35-pixel step to at most 3.21 pixels per frame.

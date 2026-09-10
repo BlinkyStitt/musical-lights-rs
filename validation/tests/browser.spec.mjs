@@ -14,6 +14,7 @@ test('Leptos renders routes and 24 meters without the temporary counter', async 
   await expect(page.getByRole('button', { name: /Pause display|Resume display/i })).toHaveCount(0);
   await expect(page.getByText('Every band has room')).toHaveCount(0);
   await expect(page.locator('.meter-guide')).toHaveText('LOUDQUIET');
+  await expect(page.locator('.frame-rate')).toHaveText('— FPS');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Old Arduino Code' })).toBeVisible();
   await page.getByRole('link', { name: 'Home', exact: true }).click();
@@ -110,7 +111,7 @@ for (const rate of [44100, 48000]) {
     }, { rate });
     await page.goto(leptos);
     await page.getByRole('button', { name: 'Start listening' }).click();
-    await expect(page.getByText(`Sample rate: ${rate} Hz · Smooth display`)).toBeVisible();
+    await expect(page.getByText(`Sample rate: ${rate} Hz`)).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.inputPeak)).toBeGreaterThan(1);
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
     await expect(page.locator('#dancinglights > div')).toHaveCount(24);
@@ -125,6 +126,7 @@ for (const rate of [44100, 48000]) {
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
     await expectAnimationStopped(page);
+    await expect(page.locator('.frame-rate')).toHaveText('— FPS');
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     await page.evaluate(() => window.inputContext.close());
     await page.getByRole('button', { name: 'Start listening' }).click();
@@ -213,7 +215,7 @@ test('meters rise on the next frame, retain live levels, and fall without rapid 
     await new Promise(resolve => setTimeout(resolve, 50));
     window.meterNodes = [...document.querySelectorAll('.meter-fill')];
     window.heights = () => window.meterNodes.map(node => new DOMMatrixReadOnly(getComputedStyle(node).transform).m22);
-    window.screenFrame = () => new Promise(resolve => requestAnimationFrame(() => queueMicrotask(resolve)));
+    window.screenFrame = () => new Promise(resolve => requestAnimationFrame(now => queueMicrotask(() => resolve(now))));
     let phase = 0;
     window.sendAudio = gain => {
       const data = Float32Array.from({ length: 128 }, () => gain * Math.sin(phase++ * 2 * Math.PI * 1000 / window.testContext.sampleRate));
@@ -233,7 +235,8 @@ test('meters rise on the next frame, retain live levels, and fall without rapid 
     return [style.transitionDuration, style.animationName];
   })).toEqual(['0s', 'none']);
   // No new audio callback means the last live level still applies, not zero.
-  await page.waitForTimeout(1200);
+  // Let the damped tail settle before comparing the retained live levels.
+  await page.waitForTimeout(2400);
   const floor = await page.evaluate(() => window.heights());
   expect(Math.max(...floor)).toBeGreaterThan(0.1);
   await page.waitForTimeout(100);
@@ -241,16 +244,24 @@ test('meters rise on the next frame, retain live levels, and fall without rapid 
   const fall = await page.evaluate(async () => {
     window.sendAudio(0);
     const levels = [];
-    const end = performance.now() + 1100;
+    const end = performance.now() + 2200;
     while (performance.now() < end) {
-      await window.screenFrame();
-      levels.push(Math.max(...window.heights()));
+      const time = await window.screenFrame();
+      levels.push({ time, height: Math.max(...window.heights()) });
     }
     return levels;
   });
-  expect(new Set(fall).size).toBeGreaterThan(10);
-  expect(fall.at(-1)).toBe(0);
-  for (let i = 1; i < fall.length; i++) expect(fall[i]).toBeLessThanOrEqual(fall[i - 1]);
+  expect(new Set(fall.map(frame => frame.height)).size).toBeGreaterThan(30);
+  expect(fall.at(-1).height).toBe(0);
+  for (let i = 1; i < fall.length; i++) expect(fall[i].height).toBeLessThanOrEqual(fall[i - 1].height);
+  const actualFps = (fall.length - 1) * 1000 / (fall.at(-1).time - fall[0].time);
+  const shownFps = Number((await page.locator('.frame-rate').innerText()).replace(' FPS', ''));
+  expect(shownFps).toBeGreaterThan(0);
+  expect(Math.abs(shownFps - actualFps)).toBeLessThan(3);
+  const velocities = fall.slice(1).map((frame, i) => (fall[i].height - frame.height) * 1000 / (frame.time - fall[i].time));
+  expect(Math.max(...velocities)).toBeLessThan(2.3);
+  const movingVelocities = velocities.filter(velocity => velocity > 0);
+  expect(movingVelocities.at(-1)).toBeLessThan(.02);
 
   for (const reducedMotion of ['no-preference', 'reduce']) {
     await page.emulateMedia({ reducedMotion });
@@ -342,7 +353,7 @@ for (const colorScheme of ['light', 'dark']) {
           return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
         };
         const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-        const text = ['.primary', '.control-note', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
+        const text = ['.primary', '.control-note', '.frame-rate', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
           const node = document.querySelector(selector);
           let parent = node;
           while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;

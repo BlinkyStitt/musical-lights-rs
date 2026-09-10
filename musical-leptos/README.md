@@ -26,13 +26,23 @@ it is open. CSS applies the theme before the Rust application starts. Text,
 surfaces, controls, and tooltips adapt together; the meters retain their blue hue.
 
 Meters reach new peaks on the next screen frame. They retain short taps between
-frames, hold each new peak for 350 ms, then fall with increasing speed. A full-height
-fall takes about 0.63 seconds after the hold. Each bar stops at its current live
-band level; that level remains valid between audio callbacks. Audio analysis runs
-at the full input rate. One reusable animation callback draws the existing nodes
-and is cancelled when listening stops or the view closes, including pending
-microphone permission. Reduced motion removes the falling animation but keeps
-the same visibility hold. There is no separate pause/resume state.
+frames and hold each new peak for 350 ms. A critically damped fall then starts
+gently and slows as it approaches the current live band level. It covers 90% of
+a fixed downward distance in about 0.65 seconds after the hold. Reduced Motion
+halves the release speed instead of dropping in one step. Each bar stays above
+its live level, including when that level changes between frames. A remainder
+below 0.0001 of full height (under 0.04 pixels) settles to the exact level.
+
+Audio analysis runs at the full input rate. One reusable animation callback draws
+the existing nodes and is cancelled when listening stops or the view closes,
+including pending microphone permission. There is no separate pause/resume state.
+
+The FPS counter measures that animation callback over at least one second. It
+includes delayed frames and does not count audio callbacks or depend on bar
+movement. It shows “— FPS” when drawing stops. The browser controls
+[animation frame timing](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame);
+the page does not assume or force 120 FPS. The counter measures callback delivery,
+not physical monitor refresh or GPU presentation.
 
 The visibility hold uses the [WCAG 2.2 flashing criterion](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html)
 as its design limit: a newly lit height stays lit long enough to prevent more
@@ -45,5 +55,5 @@ accepts finite peaks without clipping. Missing input produces silent blocks
 that still advance filter state. Channel mixing rounds only after averaging.
 
 See [validation](../docs/validation.md) for routes, microphone, worklet, layout,
-contrast, reduced motion, and display timing checks. The temporary counter
+contrast, reduced motion, and display timing checks. The temporary interaction counter
 has been removed.
