@@ -83,10 +83,11 @@ all 24 bars, and theme changes and audio updates preserve their colors.
 
 ## Active display and sharing requests
 
-- Match the white lights that respond when sound is present in Bryan's reference
-  video. Obtain the video URL or local path before choosing the effect; the
-  screenshot supplied later shows a link preview, not the light response. Keep
-  the agreed flashing limit and the rainbow bands while reviewing the reference.
+- Adapt the white accents in Bryan's supplied hat video to the web bars. Bryan
+  requested glowing bar borders instead of separate lights above the graph.
+  Keep the rainbow fills and smooth fall. Brighten each border on a new display
+  peak, share the existing 350 ms hold, then fade it faster than the colored
+  trail. Keep the agreed flashing limit and reduced-motion behavior.
 - Keep the screen awake while the visualizer page is visible. Release its wake
   lock when the view closes or becomes hidden, request it again when visible,
   and report when the browser or system does not grant the lock. Do not change
@@ -128,10 +129,14 @@ its dimensions. The renderer uses the actual shared rainbow palette. Deployment
 and the sharing platform's cached preview must be checked after merge.
 
 Combined validation passed with 35 core tests in each of four feature
-combinations, eight display tests, 27 browser/lifecycle checks, and the release
+combinations, 11 display tests, 31 browser/lifecycle checks, and the release
 build. The separate visible-browser wake-lock check also passed.
 
 Keep all work in the existing audio-repair PR #1, as Bryan requested, including
-the 20 ms power-window repair, screen controls, and share preview. The earlier
-usage-limit rejection no longer blocks compilation. The white-light effect
-remains pending because its reference video has not been supplied.
+the 20 ms power-window repair, screen controls, share preview, and white borders.
+The supplied 45-second, 24 FPS video shows bright white accents with colored
+trails; a frame sequence around 10 seconds shows the accents returning with the
+columns. The web effect uses the shared Bark output and existing animation
+callback. Checks passed for the border's attack, fade, silence, constant
+thickness, modeled luminance changes, and resource cleanup in both themes and
+motion preferences. Normal and fullscreen screenshots were inspected.

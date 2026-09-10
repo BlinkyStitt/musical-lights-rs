@@ -41,6 +41,14 @@ The gradient uses 90% saturation and 58% perceptual lightness. Its linear sRGB
 channels go directly into CSS `color(srgb-linear …)` so the browser applies the
 correct display encoding. Colors do not change with volume or the system theme.
 
+Each bar gains a white border and a small glow on a new display peak. The border
+uses the same 350 ms peak hold as the bar, then fades exponentially. It loses
+90% of its brightness in 0.23 seconds after the hold, ahead of the colored trail.
+Reduced Motion doubles that fade duration. Steady levels do not retrigger it.
+The border follows the bar's actual height with a constant one-pixel outline,
+including in fullscreen. This adapts the white accents in Bryan's hat video to
+the web bars; it does not add a separate row of lights.
+
 Meters reach new peaks on the next screen frame. They retain short taps between
 frames and hold each new peak for 350 ms. A critically damped fall then starts
 gently and slows as it approaches the current live band level. It covers 90% of
@@ -70,8 +78,11 @@ not physical monitor refresh or GPU presentation.
 
 The visibility hold uses the [WCAG 2.2 flashing criterion](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html)
 as its design limit: a newly lit height stays lit long enough to prevent more
-than three repeated flash cycles in any second. It does not provide a medical safety guarantee. The page
-contains no automatic hue, opacity, or background animations.
+than three repeated flash cycles in any second. The white border shares that
+hold and only brightens with a new bar peak, so it has no independent flash
+clock. Tests also examine luminance changes as its top edge passes a colored
+pixel. These checks do not provide a medical safety guarantee. The rainbow
+colors and page background stay fixed while the border fades.
 
 Floating-point PCM can exceed its nominal [-1, 1] range, as specified by the
 [Web Audio standard](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor

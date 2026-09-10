@@ -1,4 +1,8 @@
-use crate::{display::DisplayAnimation, screen::ScreenSession, wasm_audio::AudioSession};
+use crate::{
+    display::{DisplayAnimation, DisplayFrame},
+    screen::ScreenSession,
+    wasm_audio::AudioSession,
+};
 use leptos::prelude::*;
 use musical_lights_core::{
     audio::{BARK_EDGES, BarkBank, DISPLAY_BANDS},
@@ -19,7 +23,7 @@ struct SessionOwner {
 #[component]
 pub fn DancingLights() -> impl IntoView {
     let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).rgb_colors;
-    let (audio, set_audio) = signal([0.0; DISPLAY_BANDS]);
+    let (audio, set_audio) = signal(DisplayFrame::default());
     let (listening, set_listening) = signal(false);
     let (starting, set_starting) = signal(false);
     let (error, set_error) = signal(None::<String>);
@@ -168,7 +172,7 @@ pub fn DancingLights() -> impl IntoView {
                             set_listening.set(false);
                             set_frame_rate.set(None);
                             set_error.set(None);
-                            set_audio.set([0.0; DISPLAY_BANDS]);
+                            set_audio.set(DisplayFrame::default());
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
@@ -207,8 +211,11 @@ pub fn DancingLights() -> impl IntoView {
                         view! {
                         <div class="meter" role="meter" aria-label=label tabindex="0" style=style
                             aria-valuemin="0" aria-valuemax="100"
-                            aria-valuenow=move || (audio.get()[i] * 100.0).round() as u32>
-                            <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get()[i])></div>
+                            aria-valuenow=move || (audio.get().levels[i] * 100.0).round() as u32>
+                            <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get().levels[i])></div>
+                            <div class="meter-edge" aria-hidden="true"
+                                style:height=move || format!("{}%", audio.get().levels[i] * 100.0)
+                                style:opacity=move || audio.get().edges[i].to_string()></div>
                             <span class="frequency-tooltip" role="tooltip">{tooltip}</span>
                         </div>
                     }}).collect_view()}

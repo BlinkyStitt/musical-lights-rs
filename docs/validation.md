@@ -18,7 +18,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 | --- | --- |
 | Core | 35 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
 | Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
-| Leptos | Eight display timing, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
+| Leptos | Eleven display timing, white-border, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
 | Standalone WASM | WASM Clippy; complete `build.py`; browser execution of the shared-memory worklet with nonzero oscillator output |
 | Feather M0 | `thumbv6m-none-eabi` Clippy; release link with panic-halt and with semihosting |
@@ -67,9 +67,36 @@ the sandbox blocks its macOS process startup.
 
 Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
 
+## White borders
+
+`python3 validation/validate.py leptos browser` passed after adding the white
+border effect: 11 native display tests, native/WASM Clippy, the locked Trunk
+release build, and all 31 browser/lifecycle checks. The existing microphone,
+fullscreen, wake-lock, share-preview, layout, and color checks still pass.
+
+Each new display peak lights a white one-pixel border with a small colored glow.
+The border shares the bar's 350 ms hold, then fades faster than the colored
+trail. The exponential fade loses 90% in 0.23 seconds; Reduced Motion doubles
+that duration. There is no independent pulse timer or audio processor. A steady
+input does not retrigger flashes, and queued peaks are retained until the next
+screen frame. Stop listening clears both heights and borders.
+
+Native checks cover 30/60/120/144/240 Hz, short taps, hold timing, faster border
+fade, exact settling, steady input, and delayed frames. A luminance model samples
+the white side and moving top edges at 100 heights every 2 ms. Rapid pulse periods
+from 20 to 800 ms stay within three flash pairs per rolling second in both motion
+modes and light/dark plots. This model covers solid borders; it is not a medical
+certification or an exhaustive analysis of browser antialiasing and blur.
+
+Browser checks send noise and silence through the real Bark processor. They
+verify all 24 borders, next-frame attack, faster fade, exact zero, stable rainbow
+fills, and persistent nodes. The white border remains one pixel thick and follows
+the bar height in fullscreen. Screenshots were inspected in light/dark themes
+and normal/reduced motion. No separate lights were added above the bars.
+
 ## Screen controls and share preview
 
-All 27 browser and screen-lifecycle checks passed in the combined suite. The
+All 31 browser and screen-lifecycle checks passed in the combined suite. The
 separate native wake-lock test also passed in a visible browser window.
 
 Screen lifecycle tests cover grants, system releases, denied requests without
