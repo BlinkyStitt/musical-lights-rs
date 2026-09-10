@@ -80,3 +80,41 @@ The core feature checks passed with 32 tests in each of four combinations. The
 Leptos checks, release build, and all 15 browser tests passed. Every bar has at
 least 3:1 contrast against the graph in both themes. Noise input checks exercise
 all 24 bars, and theme changes and audio updates preserve their colors.
+
+## Active display and sharing requests
+
+- Match the white lights that respond when sound is present in Bryan's reference
+  video. Obtain the video URL or local path before choosing the effect; the
+  screenshot supplied later shows a link preview, not the light response. Keep
+  the agreed flashing limit and the rainbow bands while reviewing the reference.
+- Keep the screen awake while the visualizer page is visible. Release its wake
+  lock when the view closes or becomes hidden, request it again when visible,
+  and report when the browser or system does not grant the lock. Do not change
+  the computer's global sleep settings.
+- Add Fullscreen and Exit fullscreen controls to the visualizer. Fit the graph
+  and controls to the screen, follow browser exits such as Escape, and handle
+  rejected or late requests without leaks. Draft screen code exists locally;
+  compilation, lifecycle tests, browser checks, commit, and delivery are pending.
+- Add an attractive share preview. The initial `musical-leptos/index.html` has
+  no share metadata. `src/lib.rs` adds some metadata after the app starts, but
+  it has no `og:title`, `og:description`, or `og:image`. Supply complete metadata
+  in the initial HTML so preview services do not need to execute JavaScript.
+  Move the site-wide tags to that single source instead of duplicating them in
+  the client-rendered app.
+- Design a 1200×630 PNG preview with a dark background, the shared 24-color
+  rainbow spectrum, and a clear Musical Lights title. Keep the main content
+  inside a margin so cropped cards remain readable. Publish the image at a
+  stable, public HTTPS URL through the existing Trunk and Pages build.
+- Add Open Graph title, description, website type, canonical URL, image URL,
+  image dimensions, MIME type, and image alternative text. Add a large-image
+  Twitter card with matching title, description, and image. Use absolute public
+  URLs. Follow the [Open Graph specification](https://ogp.me/).
+- Validate the raw built and deployed HTML with JavaScript disabled. Confirm
+  that the preview image returns HTTP 200 with the correct type and dimensions.
+  Check the actual sharing platform's preview and refresh its cached card where
+  supported; do not claim that an existing post updates automatically. Verify
+  preview behavior without publishing a test post unless Bryan requests one.
+
+Automatic approval review rejected the screen compile command because the Codex
+usage limit was reached. Screen implementation and validation remain unfinished.
+The share-preview item is a plan update; its image and metadata are not implemented.
