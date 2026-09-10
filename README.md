@@ -72,6 +72,8 @@ Being careful about how the stm32 is powered, plug it into your computer's USB p
 
 - [ ] defmt instead of log in musical-lights-core
 
+  - how should we handle both defmt and log being enabled? i just want one. should it exit out? should it use both?
+
 - <https://www.youtube.com/watch?v=PAsMlDptjx8>
 
 Bosi, M. & Goldberg, R. – “Filter Banks in Perceptual Audio Coding.”

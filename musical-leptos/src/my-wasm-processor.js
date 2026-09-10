@@ -28,7 +28,6 @@ class MyWasmProcessor extends AudioWorkletProcessor {
         // browsers all handle this differently
         // chrome, return true or it stops immediatly
         // firefox, return true or it stops when there is no more input
-        // false SHOULD be fine, but no...
         return true;
     }
 }

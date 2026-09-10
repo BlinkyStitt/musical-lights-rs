@@ -20,10 +20,10 @@ use crate::wasm_audio::wasm_audio;
 const MIC_SAMPLES: usize = 128;
 const FFT_INPUTS: usize = 2048;
 
-/// bark scale has 24 bands, but we want more for the exponential
+/// bark scale has 24 bands.
 const NUM_BANDS: usize = 24;
 
-// /// TODO: 0-20kHz is way too wide
+// /// TODO: 0-20kHz is way too wide for most music. but some electronic music and songs with female vocals actually do use the higher 
 // const MIN_FREQ: f32 = 0.0;
 // const MAX_FREQ: f32 = 12_000.0;
 
