@@ -16,9 +16,9 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 
 | Package | Passed checks |
 | --- | --- |
-| Core | 32 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
+| Core | 35 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
 | Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
-| Leptos | Eight display timing, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
+| Leptos | Eleven display timing, white-border, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
 | Standalone WASM | WASM Clippy; complete `build.py`; browser execution of the shared-memory worklet with nonzero oscillator output |
 | Feather M0 | `thumbv6m-none-eabi` Clippy; release link with panic-halt and with semihosting |
@@ -26,7 +26,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 | ESP Embassy | `xtensa-esp32-none-elf` Clippy and release links for the application and priority example |
 | ESP-IDF | `xtensa-esp32-espidf` Clippy and release link with ESP-IDF v6.1 |
 
-All 15 browser tests passed. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
+The original 15 browser tests passed again with the screen and share changes. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
 
 Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. The complete graph is visible without scrolling at these sizes, and descriptive text follows it. Tests check Quiet/Loud labels, every band's exact frequency tooltip, keyboard focus, and removal of the counter and pause/resume controls. Screenshots were inspected, including color-vision simulations. The layout and contrast checks cover both system color schemes at all three widths. Text contrast is at least 4.5:1, and meter contrast against the graph is at least 3:1. Tests switch the system theme in both directions while the page stays open and confirm that the meter nodes remain intact.
 
@@ -45,9 +45,82 @@ Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, 
 
 The processor returns one borrowed `BarkFrame`. Its `bands()` output serves the website and terminal; `panel_rows()` serves the fixed LED geometry. Both use the same normalization function and the same filter/envelope state. The panel does not average already-normalized web values or use 16/17-pixel band segments.
 
-The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor now scales each block and its carried filter state, runs the biquads in f32, and restores physical level in f64 before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
+The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor scales each block and its carried filter state and runs the biquads in f32. It accumulates physical power in f64 across callbacks, then computes RMS before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
+
+The callback-size repair uses continuous 20 ms power windows, rounded to the
+nearest sample. Compression, floor, peak, and silence updates use those same
+boundaries. Incomplete windows retain the previous result. Three new tests first
+failed against the callback-sized detector, then passed after the repair. They
+cover 128-sample, 800-sample, and uneven blocks, multiple windows in one callback,
+partial-window retention, silence, and a 30-second 50 Hz tone at amplitude 0.5.
+At both 44.1 and 48 kHz, the bass range during the final second is less than one
+percentage point and stays between 4% and 7%. The test also checks compressed
+level against the tone's expected RMS. These checks validate power integration;
+they do not establish equal perceived loudness or physical LED output.
+
+The combined `python3 validation/validate.py core leptos browser` command passed
+after the screen controls were finished. Formatting and focus/layout checks now
+include the fullscreen button and wake status. The browser motion test sends
+enough silence to complete an analysis window and allows the documented peak
+hold and damped fall to reach exact zero. Chromium requires host access because
+the sandbox blocks its macOS process startup.
 
 Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
+
+## White borders
+
+`python3 validation/validate.py leptos browser` passed after adding the white
+border effect: 11 native display tests, native/WASM Clippy, the locked Trunk
+release build, and all 31 browser/lifecycle checks. The existing microphone,
+fullscreen, wake-lock, share-preview, layout, and color checks still pass.
+
+Each new display peak lights a white one-pixel border with a small colored glow.
+The border shares the bar's 350 ms hold, then fades faster than the colored
+trail. The exponential fade loses 90% in 0.23 seconds; Reduced Motion doubles
+that duration. There is no independent pulse timer or audio processor. A steady
+input does not retrigger flashes, and queued peaks are retained until the next
+screen frame. Stop listening clears both heights and borders.
+
+Native checks cover 30/60/120/144/240 Hz, short taps, hold timing, faster border
+fade, exact settling, steady input, and delayed frames. A luminance model samples
+the white side and moving top edges at 100 heights every 2 ms. Rapid pulse periods
+from 20 to 800 ms stay within three flash pairs per rolling second in both motion
+modes and light/dark plots. This model covers solid borders; it is not a medical
+certification or an exhaustive analysis of browser antialiasing and blur.
+
+Browser checks send noise and silence through the real Bark processor. They
+verify all 24 borders, next-frame attack, faster fade, exact zero, stable rainbow
+fills, and persistent nodes. The white border remains one pixel thick and follows
+the bar height in fullscreen. Screenshots were inspected in light/dark themes
+and normal/reduced motion. No separate lights were added above the bars.
+
+## Screen controls and share preview
+
+All 31 browser and screen-lifecycle checks passed in the combined suite. The
+separate native wake-lock test also passed in a visible browser window.
+
+Screen lifecycle tests cover grants, system releases, denied requests without
+retry loops, hidden/visible transitions, pending requests invalidated by a tab
+change, and late grants after closure. Browser integration checks the mounted
+view's ownership of its lock even when microphone access fails. Unsupported
+APIs leave the app usable. Native API checks compare the status with the actual
+browser result: headless Chromium can deny the lock, while a visible Chromium
+window granted it and released it when the route closed. No test changes global
+system sleep settings or measures a full operating-system sleep interval.
+
+Fullscreen checks use real browser entry and exit, including an external exit
+event. At 375×812 and 1440×1000, the card fills the viewport and expands the graph
+while controls and FPS stay visible. Both system themes render correctly. Audio
+continues through fullscreen changes and closes when listening stops. Lifecycle
+tests also cover rejected requests and an entry that completes after view closure.
+
+Preview checks load HTML with JavaScript disabled and verify the title, Open
+Graph tags, canonical URL, and large-image Twitter card. The copied PNG returns
+HTTP 200 as `image/png` with 1200×630 dimensions. Mounting and route navigation
+retain one set of metadata. `npm run preview` regenerated the image from the
+actual rainbow palette, and the output was inspected. The preview uses a static
+illustration, not recorded microphone data. Production and sharing-platform
+cache checks remain for deployment after the combined PR merges.
 
 ## Display motion and FPS
 
@@ -88,12 +161,17 @@ The latest ten-second microphone check received 3750 blocks at 48000 Hz. The inp
 
 | Sample rate | Samples per block | Wall time per block | Fraction of real-time budget |
 | --- | --- | --- | --- |
-| 44100 Hz | 128 | 8.76 us | 0.30% |
-| 44100 Hz | 794 | 53.60 us | 0.30% |
-| 48000 Hz | 128 | 9.22 us | 0.35% |
-| 48000 Hz | 794 | 54.10 us | 0.33% |
+| 44100 Hz | 128 | 6.52 us | 0.22% |
+| 44100 Hz | 794 | 40.08 us | 0.22% |
+| 48000 Hz | 128 | 6.56 us | 0.25% |
+| 48000 Hz | 794 | 41.23 us | 0.25% |
 
-`size_of::<BarkBank>()` is 2032 bytes on this host. Processing allocates no heap storage and uses a 128-sample scratch array plus 24 mean-square accumulators (608 bytes before compiler optimization). This size excludes caller-owned input/output buffers, other stack variables, browser resources, and firmware drivers. Total firmware memory and CPU cost still need measurements on each device.
+These measurements include the 20 ms power-window repair. `size_of::<BarkBank>()`
+is 2336 bytes on this host, including the persistent f64 power sums. Processing
+allocates no heap storage and uses a 128-sample scratch array (512 bytes before
+compiler optimization). This size excludes caller-owned input/output buffers,
+other stack variables, browser resources, and firmware drivers. Total firmware
+memory and CPU cost still need measurements on each device.
 
 ## Warnings and local setup
 

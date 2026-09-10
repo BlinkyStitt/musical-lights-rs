@@ -83,21 +83,22 @@ all 24 bars, and theme changes and audio updates preserve their colors.
 
 ## Active display and sharing requests
 
-- Match the white lights that respond when sound is present in Bryan's reference
-  video. Obtain the video URL or local path before choosing the effect; the
-  screenshot supplied later shows a link preview, not the light response. Keep
-  the agreed flashing limit and the rainbow bands while reviewing the reference.
+- Adapt the white accents in Bryan's supplied hat video to the web bars. Bryan
+  requested glowing bar borders instead of separate lights above the graph.
+  Keep the rainbow fills and smooth fall. Brighten each border on a new display
+  peak, share the existing 350 ms hold, then fade it faster than the colored
+  trail. Keep the agreed flashing limit and reduced-motion behavior.
 - Keep the screen awake while the visualizer page is visible. Release its wake
   lock when the view closes or becomes hidden, request it again when visible,
   and report when the browser or system does not grant the lock. Do not change
   the computer's global sleep settings.
 - Add Fullscreen and Exit fullscreen controls to the visualizer. Fit the graph
   and controls to the screen, follow browser exits such as Escape, and handle
-  rejected or late requests without leaks. Draft screen code exists locally;
-  compilation, lifecycle tests, browser checks, commit, and delivery are pending.
-- Add an attractive share preview. The initial `musical-leptos/index.html` has
-  no share metadata. `src/lib.rs` adds some metadata after the app starts, but
-  it has no `og:title`, `og:description`, or `og:image`. Supply complete metadata
+  rejected or late requests without leaks. The screen controls now compile and
+  pass the lifecycle and browser checks described below.
+- Add an attractive share preview. The former `musical-leptos/index.html` had
+  no share metadata. `src/lib.rs` added some metadata after the app started,
+  without `og:title`, `og:description`, or `og:image`. Supply complete metadata
   in the initial HTML so preview services do not need to execute JavaScript.
   Move the site-wide tags to that single source instead of duplicating them in
   the client-rendered app.
@@ -115,6 +116,27 @@ all 24 bars, and theme changes and audio updates preserve their colors.
   supported; do not claim that an existing post updates automatically. Verify
   preview behavior without publishing a test post unless Bryan requests one.
 
-Automatic approval review rejected the screen compile command because the Codex
-usage limit was reached. Screen implementation and validation remain unfinished.
-The share-preview item is a plan update; its image and metadata are not implemented.
+The wake-lock and fullscreen implementation now passes compilation, native/WASM
+Clippy, and the Leptos release build. Lifecycle checks cover rejected grants,
+system releases, visibility changes during pending requests, view closure, and
+late fullscreen entry. A visible Chromium window obtained a real wake lock and
+released it on route closure. Desktop and phone fullscreen checks keep the live
+graph, controls, and FPS visible in both themes.
+
+The 1200×630 PNG and static metadata are implemented. Browser checks read one
+complete set of metadata without JavaScript, fetch the image as a PNG, and check
+its dimensions. The renderer uses the actual shared rainbow palette. Deployment
+and the sharing platform's cached preview must be checked after merge.
+
+Combined validation passed with 35 core tests in each of four feature
+combinations, 11 display tests, 31 browser/lifecycle checks, and the release
+build. The separate visible-browser wake-lock check also passed.
+
+Keep all work in the existing audio-repair PR #1, as Bryan requested, including
+the 20 ms power-window repair, screen controls, share preview, and white borders.
+The supplied 45-second, 24 FPS video shows bright white accents with colored
+trails; a frame sequence around 10 seconds shows the accents returning with the
+columns. The web effect uses the shared Bark output and existing animation
+callback. Checks passed for the border's attack, fade, silence, constant
+thickness, modeled luminance changes, and resource cleanup in both themes and
+motion preferences. Normal and fullscreen screenshots were inspected.

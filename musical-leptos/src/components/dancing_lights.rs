@@ -1,4 +1,8 @@
-use crate::{display::DisplayAnimation, wasm_audio::AudioSession};
+use crate::{
+    display::{DisplayAnimation, DisplayFrame},
+    screen::ScreenSession,
+    wasm_audio::AudioSession,
+};
 use leptos::prelude::*;
 use musical_lights_core::{
     audio::{BARK_EDGES, BarkBank, DISPLAY_BANDS},
@@ -19,12 +23,32 @@ struct SessionOwner {
 #[component]
 pub fn DancingLights() -> impl IntoView {
     let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).rgb_colors;
-    let (audio, set_audio) = signal([0.0; DISPLAY_BANDS]);
+    let (audio, set_audio) = signal(DisplayFrame::default());
     let (listening, set_listening) = signal(false);
     let (starting, set_starting) = signal(false);
     let (error, set_error) = signal(None::<String>);
     let (sample_rate, set_sample_rate) = signal(0.0);
     let (frame_rate, set_frame_rate) = signal(None::<f64>);
+    let (wake_status, set_wake_status) = signal(String::from("Keeping screen awake…"));
+    let (fullscreen, set_fullscreen) = signal(false);
+    let (fullscreen_available, set_fullscreen_available) = signal(false);
+    let (screen_error, set_screen_error) = signal(String::new());
+    let screen = StoredValue::new_local(None::<ScreenSession>);
+    let card = NodeRef::<leptos::html::Section>::new();
+    card.on_load(move |element| {
+        let session = ScreenSession::new(&element, move |awake, full, available, error| {
+            set_wake_status.set(awake);
+            set_fullscreen.set(full);
+            set_fullscreen_available.set(available);
+            set_screen_error.set(error);
+        });
+        screen.set_value(Some(session));
+    });
+    on_cleanup(move || {
+        screen.update_value(|session| {
+            session.take();
+        })
+    });
     let owner = StoredValue::new_local(SessionOwner {
         alive: Rc::new(Cell::new(true)),
         session: Rc::new(RefCell::new(None)),
@@ -136,7 +160,7 @@ pub fn DancingLights() -> impl IntoView {
         });
     };
     view! {
-        <section class="audio-card" aria-label="Live audio spectrum">
+        <section class="audio-card" aria-label="Live audio spectrum" node_ref=card>
             <div class="audio-controls">
                 <div class="button-row">
                     <Show when=move || !listening.get() fallback=move || view! {
@@ -148,13 +172,21 @@ pub fn DancingLights() -> impl IntoView {
                             set_listening.set(false);
                             set_frame_rate.set(None);
                             set_error.set(None);
-                            set_audio.set([0.0; DISPLAY_BANDS]);
+                            set_audio.set(DisplayFrame::default());
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
                             {move || if starting.get() { "Starting microphone…" } else { "Start listening" }}
                         </button>
                     </Show>
+                    <button class="fullscreen-button" disabled=move || !fullscreen_available.get()
+                        aria-pressed=move || fullscreen.get().to_string()
+                        title=move || if fullscreen_available.get() { "Expand the visualizer" } else { "Fullscreen is unavailable in this browser" }
+                        on:click=move |_| screen.with_value(|session| {
+                            if let Some(session) = session { session.toggle_fullscreen(); }
+                        })>
+                        {move || if fullscreen.get() { "Exit fullscreen" } else { "Fullscreen" }}
+                    </button>
                 </div>
                 <p class="mic-status" role="status">
                     {move || if starting.get() { "Waiting for microphone" } else if listening.get() {
@@ -179,8 +211,11 @@ pub fn DancingLights() -> impl IntoView {
                         view! {
                         <div class="meter" role="meter" aria-label=label tabindex="0" style=style
                             aria-valuemin="0" aria-valuemax="100"
-                            aria-valuenow=move || (audio.get()[i] * 100.0).round() as u32>
-                            <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get()[i])></div>
+                            aria-valuenow=move || (audio.get().levels[i] * 100.0).round() as u32>
+                            <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get().levels[i])></div>
+                            <div class="meter-edge" aria-hidden="true"
+                                style:height=move || format!("{}%", audio.get().levels[i] * 100.0)
+                                style:opacity=move || audio.get().edges[i].to_string()></div>
                             <span class="frequency-tooltip" role="tooltip">{tooltip}</span>
                         </div>
                     }}).collect_view()}
@@ -190,11 +225,15 @@ pub fn DancingLights() -> impl IntoView {
             <p class="control-note">{move || if listening.get() {
                 format!("Sample rate: {} Hz", sample_rate.get())
             } else { "Allow microphone access to begin. No recording.".into() }}
+                <span class="display-status">
+                <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>
                 <span class="frame-rate" aria-label="Frame rate" title="Frames per second">
                     {move || frame_rate.get().map_or_else(|| "— FPS".into(), |fps| format!("{fps:.0} FPS"))}
                 </span>
+                </span>
             </p>
             <p class="audio-error" role="alert">{move || error.get()}</p>
+            <p class="screen-error" role="status">{move || screen_error.get()}</p>
         </section>
     }
 }

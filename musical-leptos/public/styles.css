@@ -57,6 +57,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 #dancinglights { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: clamp(2px, .7vw, 8px); height: clamp(210px, 28vw, 320px); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); }
 .meter { position: relative; height: 100%; min-width: 0; border-bottom: 3px solid var(--band-color); }
 .meter-fill { position: absolute; inset: 0; background: var(--band-color); border-radius: 5px 5px 0 0; transform-origin: bottom; transform: scaleY(0); }
+.meter-edge { position: absolute; bottom: 0; left: 0; right: 0; height: 0; opacity: 0; border: 1px solid white; border-bottom: 0; border-radius: 5px 5px 0 0; box-shadow: inset 0 0 4px #FFFFFF99, 0 0 8px color-mix(in srgb, var(--band-color) 65%, transparent); pointer-events: none; }
 /* Heights come from the animation envelope; CSS must not delay an attack. */
 .meter-guide { position: absolute; top: 1.8rem; bottom: 2.85rem; left: .7rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .spectrum-labels { display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; padding-top: 1rem; }
@@ -64,10 +65,19 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .button-row { display: flex; flex-wrap: wrap; gap: .65rem; }
 button { border: 1px solid var(--primary); border-radius: 9px; padding: .75rem 1.1rem; font-size: .85rem; cursor: pointer; min-height: 44px; }
 button.primary { background: var(--primary); color: white; }
+button.fullscreen-button { background: var(--surface); color: var(--ink); border-color: var(--line); }
 button:disabled { cursor: default; color: var(--muted); background: var(--disabled); border-color: var(--line); }
 button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
 .control-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; display: flex; justify-content: space-between; gap: 1rem; }
 .frame-rate { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7ch; text-align: right; }
+.display-status { display: flex; justify-content: space-between; gap: 1rem; }
+.wake-status { white-space: nowrap; }
+.screen-error { color: var(--ink); font-size: .82rem; margin: 0; }
+.screen-error:not(:empty) { margin-top: .75rem; }
+.audio-card:fullscreen { display: flex; flex-direction: column; width: 100%; height: 100%; padding: clamp(.75rem, 2vw, 2rem); border: 0; border-radius: 0; overflow: auto; }
+.audio-card:fullscreen .spectrum-panel { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
+.audio-card:fullscreen #dancinglights { flex: 1; height: auto; min-height: 60px; }
+.audio-card::backdrop { background: var(--paper); }
 .audio-error { color: var(--ink); font-size: .82rem; margin: 0; overflow-wrap: anywhere; }
 .audio-error:not(:empty) { border-left: 3px solid var(--alert); padding-left: .75rem; margin-top: .75rem; }
 .how-it-works { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin: 1.25rem .5rem; }
@@ -85,9 +95,13 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   nav a { padding: .6rem .7rem; font-size: .8rem; }
   .audio-card { padding: .75rem; }
   .mic-status { font-size: .6rem; padding: .35rem .5rem; }
+  .audio-controls { flex-wrap: wrap; gap: .5rem; }
+  .button-row { gap: .5rem; }
+  button { font-size: .75rem; padding: .65rem .7rem; }
+  .control-note { flex-direction: column; gap: .15rem; }
   .spectrum-panel { padding-right: .65rem; padding-left: 3rem; }
   .meter-guide { left: .45rem; }
-  .meter-fill { border-radius: 3px 3px 0 0; }
+  .meter-fill, .meter-edge { border-radius: 3px 3px 0 0; }
   .how-it-works { grid-template-columns: 1fr; gap: 1rem; }
   footer { flex-direction: column; gap: .5rem; }
 }

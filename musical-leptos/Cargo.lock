@@ -1115,21 +1115,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leptos_meta"
-version = "0.9.0-beta"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c725497d339469f9ee12e65b2f608c83ff0ef088ddd33d01b67884af3bbcbd15"
-dependencies = [
- "futures",
- "indexmap",
- "leptos",
- "or_poisoned",
- "send_wrapper",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "leptos_router"
 version = "0.9.0-beta1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1293,7 +1278,6 @@ dependencies = [
  "flume",
  "js-sys",
  "leptos",
- "leptos_meta",
  "leptos_router",
  "log",
  "musical-lights-core",

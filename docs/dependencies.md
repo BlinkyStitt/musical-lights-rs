@@ -52,7 +52,6 @@ The user requested current releases and pre-releases. These major upgrades requi
 | itertools | `=0.15.0` | core, stm32, esp-idf |
 | js-sys | `=0.3.105` | leptos, dioxus, wasm |
 | leptos | `=0.9.0-beta` | leptos |
-| leptos_meta | `=0.9.0-beta` | leptos |
 | leptos_router | `=0.9.0-beta1` | leptos |
 | log | `=0.4.34` | core, terminal, leptos, dioxus, feather, esp-idf |
 | lsm9ds1 | `eacd62cb6a1c2dda962ed8d2546566925472e586` | stm32, esp-embassy |
