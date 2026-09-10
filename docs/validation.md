@@ -1,6 +1,6 @@
 # Validation record
 
-Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. The base upgrade also passed both GitHub workflows at commit `6802973`.
+Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. Both GitHub workflows passed at commits `6802973` and `cfca78c`. After the display response and compact layout changes, the affected Leptos checks and all 12 browser tests passed again.
 
 ## Exact tools
 
@@ -18,7 +18,7 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 | --- | --- |
 | Core | 31 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
 | Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
-| Leptos | Two display timing tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
+| Leptos | Six display timing and live-level floor tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
 | Standalone WASM | WASM Clippy; complete `build.py`; browser execution of the shared-memory worklet with nonzero oscillator output |
 | Feather M0 | `thumbv6m-none-eabi` Clippy; release link with panic-halt and with semihosting |
@@ -28,7 +28,9 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 
 All 12 browser tests passed. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
 
-Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, pause/resume, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. Automatic meter targets change at most twice per second, using monotonic browser time. A linear 500 ms transition avoids overshoot. This rate is below the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html); these checks do not provide a medical safety guarantee. Screenshots were inspected, including color-vision simulations. The temporary counter was removed at Bryan's request.
+Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. The complete graph is visible without scrolling at these sizes, and descriptive text follows it. Tests check Quiet/Loud labels, every band's exact frequency tooltip, keyboard focus, and removal of the counter and pause/resume controls. Screenshots were inspected, including color-vision simulations.
+
+Bars rise on the next screen frame without CSS easing. A new peak holds for 350 ms, then falls with increasing speed to its current live band level. The latest level remains valid between audio callbacks, so an absent callback cannot pull the bar below the live level. Native tests cover exact gravity timing across frame rates, short taps, changes in the floor, and reduced motion. The browser checks the actual rendered fast attack, retained live level, continuous fall to silence, and repeated queued taps at 100 heights in every band. The hold limits repeated flashes to at most three in any second, using the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html) as the design criterion. These checks do not provide a medical safety guarantee. Resource tests also verify that animation requests stop on microphone denial, Stop listening, route closure, and closure while permission remains pending.
 
 Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, separate outputs including every bass band, rejected input without state changes, silence, zero range, bounded output, sample-duration envelope timing, fractional LED decay to zero, actual frame writes, FFT frequency detection, gradient boundaries, and message CRC/COBS bounds. New tests preserve the expected level ratio above nominal full scale, keep extreme finite transients bounded, and compare changing-level filter history against an unscaled reference. The panel test checks the original five-band sum before normalization and all 19 remaining outputs. Firmware asserts that 20 rows of 20 pixels fill exactly 400 pixels, and retains the row-based scroll step.
 
@@ -61,6 +63,8 @@ ESP-IDF Clippy and linking report 32 warnings, mainly unused imports, variables,
 
 Cargo reports manifest warnings for retained dependency declarations and binary names. Leptos dependencies `attribute-derive-macro 0.10.5` and `proc-macro-error2 2.0.1` report future Rust incompatibility warnings. The current pinned compiler still builds them successfully. These are not claims of compatibility with a later compiler.
 
+GitHub also reports [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) for `glib 0.18.5` in the optional Dioxus Linux desktop dependency graph. The pinned newest Dioxus pre-release still brings this version through its GTK stack. The selected web target does not include `glib`; the independent lockfile records optional desktop dependencies too. This upstream desktop issue remains unresolved. No older dependency selection or compatibility patch hides it.
+
 The terminal release examples link SDL2 from `/opt/homebrew/opt/sdl2/lib`. Local ESP-IDF setup exposed a broken Homebrew Python 3.14.7 `pyexpat` reference to the macOS system libexpat. Installing expat 2.8.4, updating that extension's library reference, and signing the extension repaired the host Python environment. The original extension was saved in `/tmp/musical-pyexpat-original.so`. The application contains no workaround for that local installation fault.
 
 ## Hardware limits
@@ -71,4 +75,4 @@ The Feather application still contains initialization only. The Embassy radio ta
 
 The standalone worklet requires shared WASM memory, rebuilt standard library atomics/TLS exports, and cross-origin isolation headers. The browser tests serve the required headers. Ordinary static hosting without those headers is not a supported worklet deployment.
 
-CI covers every package root plus the browser tests. The base upgrade passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34460998622) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34460998336). Check the follow-up commit's workflow results after push.
+CI covers every package root plus the browser tests. The microphone and 24-band update at `cfca78c` passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34464834026) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34464834053). The live page also passed a Chromium check with real worklet peaks above one, 24 meters, centered layout, route navigation, and stream cleanup. Check the next display commit's workflow results and live page after push.

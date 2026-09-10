@@ -1,37 +1,163 @@
 use musical_lights_core::audio::DISPLAY_BANDS;
+use std::{cell::RefCell, rc::Rc};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
-/// At most two automatic target changes per second. A flash requires two
-/// opposing changes; this stays below WCAG's three-flashes-per-second limit.
-pub const DISPLAY_INTERVAL_MS: f64 = 500.0;
+// A newly lit height remains lit for at least 350 ms. Even a pixel at the top
+// cannot complete more than three automatic flash cycles in one second.
+const MIN_VISIBLE_MS: f64 = 350.0;
+// Full-height free fall takes about 0.63 s after the short visibility hold.
+const GRAVITY: f32 = 5.0;
 
-pub struct DisplayPacer {
-    last_update_ms: f64,
-    peaks: [f32; DISPLAY_BANDS],
+#[derive(Clone, Copy, Default)]
+struct FallingBand {
+    height: f32,
+    velocity: f32,
+    hold_until_ms: f64,
 }
 
-impl DisplayPacer {
+pub struct GravityDisplay {
+    bands: [FallingBand; DISPLAY_BANDS],
+    current: [f32; DISPLAY_BANDS],
+    pending: [f32; DISPLAY_BANDS],
+    last_frame_ms: f64,
+}
+
+impl GravityDisplay {
     pub fn new(now_ms: f64) -> Self {
         Self {
-            last_update_ms: now_ms,
-            peaks: [0.0; DISPLAY_BANDS],
+            bands: [FallingBand::default(); DISPLAY_BANDS],
+            current: [0.0; DISPLAY_BANDS],
+            pending: [0.0; DISPLAY_BANDS],
+            last_frame_ms: now_ms,
         }
     }
 
-    /// Keep short transients within the display window. Use monotonic wall time,
-    /// not audio sample time, so queued callbacks cannot cause catch-up flashes.
-    pub fn push(
-        &mut self,
-        values: [f32; DISPLAY_BANDS],
-        now_ms: f64,
-    ) -> Option<[f32; DISPLAY_BANDS]> {
-        for (peak, value) in self.peaks.iter_mut().zip(values) {
+    /// Retain even a short tap between screen frames. Audio analysis never
+    /// waits for drawing, and queued messages cannot replay animation frames.
+    pub fn push(&mut self, values: [f32; DISPLAY_BANDS]) {
+        self.current = values;
+        for (peak, value) in self.pending.iter_mut().zip(values) {
             *peak = peak.max(value);
         }
-        if now_ms - self.last_update_ms < DISPLAY_INTERVAL_MS {
-            return None;
+    }
+
+    pub fn frame(&mut self, now_ms: f64, reduced_motion: bool) -> [f32; DISPLAY_BANDS] {
+        let previous_ms = self.last_frame_ms;
+        self.last_frame_ms = now_ms;
+        std::array::from_fn(|i| {
+            // The last audio level remains the floor between audio callbacks.
+            // Pending peaks preserve taps that arrive between screen frames.
+            let input = self.current[i].max(std::mem::take(&mut self.pending[i]));
+            let band = &mut self.bands[i];
+            if input > band.height {
+                // No attack easing: the next screen frame reaches the input.
+                band.height = input;
+                band.velocity = 0.0;
+                band.hold_until_ms = now_ms + MIN_VISIBLE_MS;
+            } else if now_ms > band.hold_until_ms {
+                let elapsed_s = ((now_ms - previous_ms.max(band.hold_until_ms)) / 1000.0) as f32;
+                let fall = band.velocity * elapsed_s + 0.5 * GRAVITY * elapsed_s * elapsed_s;
+                band.velocity += GRAVITY * elapsed_s;
+                band.height = if reduced_motion {
+                    input
+                } else {
+                    (band.height - fall).max(input)
+                };
+                if band.height == input {
+                    band.velocity = 0.0;
+                }
+            }
+            band.height
+        })
+    }
+}
+
+/// One reusable animation callback, owned by the microphone view. Its weak
+/// reference avoids a callback/resource cycle; dropping the owner cancels RAF.
+#[derive(Clone)]
+pub struct DisplayAnimation(Rc<RefCell<Option<AnimationResources>>>);
+
+struct AnimationResources {
+    window: web_sys::Window,
+    reduced_motion: Option<web_sys::MediaQueryList>,
+    display: GravityDisplay,
+    request: Option<i32>,
+    callback: Option<Closure<dyn FnMut(f64)>>,
+}
+
+impl DisplayAnimation {
+    pub fn new(mut on_frame: impl FnMut([f32; DISPLAY_BANDS]) + 'static) -> Result<Self, JsValue> {
+        let window =
+            web_sys::window().ok_or_else(|| JsValue::from_str("Browser window is unavailable"))?;
+        let now = window
+            .performance()
+            .ok_or_else(|| JsValue::from_str("Browser clock is unavailable"))?
+            .now();
+        let reduced_motion = window.match_media("(prefers-reduced-motion: reduce)")?;
+        let resources = Rc::new(RefCell::new(Some(AnimationResources {
+            window,
+            reduced_motion,
+            display: GravityDisplay::new(now),
+            request: None,
+            callback: None,
+        })));
+        let weak = Rc::downgrade(&resources);
+        let callback = Closure::new(move |now_ms: f64| {
+            let Some(resources) = weak.upgrade() else {
+                return;
+            };
+            let mut guard = resources.borrow_mut();
+            let Some(resources) = guard.as_mut() else {
+                return;
+            };
+            resources.request = None;
+            let reduced_motion = resources
+                .reduced_motion
+                .as_ref()
+                .is_some_and(|query| query.matches());
+            on_frame(resources.display.frame(now_ms, reduced_motion));
+            resources.request = resources
+                .window
+                .request_animation_frame(
+                    resources
+                        .callback
+                        .as_ref()
+                        .unwrap()
+                        .as_ref()
+                        .unchecked_ref(),
+                )
+                .ok();
+        });
+        {
+            let mut guard = resources.borrow_mut();
+            let resources = guard.as_mut().unwrap();
+            resources.request = Some(
+                resources
+                    .window
+                    .request_animation_frame(callback.as_ref().unchecked_ref())?,
+            );
+            resources.callback = Some(callback);
         }
-        self.last_update_ms = now_ms;
-        Some(std::mem::replace(&mut self.peaks, [0.0; DISPLAY_BANDS]))
+        Ok(Self(resources))
+    }
+
+    /// Cancel drawing now, even if asynchronous audio setup owns another handle.
+    pub fn stop(&self) {
+        self.0.borrow_mut().take();
+    }
+
+    pub fn push(&self, values: [f32; DISPLAY_BANDS]) {
+        if let Some(resources) = self.0.borrow_mut().as_mut() {
+            resources.display.push(values);
+        }
+    }
+}
+
+impl Drop for AnimationResources {
+    fn drop(&mut self) {
+        if let Some(request) = self.request {
+            let _ = self.window.cancel_animation_frame(request);
+        }
     }
 }
 
@@ -40,34 +166,116 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rapid_changes_keep_transients_and_limit_updates() {
-        let mut display = DisplayPacer::new(0.0);
-        let mut updates = Vec::new();
-        for ms in 1..=5000 {
-            let value = if ms % 2 == 0 { 1.0 } else { 0.0 };
-            if let Some(values) = display.push([value; DISPLAY_BANDS], ms as f64) {
-                assert_eq!(values, [1.0; DISPLAY_BANDS]);
-                updates.push(ms);
-            }
-        }
-        assert_eq!(updates, (1..=10).map(|n| n * 500).collect::<Vec<_>>());
-        assert_eq!(
-            display.push([0.0; DISPLAY_BANDS], 5500.0),
-            Some([0.0; DISPLAY_BANDS])
-        );
+    fn tap_reaches_its_peak_on_the_next_frame() {
+        let mut display = GravityDisplay::new(0.0);
+        display.push([0.8; DISPLAY_BANDS]);
+        display.push([0.0; DISPLAY_BANDS]);
+        assert_eq!(display.frame(16.0, false), [0.8; DISPLAY_BANDS]);
+        display.push([1.0; DISPLAY_BANDS]);
+        assert_eq!(display.frame(32.0, false), [1.0; DISPLAY_BANDS]);
     }
 
     #[test]
-    fn delayed_callbacks_never_replay_a_burst_of_updates() {
-        let mut display = DisplayPacer::new(0.0);
-        assert!(display.push([1.0; DISPLAY_BANDS], 5000.0).is_some());
-        for _ in 0..1000 {
-            assert!(display.push([0.0; DISPLAY_BANDS], 5000.0).is_none());
+    fn fall_accelerates_and_is_independent_of_frame_rate() {
+        for step in [5, 10, 20, 50] {
+            let mut display = GravityDisplay::new(0.0);
+            display.push([1.0; DISPLAY_BANDS]);
+            display.frame(0.0, false);
+            display.push([0.0; DISPLAY_BANDS]);
+            for ms in (step..=500).step_by(step) {
+                display.frame(ms as f64, false);
+            }
+            // 150 ms of free fall: 1 - 0.5 * 5 * 0.15^2.
+            assert!((display.bands[0].height - 0.94375).abs() < 1e-5);
+            for ms in (500 + step..=1000).step_by(step) {
+                display.frame(ms as f64, false);
+            }
+            assert_eq!(display.bands[0].height, 0.0);
         }
-        assert!(display.push([0.0; DISPLAY_BANDS], 5499.0).is_none());
-        assert_eq!(
-            display.push([0.0; DISPLAY_BANDS], 5500.0),
-            Some([0.0; DISPLAY_BANDS])
-        );
+    }
+
+    #[test]
+    fn a_new_peak_cancels_downward_velocity_immediately() {
+        let mut display = GravityDisplay::new(0.0);
+        display.push([1.0; DISPLAY_BANDS]);
+        display.frame(0.0, false);
+        display.push([0.0; DISPLAY_BANDS]);
+        display.frame(700.0, false);
+        assert!(display.bands[0].velocity > 0.0);
+        display.push([0.9; DISPLAY_BANDS]);
+        assert_eq!(display.frame(716.0, false), [0.9; DISPLAY_BANDS]);
+        assert_eq!(display.bands[0].velocity, 0.0);
+    }
+
+    #[test]
+    fn repeated_taps_limit_flashes_at_every_meter_height() {
+        for reduced_motion in [false, true] {
+            for period_ms in [20, 80, 150, 250, 350, 500, 800] {
+                let mut display = GravityDisplay::new(0.0);
+                let mut was_lit = [false; 100];
+                let mut rises: [Vec<usize>; 100] = std::array::from_fn(|_| Vec::new());
+                for ms in (0..6000).step_by(5) {
+                    let input = if ms % period_ms == 0 { 1.0 } else { 0.0 };
+                    display.push([input; DISPLAY_BANDS]);
+                    let level = display.frame(ms as f64, reduced_motion)[0];
+                    assert!((0.0..=1.0).contains(&level));
+                    for (pixel, was_lit) in was_lit.iter_mut().enumerate() {
+                        let lit = level >= (pixel + 1) as f32 / 100.0;
+                        if lit && !*was_lit {
+                            rises[pixel].push(ms);
+                            assert!(
+                                rises[pixel]
+                                    .iter()
+                                    .filter(|&&rise| ms - rise < 1000)
+                                    .count()
+                                    <= 3
+                            );
+                        }
+                        *was_lit = lit;
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn reduced_motion_removes_gravity_animation_but_keeps_visibility_hold() {
+        let mut display = GravityDisplay::new(0.0);
+        display.push([1.0; DISPLAY_BANDS]);
+        assert_eq!(display.frame(0.0, true), [1.0; DISPLAY_BANDS]);
+        display.push([0.0; DISPLAY_BANDS]);
+        assert_eq!(display.frame(350.0, true), [1.0; DISPLAY_BANDS]);
+        assert_eq!(display.frame(351.0, true), [0.0; DISPLAY_BANDS]);
+    }
+
+    #[test]
+    fn fall_stops_at_each_live_band_level_even_between_audio_callbacks() {
+        for reduced_motion in [false, true] {
+            let mut display = GravityDisplay::new(0.0);
+            display.push([1.0; DISPLAY_BANDS]);
+            display.frame(0.0, reduced_motion);
+            let floors = std::array::from_fn(|i| (i + 1) as f32 / 25.0);
+            display.push(floors);
+            for ms in (10..=2000).step_by(10) {
+                let heights = display.frame(ms as f64, reduced_motion);
+                for (height, floor) in heights.into_iter().zip(floors) {
+                    assert!(height >= floor, "{height} fell below {floor} at {ms} ms");
+                }
+            }
+            assert_eq!(display.frame(2010.0, reduced_motion), floors);
+            // A new lower level starts a fresh fall; no old downward velocity
+            // can carry a bar below the new floor.
+            display.push([0.02; DISPLAY_BANDS]);
+            assert!(
+                display
+                    .frame(2020.0, reduced_motion)
+                    .iter()
+                    .all(|&v| v >= 0.02)
+            );
+            assert_eq!(display.frame(4000.0, reduced_motion), [0.02; DISPLAY_BANDS]);
+            display.push([0.7; DISPLAY_BANDS]);
+            assert_eq!(display.frame(4016.0, reduced_motion), [0.7; DISPLAY_BANDS]);
+            assert_eq!(display.frame(6000.0, reduced_motion), [0.7; DISPLAY_BANDS]);
+        }
     }
 }

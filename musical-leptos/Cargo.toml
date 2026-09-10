@@ -33,6 +33,7 @@ web-sys = { version = "=0.3.105", features = [
     "BlobPropertyBag",
     "Document",
     "MediaDevices",
+    "MediaQueryList",
     "MediaStream",
     "MediaStreamTrack",
     "MessageEvent",

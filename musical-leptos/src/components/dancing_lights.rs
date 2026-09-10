@@ -1,4 +1,4 @@
-use crate::{display::DisplayPacer, wasm_audio::AudioSession};
+use crate::{display::DisplayAnimation, wasm_audio::AudioSession};
 use leptos::prelude::*;
 use musical_lights_core::audio::{BARK_EDGES, BarkBank, DISPLAY_BANDS};
 use std::{
@@ -10,6 +10,7 @@ use std::{
 struct SessionOwner {
     alive: Rc<Cell<bool>>,
     session: Rc<RefCell<Option<AudioSession>>>,
+    animation: Rc<RefCell<Option<DisplayAnimation>>>,
 }
 
 #[component]
@@ -17,18 +18,21 @@ pub fn DancingLights() -> impl IntoView {
     let (audio, set_audio) = signal([0.0; DISPLAY_BANDS]);
     let (listening, set_listening) = signal(false);
     let (starting, set_starting) = signal(false);
-    let (paused, set_paused) = signal(false);
     let (error, set_error) = signal(None::<String>);
     let (sample_rate, set_sample_rate) = signal(0.0);
     let owner = StoredValue::new_local(SessionOwner {
         alive: Rc::new(Cell::new(true)),
         session: Rc::new(RefCell::new(None)),
+        animation: Rc::new(RefCell::new(None)),
     });
     on_cleanup(move || {
         owner.with_value(|owner| {
             owner.alive.set(false);
             if let Some(session) = owner.session.borrow_mut().take() {
                 session.stop();
+            }
+            if let Some(animation) = owner.animation.borrow_mut().take() {
+                animation.stop();
             }
         })
     });
@@ -56,12 +60,23 @@ pub fn DancingLights() -> impl IntoView {
             set_error.set(Some("The browser display clock is unavailable.".into()));
             return;
         };
-        let mut display = DisplayPacer::new(clock.now());
-        let mut block_error = None;
+        let owner = owner.get_value();
+        let alive = owner.alive.clone();
+        let animation = match DisplayAnimation::new(move |values| {
+            if alive.get() && audio.get_untracked() != values {
+                set_audio.set(values);
+            }
+        }) {
+            Ok(animation) => animation,
+            Err(error) => {
+                set_error.set(Some(format!("Display: {error:?}")));
+                return;
+            }
+        };
+        *owner.animation.borrow_mut() = Some(animation.clone());
+        let mut error_until_ms = 0.0;
         set_sample_rate.set(rate);
         set_starting.set(true);
-        set_paused.set(false);
-        let owner = owner.get_value();
         *owner.session.borrow_mut() = Some(session.clone());
         let alive = owner.alive.clone();
         leptos::task::spawn_local(async move {
@@ -70,21 +85,21 @@ pub fn DancingLights() -> impl IntoView {
                     if !alive.get() {
                         return;
                     }
+                    let now_ms = clock.now();
                     let values = match bank.push_samples(&samples) {
-                        Ok(frame) => frame.bands().0,
+                        Ok(frame) => {
+                            if now_ms >= error_until_ms && error.get_untracked().is_some() {
+                                set_error.set(None);
+                            }
+                            frame.bands().0
+                        }
                         Err(error) => {
-                            block_error = Some(error.to_string());
+                            error_until_ms = now_ms + 350.0;
+                            set_error.set(Some(error.to_string()));
                             [0.0; DISPLAY_BANDS]
                         }
                     };
-                    if let Some(values) = display.push(values, clock.now()) {
-                        // Error text follows the same limited cadence as the
-                        // meters and clears after a valid display window.
-                        set_error.set(block_error.take());
-                        if !paused.get_untracked() {
-                            set_audio.set(values);
-                        }
-                    }
+                    animation.push(values);
                 })
                 .await;
             // A route can close while getUserMedia is still awaiting permission.
@@ -99,30 +114,25 @@ pub fn DancingLights() -> impl IntoView {
                     if let Some(session) = owner.session.borrow_mut().take() {
                         session.stop();
                     }
+                    if let Some(animation) = owner.animation.borrow_mut().take() {
+                        animation.stop();
+                    }
                     set_error.set(Some(format!("Microphone: {error:?}")));
                 }
             }
         });
     };
     view! {
-        <section class="audio-card" aria-labelledby="spectrum-title">
-            <div class="card-heading">
-                <div><p class="eyebrow">"LIVE SPECTRUM"</p><h2 id="spectrum-title">"See what you hear"</h2></div>
-                <p class="mic-status" role="status">
-                    {move || if starting.get() { "Waiting for microphone" } else if listening.get() {
-                        if paused.get() { "Display paused · Mic on" } else { "Listening · Mic on" }
-                    } else { "Microphone off" }}
-                </p>
-            </div>
+        <section class="audio-card" aria-label="Live audio spectrum">
             <div class="audio-controls">
                 <div class="button-row">
                     <Show when=move || !listening.get() fallback=move || view! {
                         <button class="primary" on:click=move |_| {
                             owner.with_value(|owner| {
                                 if let Some(session) = owner.session.borrow_mut().take() { session.stop(); }
+                                if let Some(animation) = owner.animation.borrow_mut().take() { animation.stop(); }
                             });
                             set_listening.set(false);
-                            set_paused.set(false);
                             set_error.set(None);
                             set_audio.set([0.0; DISPLAY_BANDS]);
                         }>"Stop listening"</button>
@@ -131,31 +141,33 @@ pub fn DancingLights() -> impl IntoView {
                             {move || if starting.get() { "Starting microphone…" } else { "Start listening" }}
                         </button>
                     </Show>
-                    <button class="secondary" disabled=move || !listening.get()
-                        aria-pressed=move || paused.get().to_string()
-                        on:click=move |_| set_paused.update(|value| *value = !*value)>
-                        {move || if paused.get() { "Resume display" } else { "Pause display" }}
-                    </button>
                 </div>
-                <p class="control-note">{move || if listening.get() {
-                    format!("Sample rate: {} Hz · Smooth display", sample_rate.get())
-                } else { "Allow microphone access to begin. No recording.".into() }}</p>
+                <p class="mic-status" role="status">
+                    {move || if starting.get() { "Waiting for microphone" } else if listening.get() {
+                        "Listening · Mic on"
+                    } else { "Microphone off" }}
+                </p>
             </div>
             <div class="spectrum-panel">
-                <div class="meter-guide" aria-hidden="true"><span>"HIGH"</span><span>"LOW"</span></div>
+                <div class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></div>
                 <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble">
                     {BARK_EDGES.windows(2).enumerate().map(|(i, edges)| {
                         let label = format!("{}–{} Hz", edges[0], edges[1]);
+                        let tooltip = label.clone();
                         view! {
-                        <div class="meter" role="meter" aria-label=label.clone() title=label
+                        <div class="meter" role="meter" aria-label=label tabindex="0"
                             aria-valuemin="0" aria-valuemax="100"
                             aria-valuenow=move || (audio.get()[i] * 100.0).round() as u32>
                             <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get()[i])></div>
+                            <span class="frequency-tooltip" role="tooltip">{tooltip}</span>
                         </div>
                     }}).collect_view()}
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
+            <p class="control-note">{move || if listening.get() {
+                format!("Sample rate: {} Hz · Smooth display", sample_rate.get())
+            } else { "Allow microphone access to begin. No recording.".into() }}</p>
             <p class="audio-error" role="alert">{move || error.get()}</p>
         </section>
     }

@@ -11,6 +11,9 @@ test('Leptos renders routes and 24 meters without the temporary counter', async 
   expect(await page.getByRole('meter').evaluateAll(nodes => nodes.slice(0, 5).map(n => n.getAttribute('aria-label'))))
     .toEqual(['0–100 Hz', '100–200 Hz', '200–300 Hz', '300–400 Hz', '400–510 Hz']);
   await expect(page.getByRole('button', { name: /Click me|counter/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Pause display|Resume display/i })).toHaveCount(0);
+  await expect(page.getByText('Every band has room')).toHaveCount(0);
+  await expect(page.locator('.meter-guide')).toHaveText('LOUDQUIET');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Old Arduino Code' })).toBeVisible();
   await page.getByRole('link', { name: 'Home', exact: true }).click();
@@ -21,6 +24,7 @@ test('Leptos renders routes and 24 meters without the temporary counter', async 
 });
 
 async function trackContexts(page) {
+  await trackAnimation(page);
   await page.addInitScript(() => {
     window.audioContexts = [];
     const NativeContext = window.AudioContext;
@@ -28,6 +32,35 @@ async function trackContexts(page) {
       constructor(options) { super(options); window.audioContexts.push(this); }
     };
   });
+}
+
+async function trackAnimation(page) {
+  await page.addInitScript(() => {
+    const request = window.requestAnimationFrame.bind(window);
+    const cancel = window.cancelAnimationFrame.bind(window);
+    window.pendingAnimationFrames = new Set();
+    window.animationCalls = 0;
+    window.requestAnimationFrame = callback => {
+      const id = request(now => {
+        window.pendingAnimationFrames.delete(id);
+        window.animationCalls++;
+        callback(now);
+      });
+      window.pendingAnimationFrames.add(id);
+      return id;
+    };
+    window.cancelAnimationFrame = id => {
+      window.pendingAnimationFrames.delete(id);
+      cancel(id);
+    };
+  });
+}
+
+async function expectAnimationStopped(page) {
+  await expect.poll(() => page.evaluate(() => window.pendingAnimationFrames.size)).toBe(0);
+  const calls = await page.evaluate(() => window.animationCalls);
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => window.animationCalls)).toBe(calls);
 }
 
 test('microphone denial displays an error and closes the audio context', async ({ page }) => {
@@ -40,11 +73,13 @@ test('microphone denial displays an error and closes the audio context', async (
   await expect(page.getByRole('alert')).toContainText('Microphone denied');
   await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
+  await expectAnimationStopped(page);
 });
 
 for (const rate of [44100, 48000]) {
   test(`real audio peaks above full scale update 24 meters at ${rate} Hz and release resources`, async ({ page }) => {
     const errors = []; page.on('pageerror', error => { errors.push(error.message); console.log('page error:', error.message); });
+    await trackAnimation(page);
     await page.addInitScript(({ rate }) => {
       const NativeContext = window.AudioContext;
       window.audioContexts = [];
@@ -81,19 +116,15 @@ for (const rate of [44100, 48000]) {
     await expect(page.locator('#dancinglights > div')).toHaveCount(24);
     await expect(page.getByRole('alert')).toBeEmpty();
     await page.screenshot({ path: `test-results/leptos-${rate}.png`, fullPage: true });
-    // Pausing retains stable nodes and values while audio analysis continues.
+    // Falling meters retain the same DOM nodes and reach zero after silence.
     await page.evaluate(() => { window.originalMeters = [...document.querySelectorAll('.meter')]; });
-    await page.getByRole('button', { name: 'Pause display' }).click();
-    const paused = await page.getByRole('meter').evaluateAll(nodes => nodes.map(n => n.getAttribute('aria-valuenow')));
     await page.evaluate(() => { window.testInputGain.gain.value = 0; });
-    await page.waitForTimeout(1200);
-    expect(await page.getByRole('meter').evaluateAll(nodes => nodes.map(n => n.getAttribute('aria-valuenow')))).toEqual(paused);
-    await page.getByRole('button', { name: 'Resume display' }).click();
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     expect(await page.evaluate(() => window.originalMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
+    await expectAnimationStopped(page);
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     await page.evaluate(() => window.inputContext.close());
     await page.getByRole('button', { name: 'Start listening' }).click();
@@ -101,6 +132,7 @@ for (const rate of [44100, 48000]) {
     await page.getByRole('link', { name: 'About', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed', 'closed']);
+    await expectAnimationStopped(page);
     await page.evaluate(() => window.inputContext.close());
     expect(errors).toEqual([]);
   });
@@ -116,6 +148,8 @@ test('leaving the view while permission is pending releases the late stream', as
   await expect.poll(() => page.evaluate(() => typeof window.resolveInput)).toBe('function');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
+  // Cancel drawing before the still-pending permission promise resolves.
+  await expectAnimationStopped(page);
   await page.evaluate(async () => {
     const context = new AudioContext();
     const stream = context.createMediaStreamDestination().stream;
@@ -158,7 +192,7 @@ test('input worklet handles absent input and actual block lengths', async () => 
   }
 });
 
-test('rapid audio and queued callbacks cannot flash the meters rapidly', async ({ page }) => {
+test('meters rise on the next frame, retain live levels, and fall without rapid flashes', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeContext = window.AudioContext;
     window.AudioContext = class extends NativeContext {
@@ -175,46 +209,93 @@ test('rapid audio and queued callbacks cannot flash the meters rapidly', async (
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   await page.evaluate(async () => {
     await window.testContext.suspend();
-    window.meterChanges = [];
+    // Drain the last real worklet messages before supplying controlled blocks.
+    await new Promise(resolve => setTimeout(resolve, 50));
     window.meterNodes = [...document.querySelectorAll('.meter-fill')];
-    const observer = new MutationObserver(records => {
-      if (records.some(record => record.attributeName === 'style')) window.meterChanges.push(performance.now());
-    });
-    observer.observe(document.querySelector('#dancinglights'), { subtree: true, attributes: true });
-    const signal = new Float32Array(128).map((_, i) => 4 * Math.sin(i * 2 * Math.PI * 1000 / window.testContext.sampleRate));
-    const quiet = new Float32Array(128);
-    for (let tick = 0; tick < 40; tick++) {
-      // A batch of queued messages arrives without any elapsed wall time.
-      for (let message = 0; message < 20; message++) {
-        window.testPort.dispatchEvent(new MessageEvent('message', { data: message % 2 ? signal : quiet }));
-      }
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    observer.disconnect();
+    window.heights = () => window.meterNodes.map(node => new DOMMatrixReadOnly(getComputedStyle(node).transform).m22);
+    window.screenFrame = () => new Promise(resolve => requestAnimationFrame(() => queueMicrotask(resolve)));
+    let phase = 0;
+    window.sendAudio = gain => {
+      const data = Float32Array.from({ length: 128 }, () => gain * Math.sin(phase++ * 2 * Math.PI * 1000 / window.testContext.sampleRate));
+      window.testPort.dispatchEvent(new MessageEvent('message', { data }));
+    };
   });
-  const changes = await page.evaluate(() => window.meterChanges);
-  expect(changes.length).toBeGreaterThanOrEqual(3);
-  expect(changes.length).toBeLessThanOrEqual(6);
-  for (let i = 1; i < changes.length; i++) expect(changes[i] - changes[i - 1]).toBeGreaterThanOrEqual(490);
+  const attack = await page.evaluate(async () => {
+    const before = Math.max(...window.heights());
+    for (let block = 0; block < 20; block++) window.sendAudio(4);
+    await window.screenFrame();
+    return { before, after: Math.max(...window.heights()) };
+  });
+  expect(attack.before).toBe(0);
+  expect(attack.after).toBeGreaterThan(0.1);
+  expect(await page.locator('.meter-fill').first().evaluate(node => {
+    const style = getComputedStyle(node);
+    return [style.transitionDuration, style.animationName];
+  })).toEqual(['0s', 'none']);
+  // No new audio callback means the last live level still applies, not zero.
+  await page.waitForTimeout(1200);
+  const floor = await page.evaluate(() => window.heights());
+  expect(Math.max(...floor)).toBeGreaterThan(0.1);
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => window.heights())).toEqual(floor);
+  const fall = await page.evaluate(async () => {
+    window.sendAudio(0);
+    const levels = [];
+    const end = performance.now() + 1100;
+    while (performance.now() < end) {
+      await window.screenFrame();
+      levels.push(Math.max(...window.heights()));
+    }
+    return levels;
+  });
+  expect(new Set(fall).size).toBeGreaterThan(10);
+  expect(fall.at(-1)).toBe(0);
+  for (let i = 1; i < fall.length; i++) expect(fall[i]).toBeLessThanOrEqual(fall[i - 1]);
+
+  for (const reducedMotion of ['no-preference', 'reduce']) {
+    await page.emulateMedia({ reducedMotion });
+    const maxFlashes = await page.evaluate(async () => {
+      const wasLit = Array(24 * 100).fill(false);
+      const rises = Array.from(wasLit, () => []);
+      let maxFlashes = 0;
+      const start = performance.now();
+      let lastTick = -1;
+      while (performance.now() - start < 2200) {
+        const tick = Math.floor((performance.now() - start) / 50);
+        if (tick !== lastTick) {
+          // Many queued blocks arrive together, including taps and silence.
+          for (let block = 0; block < 20; block++) window.sendAudio(tick % 2 ? 0 : 4);
+          lastTick = tick;
+        }
+        await window.screenFrame();
+        const now = performance.now();
+        for (const [band, height] of window.heights().entries()) {
+          for (let pixel = 0; pixel < 100; pixel++) {
+            const index = band * 100 + pixel;
+            const lit = height >= (pixel + 1) / 100;
+            if (lit && !wasLit[index]) {
+              rises[index] = rises[index].filter(time => now - time < 1000);
+              rises[index].push(now);
+              maxFlashes = Math.max(maxFlashes, rises[index].length);
+            }
+            wasLit[index] = lit;
+          }
+        }
+      }
+      return maxFlashes;
+    });
+    expect(maxFlashes).toBeGreaterThan(0);
+    expect(maxFlashes).toBeLessThanOrEqual(3);
+  }
   expect(await page.evaluate(() => window.meterNodes.every((node, i) => node === document.querySelectorAll('.meter-fill')[i]))).toBe(true);
   await expect(page.getByRole('alert')).toBeEmpty();
-  const styles = await page.locator('.meter-fill').first().evaluate(node => {
-    const style = getComputedStyle(node);
-    return [style.transitionProperty, style.transitionDuration, style.transitionTimingFunction, style.animationName];
-  });
-  expect(styles).toEqual(['transform', '0.5s', 'linear', 'none']);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  expect(await page.locator('.meter-fill').first().evaluate(node => getComputedStyle(node).transitionDuration)).toBe('0s');
-  await page.evaluate(async () => {
-    await new Promise(resolve => setTimeout(resolve, 510));
+  await page.evaluate(() => {
     const data = new Float32Array(128); data[108] = NaN;
     window.testPort.dispatchEvent(new MessageEvent('message', { data }));
   });
   await expect(page.getByRole('alert')).toContainText('sample 108 is not finite');
-  await page.evaluate(async () => {
-    await new Promise(resolve => setTimeout(resolve, 510));
-    window.testPort.dispatchEvent(new MessageEvent('message', { data: new Float32Array(128) }));
-  });
+  await page.waitForTimeout(360);
+  await page.evaluate(() => window.sendAudio(0));
   await expect(page.getByRole('alert')).toBeEmpty();
 });
 
@@ -232,6 +313,24 @@ for (const width of [375, 768, 1440]) {
     expect(first.y).toBe(last.y);
     expect(last.x + last.width).toBeLessThan(card.x + card.width);
     await expect(page.getByRole('button', { name: 'Start listening' })).toBeInViewport();
+    await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
+    expect(first.y).toBeLessThan(200);
+    const description = await page.locator('.intro').boundingBox();
+    expect(description.y).toBeGreaterThan(first.y + first.height);
+    for (const meter of meters) {
+      const label = await meter.getAttribute('aria-label');
+      await meter.hover();
+      const tooltip = meter.getByRole('tooltip');
+      await expect(tooltip).toBeVisible();
+      await expect(tooltip).toHaveText(label);
+      const box = await tooltip.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+    }
+    await page.mouse.move(0, 0);
+    await page.getByRole('button', { name: 'Start listening' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(meters[0].getByRole('tooltip')).toBeVisible();
     // Check actual text colors against the background they use.
     const contrasts = await page.evaluate(() => {
       const luminance = rgb => {
@@ -240,7 +339,7 @@ for (const width of [375, 768, 1440]) {
         });
         return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
       };
-      return ['.primary', '.control-note', '.mic-status', '.eyebrow', '.how-it-works p', 'footer a'].map(selector => {
+      return ['.primary', '.control-note', '.mic-status', '.eyebrow', '.frequency-tooltip', '.how-it-works p', 'footer a'].map(selector => {
         const node = document.querySelector(selector);
         let parent = node;
         while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;

@@ -24,16 +24,14 @@ pub fn Home() -> impl IntoView {
             }
         }>
             <div class="home">
-                <section class="intro" aria-labelledby="page-title">
-                    <p class="eyebrow">"A LITTLE SOUND. A LITTLE COLOR."</p>
-                    <h1 id="page-title">"Musical Lights"</h1>
-                    <p class="lede">"Give your music room to move."</p>
-                    <p>"Turn on your microphone and watch the spectrum settle into sound."</p>
-                </section>
                 <DancingLights/>
+                <section class="intro" aria-labelledby="page-title">
+                    <p class="eyebrow">"ABOUT THE DISPLAY"</p>
+                    <h1 id="page-title">"Musical Lights"</h1>
+                    <p>"24 frequency bands, from bass to treble."</p>
+                </section>
                 <section class="how-it-works" aria-label="About the display">
-                    <div><h3>"Every band has room"</h3><p>"All 24 bands stay separate, from the five bass bands to the brightest details."</p></div>
-                    <div><h3>"An easier pace"</h3><p>"Slow, smooth updates keep sharp taps from becoming rapid flashes. Pause whenever you like."</p></div>
+                    <div><h3>"An easier pace"</h3><p>"Meters rise with each beat, then fall gently. Hover over a band to see its frequency edges."</p></div>
                     <div><h3>"Your sound stays here"</h3><p>"Audio is processed in this browser. This page does not record or upload it."</p></div>
                 </section>
             </div>

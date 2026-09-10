@@ -26,10 +26,22 @@ The base upgrade was committed as `6802973` and pushed on `main`. Both GitHub wo
 - Check channel mixing, absent input, error recovery, actual sample rates and block lengths, and audio cleanup. Advance the processor through silent input gaps.
 - Replace the text bars and multi-column layout with 24 persistent meters in a centered, responsive page. Use readable controls, stable colors, frequency labels, and a clear microphone state. Keep all five bass bands separate on the website. Preserve the LED panel's 20 rows of 20 pixels, palette, scrolling, and wiring order; do not distribute bands across 16/17-pixel segments.
 - Remove the temporary interaction counter and its tests, as requested by Bryan. The counter is not part of the page design.
-- Reduce visual flicker using WCAG 2.2 flashing criteria: limit automatic meter target changes to two per second, interpolate smoothly without overshoot, and respect reduced motion. Keep analysis at the full audio rate. Test rapid alternating signals and delayed message delivery. Do not claim a medical safety guarantee.
+- Reduce visual flicker using WCAG 2.2 flashing criteria. The first version limited target changes to two per second. Bryan requested a faster attack; the display response update below replaces that pacing. Keep analysis at the full audio rate and respect reduced motion. Test rapid alternating signals and delayed message delivery. Do not claim a medical safety guarantee.
 - Check real browser audio peaks, silence, denial, cleanup, stable DOM nodes, phone and desktop centering, reduced motion, and display timing. Recheck all packages because the shared processor changes; record CPU and memory costs.
 - The complete all-root validation passed with 31 core tests in four feature combinations, three terminal tests, two display timing tests, 12 browser tests, and all release builds. The panel retains 20 complete rows. Physical hardware checks remain separate.
 
 ## Final delivery
 
 Review the complete diff, commit and push the repairs on `main`, then verify CI, remote alignment, and a clean tree.
+
+## Completed display response update
+
+- Replace the two-updates-per-second display with immediate rises on the next screen frame and a gradual, gravity-like fall. Retain the flashing constraint and verify repeated taps, frame timing, and resource cleanup.
+- Stop each falling bar at its current live band level. Keep that level between audio callbacks, and test that gravity cannot pull a bar below it.
+- Remove the pause/resume buttons and their state and handlers.
+- Remove the “Every band has room” content. Show exact frequency edges when the pointer rests on a band, using the shared filter definitions.
+- Rename the vertical labels from Low/High to Quiet/Loud.
+- Put the microphone controls and complete graph directly below navigation. Move descriptive text below the app and reduce empty space. Check that phone and desktop users can see the graph without scrolling.
+- Keep the microphone repair, all 24 web bands, the panel's 20 rows of 20 pixels, the completed package/toolchain updates, and the canonical remote. Validate the changed page, commit, push, and check deployment again.
+
+Six display tests, native/WASM Clippy, the Trunk release build, and all 12 browser tests passed. Browser checks cover all frequency tooltips, the live-level floor, next-frame attack, continuous fall, repeated flashes, and animation cleanup. At 375/768/1440 pixels the graph appears above the description and fits in the first viewport. Commit, push, and deployment verification remain the delivery steps.
