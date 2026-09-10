@@ -41,6 +41,7 @@ web-sys = { version = "=0.3.105", features = [
     "MediaStreamAudioSourceNode",
     "MessagePort",
     "Navigator",
+    "Performance",
     "TextDecoder",
     "Window",
 ] }

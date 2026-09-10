@@ -47,7 +47,7 @@ impl AudioSession {
 
     pub async fn start(
         &self,
-        mut on_samples: impl FnMut(Option<Vec<f32>>) + 'static,
+        mut on_samples: impl FnMut(Vec<f32>) + 'static,
     ) -> Result<(), JsValue> {
         let context = self
             .resources
@@ -98,10 +98,8 @@ impl AudioSession {
         resources.worklet = Some(AudioWorkletNode::new(&context, "my-wasm-processor")?);
         let callback = Closure::new(move |event: MessageEvent| {
             let data = event.data();
-            if data.is_null() || data.is_undefined() {
-                on_samples(None);
-            } else if let Ok(data) = data.dyn_into::<Float32Array>() {
-                on_samples(Some(data.to_vec()));
+            if let Ok(data) = data.dyn_into::<Float32Array>() {
+                on_samples(data.to_vec());
             }
         });
         let worklet = resources.worklet.as_ref().unwrap();

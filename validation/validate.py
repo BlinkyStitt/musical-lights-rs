@@ -54,6 +54,8 @@ def validate(name):
     elif name in ["leptos", "dioxus", "wasm"]:
         run(cargo + ["clippy", "--locked", "--target", "wasm32-unknown-unknown", "--", "-D", "warnings"], directory)
         if name == "leptos":
+            run(cargo + ["test", "--locked", "--lib"], directory)
+            run(cargo + ["clippy", "--locked", "--tests", "--", "-D", "warnings"], directory)
             cli_version("trunk", "0.22.0-beta.5")
             cli_version("wasm-bindgen", "0.2.128")
             run(["trunk", "build", "--locked", "--release"], directory)

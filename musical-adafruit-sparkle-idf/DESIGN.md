@@ -1,6 +1,9 @@
 # Audio and LED processing
 
 The active ESP-IDF application uses `BarkBank` from `musical-lights-core`.
+Its analyzed `BarkFrame` supplies `panel_rows()` for this 20×20 layout. The web
+and terminal renderers use `bands()` to show all 24 bands separately. Both
+layouts use the same filtering, envelopes, and normalization code.
 It reads normalized mono PCM through I2S at 44,100 Hz.
 
 1. Validate the full input block before changing processor state.
@@ -19,12 +22,16 @@ It reads normalized mono PCM through I2S at 44,100 Hz.
 7. Map the 20 display values to the existing brightness range, 8 through 128.
    Keep each LED envelope as a float until the final brightness conversion.
    Preserve the panel mapping, palette, scrolling, and onboard brightness limit.
+   Every output fills exactly one 20-pixel row. A compile-time assertion requires
+   20 rows × 20 pixels to match the 400-pixel frame. The scroll step remains one
+   physical row.
 
 These stages form an artistic visualizer. They approximate loudness; they do
 not implement ISO 226, ISO 532, or another calibrated loudness model.
 
-Invalid sample rates, empty input, non-finite samples, and samples outside
-normalized PCM range return typed errors. Filters also reject rates whose
+Invalid sample rates, empty input, and non-finite samples return typed errors.
+Finite peaks outside nominal PCM full scale remain valid. Block scaling keeps
+filter arithmetic bounded without clipping the signal. Filters also reject rates whose
 coefficients cannot form a finite, stable filter in f32.
 
 The LED thread creates and owns its RMT drivers. The current driver does not

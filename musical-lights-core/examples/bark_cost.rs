@@ -18,13 +18,13 @@ fn main() {
                 .collect();
             let mut bank = BarkBank::new(rate).unwrap();
             for block in samples.chunks(block_len) {
-                black_box(bank.push_samples(black_box(block)).unwrap());
+                black_box(bank.push_samples(black_box(block)).unwrap().bands());
             }
             let start = Instant::now();
             let repeats = 10;
             for _ in 0..repeats {
                 for block in samples.chunks(block_len) {
-                    black_box(bank.push_samples(black_box(block)).unwrap());
+                    black_box(bank.push_samples(black_box(block)).unwrap().bands());
                 }
             }
             let elapsed = start.elapsed();

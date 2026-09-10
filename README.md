@@ -4,9 +4,10 @@ Rust applications that make lights respond to audio.
 
 See the [upgrade plan](docs/upgrade-plan.md) for the agreed scope and added checks.
 
-The shared processor analyzes 24 Bark bands. It combines the lowest five into
-one bass output and returns 20 display values. Leptos, the terminal filter-bank
-visualizer, and ESP-IDF use this processor. Weighting, compression, adaptive
+The shared processor analyzes 24 Bark bands. The website and terminal display
+all bands separately. The 20×20 LED panel retains 20 rows, with the five bass
+bands combined before normalization. Leptos, the terminal filter-bank visualizer,
+and ESP-IDF use the same processor. Weighting, compression, adaptive
 normalization, and bass combination are visual approximations. They do not
 implement or claim compliance with an ISO loudness standard.
 

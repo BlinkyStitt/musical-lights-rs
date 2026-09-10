@@ -24,7 +24,10 @@ pub use buffered_fft::{BufferedFFT, FftOutputs, bin_to_frequency, frequency_to_b
 pub use decibels::Decibels;
 pub use down_resistance_builder::DownResistanceBuilder;
 pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
-pub use filter_bank::{AudioError, BARK_BANDS, BASS_BANDS, BarkBank, DISPLAY_BANDS, Envelope};
+pub use filter_bank::{
+    AudioError, BARK_BANDS, BARK_EDGES, BASS_BANDS, BarkBank, BarkFrame, DISPLAY_BANDS, Envelope,
+    PANEL_ROWS,
+};
 pub use i2s::{parse_i2s_16_bit_mono_to_f32_array, parse_i2s_24_bit_mono_to_f32_array};
 pub use peak_scaled::PeakScaledBuilder;
 pub use samples::{Samples, WindowedSamples};

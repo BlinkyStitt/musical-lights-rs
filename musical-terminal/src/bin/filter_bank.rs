@@ -29,7 +29,7 @@ async fn audio_task(
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
         let x = match bank.push_samples(&samples.0) {
-            Ok(x) => x,
+            Ok(frame) => frame.bands(),
             Err(error) => {
                 log::warn!("Invalid microphone block: {error}");
                 continue;

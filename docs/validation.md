@@ -1,6 +1,6 @@
 # Validation record
 
-Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed after the final shared math, browser cleanup, ADC, and LED timing changes. The terminal checks also ran after the bounded microphone example gained display output.
+Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. The base upgrade also passed both GitHub workflows at commit `6802973`.
 
 ## Exact tools
 
@@ -16,9 +16,9 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 
 | Package | Passed checks |
 | --- | --- |
-| Core | 27 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
-| Terminal | Two callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
-| Leptos | WASM Clippy; Trunk release build; browser routes, counter, microphone denial, live reactive audio at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
+| Core | 31 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
+| Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
+| Leptos | Two display timing tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
 | Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
 | Standalone WASM | WASM Clippy; complete `build.py`; browser execution of the shared-memory worklet with nonzero oscillator output |
 | Feather M0 | `thumbv6m-none-eabi` Clippy; release link with panic-halt and with semihosting |
@@ -26,15 +26,21 @@ The scripts run Cargo from each package directory with its pinned toolchain and 
 | ESP Embassy | `xtensa-esp32-none-elf` Clippy and release links for the application and priority example |
 | ESP-IDF | `xtensa-esp32-espidf` Clippy and release link with ESP-IDF v6.1 |
 
-All eight browser tests passed. They use real browser AudioContexts and AudioWorklets. The live audio tests replace only microphone acquisition with an oscillator stream. Separate input-worklet checks cover absent input, stereo downmix, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later. Screenshots were also inspected for Leptos and Dioxus rendering.
+All 12 browser tests passed. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
 
-Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, the five-band bass sum and 20-output mapping, rejected input without state changes, silence, zero range, bounded output, sample-duration envelope timing, fractional LED decay to zero, actual frame writes, FFT frequency detection, gradient boundaries, and message CRC/COBS bounds.
+Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, pause/resume, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. Automatic meter targets change at most twice per second, using monotonic browser time. A linear 500 ms transition avoids overshoot. This rate is below the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html); these checks do not provide a medical safety guarantee. Screenshots were inspected, including color-vision simulations. The temporary counter was removed at Bryan's request.
+
+Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, separate outputs including every bass band, rejected input without state changes, silence, zero range, bounded output, sample-duration envelope timing, fractional LED decay to zero, actual frame writes, FFT frequency detection, gradient boundaries, and message CRC/COBS bounds. New tests preserve the expected level ratio above nominal full scale, keep extreme finite transients bounded, and compare changing-level filter history against an unscaled reference. The panel test checks the original five-band sum before normalization and all 19 remaining outputs. Firmware asserts that 20 rows of 20 pixels fill exactly 400 pixels, and retains the row-based scroll step.
+
+The processor returns one borrowed `BarkFrame`. Its `bands()` output serves the website and terminal; `panel_rows()` serves the fixed LED geometry. Both use the same normalization function and the same filter/envelope state. The panel does not average already-normalized web values or use 16/17-pixel band segments.
+
+The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor now scales each block and its carried filter state, runs the biquads in f32, and restores physical level in f64 before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
 
 Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
 
 ## Microphone and terminal display
 
-The final ten-second microphone check received 3750 blocks at 48000 Hz. The input peak was 0.012168095. All 20 output values remained finite and bounded. The same `Bands` formatter used by the terminal visualizer printed 20 columns; this quiet input produced blank glyphs at its display scale. CPAL reported one buffer underrun/overrun during the check. The run then completed successfully, so this is functional evidence, not a claim of dropout-free capture.
+The latest ten-second microphone check received 3750 blocks at 48000 Hz. The input peak was 0.015137273. All 24 output values remained finite and bounded. The same `Bands` formatter used by the terminal visualizer printed 24 columns; this quiet input produced blank glyphs at its display scale. CPAL reported one buffer underrun/overrun during the check. The run then completed successfully, so this is functional evidence, not a claim of dropout-free capture.
 
 ## Processor cost and memory
 
@@ -42,12 +48,12 @@ The final ten-second microphone check received 3750 blocks at 48000 Hz. The inpu
 
 | Sample rate | Samples per block | Wall time per block | Fraction of real-time budget |
 | --- | --- | --- | --- |
-| 44100 Hz | 128 | 8.19 us | 0.28% |
-| 44100 Hz | 794 | 46.14 us | 0.26% |
-| 48000 Hz | 128 | 7.09 us | 0.27% |
-| 48000 Hz | 794 | 43.46 us | 0.26% |
+| 44100 Hz | 128 | 8.76 us | 0.30% |
+| 44100 Hz | 794 | 53.60 us | 0.30% |
+| 48000 Hz | 128 | 9.22 us | 0.35% |
+| 48000 Hz | 794 | 54.10 us | 0.33% |
 
-`size_of::<BarkBank>()` is 2020 bytes on this host. Processing allocates no heap storage. This size excludes caller-owned input/output buffers, thread stacks, browser resources, and firmware drivers. Total firmware memory and CPU cost still need measurements on each device.
+`size_of::<BarkBank>()` is 2032 bytes on this host. Processing allocates no heap storage and uses a 128-sample scratch array plus 24 mean-square accumulators (608 bytes before compiler optimization). This size excludes caller-owned input/output buffers, other stack variables, browser resources, and firmware drivers. Total firmware memory and CPU cost still need measurements on each device.
 
 ## Warnings and local setup
 
@@ -65,4 +71,4 @@ The Feather application still contains initialization only. The Embassy radio ta
 
 The standalone worklet requires shared WASM memory, rebuilt standard library atomics/TLS exports, and cross-origin isolation headers. The browser tests serve the required headers. Ordinary static hosting without those headers is not a supported worklet deployment.
 
-CI now covers every package root plus the browser tests. Local validation and workflow syntax checks are complete; a GitHub Actions result must be checked separately after push.
+CI covers every package root plus the browser tests. The base upgrade passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34460998622) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34460998336). Check the follow-up commit's workflow results after push.

@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
             .0
             .iter()
             .fold(peak, |peak, sample| peak.max(sample.abs()));
-        let display = bank.push_samples(&block.0)?;
+        let display = bank.push_samples(&block.0)?.bands();
         for (peak, value) in band_peaks.iter_mut().zip(display.0) {
             *peak = peak.max(value);
         }
@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
         );
     }
     println!(
-        "Microphone: {} Hz, {blocks} valid blocks, peak {peak}; all 20 outputs finite and bounded",
+        "Microphone: {} Hz, {blocks} valid blocks, peak {peak}; all {DISPLAY_BANDS} outputs finite and bounded",
         microphone.sample_rate
     );
     let bands = Bands::<DISPLAY_BANDS, 255>(band_peaks.map(|value| (value * 255.0) as u8));

@@ -17,7 +17,7 @@ use esp_idf_svc::{
     io::Read,
 };
 use musical_lights_core::{
-    audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Envelope, Samples, DISPLAY_BANDS},
+    audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Envelope, Samples, PANEL_ROWS},
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
@@ -78,12 +78,14 @@ const I2S_SAMPLE_SIZE: usize = (I2S_SAMPLE_RATE_HZ as f32 / FPS_TARGET) as usize
 /// TODO: with 24-bit audio, this should use `size_of::<i32>`
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
-// 24 buckets don't fit inside of 400! we collapse to 20 to fit in 400
-const AGGREGATED_OUTPUTS: usize = DISPLAY_BANDS;
+// The 20×20 panel retains one full 20-pixel row per output.
+const AGGREGATED_OUTPUTS: usize = PANEL_ROWS;
+const PIXELS_PER_ROW: usize = 20;
 
 const _SAFETY_CHECKS: () = {
     // assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
     assert!(I2S_SAMPLE_SIZE > 1);
+    assert!(AGGREGATED_OUTPUTS * PIXELS_PER_ROW == NUM_FIBONACCI_NEOPIXELS);
     // assert!(I2S_SAMPLE_OVERLAP == 1 || I2S_SAMPLE_OVERLAP == 2 || I2S_SAMPLE_OVERLAP == 4)
 };
 
@@ -342,7 +344,7 @@ fn blink_neopixels_task(
             .iter() // 20 items
             .flat_map(
                 move |&band|           // for each band...
-                repeat_n(band, AGGREGATED_OUTPUTS), // …but only take `repeat` items (20) from it
+                repeat_n(band, PIXELS_PER_ROW), // exactly one physical row
             );
 
         // add the loudness to the lights and then convert the hsv data into rgb data
@@ -362,7 +364,7 @@ fn blink_neopixels_task(
         // slide the rgb data slowly. divide to slow things down. wrap it so we don't get an out of bounds error
         // TODO? multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
         let slow_slide_offset =
-            (slide_offset / 4 / AGGREGATED_OUTPUTS * AGGREGATED_OUTPUTS) % NUM_FIBONACCI_NEOPIXELS;
+            (slide_offset / 4 / PIXELS_PER_ROW * PIXELS_PER_ROW) % NUM_FIBONACCI_NEOPIXELS;
         let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
             .iter()
             .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
@@ -502,7 +504,7 @@ fn mic_task(
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
-        let spectrum = filter_bank.push_samples(&i2s_sample_buf.0)?;
+        let spectrum = filter_bank.push_samples(&i2s_sample_buf.0)?.panel_rows();
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.0.iter().zip(bands.0.iter_mut()) {

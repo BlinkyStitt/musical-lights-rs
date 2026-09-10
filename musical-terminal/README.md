@@ -1,7 +1,7 @@
 # Musical lights in the terminal
 
 Use Rust `nightly-2026-09-10`. The default binary uses the shared Bark processor:
-24 analysis bands, five combined bass bands, and 20 display values.
+24 separate analysis and display bands, including all five bass bands.
 The separate FFT binary and Pacman example remain available.
 
 On macOS:

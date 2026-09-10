@@ -4,9 +4,9 @@ use leptos::prelude::*;
 #[component]
 pub fn About() -> impl IntoView {
     view! {
-        <h1>Musical Lights</h1>
-
-        <p>UnderConstruction.gif</p>
+        <article class="about-page">
+        <p class="eyebrow">"LIGHTS THROUGH THE YEARS"</p>
+        <h1>"About Musical Lights"</h1>
 
         <p>This website is the latest Rust/WASM version of my musical-lights projects.</p>
 
@@ -29,5 +29,6 @@ pub fn About() -> impl IntoView {
             <li><a href="https://warpcast.com/flashprofits.eth">FlashProfits.eth @ Farcaster</a></li>
             <li><a href="https://github.com/BlinkyStitt/musical-lights-rs/tree/main/musical-leptos">GitHub repository for this Website</a></li>
         </ul>
+        </article>
     }
 }

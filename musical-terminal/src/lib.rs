@@ -75,7 +75,7 @@ fn build_stream<T, const N: usize>(
 ) -> Result<Stream, cpal::Error>
 where
     T: SizedSample,
-    f32: FromSample<T>,
+    f64: FromSample<T>,
 {
     let channels = usize::from(config.channels);
     let mut blocks = MonoBlocks::<N>::new();
@@ -106,14 +106,16 @@ impl<const N: usize> MonoBlocks<N> {
     }
     fn push<T: Sample>(&mut self, input: &[T], channels: usize, mut emit: impl FnMut([f32; N]))
     where
-        f32: FromSample<T>,
+        f64: FromSample<T>,
     {
         for frame in input.chunks_exact(channels) {
-            self.samples[self.filled] = frame
+            // Mix in f64 and round once, so finite float PCM peaks do not
+            // overflow the intermediate sum or erase quieter channels.
+            self.samples[self.filled] = (frame
                 .iter()
-                .map(|&sample| f32::from_sample(sample))
-                .sum::<f32>()
-                / channels as f32;
+                .map(|&sample| f64::from_sample(sample))
+                .sum::<f64>()
+                / channels as f64) as f32;
             self.filled += 1;
             if self.filled == N {
                 emit(self.samples);
@@ -147,5 +149,16 @@ mod tests {
         let mut output = None;
         blocks.push(&[i16::MIN, 0i16], 1, |b| output = Some(b));
         assert_eq!(output, Some([-1.0, 0.0]));
+    }
+    #[test]
+    fn float_downmix_preserves_peaks_and_avoids_intermediate_overflow() {
+        let mut blocks = MonoBlocks::<1>::new();
+        let mut output = Vec::new();
+        blocks.push(&[4.0f32, 8.0], 2, |b| output.push(b));
+        blocks.push(&[f32::MAX, f32::MAX], 2, |b| output.push(b));
+        blocks.push(&[33_554_432.0f32, 1.0, -33_554_432.0], 3, |b| {
+            output.push(b)
+        });
+        assert_eq!(output, [[6.0], [f32::MAX], [1.0 / 3.0]]);
     }
 }
