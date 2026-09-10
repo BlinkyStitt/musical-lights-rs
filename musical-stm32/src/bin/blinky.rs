@@ -1,8 +1,6 @@
 //! on-board LED test
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
@@ -42,7 +40,7 @@ async fn main(spawner: Spawner) {
     let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
     // spawn the tasks
-    spawner.must_spawn(blink_task(onboard_led));
+    spawner.spawn(blink_task(onboard_led).expect("task allocation failed"));
 
     info!("all tasks started");
 }

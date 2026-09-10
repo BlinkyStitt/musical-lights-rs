@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::mount::mount_to_body;
 use musical_leptos::App;
 
 fn main() {

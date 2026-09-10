@@ -1,8 +1,10 @@
 //! TODO: `brightness_video` and `gamma_video` that doesn't dim lower than 1
 
 use crate::logging::warn;
-use palette::{Hsluv, IsWithinBounds, LinSrgb, chromatic_adaptation::AdaptInto, white_point};
-use smart_leds::hsv::Hsv;
+use palette::convert::IntoColorUnclamped;
+use palette::{
+    Hsluv, IsWithinBounds, LinSrgb, Xyz, chromatic_adaptation::AdaptIntoUnclamped, white_point,
+};
 
 /// TODO: generic input color (and whitepoint)
 /// TODO: linear srgb or no? i have no idea what i am doing
@@ -11,7 +13,9 @@ pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
     // TODO: this used to have a debug format, but it was removed
     // info!("hsluv color: {:?}", color);
 
-    let rgb: LinSrgb<f32> = color.adapt_into();
+    let xyz: Xyz<white_point::E, f32> = color.into_color_unclamped();
+    let adapted: Xyz<white_point::D65, f32> = xyz.adapt_into_unclamped();
+    let rgb: LinSrgb<f32> = adapted.into_color_unclamped();
 
     let rgb: LinSrgb<u8> = rgb.into_format();
 
@@ -34,7 +38,8 @@ pub fn convert_color(color: Hsluv<white_point::E, f32>) -> (u8, u8, u8) {
 
 #[cfg(test)]
 mod tests {
-    use palette::{Hsluv, IntoColor, IsWithinBounds, Lch, Srgb};
+    use palette::IntoColor;
+    use palette::{Hsluv, IsWithinBounds, Lch, Srgb};
 
     #[test]
     fn test_lch_to_srgb_f32() {

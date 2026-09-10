@@ -191,6 +191,19 @@ mod tests {
 
         info!("{:?}", medium_builder.map);
 
-        panic!("actually assert things about the maps")
+        let boundaries = [0, 1, 4, 9, 20, 44, 97, 213, 465];
+        for band in 0..8 {
+            assert!(
+                small_builder.map[boundaries[band]..boundaries[band + 1]]
+                    .iter()
+                    .all(|&value| value == Some(band))
+            );
+        }
+        assert!(small_builder.map[465..].iter().all(Option::is_none));
+        // The nearest bin to 20 Hz is bin 1 at this FFT resolution.
+        assert_eq!(medium_builder.map[0], None);
+        assert_eq!(medium_builder.map[1], Some(0));
+        assert_eq!(medium_builder.map[929], Some(31));
+        assert!(medium_builder.map[930..].iter().all(Option::is_none));
     }
 }

@@ -1,6 +1,7 @@
 //! Use an FFT and a circular buffer to process audio.
 //!
-//! I don't think this is actually what I want. Refactoring now with [`FilterBank`].
+//! The live Bark visualizers use [`super::BarkBank`]. This FFT remains available
+//! for the terminal FFT example and the STM32 jacket.
 //!
 //! This is the first design I used (inspired by things built with a Teensy Audio Board).
 
@@ -14,7 +15,7 @@ use crate::{
     logging::trace,
     windows::Window,
 };
-use circular_buffer::CircularBuffer;
+use circular_buffer::FixedCircularBuffer;
 use num::Complex;
 
 /// put a circular buffer in front of an FFT. Use windowing to make the middle of the middle window more important.
@@ -26,7 +27,7 @@ pub struct BufferedFFT<
     WE: Weighting<FFT_OUT>,
 > {
     /// TODO: need a test that adds to the circular buffer and makes sure it wraps around like we want
-    sample_buf: CircularBuffer<FFT_IN, f32>,
+    sample_buf: FixedCircularBuffer<f32, FFT_IN>,
     /// TODO: this should be the existing FFT object so we can reuse that code. it wasn't built with buffers in mind most of the time though. not a terrible refactor
     fft_in_buf: [f32; FFT_IN],
     input_window: PhantomData<WI>,
@@ -56,7 +57,7 @@ impl<
         assert!(FFT_IN.is_multiple_of(SAMPLE_IN));
 
         Self {
-            sample_buf: CircularBuffer::new(),
+            sample_buf: FixedCircularBuffer::new(),
             fft_in_buf: [0.0; FFT_IN],
             input_window: PhantomData::<WI>,
             scale_inputs: [1.0; FFT_IN],
@@ -117,59 +118,57 @@ impl<
     }
 }
 
-/// TODO: replace this with some macros
-const HARD_CODED_FFT_INPUTS: usize = 4096;
-const HARD_CODED_FFT_OUTPUTS: usize = HARD_CODED_FFT_INPUTS / 2;
+macro_rules! impl_fft {
+    ($input:literal, $output:literal, $fft:ident) => {
+        impl<const SAMPLE_IN: usize, WI: Window<$input>, WE: Weighting<$output>>
+            BufferedFFT<SAMPLE_IN, $input, $output, WI, WE>
+        {
+            /// TODO: not sure what type to put here for the output? WeightedOutputs?
+            /// TODO: what should this function be called?
+            pub fn fft(&mut self) -> FftOutputs<'_, $output> {
+                self.fill_fft_in_buf();
 
-/// TODO: macro for this so we can support multiple rfft sizes. or maybe a different library that does more at runtime?
-impl<
-    const SAMPLE_IN: usize,
-    WI: Window<HARD_CODED_FFT_INPUTS>,
-    WE: Weighting<HARD_CODED_FFT_OUTPUTS>,
-> BufferedFFT<SAMPLE_IN, HARD_CODED_FFT_INPUTS, HARD_CODED_FFT_OUTPUTS, WI, WE>
-{
-    /// TODO: not sure what type to put here for the output? WeightedOutputs?
-    /// TODO: what should this function be called?
-    pub fn fft(&mut self) -> FftOutputs<'_, HARD_CODED_FFT_OUTPUTS> {
-        self.fill_fft_in_buf();
+                // TODO: yield here with a specific compile time feature
+                // TODO: test if we need this and where
+                #[cfg(feature = "std")]
+                yield_now();
 
-        // TODO: yield here with a specific compile time feature
-        // TODO: test if we need this and where
-        #[cfg(feature = "std")]
-        yield_now();
+                let spectrum = microfft::real::$fft(&mut self.fft_in_buf);
 
-        let spectrum = microfft::real::rfft_4096(&mut self.fft_in_buf);
+                // TODO: yield here with a specific compile time feature
+                #[cfg(feature = "std")]
+                yield_now();
 
-        // TODO: yield here with a specific compile time feature
-        #[cfg(feature = "std")]
-        yield_now();
+                // from the README of microfft:
+                // > since the real-valued coefficient at the Nyquist frequency is packed into the
+                //>  imaginary part of the DC bin, it must be cleared before computing the amplitudes
+                // TODO: what does this even mean?
+                // TODO: print this once per second. need an every_n_milliseconds macro like fastled has
+                trace!(
+                    "real-valued coefficient at nyquist frequency: {}",
+                    spectrum[0].im
+                );
+                spectrum[0].im = 0.0;
 
-        // from the README of microfft:
-        // > since the real-valued coefficient at the Nyquist frequency is packed into the
-        //>  imaginary part of the DC bin, it must be cleared before computing the amplitudes
-        // TODO: what does this even mean?
-        // TODO: print this once per second. need an every_n_milliseconds macro like fastled has
-        trace!(
-            "real-valued coefficient at nyquist frequency: {}",
-            spectrum[0].im
-        );
-        spectrum[0].im = 0.0;
+                trace!("dc bin: {}", spectrum[0].re);
 
-        trace!("dc bin: {}", spectrum[0].re);
+                // TODO: this is causing a stack overflow. can't we just give more task size?
+                // correct for the windowing function
+                // TODO: is there a simd or something for this?
+                // TODO: doing this here uses a bunch of staack space. maybe better to do after we make the conversion to magnitude
+                for (s, we) in spectrum.iter_mut().zip(self.scale_outputs) {
+                    *s *= we;
+                }
 
-        // TODO: this is causing a stack overflow. can't we just give more task size?
-        // correct for the windowing function
-        // TODO: is there a simd or something for this?
-        // TODO: doing this here uses a bunch of staack space. maybe better to do after we make the conversion to magnitude
-        for (s, we) in spectrum.iter_mut().zip(self.scale_outputs) {
-            *s *= we;
+                // correct for the weighting function
+                // TODO: i'm really unsure if we should be doing this now or later. i think a-weighting is actually the wrong thing to use since we aren't measuring in SPL
+                FftOutputs { spectrum }
+            }
         }
-
-        // correct for the weighting function
-        // TODO: i'm really unsure if we should be doing this now or later. i think a-weighting is actually the wrong thing to use since we aren't measuring in SPL
-        FftOutputs { spectrum }
-    }
+    };
 }
+impl_fft!(2048, 1024, rfft_2048);
+impl_fft!(4096, 2048, rfft_4096);
 
 /// Convert a spectrum into channels made up of varying amounts of bins
 /// TODO: something special for the first bin?
@@ -261,16 +260,34 @@ mod tests {
 
     #[test]
     fn test_extend_from_slice() {
-        let mut buf: CircularBuffer<5, u32> = CircularBuffer::from([1, 2, 3]);
+        let mut buf: FixedCircularBuffer<u32, 5> = FixedCircularBuffer::from([1, 2, 3]);
         buf.extend_from_slice(&[4, 5, 6, 7]);
         assert_eq!(buf, [3, 4, 5, 6, 7]);
     }
 
     #[test]
     fn test_sin_waves() {
-        todo!(
-            "set up a small buffered fft with a known frequency and then make sure we get expected values out of it"
+        use crate::{audio::FlatWeighting, windows::FlatWindow};
+        let mut fft = BufferedFFT::<128, 4096, 2048, FlatWindow<4096>, FlatWeighting<2048>>::new(
+            FlatWeighting,
         );
+        for block in 0..32 {
+            let samples = Samples(core::array::from_fn(|i| {
+                (core::f32::consts::TAU * 64.0 * (block * 128 + i) as f32 / 4096.0).sin()
+            }));
+            fft.push_samples(&samples);
+        }
+        let result = fft.fft();
+        let (peak, _) = result
+            .spectrum()
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.norm_sqr().total_cmp(&b.1.norm_sqr()))
+            .unwrap();
+        assert_eq!(peak, 64);
+        assert!(result.spectrum()[0].norm() < 0.01);
+        assert!(result.spectrum()[63].norm() < 0.01);
+        assert!(result.spectrum()[65].norm() < 0.01);
     }
 
     #[test]

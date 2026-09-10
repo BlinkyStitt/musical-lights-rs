@@ -1,7 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 
 #[cfg(not(feature = "use_semihosting"))]
 use panic_halt as _;
@@ -18,13 +16,8 @@ use embassy_executor::Spawner;
 use log::{debug, info};
 // use embassy_time::Timer;
 
-const MIC_SAMPLES: usize = 512;
-const NUM_CHANNELS: usize = 24;
-
 /// TODO: make sure SAMPLE_BUFFER >= MIC_SAMPLES
 /// TODO: support SAMPLE_BUFFER > MIC_SAMPLES
-const SAMPLE_BUFFER: usize = 2048;
-const FFT_BINS: usize = SAMPLE_BUFFER / 2;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -33,15 +26,15 @@ async fn main(_spawner: Spawner) {
     info!("hello, world!");
 
     let mut peripherals = Peripherals::take().unwrap();
-    let core = CorePeripherals::take().unwrap();
-    let clocks = GenericClockController::with_external_32kosc(
+    let _core = CorePeripherals::take().unwrap();
+    let _clocks = GenericClockController::with_external_32kosc(
         peripherals.gclk,
         &mut peripherals.pm,
         &mut peripherals.sysctrl,
         &mut peripherals.nvmctrl,
     );
     let pins = bsp::Pins::new(peripherals.port);
-    let red_led: bsp::RedLed = pin_alias!(pins.red_led).into();
+    let _red_led: bsp::RedLed = pin_alias!(pins.red_led).into();
     // let mut delay = Delay::new(core.SYST, &mut clocks);
 
     // TODO: what pin?
@@ -49,8 +42,8 @@ async fn main(_spawner: Spawner) {
 
     // TODO: channel to send samples from microphone to buffer
 
-    // spawner.must_spawn(read_mic_task(mic_pin));
-    // spawner.must_spawn(blink_task(red_led));
+    // spawner.spawn(read_mic_task(mic_pin).expect("task allocation failed"));
+    // spawner.spawn(blink_task(red_led).expect("task allocation failed"));
 
     debug!("all tasks spawned");
 }

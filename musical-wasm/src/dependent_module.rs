@@ -12,7 +12,7 @@ extern "C" {
     #[wasm_bindgen(method, getter)]
     fn url(this: &ImportMeta) -> JsString;
 
-    #[wasm_bindgen(js_namespace = import, js_name = meta)]
+    #[wasm_bindgen(thread_local_v2, js_namespace = import, js_name = meta)]
     static IMPORT_META: ImportMeta;
 }
 
@@ -20,12 +20,14 @@ pub fn on_the_fly(code: &str) -> Result<String, JsValue> {
     // Generate the import of the bindgen ES module, assuming `--target web`.
     let header = format!(
         "import init, * as bindgen from '{}';\n\n",
-        IMPORT_META.url(),
+        IMPORT_META.with(|meta| meta.url()),
     );
 
+    let options = BlobPropertyBag::new();
+    options.set_type("text/javascript");
     Url::create_object_url_with_blob(&Blob::new_with_str_sequence_and_options(
         &Array::of2(&JsValue::from(header.as_str()), &JsValue::from(code)),
-        BlobPropertyBag::new().type_("text/javascript"),
+        &options,
     )?)
 }
 

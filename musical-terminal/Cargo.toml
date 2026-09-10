@@ -8,32 +8,27 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.100"
-cpal = "0.16.0"
-critical-section = { version = "1.2", features = ["std"] }
-embassy-executor = { version = "0.9.1", features = [
-    "arch-std",
+anyhow = "=1.0.104"
+cpal = "=0.18.2"
+critical-section = { version = "=1.2.0", features = ["std"] }
+embassy-executor = { version = "=0.10.0", features = [
+    "platform-std",
     "executor-thread",
     "log",
-    "nightly",
 ] }
-embassy-sync = { version = "0.7.2", features = ["log", "std"] }
-embassy-time = { version = "0.5.0", features = ["log", "std"] }
-embedded-graphics = { version = "0.8.1", features = [
+embassy-sync = { version = "=0.8.0", features = ["log", "std"] }
+embassy-time = { version = "=0.5.1", features = ["log", "std"] }
+embedded-graphics = { version = "=0.8.2", features = [
     "nalgebra_support",
     "defmt",
 ] }
-embedded-graphics-simulator = "0.8.0"
-env_logger = "0.11.8"
-flume = "0.11.1"
-log = { version = "0.4.28", features = ["std"] }
+embedded-graphics-simulator = "=0.8.0"
+env_logger = "=0.11.11"
+flume = "=0.12.0"
+log = { version = "=0.4.34", features = ["std"] }
 musical-lights-core = { path = "../musical-lights-core", features = [
     "std",
     "log",
 ] }
-smart-leds-matrix = "0.2.0"
-static_cell = { version = "2.1.1", features = ["nightly"] }
-
-[patch.crates-io]
-# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
-biquad = { git = "https://github.com/korken89/biquad-rs", rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7" }
+smart-leds-matrix = "=0.2.0"
+static_cell = { version = "=2.1.1", features = ["nightly"] }

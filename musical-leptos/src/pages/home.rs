@@ -1,5 +1,5 @@
 use crate::components::{Button, DancingLights};
-use leptos::*;
+use leptos::prelude::*;
 
 /// Default Home Page
 #[component]

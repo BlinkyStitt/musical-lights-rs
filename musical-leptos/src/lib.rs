@@ -1,9 +1,8 @@
 use leptos::prelude::*;
 use leptos_meta::*;
-use leptos_router::*;
+use leptos_router::{components::*, path};
 
 mod components;
-mod dependent_module;
 mod pages;
 mod wasm_audio;
 
@@ -21,7 +20,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Html lang="en" dir="ltr" attr:data-theme="light"/>
+        <Html attr:lang="en" attr:dir="ltr" attr:data-theme="light"/>
 
         <Title text="Musical Lights"/>
 
@@ -35,13 +34,13 @@ pub fn App() -> impl IntoView {
         <Meta property="og:locale" content="en_US" />
 
         <div class="container">
-            <Router fallback=move || NotFound().into_view()>
+            <Router>
                 <nav>
                     <A href="">"Home"</A> - <A href="about">"About"</A>
                 </nav>
-                <Routes>
-                    <Route path="/" view=Home />
-                    <Route path="/about" view=About />
+                <Routes fallback=NotFound>
+                    <Route path=path!("/") view=Home />
+                    <Route path=path!("/about") view=About />
                 </Routes>
             </Router>
         </div>

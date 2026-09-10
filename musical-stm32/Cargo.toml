@@ -10,25 +10,24 @@ resolver = "2"
 default-run = "sensors_for_sparkle"
 
 [dependencies]
-ahrs = { version = "0.7.0", default-features = false }
-circular-buffer = { version = "1.1.0", default-features = false }
-cortex-m = { version = "0.7.7", features = [
+ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", rev = "0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9", default-features = false }
+circular-buffer = { version = "=2.0.1", default-features = false }
+cortex-m = { version = "=0.7.9", features = [
     "inline-asm",
     "critical-section-single-core",
 ] }
-cortex-m-rt = "0.7.5"
-defmt = "1.0"
-defmt-rtt = "1.0"
-embassy-embedded-hal = "0.3.1"
-embassy-executor = { version = "0.7.0", features = [
-    "arch-cortex-m",
+cortex-m-rt = "=0.7.6"
+defmt = "=1.1.1"
+defmt-rtt = "=1.3.0"
+embassy-embedded-hal = "=0.6.0"
+embassy-executor = { version = "=0.10.0", features = [
+    "platform-cortex-m",
     "executor-thread",
     "executor-interrupt",
     "defmt",
-    "nightly",
 ] }
-embassy-futures = "0.1.1"
-embassy-stm32 = { version = "0.2.0", features = [
+embassy-futures = "=0.1.2"
+embassy-stm32 = { version = "=0.6.0", features = [
     "defmt",
     "stm32f411ce",
     "unstable-pac",
@@ -36,73 +35,50 @@ embassy-stm32 = { version = "0.2.0", features = [
     "time-driver-any",
     "exti",
 ] }
-embassy-sync = { version = "0.7", features = ["defmt"] }
-embassy-time = { version = "0.4", features = [
+embassy-sync = { version = "=0.8.0", features = ["defmt"] }
+embassy-time = { version = "=0.5.1", features = [
     "defmt",
     "defmt-timestamp-uptime",
     "tick-hz-32_768",
 ] }
-embedded-alloc = { version = "0.6.0", default-features = false, features = [
+embedded-alloc = { version = "=0.7.0", default-features = false, features = [
     "llff",
 ] }
-embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
-enterpolation = { version = "0.3.0", default-features = false, features = [
+embedded-io-async = { version = "=0.7.0", features = ["defmt"] }
+enterpolation = { version = "=0.3.0", default-features = false, features = [
     "libm",
     "linear",
 ] }
-heapless = { version = "0.8.0", features = [
-    "defmt-03",
+heapless = { version = "=0.9.3", features = [
+    "defmt",
     "serde",
     "portable-atomic-critical-section",
 ] }
-itertools = { version = "0.14.0", default-features = false }
-lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1.git" }
-micromath = "2.1.0"
+itertools = { version = "=0.15.0", default-features = false }
+lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1", rev = "eacd62cb6a1c2dda962ed8d2546566925472e586" }
+micromath = "=2.1.0"
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "libm",
     "defmt",
     "embassy",
 ] }
-nalgebra = { version = "0.33.2", default-features = false }
-palette = { version = "0.7.6", features = ["libm"], default-features = false }
-panic-probe = { version = "1.0", features = ["print-defmt"] }
-postcard = { version = "1.1.2", default-features = false, features = [
+nalgebra = { version = "=0.35.0", default-features = false }
+palette = { version = "=0.7.7", features = ["libm"], default-features = false }
+panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
+postcard = { version = "=1.1.3", default-features = false, features = [
     "heapless",
     "use-crc",
     "use-defmt",
 ] }
-serde = { version = "1.0.219", default-features = false, features = ["derive"] }
-smart-leds = "0.4.0"
-smart-leds-trait = "0.3.1"
-static_cell = { version = "2.1.1", features = ["nightly"] }
-ws2812-async = "0.3.0"
-
-# TODO: this works in no_std, but it requires a global allocator!
-anyhow = { version = "1.0.98", default-features = false }
-
-# TODO: if i end up using these, be sure to set patch.crate-io, too
-#embassy-usb = { version = "0.1.0", features = ["defmt"] }
+serde = { version = "=1.0.229", default-features = false, features = ["derive"] }
+smart-leds = "=0.4.0"
+smart-leds-trait = "=0.3.2"
+static_cell = { version = "=2.1.1", features = ["nightly"] }
+ws2812-async = "=0.4.0"
 
 # TODO: do i want this?
-#embedded-graphics = "0.8.1"
 
 [features]
-
-[patch.crates-io]
-# we patch all embassy crates to the current main. this is because they haven't released versions of everything that use the newest embassy-sync
-# TODO: embassy feature on musical-lights-core that handles this?
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6186d111a5c150946ee5b7e9e68d987a38c1a463" }
-embedded-hal = { git = "https://github.com/rust-embedded/embedded-hal", rev = "520945278942c301433c391f63a075227d9e7c84" }
-
-# Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
-i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
-
-#smart-leds-matrix = { git = "https://github.com/WyseNynja/smart-leds-matrix.git", rev = "bc4188d311498c9396afc9c798ce42171c009ab1" }
 
 [profile.dev]
 incremental = false

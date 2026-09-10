@@ -1,13 +1,11 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 
 use core::iter::repeat;
 
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
-use embassy_stm32::adc::{Adc, SampleTime, Sequence, VREF_CALIB_MV, resolution_to_max_count};
+use embassy_stm32::adc::{Adc, AdcChannel, SampleTime, VREF_CALIB_MV, resolution_to_max_count};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::peripherals::{
     ADC1, DMA1_CH4, DMA2_CH0, DMA2_CH2, IWDG, PA0, PB5, PB15, SPI1, SPI2,
@@ -24,8 +22,8 @@ use musical_lights_core::audio::FlatWeighting;
 use musical_lights_core::lights::{DancingLights, Gradient};
 use musical_lights_core::{
     audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, ExponentialScaleAmplitudes,
-        ExponentialScaleBuilder, FFT, Samples,
+        AggregatedBinsBuilder, BufferedFFT, ExponentialScaleAmplitudes, ExponentialScaleBuilder,
+        Samples,
     },
     logging::{debug, info, trace, warn},
     remap,
@@ -47,8 +45,6 @@ const SAMPLE_RATE: f32 = 44_100.0;
 
 const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
 const MATRIX_N: usize = MATRIX_X * MATRIX_Y;
-
-const MATRIX_BUFFER: usize = MATRIX_N * 12;
 
 // this is printed on the mic board. it should probably be config
 const MIC_DC_OFFSET_MV: u32 = 1250;
@@ -75,22 +71,21 @@ pub async fn blink_task(mut led: Output<'static>) {
 #[embassy_executor::task]
 async fn mic_task(
     mic_adc: Peri<'static, ADC1>,
-    mut mic_pin: Peri<'static, PA0>,
+    mic_pin: Peri<'static, PA0>,
     tx: Sender<'static, ThreadModeRawMutex, Samples<MIC_SAMPLES>, 16>,
     // vref_nominal: u16,
     // vrefint_calibrated: u16,
     mic_dma: Peri<'static, DMA2_CH0>,
 ) {
     // TODO: i kind of wish i'd ordered the i2s mic
-    let mut adc = Adc::new(mic_adc);
-
-    // TODO: do we need to set the sample time here? we set it on the ring buffered adc later
-    adc.set_sample_time(SampleTime::CYCLES144);
-
-    // TODO: what resolution?
     let adc_resolution = embassy_stm32::adc::Resolution::BITS12;
+    let adc = Adc::new_with_config(
+        mic_adc,
+        embassy_stm32::adc::AdcConfig {
+            resolution: Some(adc_resolution),
+        },
+    );
 
-    adc.set_resolution(adc_resolution);
     let full_range = resolution_to_max_count(adc_resolution) as f32;
 
     // let mut vrefint = adc.enable_vrefint();
@@ -99,11 +94,17 @@ async fn mic_task(
     // let vref = adc.blocking_read(&mut vrefint);
 
     let mut adc_dma_buf = [0u16; MIC_SAMPLES * 2];
-    let mut ring_buffered_adc = adc.into_ring_buffered(mic_dma, &mut adc_dma_buf);
+    let mut ring_buffered_adc = adc.into_ring_buffered(
+        mic_dma,
+        &mut adc_dma_buf,
+        Irqs,
+        [(mic_pin.degrade_adc(), SampleTime::CYCLES144)].into_iter(),
+        embassy_stm32::adc::CONTINUOUS,
+        embassy_stm32::adc::Exten::RISING_EDGE,
+    );
 
     // 100 mHz processor. but what is the adc clock?
     // TODO: how long should we sample? one example had CYCLES144, another had CYCLES112
-    ring_buffered_adc.set_sample_sequence(Sequence::One, &mut mic_pin, SampleTime::CYCLES144);
 
     let mut measurements = [0u16; MIC_SAMPLES];
     let mut modified = [0f32; MIC_SAMPLES];
@@ -158,14 +159,18 @@ async fn fft_task(
     loudness_tx: Sender<'static, ThreadModeRawMutex, ExponentialScaleAmplitudes<MATRIX_Y>, 16>,
 ) {
     // create windows and weights and everything before starting any tasks
-    let mut audio_buffer: AudioBuffer<MIC_SAMPLES, FFT_INPUTS> = AudioBuffer::new();
 
     // TODO: i need custom weighting. the microphone dynamic gain might not work well with this
     // TODO: i think the microphone might already have a weighting!
     // let equal_loudness_weighting = AWeighting::new(SAMPLE_RATE);
 
-    let fft: FFT<FFT_INPUTS, FFT_OUTPUTS> =
-        FFT::new_with_window_and_weighting::<HanningWindow<FFT_INPUTS>, _>(FlatWeighting);
+    let mut fft = BufferedFFT::<
+        MIC_SAMPLES,
+        FFT_INPUTS,
+        FFT_OUTPUTS,
+        HanningWindow<FFT_INPUTS>,
+        FlatWeighting<1024>,
+    >::new(FlatWeighting);
 
     // TODO: figure out why 20-400 are too low. probably a weighting too strong and adc timings/sample rate not being correct
     let scale_builder =
@@ -178,13 +183,9 @@ async fn fft_task(
         // every `MIC_SAMPLES` samples (probably 512), do an FFT
         let samples = mic_rx.receive().await;
 
-        audio_buffer.push_samples(&samples);
-
-        let samples = audio_buffer.samples();
-
-        let amplitudes = fft.weighted_amplitudes(samples);
-
-        let loudness = scale_builder.build(amplitudes);
+        fft.push_samples(&samples);
+        let spectrum = fft.fft();
+        let loudness = scale_builder.loudness(&spectrum);
 
         // TODO: scaled loudness where a slowly decaying recent min = 0.0 and recent max = 1.0
         // TODO: shazam
@@ -214,11 +215,11 @@ async fn light_task(
     spi_config.frequency = mhz(38) / 10u32; // 3.8MHz
     spi_config.mode = embassy_stm32::spi::MODE_0;
 
-    let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, spi_config);
-    let spi_right = Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, spi_config);
+    let spi_left = Spi::new_txonly_nosck(left_peri, left_mosi, left_txdma, Irqs, spi_config);
+    let spi_right = Spi::new_txonly_nosck(right_peri, right_mosi, right_txdma, Irqs, spi_config);
 
-    let mut led_left = Ws2812::<_, Grb, { MATRIX_BUFFER }>::new(spi_left);
-    let mut led_right = Ws2812::<_, Grb, { MATRIX_BUFFER }>::new(spi_right);
+    let mut led_left = Ws2812::<_, Grb, MATRIX_N>::new(spi_left);
+    let mut led_right = Ws2812::<_, Grb, MATRIX_N>::new(spi_right);
 
     // do a test pattern that makes it easy to tell if RGB is set up correctly and the panels on are on the correct sides
     const TEST_PATTERN: [RGB8; 16] = [
@@ -374,7 +375,7 @@ async fn main(spawner: Spawner) {
 
     // // start the watchdog. make this configurable. we want it in case the lights crash
     // let wdg = IndependentWatchdog::new(p.IWDG, 5_000_000);
-    // spawner.must_spawn(watchdog_task(wdg));
+    // spawner.spawn(watchdog_task(wdg).expect("task allocation failed"));
 
     // set up pins
     let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
@@ -401,26 +402,35 @@ async fn main(spawner: Spawner) {
     debug!("spawning tasks 1");
 
     // spawn the tasks
-    spawner.must_spawn(blink_task(onboard_led));
+    spawner.spawn(blink_task(onboard_led).expect("task allocation failed"));
 
-    spawner.must_spawn(light_task(
-        left_mosi,
-        left_peri,
-        left_txdma,
-        right_mosi,
-        right_peri,
-        right_txdma,
-        loudness_rx,
-    ));
+    spawner.spawn(
+        light_task(
+            left_mosi,
+            left_peri,
+            left_txdma,
+            right_mosi,
+            right_peri,
+            right_txdma,
+            loudness_rx,
+        )
+        .expect("task allocation failed"),
+    );
 
-    spawner.must_spawn(fft_task(mic_rx, loudness_tx));
+    spawner.spawn(fft_task(mic_rx, loudness_tx).expect("task allocation failed"));
 
     // TODO: oneshot/confvar to wait until the lights and FFT are configured
     debug!("waiting for part 1");
     Timer::after_secs(3).await;
     debug!("spawning tasks part 2");
 
-    spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_tx, mic_dma));
+    spawner.spawn(mic_task(mic_adc, mic_pin, mic_tx, mic_dma).expect("task allocation failed"));
 
     info!("all tasks started");
 }
+
+embassy_stm32::bind_interrupts!(struct Irqs {
+    DMA2_STREAM0 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA2_CH0>;
+    DMA2_STREAM2 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA2_CH2>;
+    DMA1_STREAM4 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH4>;
+});

@@ -2,7 +2,6 @@ use dioxus::prelude::*;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
-const HEADER_SVG: Asset = asset!("/assets/header.svg");
 
 fn main() {
     dioxus::launch(App);
@@ -13,7 +12,6 @@ fn App() -> Element {
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
-        document::Meta
         Hero {}
 
     }
@@ -26,7 +24,7 @@ pub fn Hero() -> Element {
             id: "hero",
             h1 { "Musical Lights" },
             div { id: "links",
-                a { href: "https://dioxuslabs.com/learn/0.7/", "📚 Learn Dioxus" }
+                a { href: "https://dioxuslabs.com/learn/", "📚 Learn Dioxus" }
                 a { href: "https://dioxuslabs.com/awesome", "🚀 Awesome Dioxus" }
                 a { href: "https://github.com/dioxus-community/", "📡 Community Libraries" }
                 a { href: "https://github.com/DioxusLabs/sdk", "⚙️ Dioxus Development Kit" }

@@ -1,19 +1,17 @@
 //! instead of an FFT, use a bank of 24 filters. I think this will better match human hearing.
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type, iterator_try_collect)]
 
 use std::env;
 
 use embassy_executor::Spawner;
-use musical_lights_core::audio::{AggregatedBins, BarkBank};
+use musical_lights_core::audio::{AggregatedBins, BarkBank, DISPLAY_BANDS};
 use musical_lights_core::fps::FpsTracker;
-use musical_lights_core::lights::{Bands, Gradient};
+use musical_lights_core::lights::Bands;
 use musical_lights_core::logging::{debug, info};
 use musical_lights_core::remap;
 use musical_terminal::MicrophoneStream;
 
 /// TODO: import this from the core code
-const NUM_BANDS: usize = 20;
+const NUM_BANDS: usize = DISPLAY_BANDS;
 
 const FPS_TARGET: f32 = 55.;
 
@@ -30,7 +28,13 @@ async fn audio_task(
     tx_loudness: flume::Sender<AggregatedBins<NUM_BANDS>>,
 ) {
     while let Ok(samples) = mic_stream.stream.recv_async().await {
-        let x = bank.push_samples(&samples.0);
+        let x = match bank.push_samples(&samples.0) {
+            Ok(x) => x,
+            Err(error) => {
+                log::warn!("Invalid microphone block: {error}");
+                continue;
+            }
+        };
         tx_loudness.send_async(x).await.unwrap();
     }
 }
@@ -73,16 +77,15 @@ async fn main(spawner: Spawner) {
     let mic_stream =
         musical_terminal::MicrophoneStream::<MIC_SAMPLE_SIZE>::try_new(MIC_SAMPLE_RATE).unwrap();
 
-    let sample_rate = mic_stream.sample_rate.0 as f32;
+    let sample_rate = mic_stream.sample_rate as f32;
 
-    let filter_bank = BarkBank::new(FPS_TARGET, sample_rate);
-
-    let gradient: Gradient<400> = Gradient::new_greg_caitlin_wedding();
+    let filter_bank = BarkBank::new(sample_rate).expect("supported microphone sample rate");
 
     // TODO: how can we print this
 
-    spawner.must_spawn(audio_task(mic_stream, filter_bank, loudness_tx));
-    spawner.must_spawn(lights_task(loudness_rx));
+    spawner
+        .spawn(audio_task(mic_stream, filter_bank, loudness_tx).expect("task allocation failed"));
+    spawner.spawn(lights_task(loudness_rx).expect("task allocation failed"));
 
     debug!("all tasks spawned");
 }

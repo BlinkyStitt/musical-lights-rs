@@ -1,69 +1,30 @@
-name: Release to Github Pages
-
+name: Release to GitHub Pages
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
-  contents: write # for committing to gh-pages branch.
+  contents: read
   pages: write
   id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
-
 jobs:
-  Github-Pages-Release:
-
-    timeout-minutes: 10
-
+  pages:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
-    runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4 # repo checkout
-
-      # Install Rust Nightly Toolchain, with Clippy & Rustfmt
-      - name: Install nightly Rust
-        uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@v7.0.1
+      - name: Install pinned Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
+      - run: python3 validation/install_tools.py web
+      - run: python3 validation/validate.py leptos
+      - uses: actions/configure-pages@v6.0.0
+      - uses: actions/upload-pages-artifact@v5.0.0
         with:
-          components: clippy, rustfmt
-
-      - name: Add WASM target
-        run: cd musical-leptos && rustup target add wasm32-unknown-unknown
-
-      - name: Download and install Trunk binary
-        run: cd musical-leptos && wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.18.4/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
-
-      - name: Build with Trunk
-        # "${GITHUB_REPOSITORY#*/}" evaluates into the name of the repository
-        # using --public-url something will allow trunk to modify all the href paths like from favicon.ico to repo_name/favicon.ico .
-        # this is necessary for github pages where the site is deployed to username.github.io/repo_name and all files must be requested
-        # relatively as favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
-        # will obviously return error 404 not found.
-        # run: cd musical-leptos && ./trunk build --release --public-url "${GITHUB_REPOSITORY#*/}"
-        run: cd musical-leptos && ./trunk build --release
-
-      # Deploy with Github Static Pages
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        with:
-          enablement: true
-          # token:
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
-        with:
-          path: './musical-leptos/dist'
-
-      - name: Deploy to GitHub Pages 🚀
+          path: ./musical-leptos/dist
+      - uses: actions/deploy-pages@v5.0.1
         id: deployment
-        uses: actions/deploy-pages@v3

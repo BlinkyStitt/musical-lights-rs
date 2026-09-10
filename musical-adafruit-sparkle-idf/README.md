@@ -4,15 +4,21 @@ Rust's standard library on a tiny little $25 computer. Amazing.
 
 # Development
 
-    ... some steps from https://docs.esp-rs.org/
+Use ESP-IDF `v6.1`, toolchain `esp-1.98.1.0`, and `espup 0.17.1`.
+The coordinated Git revisions in Cargo.toml add IDF 6.x support beyond the
+published Rust crates. The LED driver uses the current RMT API.
+See [dependency pins](../docs/dependencies.md).
 
-     . $HOME/export-esp.sh
+Follow the root [setup guide](../README.md), then run:
 
-    cargo binstall ldproxy
+```sh
+. "$HOME/export-esp-1.98.1.0.sh"
+cargo build --release --bins --locked
+```
 
-Upgrade the xtensa rust for esp32:
-
-    espup install
+Use Python 3.10 or newer for IDF setup. The validated host uses Python 3.14.7.
+Run each command from this directory. Load the generated ESP environment in
+each new shell. The LED thread creates and owns its RMT drivers.
 
 ## Deploying
 
@@ -72,7 +78,7 @@ The 4 [fibonnaci256](https://www.evilgeniuslabs.org/fibonacci256) panels that i 
 
 [eventloop](https://github.com/esp-rs/esp-idf-svc/blob/master/examples/eventloop.rs) or flume?
 
-rmt-legacy was needed to get a RxRmtDriver struct. Is there an issue tracking using the v5 idf for rmt?
+The active LED output uses the current transmit driver. Infrared receive remains unimplemented.
 
 Compare to WLED: <https://learn.adafruit.com/adafruit-sparkle-motion/wled-software-2>
 

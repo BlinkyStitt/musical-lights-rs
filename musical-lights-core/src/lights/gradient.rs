@@ -3,12 +3,9 @@ use enterpolation::{
     bspline::{BSpline, BorderBuffer},
     linear::Linear,
 };
-use palette::{
-    FromColor, Hsluv, Hsva, IntoColor, LinSrgb, Mix, Srgb,
-    chromatic_adaptation::AdaptInto,
-    convert::IntoColorUnclamped,
-    white_point::{self, E},
-};
+#[allow(unused_imports)]
+use micromath::F32Ext;
+use palette::{Hsluv, Mix, white_point};
 use smart_leds::{RGB8, colors::BLACK, hsv::Hsv};
 
 use super::convert_color;
@@ -102,7 +99,7 @@ impl<const N: usize> Gradient<N> {
     // pub fn get(&self, n: usize, width: usize) -> (u8, u8, u8) {
     //     let hsluv = self
     //         .spline
-    //         .gen(remap(
+    //         .r#gen(remap(
     //             n as f32,
     //             0.0,
     //             (width - 1) as f32,
@@ -193,7 +190,7 @@ fn mermaid_spline() -> MermaidSpline {
 #[cfg(test)]
 mod tests {
     use crate::lights::{convert_color, gradient::mermaid_spline};
-    use enterpolation::Curve;
+    use enterpolation::{Curve, Signal};
 
     #[test_log::test]
     fn test_mermaid_spline() {
@@ -203,6 +200,14 @@ mod tests {
             convert_color(hsluv);
         }
 
-        todo!("actually assert things");
+        let start = spline.eval(0.0).0;
+        let end = spline.eval(1.0).0;
+        assert!((start.hue.into_inner() - 258.3).abs() < 0.001);
+        assert!((start.l - 33.8).abs() < 0.001);
+        assert!((end.hue.into_inner() - 142.2).abs() < 0.001);
+        assert!((end.l - 64.5).abs() < 0.001);
+        let midpoint = spline.eval(0.5).0;
+        let expected_lightness = (33.8 + 3.0 * 49.2 + 3.0 * 54.8 + 64.5) / 8.0;
+        assert!((midpoint.l - expected_lightness).abs() < 0.001);
     }
 }

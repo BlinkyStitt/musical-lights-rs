@@ -3,3 +3,8 @@
 */target/
 .DS_Store
 /target/
+/validation/node_modules/
+/validation/test-results/
+/validation/playwright-report/
+/.tools/
+**/__pycache__/

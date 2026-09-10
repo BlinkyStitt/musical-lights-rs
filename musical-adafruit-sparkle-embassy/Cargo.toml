@@ -9,85 +9,39 @@ name = "musical-adafruit-sparkle"
 path = "./src/bin/main.rs"
 
 [dependencies]
-# TODO: things are broken. something about rmt async. [Maybe related](https://github.com/esp-rs/esp-hal-community/issues/4)
 
-bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "ca149efc842324f2cc282ea743897e204cf920b5", features = [
-  "async",
-  "macros",
-] }
-defmt = "1.0.1"
-embassy-net = { version = "0.7.0", features = [
-  "dhcpv4",
-  "medium-ethernet",
-  "tcp",
-  "udp",
-] }
-embedded-io = "0.6.1"
-embedded-io-async = "0.6.1"
-esp-alloc = "0.8.0"
-esp-backtrace = { version = "0.17.0", features = [
+defmt = "=1.1.1"
+embedded-io = "=0.7.1"
+embedded-io-async = "=0.7.0"
+esp-alloc = { version = "=0.11.0", features = ["esp32"] }
+esp-backtrace = { version = "=0.20.0", features = [
   "defmt",
   "esp32",
-  "exception-handler",
   "panic-handler",
 ] }
-esp-hal = { version = "1.0.0-rc.0", features = ["defmt", "esp32", "unstable"] }
-esp-println = { version = "0.15.0", features = ["defmt-espflash", "esp32"] }
+esp-hal = { version = "=1.2.1", features = ["defmt", "esp32", "unstable"] }
+esp-println = { version = "=0.18.0", features = ["defmt-espflash", "esp32"] }
 # for more networking protocol support see https://crates.io/crates/edge-net
-critical-section = "1.2.0"
-embassy-executor = { version = "0.7.0", features = ["defmt", "nightly"] }
-embassy-sync = { version = "0.7.0", features = ["defmt"] }
-embassy-futures = { version = "0.1.1", features = ["defmt"] }
-embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
-esp-hal-embassy = { version = "0.9.0", features = ["esp32"] }
-esp-hal-smartled = { version = "0.15.0", features = ["defmt", "esp32"] }
-esp-wifi = { version = "0.15", features = [
-  "ble",
-  "builtin-scheduler",
-  "coex",
-  "defmt",
-  "esp-alloc",
-  "esp32",
-  "wifi",
-] }
-heapless = { version = "0.8.0", default-features = false }
-lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1", version = "0.1.0" }
+critical-section = "=1.2.0"
+embassy-executor = { version = "=0.10.0", features = ["defmt"] }
+embassy-sync = { version = "=0.8.0", features = ["defmt"] }
+embassy-futures = { version = "=0.1.2", features = ["defmt"] }
+embassy-time = { version = "=0.5.1", features = [] }
+esp-rtos = { version = "=0.4.0", features = ["esp32", "embassy", "defmt"] }
+esp-hal-smartled = { version = "=0.18.0", features = ["defmt", "esp32"] }
+heapless = { version = "=0.9.3", default-features = false }
+lsm9ds1 = { git = "https://github.com/BlinkyStitt/lsm9ds1", rev = "eacd62cb6a1c2dda962ed8d2546566925472e586" }
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
   "defmt",
   "embassy",
   "libm",
 ] }
-static_cell = { version = "2.1.1", features = ["nightly"] }
-smart-leds = "0.4.0"
-smoltcp = { version = "0.12.0", default-features = false, features = [
-  "medium-ethernet",
-  "multicast",
-  "proto-dhcpv4",
-  "proto-dns",
-  "proto-ipv4",
-  "socket-dns",
-  "socket-icmp",
-  "socket-raw",
-  "socket-tcp",
-  "socket-udp",
-] }
-sx1262 = { version = "0.2.1", features = ["defmt"] }
-ws2812-async = "0.3.0"
+static_cell = { version = "=2.1.1", features = ["nightly"] }
+smart-leds = "=0.4.0"
+sx1262 = { version = "=0.3.0", features = ["defmt"] }
+ws2812-async = "=0.4.0"
 
-# TODO: use bleps or trouble? the bleps docs say if you want async to use trouble, but bleps also has async :shrug:
-# <https://github.com/embassy-rs/trouble/tree/main/examples/esp32>
-#trouble-host = { git = "https://github.com/embassy-rs/trouble.git", version = "0.2.3" }
-
-# TODO: this is incompatible with the current esp-hal version (1.0.0-beta.0). its on main, but not released yet
 # TODO: i think its only a blocking method of writing though. so i don't know if we want it. maybe its okay if we keep it on core 1?
-# esp-hal-smartled = { version = "*", features = ["esp32"] }
-
-[patch.crates-io]
-# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
-biquad = { git = "https://github.com/korken89/biquad-rs", rev = "34ee4986e7f8426e91112e4171e2a8bfbd7262c7" }
-
-# Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
-i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
 
 [profile.dev]
 # Rust debug is too slow.

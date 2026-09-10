@@ -1,25 +1,16 @@
-# Development
+# Dioxus page
 
-Your new bare-bones project includes minimal organization with a single `main.rs` file and a few assets.
+The application and CLI both use `0.8.0-alpha.1`. Use Rust `nightly-2026-09-10`.
+From the repository root, run `python3 validation/install_tools.py web`, then add
+`.tools/bin` to `PATH`.
 
-```
-project/
-├─ assets/ # Any assets that are used by the app should be placed here
-├─ src/
-│  ├─ main.rs # main.rs is the entry point to your application and currently contains all components for the app
-├─ Cargo.toml # The Cargo.toml file defines the dependencies and feature flags for your project
-```
-
-### Serving Your App
-
-Run the following command in the root of your project to start developing with the default platform:
-
-```bash
-dx serve
+```sh
+dx serve --web
+dx build --web --release --locked
 ```
 
-To run for a different platform, use the `--platform platform` flag. E.g.
-```bash
-dx serve --platform desktop
-```
+Run these commands from this package directory. The release page is in
+`target/dx/musical-dioxus/release/web/public/`.
 
+This application currently renders the project page and links. It has no microphone processor.
+See [validation](../docs/validation.md) for the visible page test.

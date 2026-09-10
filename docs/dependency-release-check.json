@@ -1,0 +1,957 @@
+{
+  "ahrs": {
+    "created_at": "2025-09-23T02:12:52.727007Z",
+    "license": "MIT",
+    "repository": "https://github.com/jmagnuson/ahrs-rs",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.8.0"
+  },
+  "anyhow": {
+    "created_at": "2026-07-18T20:59:37.656167Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/anyhow",
+    "roots": [
+      "musical-stm32/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": "1.68",
+    "version": "1.0.104"
+  },
+  "biquad": {
+    "created_at": "2026-03-22T07:14:10.938691Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/korken89/biquad-rs",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.6.0"
+  },
+  "biski64": {
+    "created_at": "2025-06-09T22:14:46.844949Z",
+    "license": "MIT",
+    "repository": "https://github.com/danielcota/biski64",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.3.2"
+  },
+  "circular-buffer": {
+    "created_at": "2026-08-11T00:54:36.734534Z",
+    "license": "BSD-3-Clause",
+    "repository": "https://github.com/andreacorbellini/rust-circular-buffer",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.93.0",
+    "version": "2.0.1"
+  },
+  "cobs": {
+    "created_at": "2026-03-03T09:27:47.024041Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/jamesmunns/cobs.rs",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.87",
+    "version": "0.5.1"
+  },
+  "console_error_panic_hook": {
+    "created_at": "2021-10-11T17:01:02.936833Z",
+    "license": "Apache-2.0/MIT",
+    "repository": "https://github.com/rustwasm/console_error_panic_hook",
+    "roots": [
+      "musical-leptos/Cargo.toml",
+      "musical-wasm/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.1.7"
+  },
+  "console_log": {
+    "created_at": "2026-07-15T05:30:41.225105Z",
+    "license": "MIT/Apache-2.0",
+    "repository": "https://github.com/iamcodemaker/console_log",
+    "roots": [
+      "musical-leptos/Cargo.toml",
+      "musical-wasm/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.1.0"
+  },
+  "cortex-m": {
+    "created_at": "2026-08-19T00:47:07.140499Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/cortex-m",
+    "roots": [
+      "musical-feather-m0/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.85",
+    "version": "0.7.9"
+  },
+  "cortex-m-rt": {
+    "created_at": "2026-07-29T07:17:07.852016Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/cortex-m",
+    "roots": [
+      "musical-feather-m0/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.85",
+    "version": "0.7.6"
+  },
+  "cpal": {
+    "created_at": "2026-08-16T18:02:02.361461Z",
+    "license": "Apache-2.0",
+    "repository": "https://github.com/RustAudio/cpal",
+    "roots": [
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": "1.85",
+    "version": "0.18.2"
+  },
+  "crc": {
+    "created_at": "2025-11-26T17:46:02.621035Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/mrhooray/crc-rs.git",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.83",
+    "version": "3.4.0"
+  },
+  "critical-section": {
+    "created_at": "2024-10-16T13:28:54.130490Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/critical-section",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.2.0"
+  },
+  "dagc": {
+    "created_at": "2025-06-28T02:25:03.389155Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/sile/dagc",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.1.1"
+  },
+  "defmt": {
+    "created_at": "2026-07-03T14:14:30.344251Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/knurling-rs/defmt",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.1.1"
+  },
+  "defmt-rtt": {
+    "created_at": "2026-07-03T14:12:14.066731Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/knurling-rs/defmt",
+    "roots": [
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.3.0"
+  },
+  "dioxus": {
+    "created_at": "2026-07-31T00:13:10.459124Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/DioxusLabs/dioxus/",
+    "roots": [
+      "musical-dioxus/Cargo.toml"
+    ],
+    "rust_version": "1.85.0",
+    "version": "0.8.0-alpha.1"
+  },
+  "dioxus-cli": {
+    "created_at": "2026-07-31T00:19:18.903597Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/DioxusLabs/dioxus/",
+    "roots": [],
+    "rust_version": "1.93.0",
+    "version": "0.8.0-alpha.1"
+  },
+  "ed25519-dalek": {
+    "created_at": "2026-07-06T16:23:09.992366Z",
+    "license": "BSD-3-Clause",
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.85",
+    "version": "3.0.0"
+  },
+  "embassy-embedded-hal": {
+    "created_at": "2026-03-20T14:16:25.027770Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.6.0"
+  },
+  "embassy-executor": {
+    "created_at": "2026-03-20T14:13:14.366193Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-feather-m0/Cargo.toml",
+      "musical-stm32/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.10.0"
+  },
+  "embassy-futures": {
+    "created_at": "2025-08-27T17:00:52.540563Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.1.2"
+  },
+  "embassy-net": {
+    "created_at": "2026-04-16T15:20:48.262419Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.9.1"
+  },
+  "embassy-stm32": {
+    "created_at": "2026-03-20T14:26:37.030025Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.6.0"
+  },
+  "embassy-sync": {
+    "created_at": "2026-03-20T14:11:25.311068Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-feather-m0/Cargo.toml",
+      "musical-stm32/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.8.0"
+  },
+  "embassy-time": {
+    "created_at": "2026-03-20T14:16:19.292901Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/embassy",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.5.1"
+  },
+  "embedded-alloc": {
+    "created_at": "2026-01-03T19:01:52.224713Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/embedded-alloc",
+    "roots": [
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.7.0"
+  },
+  "embedded-graphics": {
+    "created_at": "2026-02-15T16:30:48.529163Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embedded-graphics/embedded-graphics",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.8.2"
+  },
+  "embedded-graphics-simulator": {
+    "created_at": "2025-10-10T18:24:24.024871Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embedded-graphics/simulator",
+    "roots": [
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.8.0"
+  },
+  "embedded-io": {
+    "created_at": "2025-10-01T10:36:11.222774Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/embedded-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.81",
+    "version": "0.7.1"
+  },
+  "embedded-io-async": {
+    "created_at": "2025-09-30T21:27:54.677266Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/embedded-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.81",
+    "version": "0.7.0"
+  },
+  "embuild": {
+    "created_at": "2026-09-07T18:36:52.079555Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/embuild",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": "1.59",
+    "version": "0.33.5"
+  },
+  "enterpolation": {
+    "created_at": "2025-05-08T13:15:56.600067Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/NicolasKlenert/enterpolation",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.3.0"
+  },
+  "env_logger": {
+    "created_at": "2026-06-25T12:42:02.332351Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/env_logger",
+    "roots": [
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": "1.71",
+    "version": "0.11.11"
+  },
+  "esp-alloc": {
+    "created_at": "2026-08-26T10:02:01.831275Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.95.0",
+    "version": "0.11.0"
+  },
+  "esp-backtrace": {
+    "created_at": "2026-08-26T10:02:18.925390Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.95.0",
+    "version": "0.20.0"
+  },
+  "esp-hal": {
+    "created_at": "2026-09-08T13:10:16.768540Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.95.0",
+    "version": "1.2.1"
+  },
+  "esp-hal-embassy": {
+    "created_at": "2025-10-14T16:14:01.247908Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.88.0",
+    "version": "0.9.1"
+  },
+  "esp-hal-smartled": {
+    "created_at": "2026-09-05T16:26:24.892178Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal-community",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.95",
+    "version": "0.18.0"
+  },
+  "esp-idf-hal": {
+    "created_at": "2026-03-10T19:17:03.652110Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-idf-hal",
+    "roots": [],
+    "rust_version": "1.82",
+    "version": "0.46.2"
+  },
+  "esp-idf-svc": {
+    "created_at": "2026-03-10T12:56:53.579065Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-idf-svc",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": "1.82",
+    "version": "0.52.1"
+  },
+  "esp-idf-sys": {
+    "created_at": "2026-03-10T18:39:00.475272Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-idf-sys",
+    "roots": [],
+    "rust_version": "1.82",
+    "version": "0.37.2"
+  },
+  "esp-println": {
+    "created_at": "2026-08-26T10:02:05.082655Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.95.0",
+    "version": "0.18.0"
+  },
+  "esp-radio": {
+    "created_at": "2026-06-03T13:58:27.950009Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [],
+    "rust_version": "1.95.0",
+    "version": "1.0.0-beta.0"
+  },
+  "esp-rtos": {
+    "created_at": "2026-08-26T10:02:10.524646Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [],
+    "rust_version": "1.95.0",
+    "version": "0.4.0"
+  },
+  "esp-wifi": {
+    "created_at": "2025-10-14T16:13:14.409641Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/esp-hal",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.88.0",
+    "version": "0.15.1"
+  },
+  "espup": {
+    "created_at": "2026-04-17T11:32:35.636782Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/esp-rs/espup",
+    "roots": [],
+    "rust_version": "1.88.0",
+    "version": "0.17.1"
+  },
+  "extfn": {
+    "created_at": "2025-08-26T13:39:22.840088Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/ondt/extfn",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.72",
+    "version": "0.1.3"
+  },
+  "eyre": {
+    "created_at": "2026-08-11T19:47:48.521837Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/eyre-rs/eyre",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": "1.65.0",
+    "version": "0.6.14"
+  },
+  "feather_m0": {
+    "created_at": "2026-08-09T22:17:46.992803Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/atsamd-rs/atsamd",
+    "roots": [
+      "musical-feather-m0/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.20.4"
+  },
+  "flume": {
+    "created_at": "2025-12-08T17:22:31.630716Z",
+    "license": "Apache-2.0/MIT",
+    "repository": "https://github.com/zesterer/flume",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-leptos/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.12.0"
+  },
+  "heapless": {
+    "created_at": "2026-04-30T21:21:52.310678Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/heapless",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.87",
+    "version": "0.9.3"
+  },
+  "i24": {
+    "created_at": "2026-07-08T16:37:05.643190Z",
+    "license": "MIT",
+    "repository": "https://github.com/jmg049/i24",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "2.3.5"
+  },
+  "infrared": {
+    "created_at": "2023-01-22T08:36:20.127608Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/jkristell/infrared",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.14.2"
+  },
+  "itertools": {
+    "created_at": "2026-06-16T15:09:28.880416Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-itertools/itertools",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.63.0",
+    "version": "0.15.0"
+  },
+  "js-sys": {
+    "created_at": "2026-09-04T23:58:12.292107Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys",
+    "roots": [
+      "musical-dioxus/Cargo.toml",
+      "musical-leptos/Cargo.toml",
+      "musical-wasm/Cargo.toml"
+    ],
+    "rust_version": "1.77",
+    "version": "0.3.105"
+  },
+  "leptos": {
+    "created_at": "2026-07-18T18:51:46.233163Z",
+    "license": "MIT",
+    "repository": "https://github.com/leptos-rs/leptos",
+    "roots": [
+      "musical-leptos/Cargo.toml"
+    ],
+    "rust_version": "1.88",
+    "version": "0.9.0-beta"
+  },
+  "leptos_meta": {
+    "created_at": "2026-07-18T18:51:52.990010Z",
+    "license": "MIT",
+    "repository": "https://github.com/leptos-rs/leptos",
+    "roots": [
+      "musical-leptos/Cargo.toml"
+    ],
+    "rust_version": "1.88",
+    "version": "0.9.0-beta"
+  },
+  "leptos_router": {
+    "created_at": "2026-07-21T13:42:10.784798Z",
+    "license": "MIT",
+    "repository": "https://github.com/leptos-rs/leptos",
+    "roots": [
+      "musical-leptos/Cargo.toml"
+    ],
+    "rust_version": "1.88",
+    "version": "0.9.0-beta1"
+  },
+  "log": {
+    "created_at": "2026-08-22T11:44:27.941626Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/log",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-dioxus/Cargo.toml",
+      "musical-feather-m0/Cargo.toml",
+      "musical-leptos/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": "1.71.0",
+    "version": "0.4.34"
+  },
+  "microfft": {
+    "created_at": "2024-04-14T10:27:15.725277Z",
+    "license": "MIT",
+    "repository": "https://gitlab.com/teskje/microfft-rs",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.61",
+    "version": "0.6.0"
+  },
+  "micromath": {
+    "created_at": "2023-10-31T18:03:16.322862Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/tarcieri/micromath",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "2.1.0"
+  },
+  "nalgebra": {
+    "created_at": "2026-05-24T16:12:14.939059Z",
+    "license": "Apache-2.0",
+    "repository": "https://github.com/dimforge/nalgebra",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.89.0",
+    "version": "0.35.0"
+  },
+  "num": {
+    "created_at": "2024-05-08T16:40:50.854279Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-num/num",
+    "roots": [
+      "musical-leptos/Cargo.toml",
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.60",
+    "version": "0.4.3"
+  },
+  "num-complex": {
+    "created_at": "2024-05-07T23:51:24.022830Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-num/num-complex",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.60",
+    "version": "0.4.6"
+  },
+  "once_cell": {
+    "created_at": "2026-03-12T10:59:52.512992Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/matklad/once_cell",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": "1.65",
+    "version": "1.21.4"
+  },
+  "palette": {
+    "created_at": "2026-08-02T16:18:24.627149Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/Ogeon/palette",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.71.0",
+    "version": "0.7.7"
+  },
+  "pallete": {
+    "created_at": "2021-08-18T08:54:09.351628Z",
+    "license": "MIT",
+    "repository": "https://github.com/rishit-khandelwal/rainbow",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.1.0"
+  },
+  "panic-halt": {
+    "created_at": "2024-10-25T19:40:40.310777Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/korken89/panic-halt",
+    "roots": [
+      "musical-feather-m0/Cargo.toml"
+    ],
+    "rust_version": "1.58.0",
+    "version": "1.0.0"
+  },
+  "panic-probe": {
+    "created_at": "2025-04-01T14:46:41.110414Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/knurling-rs/defmt",
+    "roots": [
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.0.0"
+  },
+  "panic-semihosting": {
+    "created_at": "2026-07-28T18:47:24.764600Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-embedded/cortex-m",
+    "roots": [
+      "musical-feather-m0/Cargo.toml"
+    ],
+    "rust_version": "1.85",
+    "version": "0.7.0"
+  },
+  "postcard": {
+    "created_at": "2025-07-24T15:55:57.238442Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/jamesmunns/postcard",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "1.1.3"
+  },
+  "rand": {
+    "created_at": "2026-07-02T09:01:38.792937Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-random/rand",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": "1.85",
+    "version": "0.10.2"
+  },
+  "serde": {
+    "created_at": "2026-07-18T23:05:13.266456Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "roots": [
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": "1.56",
+    "version": "1.0.229"
+  },
+  "smart-leds": {
+    "created_at": "2024-01-14T16:09:36.390943Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/smart-leds-rs/smart-leds",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-lights-core/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.4.0"
+  },
+  "smart-leds-matrix": {
+    "created_at": "2024-01-17T13:46:49.247060Z",
+    "license": "Apache-2.0",
+    "repository": "https://github.com/smart-leds-rs/smart-leds-matrix",
+    "roots": [
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.2.0"
+  },
+  "smart-leds-trait": {
+    "created_at": "2025-09-27T15:17:23.327901Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/smart-leds-rs/smart-leds-trait",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.3.2"
+  },
+  "smoltcp": {
+    "created_at": "2026-08-17T01:47:21.367822Z",
+    "license": "0BSD",
+    "repository": "https://github.com/smoltcp-rs/smoltcp.git",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": "1.91",
+    "version": "0.14.0"
+  },
+  "static_cell": {
+    "created_at": "2025-06-22T20:37:49.363445Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/embassy-rs/static-cell",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-adafruit-sparkle-idf/Cargo.toml",
+      "musical-stm32/Cargo.toml",
+      "musical-terminal/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "2.1.1"
+  },
+  "sx1262": {
+    "created_at": "2025-10-24T01:26:18.406427Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/BroderickCarlin/SX1261",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.3.0"
+  },
+  "terrors": {
+    "created_at": "2025-04-22T13:10:15.006688Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/komora-io/terrors",
+    "roots": [
+      "musical-leptos/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.3.3"
+  },
+  "test-log": {
+    "created_at": "2026-05-30T22:41:06.804446Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/d-e-s-o/test-log.git",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.71",
+    "version": "0.2.21"
+  },
+  "thiserror": {
+    "created_at": "2026-08-08T06:22:23.795550Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/thiserror",
+    "roots": [
+      "musical-lights-core/Cargo.toml"
+    ],
+    "rust_version": "1.71",
+    "version": "2.0.20"
+  },
+  "trunk": {
+    "created_at": "2026-09-09T16:31:28.766547Z",
+    "license": "MIT/Apache-2.0",
+    "repository": "https://github.com/trunk-rs/trunk",
+    "roots": [],
+    "rust_version": "1.96.1",
+    "version": "0.22.0-beta.5"
+  },
+  "wasm-bindgen": {
+    "created_at": "2026-09-04T23:58:10.332542Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen",
+    "roots": [
+      "musical-dioxus/Cargo.toml",
+      "musical-leptos/Cargo.toml",
+      "musical-wasm/Cargo.toml"
+    ],
+    "rust_version": "1.77",
+    "version": "0.2.128"
+  },
+  "wasm-bindgen-cli": {
+    "created_at": "2026-09-04T23:58:22.437820Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/cli",
+    "roots": [],
+    "rust_version": "1.86",
+    "version": "0.2.128"
+  },
+  "wasm-bindgen-futures": {
+    "created_at": "2026-09-04T23:58:17.192884Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/futures",
+    "roots": [
+      "musical-dioxus/Cargo.toml",
+      "musical-leptos/Cargo.toml",
+      "musical-wasm/Cargo.toml"
+    ],
+    "rust_version": "1.77",
+    "version": "0.4.78"
+  },
+  "wasm-bindgen-test": {
+    "created_at": "2026-09-04T23:58:26.590912Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen",
+    "roots": [
+      "musical-dioxus/Cargo.toml",
+      "musical-leptos/Cargo.toml"
+    ],
+    "rust_version": "1.77",
+    "version": "0.3.78"
+  },
+  "web-sys": {
+    "created_at": "2026-09-04T23:58:14.724782Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys",
+    "roots": [
+      "musical-dioxus/Cargo.toml",
+      "musical-leptos/Cargo.toml",
+      "musical-wasm/Cargo.toml"
+    ],
+    "rust_version": "1.77",
+    "version": "0.3.105"
+  },
+  "ws2812-async": {
+    "created_at": "2026-02-08T22:09:09.461573Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/kalkyl/ws2812-async",
+    "roots": [
+      "musical-adafruit-sparkle-embassy/Cargo.toml",
+      "musical-stm32/Cargo.toml"
+    ],
+    "rust_version": null,
+    "version": "0.4.0"
+  },
+  "ws2812-esp32-rmt-driver": {
+    "created_at": "2026-08-08T22:11:16.471522Z",
+    "license": "MIT",
+    "repository": "https://github.com/cat-in-136/ws2812-esp32-rmt-smart-leds",
+    "roots": [
+      "musical-adafruit-sparkle-idf/Cargo.toml"
+    ],
+    "rust_version": "1.82",
+    "version": "0.15.0-alpha.1"
+  }
+}

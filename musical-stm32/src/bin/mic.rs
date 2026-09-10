@@ -1,13 +1,11 @@
 //! microphone test
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
 use embassy_stm32::{
     Peri,
-    adc::{Adc, SampleTime, Sequence, VREF_CALIB_MV, resolution_to_max_count},
+    adc::{Adc, AdcChannel, SampleTime, VREF_CALIB_MV, resolution_to_max_count},
     gpio::{Level, Output, Speed},
     peripherals::{ADC1, DMA2_CH0, PA0},
 };
@@ -43,36 +41,44 @@ pub async fn blink_task(mut led: Output<'static>) {
 #[embassy_executor::task]
 async fn mic_task(
     mic_adc: Peri<'static, ADC1>,
-    mut mic_pin: Peri<'static, PA0>,
+    mic_pin: Peri<'static, PA0>,
     dma: Peri<'static, DMA2_CH0>,
 ) {
     // TODO: i kind of wish i'd ordered the i2s mic
-    let mut adc = Adc::new(mic_adc);
-
-    // TODO: do we need to set the sample time here? we set it on the ring buffered adc later
-    adc.set_sample_time(SampleTime::CYCLES144);
-
-    // TODO: what resolution?
     let adc_resolution = embassy_stm32::adc::Resolution::BITS12;
+    let mut adc = Adc::new_with_config(
+        mic_adc,
+        embassy_stm32::adc::AdcConfig {
+            resolution: Some(adc_resolution),
+        },
+    );
 
-    adc.set_resolution(adc_resolution);
     let full_range = resolution_to_max_count(adc_resolution) as f32;
 
     // // TODO: do we care about the temperature?
     // // TODO: shut down if hot?
     let mut temperature = adc.enable_temperature();
-    let temp_sample = adc.blocking_read(&mut temperature);
+    let temp_sample = adc.blocking_read(&mut temperature, SampleTime::CYCLES144);
     info!("temp: {}", temp_sample);
 
     // let half_range = full_range / 2 + 1;
 
     let mut adc_dma_buf = [0u16; DMA_BUF_LEN];
-    let mut ring_buffered_adc = adc.into_ring_buffered(dma, &mut adc_dma_buf);
+    let mut ring_buffered_adc = adc.into_ring_buffered(
+        dma,
+        &mut adc_dma_buf,
+        Irqs,
+        [
+            (mic_pin.degrade_adc(), SampleTime::CYCLES144),
+            (temperature.degrade_adc(), SampleTime::CYCLES144),
+        ]
+        .into_iter(),
+        embassy_stm32::adc::CONTINUOUS,
+        embassy_stm32::adc::Exten::RISING_EDGE,
+    );
 
     // 100 mHz processor. but what is the adc clock?
     // TODO: how long should we sample? one example had CYCLES144, another had CYCLES112
-    ring_buffered_adc.set_sample_sequence(Sequence::One, &mut mic_pin, SampleTime::CYCLES144);
-    ring_buffered_adc.set_sample_sequence(Sequence::Two, &mut temperature, SampleTime::CYCLES144);
 
     // // TODO: i think we should be able to use this instead of adc_resolution.
     // let mut vrefint = adc.enable_vrefint();
@@ -157,10 +163,14 @@ async fn main(spawner: Spawner) {
     let mic_dma = p.DMA2_CH0;
 
     // start an async task in the background so that we can test the async part of the leds actually works properly
-    spawner.must_spawn(blink_task(onboard_led));
+    spawner.spawn(blink_task(onboard_led).expect("task allocation failed"));
 
     // listen to the microphone
-    spawner.must_spawn(mic_task(mic_adc, mic_pin, mic_dma));
+    spawner.spawn(mic_task(mic_adc, mic_pin, mic_dma).expect("task allocation failed"));
 
     info!("all tasks started");
 }
+
+embassy_stm32::bind_interrupts!(struct Irqs {
+    DMA2_STREAM0 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA2_CH0>;
+});

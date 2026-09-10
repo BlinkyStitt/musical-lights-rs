@@ -1,0 +1,56 @@
+name: Validate all package roots
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [core, terminal, feather, stm32]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
+      - name: Install terminal libraries
+        if: matrix.package == 'terminal'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsdl2-dev
+      - run: python3 validation/validate.py ${{ matrix.package }}
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '26.8.2'
+      - name: Install Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
+      - run: python3 validation/install_tools.py web
+      - run: python3 validation/validate.py leptos dioxus wasm
+      - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium && npm test
+  esp:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [esp-embassy, esp-idf]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14.7'
+      - name: Install host Rust and linker
+        run: |
+          rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
+          python3 validation/install_tools.py esp
+      - name: Install exact Xtensa toolchain
+        run: .tools/bin/espup install --toolchain-version 1.98.1.0 --name esp-1.98.1.0 --targets esp32 --export-file "$RUNNER_TEMP/export-esp.sh"
+      - name: Validate firmware
+        run: |
+          . "$RUNNER_TEMP/export-esp.sh"
+          python3 validation/validate.py ${{ matrix.package }}

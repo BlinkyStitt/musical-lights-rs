@@ -29,17 +29,17 @@ impl FpsTracker {
 
         if elapsed >= Duration::from_secs(1) {
             // TODO: track the stddev too?
-            #[cfg(not(feature = "embassy"))]
+            #[cfg(feature = "std")]
             {
                 let fps = self.count as f32 / elapsed.as_secs_f32();
                 info!("{} FPS: {}", self.label, fps);
             }
 
-            #[cfg(feature = "embassy")]
+            #[cfg(all(not(feature = "std"), feature = "embassy"))]
             {
                 // TODO: this doesn't work with embassy. it doesn't have as_secs_f32. maybe use as_millis and display fps ?
-                let fpms = self.count * 1000 / elapsed.as_millis() as u64;
-                info!("{} FPMS: {}", self.label, fpms);
+                let fps = self.count * 1000 / elapsed.as_millis();
+                info!("{} FPS: {}", self.label, fps);
             }
 
             self.count = 0;

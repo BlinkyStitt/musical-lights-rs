@@ -1,65 +1,157 @@
-use crate::dependent_module;
-
-use log::debug;
-use wasm_bindgen::JsValue;
+use js_sys::{Array, Float32Array};
+use std::{cell::RefCell, rc::Rc};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::MediaStream;
-use web_sys::{AudioContext, AudioWorkletNode, AudioWorkletNodeOptions};
+use web_sys::{
+    AudioContext, AudioWorkletNode, Blob, BlobPropertyBag, MediaStream, MediaStreamAudioSourceNode,
+    MediaStreamConstraints, MediaStreamTrack, MessageEvent, Url,
+};
 
-// Use wasm_audio if you have a single wasm audio processor in your application
-// whose samples should be played directly. Ideally, call wasm_audio based on
-// user interaction. Otherwise, resume the context on user interaction, so
-// playback starts reliably on all browsers.
-pub async fn wasm_audio(
-    media_stream: &MediaStream,
-) -> Result<(AudioContext, AudioWorkletNode), JsValue> {
-    let ctx = AudioContext::new()?;
-
-    prepare_wasm_audio(&ctx).await?;
-
-    debug!("audio context: {:?}", ctx);
-
-    let input = ctx.create_media_stream_source(media_stream).unwrap();
-
-    // TODO: pass a process callback to this somehow
-    let worklet = wasm_audio_worklet(&ctx)?;
-
-    input.connect_with_audio_node(&worklet)?;
-
-    worklet.connect_with_audio_node(&ctx.destination())?;
-
-    // TODO: what should we do with errors?
-    // port.set_onmessageerror(onmessageerror_callback);
-
-    debug!("audio input: {:?}", input);
-    debug!("audio node: {:?}", worklet);
-
-    Ok((ctx, worklet))
+/// A view owns the session while asynchronous setup can also hold a handle.
+#[derive(Clone)]
+pub struct AudioSession {
+    resources: Rc<RefCell<Option<AudioResources>>>,
 }
 
-// wasm_audio_node creates an AudioWorkletNode running a wasm audio processor.
-// Remember to call prepare_wasm_audio once on your context before calling
-// this function.
-pub fn wasm_audio_worklet(ctx: &AudioContext) -> Result<AudioWorkletNode, JsValue> {
-    let audio_worklet_node_options = AudioWorkletNodeOptions::new();
-
-    // TODO: one example passed wasm_bindgen::memory() here, but I don't think that is needed anymore. it also gave errors
-    // TODO: instead of the main module, i think we need a sub-module specifically for audio processing
-    audio_worklet_node_options.set_processor_options(Some(&js_sys::Array::of2(
-        &wasm_bindgen::module(),
-        &"foobar".into(),
-    )));
-    debug!("options: {:?}", audio_worklet_node_options);
-
-    let node =
-        AudioWorkletNode::new_with_options(ctx, "my-wasm-processor", &audio_worklet_node_options)?;
-    debug!("node: {:?}", node);
-
-    Ok(node)
+/// Dropping these resources also releases a partially initialized session.
+struct AudioResources {
+    context: AudioContext,
+    stream: Option<MediaStream>,
+    input: Option<MediaStreamAudioSourceNode>,
+    worklet: Option<AudioWorkletNode>,
+    callback: Option<Closure<dyn FnMut(MessageEvent)>>,
 }
 
-pub async fn prepare_wasm_audio(ctx: &AudioContext) -> Result<(), JsValue> {
-    let mod_url = dependent_module!("my-wasm-processor.js")?;
-    JsFuture::from(ctx.audio_worklet()?.add_module(&mod_url)?).await?;
-    Ok(())
+impl AudioSession {
+    /// Call directly from a user gesture so the browser can start audio.
+    pub fn new() -> Result<Self, JsValue> {
+        Ok(Self {
+            resources: Rc::new(RefCell::new(Some(AudioResources {
+                context: AudioContext::new()?,
+                stream: None,
+                input: None,
+                worklet: None,
+                callback: None,
+            }))),
+        })
+    }
+
+    pub fn sample_rate(&self) -> f32 {
+        self.resources
+            .borrow()
+            .as_ref()
+            .expect("open audio session")
+            .context
+            .sample_rate()
+    }
+
+    pub async fn start(
+        &self,
+        mut on_samples: impl FnMut(Option<Vec<f32>>) + 'static,
+    ) -> Result<(), JsValue> {
+        let context = self
+            .resources
+            .borrow()
+            .as_ref()
+            .ok_or_else(closed_session)?
+            .context
+            .clone();
+        JsFuture::from(context.resume()?).await?;
+        if self.resources.borrow().is_none() {
+            return Err(closed_session());
+        }
+        let constraints = MediaStreamConstraints::new();
+        constraints.set_audio(&JsValue::TRUE);
+        let window =
+            web_sys::window().ok_or_else(|| JsValue::from_str("Browser window is unavailable"))?;
+        let stream = JsFuture::from(
+            window
+                .navigator()
+                .media_devices()?
+                .get_user_media_with_constraints(&constraints)?,
+        )
+        .await?;
+        let stream = stream.dyn_into::<MediaStream>()?;
+        {
+            let mut resources = self.resources.borrow_mut();
+            let Some(resources) = resources.as_mut() else {
+                stop_tracks(&stream);
+                return Err(closed_session());
+            };
+            resources.stream = Some(stream);
+        }
+        let options = BlobPropertyBag::new();
+        options.set_type("text/javascript");
+        let blob = Blob::new_with_str_sequence_and_options(
+            &Array::of1(&JsValue::from_str(include_str!("my-wasm-processor.js"))),
+            &options,
+        )?;
+        let url = Url::create_object_url_with_blob(&blob)?;
+        let loaded =
+            async { JsFuture::from(context.audio_worklet()?.add_module(&url)?).await }.await;
+        Url::revoke_object_url(&url)?;
+        loaded?;
+        let mut resources = self.resources.borrow_mut();
+        let resources = resources.as_mut().ok_or_else(closed_session)?;
+        resources.input =
+            Some(context.create_media_stream_source(resources.stream.as_ref().unwrap())?);
+        resources.worklet = Some(AudioWorkletNode::new(&context, "my-wasm-processor")?);
+        let callback = Closure::new(move |event: MessageEvent| {
+            let data = event.data();
+            if data.is_null() || data.is_undefined() {
+                on_samples(None);
+            } else if let Ok(data) = data.dyn_into::<Float32Array>() {
+                on_samples(Some(data.to_vec()));
+            }
+        });
+        let worklet = resources.worklet.as_ref().unwrap();
+        worklet
+            .port()?
+            .set_onmessage(Some(callback.as_ref().unchecked_ref()));
+        resources.callback = Some(callback);
+        resources
+            .input
+            .as_ref()
+            .unwrap()
+            .connect_with_audio_node(worklet)?;
+        // The worklet writes silence to the output, so the microphone does not feed back.
+        worklet.connect_with_audio_node(&context.destination())?;
+        Ok(())
+    }
+
+    /// Close now, even while the browser permission request is pending.
+    pub fn stop(&self) {
+        self.resources.borrow_mut().take();
+    }
+}
+
+fn closed_session() -> JsValue {
+    JsValue::from_str("Audio session has closed")
+}
+
+fn stop_tracks(stream: &MediaStream) {
+    for track in stream.get_tracks().iter() {
+        if let Ok(track) = track.dyn_into::<MediaStreamTrack>() {
+            track.stop();
+        }
+    }
+}
+
+impl Drop for AudioResources {
+    fn drop(&mut self) {
+        if let Some(worklet) = &self.worklet {
+            if let Ok(port) = worklet.port() {
+                port.set_onmessage(None);
+                port.close();
+            }
+            let _ = worklet.disconnect();
+        }
+        if let Some(input) = &self.input {
+            let _ = input.disconnect();
+        }
+        if let Some(stream) = &self.stream {
+            stop_tracks(stream);
+        }
+        let _ = self.context.close();
+    }
 }

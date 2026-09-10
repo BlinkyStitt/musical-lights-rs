@@ -1,6 +1,3 @@
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
-
 use embassy_executor::Spawner;
 use musical_lights_core::{
     audio::{AWeighting, AggregatedBins, AggregatedBinsBuilder, BarkScaleBuilder, BufferedFFT},
@@ -101,7 +98,7 @@ async fn main(spawner: Spawner) {
 
     let mic_stream = musical_terminal::MicrophoneStream::try_new(48_000).unwrap();
 
-    let sample_rate = mic_stream.sample_rate.0 as f32;
+    let sample_rate = mic_stream.sample_rate as f32;
 
     let weighting = AWeighting::new(sample_rate);
     // let weighting = FlatWeighting {};
@@ -116,8 +113,10 @@ async fn main(spawner: Spawner) {
     // let scale_builder = ExponentialScaleBuilder::new(80.0, 20_000.0, sample_rate);
     let scale_builder = BarkScaleBuilder::new(sample_rate);
 
-    spawner.must_spawn(audio_task(mic_stream, fft, scale_builder, loudness_tx));
-    spawner.must_spawn(lights_task(loudness_rx));
+    spawner.spawn(
+        audio_task(mic_stream, fft, scale_builder, loudness_tx).expect("task allocation failed"),
+    );
+    spawner.spawn(lights_task(loudness_rx).expect("task allocation failed"));
 
     debug!("all tasks spawned");
 }

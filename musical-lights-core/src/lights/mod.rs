@@ -17,5 +17,9 @@ mod visualizer;
 
 pub use color_correction::convert_color;
 pub use dancing_lights::{Bands, DancingLights};
+pub use flag::{flag_pattern, flag_stars_pattern, flag_stripes_pattern};
 pub use gradient::{Gradient, apply_greg_caitlin_wedding_spline};
 pub use matrix::{Layout, SimpleXY, SnakeXY};
+
+mod rainbow_frame;
+pub use rainbow_frame::fill_rainbow_frame;

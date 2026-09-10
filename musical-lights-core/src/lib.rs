@@ -1,12 +1,17 @@
+#![cfg_attr(test, feature(iter_next_chunk))]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(not(test), no_main)]
-#![feature(type_alias_impl_trait, duration_millis_float, iter_next_chunk)]
+
+#[cfg(all(test, not(feature = "std")))]
+#[macro_use]
+extern crate std;
 
 pub mod audio;
 pub mod battery;
 pub mod compass;
 pub mod config;
 pub mod errors;
+#[cfg(any(feature = "std", feature = "embassy"))]
 pub mod fps;
 pub mod gps;
 pub mod iter;

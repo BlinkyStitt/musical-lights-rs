@@ -1,8 +1,6 @@
 //! neopixel test
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
 use embassy_stm32::{
@@ -19,7 +17,6 @@ const MATRIX_X: u32 = 32;
 const MATRIX_Y: u32 = 8;
 
 const MATRIX_N: usize = MATRIX_X as usize * MATRIX_Y as usize;
-const MATRIX_BUFFER: usize = MATRIX_N * 12;
 
 #[embassy_executor::task]
 pub async fn blink_task(mut led: Output<'static>) {
@@ -45,7 +42,7 @@ async fn main(spawner: Spawner) {
     let onboard_led = Output::new(p.PC13, Level::High, Speed::Low);
 
     // start an async task in the background so that we can test the async part of the leds actually works properly
-    spawner.must_spawn(blink_task(onboard_led));
+    spawner.spawn(blink_task(onboard_led).expect("task allocation failed"));
 
     let mut spi_config = SpiConfig::default();
 
@@ -56,9 +53,9 @@ async fn main(spawner: Spawner) {
     let mosi = p.PB5;
     let txdma = p.DMA2_CH2;
 
-    let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, spi_config);
+    let spi = Spi::new_txonly_nosck(spi_peri, mosi, txdma, Irqs, spi_config);
 
-    let mut neopixel = ws2812_async::Ws2812::<_, ws2812_async::Grb, MATRIX_BUFFER>::new(spi);
+    let mut neopixel = ws2812_async::Ws2812::<_, ws2812_async::Grb, MATRIX_N>::new(spi);
 
     static BLANK: [RGB8; MATRIX_N] = [RGB8::new(0, 0, 0); MATRIX_N];
 
@@ -109,3 +106,5 @@ async fn main(spawner: Spawner) {
 
     info!("all tasks started");
 }
+
+embassy_stm32::bind_interrupts!(struct Irqs { DMA2_STREAM2 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA2_CH2>; });

@@ -74,9 +74,8 @@ impl<const X: usize, const Y: usize, const N: usize> DancingLights<X, Y, N> {
 
         // fill the framebuf with the gradient. just the top and bottom pixels start filled
 
-        for y in 0..Y {
+        for (y, &rgb_color) in gradient.rgb_colors.iter().enumerate() {
             // TODO: something is wrong with this gradient code. it always gives nearly off numbers
-            let rgb_color = gradient.rgb_colors[y];
 
             // TODO: handle different layouts
             let inside = SnakeXY::xy_to_n(0, y, X);

@@ -3,8 +3,6 @@
 //! TODO: unwrap less
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 
 use ahrs::{Ahrs, Madgwick};
 use core::f64::consts::PI;
@@ -42,7 +40,6 @@ use musical_lights_core::{
 };
 use musical_stm32::sparkle_uart::{UartFromSparkle, UartToSparkle};
 use nalgebra::Vector3;
-use postcard::experimental::max_size::MaxSize;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -54,7 +51,7 @@ const MESSAGE_CHANNEL_SIZE: usize = 8;
 
 type MyRawMutex = CriticalSectionRawMutex;
 
-pub type MySpi = Spi<'static, Async>;
+pub type MySpi = Spi<'static, Async, spi::mode::Master>;
 pub type MySpiBus = Mutex<MyRawMutex, MySpi>;
 pub type MySpiDevice<CS> = SpiDevice<'static, MyRawMutex, MySpi, CS>;
 
@@ -73,6 +70,14 @@ pub type MyMessageReceiver = MyReceiver<Message, MESSAGE_CHANNEL_SIZE>;
 pub type MyLSM9DS1 = LSM9DS1<SpiInterface<AccelGyroDevice, MagDevice>>;
 
 bind_interrupts!(struct Irqs {
+    DMA2_STREAM7 => embassy_stm32::dma::InterruptHandler<peripherals::DMA2_CH7>;
+    DMA2_STREAM5 => embassy_stm32::dma::InterruptHandler<peripherals::DMA2_CH5>;
+    DMA1_STREAM6 => embassy_stm32::dma::InterruptHandler<peripherals::DMA1_CH6>;
+    DMA1_STREAM7 => embassy_stm32::dma::InterruptHandler<peripherals::DMA1_CH7>;
+    DMA2_STREAM2 => embassy_stm32::dma::InterruptHandler<peripherals::DMA2_CH2>;
+    DMA2_STREAM0 => embassy_stm32::dma::InterruptHandler<peripherals::DMA2_CH0>;
+    EXTI15_10 => embassy_stm32::exti::InterruptHandler<embassy_stm32::interrupt::typelevel::EXTI15_10>;
+
     USART1 => usart::InterruptHandler<peripherals::USART1>;
     USART2 => usart::InterruptHandler<peripherals::USART2>;
     // TODO: bind for the accelerometer/magnetometer. it has data ready and programmable ones
@@ -129,7 +134,7 @@ async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart: UartToSparkl
 }
 
 #[embassy_executor::task]
-async fn read_gps_task(gps: (), channel: MyMessageSender) {
+async fn read_gps_task(_gps: (), _channel: MyMessageSender) {
     todo!();
 }
 
@@ -138,8 +143,8 @@ async fn read_lsm9ds1_task(
     // TODO: add a `split` function to the lsm9ds1 so that we can have two different tasks using it
     mut lsm9ds1: LSM9DS1<SpiInterface<AccelGyroDevice, MagDevice>>,
     // TODO: theres two interrupts here, possible too
-    mut accel_gyro_data_ready: ExtiInput<'static>,
-    mut mag_interrupt: ExtiInput<'static>,
+    mut accel_gyro_data_ready: ExtiInput<'static, Async>,
+    mut mag_interrupt: ExtiInput<'static, Async>,
     channel: MyMessageSender,
 ) {
     // TODO: i can't put an except on these. its saying it can't convert the errors
@@ -230,7 +235,7 @@ async fn read_accel_gyro_mag(
 }
 
 #[embassy_executor::task]
-async fn radio_task(radio: (), to_sparkle: MyMessageSender, to_radio: MyMessageReceiver) {
+async fn radio_task(_radio: (), _to_sparkle: MyMessageSender, _to_radio: MyMessageReceiver) {
     todo!();
 }
 
@@ -270,9 +275,9 @@ async fn main(spawner: Spawner) {
         p.USART1,
         p.PA10,
         p.PB6,
-        Irqs,
         p.DMA2_CH7,
         p.DMA2_CH5,
+        Irqs,
         uart_sparkle_config,
     )
     .expect("failed to create UART1 for sparkle");
@@ -287,13 +292,13 @@ async fn main(spawner: Spawner) {
     uart_gps_config.baudrate = 9600; // GPS baud rate, this must match the GPS module's baud rate
 
     // TODO: double check the pin diagram!
-    let uart_gps = Uart::new(
+    let _uart_gps = Uart::new(
         p.USART2,
         p.PA3,
         p.PA2,
-        Irqs,
         p.DMA1_CH6,
         p.DMA1_CH7,
+        Irqs,
         uart_gps_config,
     )
     .expect("failed to create UART2 for gps");
@@ -306,7 +311,7 @@ async fn main(spawner: Spawner) {
     spi_config.frequency = Hertz(1_000_000);
 
     let spi: MySpi = Spi::new(
-        p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA2_CH2, p.DMA2_CH0, spi_config,
+        p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA2_CH2, p.DMA2_CH0, Irqs, spi_config,
     );
 
     static SPI_BUS: StaticCell<MySpiBus> = StaticCell::new();
@@ -320,12 +325,12 @@ async fn main(spawner: Spawner) {
     // TODO: any more chip selects on the spi?
     // TODO: not sure about this pull mode. or these pins. but i think this is close
     // TODO: accel/gyro has 2 interrupts. maybe use those
-    let spi_accel_gyro_drdy = ExtiInput::new(p.PA11, p.EXTI11, gpio::Pull::Down);
-    let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down);
+    let spi_accel_gyro_drdy = ExtiInput::new(p.PA11, p.EXTI11, gpio::Pull::Down, Irqs);
+    let spi_magnetometer_int = ExtiInput::new(p.PA12, p.EXTI12, gpio::Pull::Down, Irqs);
 
     let spi_accel_gyro: AccelGyroDevice = SpiDevice::new(spi_bus, spi_ag_cs);
     let spi_mag: MagDevice = SpiDevice::new(spi_bus, spi_mag_cs);
-    let spi_radio: RadioDevice = SpiDevice::new(spi_bus, spi_radio_cs);
+    let _spi_radio: RadioDevice = SpiDevice::new(spi_bus, spi_radio_cs);
 
     let lsm9sd1_spi_interface = lsm9ds1::interface::SpiInterface::init(spi_accel_gyro, spi_mag);
     // TODO: these all have slightly different sample rates. i don't love that. just be higher than our framerate?
@@ -372,32 +377,33 @@ async fn main(spawner: Spawner) {
     static SPARKLE_READY: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
     // spawn some of the tasks. not the ones that talk to the sparkle yet
-    spawner.must_spawn(blink_task(onboard_led));
-    spawner.must_spawn(send_to_sparkle_task(
-        TO_SPARKLE_CHANNEL.receiver(),
-        uart_sparkle_tx,
-    ));
-    spawner.must_spawn(read_from_sparkle_task(
-        uart_sparkle_rx,
-        TO_SPARKLE_CHANNEL.sender(),
-        &SPARKLE_READY,
-    ));
+    spawner.spawn(blink_task(onboard_led).expect("task allocation failed"));
+    spawner.spawn(
+        send_to_sparkle_task(TO_SPARKLE_CHANNEL.receiver(), uart_sparkle_tx)
+            .expect("task allocation failed"),
+    );
+    spawner.spawn(
+        read_from_sparkle_task(uart_sparkle_rx, TO_SPARKLE_CHANNEL.sender(), &SPARKLE_READY)
+            .expect("task allocation failed"),
+    );
 
     SPARKLE_READY.wait().await;
 
     // spawn the rest of the tasks. these tasks might send things to the sparkle board
-    spawner.must_spawn(read_gps_task((), TO_SPARKLE_CHANNEL.sender()));
-    spawner.must_spawn(read_lsm9ds1_task(
-        lsm9ds1,
-        spi_accel_gyro_drdy,
-        spi_magnetometer_int,
-        TO_SPARKLE_CHANNEL.sender(),
-    ));
-    spawner.must_spawn(radio_task(
-        (),
-        TO_SPARKLE_CHANNEL.sender(),
-        TO_RADIO_CHANNEL.receiver(),
-    ));
+    spawner.spawn(read_gps_task((), TO_SPARKLE_CHANNEL.sender()).expect("task allocation failed"));
+    spawner.spawn(
+        read_lsm9ds1_task(
+            lsm9ds1,
+            spi_accel_gyro_drdy,
+            spi_magnetometer_int,
+            TO_SPARKLE_CHANNEL.sender(),
+        )
+        .expect("task allocation failed"),
+    );
+    spawner.spawn(
+        radio_task((), TO_SPARKLE_CHANNEL.sender(), TO_RADIO_CHANNEL.receiver())
+            .expect("task allocation failed"),
+    );
 
     info!("all tasks started");
 }

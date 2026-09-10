@@ -1,7 +1,5 @@
 //! TODO: i think the executor tasks should take the specific pins/peripherials. then it should call a generic function that takes AnyPin
 
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 #![no_std]
 #![no_main]
 
@@ -9,12 +7,10 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use esp_backtrace as _;
-use esp_hal::interrupt::software::SoftwareInterruptControl;
 use esp_hal::interrupt::Priority;
 use esp_hal::timer::timg::TimerGroup;
-use esp_hal::timer::AnyTimer;
-use esp_hal_embassy::InterruptExecutor;
 use esp_println as _;
+use esp_rtos::embassy::InterruptExecutor;
 use static_cell::StaticCell;
 
 extern crate alloc;
@@ -56,7 +52,7 @@ async fn low_prio_async() {
     }
 }
 
-#[esp_hal_embassy::main]
+#[esp_rtos::main]
 async fn main(low_prio_spawner: Spawner) {
     info!("Init!");
 
@@ -64,24 +60,17 @@ async fn main(low_prio_spawner: Spawner) {
 
     let peripherals = esp_hal::init(esp_hal::Config::default());
 
-    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let timer0: AnyTimer = timg0.timer0.into();
-
-    let timg1 = TimerGroup::new(peripherals.TIMG1);
-    let timer1: AnyTimer = timg1.timer0.into();
-
-    esp_hal_embassy::init([timer0, timer1]);
+    esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
 
     static EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
-    let executor = InterruptExecutor::new(sw_ints.software_interrupt2);
+    let executor = InterruptExecutor::new(peripherals.FROM_CPU_INTR2);
     let executor = EXECUTOR.init(executor);
 
     let spawner = executor.start(Priority::Priority3);
-    spawner.must_spawn(high_prio());
+    spawner.spawn(high_prio().expect("task allocation failed"));
 
     info!("Spawning low-priority tasks");
-    low_prio_spawner.must_spawn(low_prio_async());
-    low_prio_spawner.must_spawn(low_prio_blocking());
+    low_prio_spawner.spawn(low_prio_async().expect("task allocation failed"));
+    low_prio_spawner.spawn(low_prio_blocking().expect("task allocation failed"));
 }

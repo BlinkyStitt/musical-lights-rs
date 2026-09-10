@@ -1,7 +1,5 @@
 //! TODO: i think the executor tasks should take the specific pins/peripherials. then it should call a generic function that takes AnyPin
 
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
 #![no_std]
 #![no_main]
 // these warnings are annoying during initial dev. these things will be used soon
@@ -17,37 +15,33 @@ use embassy_futures::{join, yield_now};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Ticker, Timer};
 use esp_backtrace as _;
-use esp_hal::dma::{AnyI2sDmaChannel, AnySpiDmaChannel, CHUNK_SIZE};
+use esp_hal::dma::CHUNK_SIZE;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::i2c::master::I2c;
-use esp_hal::i2c::AnyI2c;
-use esp_hal::i2s::master::{DataFormat, I2s, Standard};
-use esp_hal::interrupt::software::SoftwareInterruptControl;
+
+use esp_hal::i2s::master::{Channels, DataFormat, I2s, TdmConfig};
+
 use esp_hal::interrupt::Priority;
 use esp_hal::peripherals::{DMA_I2S0, DMA_SPI2, I2C0, I2S0, SPI2, SPI3};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::{Config, Spi};
-use esp_hal::spi::AnySpi;
+
 use esp_hal::system::{CpuControl, Stack};
 use esp_hal::timer::AnyTimer;
-use esp_hal::{
-    dma_buffers, dma_circular_buffers, dma_circular_buffers_chunk_size, dma_circular_descriptors,
-    dma_rx_stream_buffer, Async,
-};
+use esp_hal::{Async, dma_rx_stream_buffer};
 use lsm9ds1::accel;
 // use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{clock::CpuClock, gpio::AnyPin};
-use esp_hal_embassy::{Executor, InterruptExecutor};
-use esp_hal_smartled::{smart_led_buffer, SmartLedsAdapter};
+
+use esp_hal_smartled::{RmtSmartLeds, WS2812B_TIMING, buffer_size, color_order};
 use esp_println as _;
 use lsm9ds1::interface::{I2cInterface, SpiInterface};
 use musical_lights_core::fps::FpsTracker;
 use smart_leds::{
-    brightness, gamma,
-    hsv::{hsv2rgb, Hsv},
-    SmartLedsWrite, RGB8,
+    RGB8, SmartLedsWrite, brightness, gamma,
+    hsv::{Hsv, hsv2rgb},
 };
 use static_cell::StaticCell;
 
@@ -73,19 +67,37 @@ const FIBONACCI_BRIGHTNESS: u8 = 25;
 /// blink the onboard neopixel and the fibonacci neopixels
 #[embassy_executor::task]
 async fn blink_fibonacci256_neopixel_rmt(
-    onboard_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 0>,
+    onboard_rmt_channel: esp_hal::rmt::ChannelCreator<'static, esp_hal::Blocking, 0>,
     onboard_pin: AnyPin<'static>,
-    fibonacci_rmt_channel: esp_hal::rmt::ChannelCreator<esp_hal::Blocking, 1>,
+    fibonacci_rmt_channel: esp_hal::rmt::ChannelCreator<'static, esp_hal::Blocking, 1>,
     fibonacci_pin: AnyPin<'static>,
 ) {
-    // TODO: why can't we use the NUM_ONBOARD_NEOPIXELS const here? that's sad
-    let onboard_rmt_buffer: [u32; NUM_ONBOARD_NEOPIXELS * 24 + 1] = smart_led_buffer!(1);
-    let fibonacci_rmt_buffer: [u32; NUM_FIBONACCI_NEOPIXELS * 24 + 1] = smart_led_buffer!(256);
-
-    let mut onboard_leds =
-        SmartLedsAdapter::new(onboard_rmt_channel, onboard_pin, onboard_rmt_buffer);
-    let mut fibonacci_leds =
-        SmartLedsAdapter::new(fibonacci_rmt_channel, fibonacci_pin, fibonacci_rmt_buffer);
+    // At 80 MHz this preset fits both SK6805 and WS2812B timing limits.
+    // See docs/led-timing.md for the part sources and pulse comparison.
+    let mut onboard_leds = RmtSmartLeds::<
+        { buffer_size::<RGB8>(NUM_ONBOARD_NEOPIXELS) },
+        _,
+        RGB8,
+        color_order::Grb,
+    >::new(
+        WS2812B_TIMING,
+        onboard_rmt_channel,
+        onboard_pin,
+        Rate::from_mhz(80),
+    )
+    .expect("initializing onboard LEDs");
+    let mut fibonacci_leds = RmtSmartLeds::<
+        { buffer_size::<RGB8>(NUM_FIBONACCI_NEOPIXELS) },
+        _,
+        RGB8,
+        color_order::Grb,
+    >::new(
+        WS2812B_TIMING,
+        fibonacci_rmt_channel,
+        fibonacci_pin,
+        Rate::from_mhz(80),
+    )
+    .expect("initializing Fibonacci LEDs");
 
     // TODO: everything under this should be in a separate function
 
@@ -128,11 +140,7 @@ async fn blink_fibonacci256_neopixel_rmt(
             // TODO: call a function that applies a chosen pattern and pallete to the data. use base_hsv as a starting color
             // TODO: don't just change the color. use a fade effect to go from one color to the next
             // TODO: fastled had cool dithering. can we use that here? or use it earlier?
-            fibonacci_data.iter_mut().enumerate().map(|(i, mut x)| {
-                let mut x = base_hsv;
-                x.hue = x.hue.wrapping_add((i / 2) as u8);
-                hsv2rgb(x)
-            });
+            musical_lights_core::lights::fill_rainbow_frame(&mut *fibonacci_data, base_hsv);
 
             yield_now().await;
 
@@ -182,13 +190,13 @@ async fn sensor_task(
     scl: AnyPin<'static>,
     sda: AnyPin<'static>,
 ) {
-    let radio_f = radio_subtask(spi.into(), dma.into());
-    let accelerometer_f = accelerometer_subtask(i2c.into(), scl, sda);
+    let radio_f = radio_subtask(spi, dma);
+    let accelerometer_f = accelerometer_subtask(i2c, scl, sda);
 
     join(radio_f, accelerometer_f).await;
 }
 
-async fn radio_subtask(spi: AnySpi<'static>, _dma: AnySpiDmaChannel<'static>) {
+async fn radio_subtask(spi: SPI2<'static>, _dma: DMA_SPI2<'static>) {
     // TODO: hmm. i think my interface is actually a tx/rx interface. i need to check the docs
     let mut radio = sx1262::Device::new(spi);
 
@@ -196,7 +204,7 @@ async fn radio_subtask(spi: AnySpi<'static>, _dma: AnySpiDmaChannel<'static>) {
     warn!("what should the radio loop do?");
 }
 
-async fn accelerometer_subtask(i2c: AnyI2c<'static>, scl: AnyPin<'static>, sda: AnyPin<'static>) {
+async fn accelerometer_subtask(i2c: I2C0<'static>, scl: AnyPin<'static>, sda: AnyPin<'static>) {
     // async fn accelerometer_task(spi: SPI3, ag_cs: AnyPin, m_cs: AnyPin) {
     // TODO: do we need to upgrade this library to support the magnetometer over i2c
     // TODO: what frequency?
@@ -258,77 +266,32 @@ async fn mic_task(
     ws: AnyPin<'static>,
     din: AnyPin<'static>,
 ) {
-    // TODO: the esp32-s3 can put the dma on external ram, but i don't think the esp32 can
-    // <https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/spi_loopback_dma_psram.rs>
-    // TODO: the example has rx and tx flipped. we should fix the docs since that did not work
-    // TODO: the example uses dma_buffers, but it feels like circular buffers are the right things to use here
-    // TODO: how do we make the buffer chunk size smaller? i think that would work better. we need it to be an amount that fits in the fft cleanly
-    // let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-    //     dma_circular_buffers!(I2S_BUFFER_SIZE, 0);
-
-    // TODO: i don't understand how to make the chunk size smaller. is this right? i get a clippy warning
-    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) =
-        dma_circular_buffers_chunk_size!(I2S_BUFFER_SIZE, 0, CHUNK_SIZE);
-
-    // TODO: low power mode on the i2s?
-    // TODO: if we want to sample at 48kHz, we probably want this on another core. writing the lights is blocking
+    let rx_buffer = dma_rx_stream_buffer!(I2S_BUFFER_SIZE, I2S_CHUNK_SIZE);
     let i2s = I2s::new(
         i2s,
-        Standard::Philips, // TODO: is this the right standard?
-        // DataFormat::Data32Channel32, // TODO: this might be too much data
-        DataFormat::Data16Channel16,
-        Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        // Rate::from_hz(44_100), // TODO: this is probably more than we need, but lets see what we can get out of this hardware
-        // Rate::from_hz(16_000),
         dma,
+        TdmConfig::new_tdm_philips()
+            .with_sample_rate(Rate::from_hz(44_100))
+            .with_data_format(DataFormat::Data16Channel16)
+            .with_channels(Channels::STEREO),
     )
-    // .with_mclk(mclk) // TODO: do we need this pin? its the master clock output pin.
+    .expect("initializing I2S")
     .into_async();
-
-    // TODO: set an interrupt handler?
-
-    let i2s_rx = i2s
-        .i2s_rx
-        .with_bclk(bclk)
-        .with_ws(ws)
-        .with_din(din)
-        .build(rx_descriptors);
-
-    // TODO: maybe we don't want a circular buffer. maybe we want to read with one shots?
-    let mut transfer = i2s_rx
-        .read_dma_circular_async(rx_buffer)
-        .expect("failed reading i2s dma circular");
-
-    // TODO: should this be I2S_BYTES, or I2S_BUFFER_SIZE?
-    // TODO: some example code had 5000 here. i don't know why it would need to be larger?
-    let mut rcv: Box<[u8]> = Box::new([0u8; I2S_BUFFER_SIZE]);
-
+    let i2s_rx = i2s.i2s_rx.with_bclk(bclk).with_ws(ws).with_din(din).build();
+    let mut transfer = i2s_rx.read(rx_buffer).expect("starting I2S DMA");
+    let mut received = Box::new([0u8; I2S_BUFFER_SIZE]);
     loop {
-        match transfer.available().await {
-            Ok(mut avail) => {
-                transfer
-                    .pop(&mut rcv[..avail])
-                    .await
-                    .expect("i2s mic transfer pop failed");
-
-                // TODO: read this in chunks. we want to store it in a circular buffer so that we can do a windowing function on it
-                // TODO: do something real with the data.
-                // let sum = rcv.iter().map(|x| *x as u32).sum::<u32>();
-
-                // TODO: do something with the received data
-                info!("{} bytes", avail);
-            }
-            Err(e) => {
-                // TODO: how do we force a restart? can we just make a new transfer?
-                panic!("Error receiving data: {:?}", e);
-
-                break;
-            }
-        }
+        transfer
+            .wait_for_available_async()
+            .await
+            .expect("receiving I2S DMA");
+        let available = transfer.available_bytes().min(received.len());
+        let count = transfer.pop(&mut received[..available]);
+        info!("{} bytes", count);
     }
 }
 
-#[esp_hal_embassy::main]
+#[esp_rtos::main]
 async fn main(low_prio_spawner: Spawner) {
     // generator version: 0.3.1
 
@@ -400,16 +363,8 @@ async fn main(low_prio_spawner: Spawner) {
 
     // initialize embassy
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let timer0: AnyTimer = timg0.timer0.into();
-
-    let timg1 = TimerGroup::new(peripherals.TIMG1);
-    let timer1: AnyTimer = timg1.timer0.into();
-
-    esp_hal_embassy::init([timer0, timer1]);
+    esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
     info!("Embassy initialized!");
-
-    let mut cpu_control = CpuControl::new(peripherals.CPU_CTRL);
-    let sw_ints = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
 
     // TODO: 80MHz is cargo culted. need to find the docs for this
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("initializing rmt");
@@ -454,12 +409,12 @@ async fn main(low_prio_spawner: Spawner) {
     // let high_priority_spawner = high_priority_executor.start(Priority::Priority3);
 
     // TODO: start the blink task on core 1 since its blocking and neopixels are time sensitive
-    low_prio_spawner.must_spawn(blink_fibonacci_f);
+    low_prio_spawner.spawn(blink_fibonacci_f.expect("task allocation failed"));
 
     // Start the tasks on core 0
     // TODO: the program is locking up when we add more spawned functions. the mix of async and blocking is probably to blame
-    low_prio_spawner.must_spawn(i2s_mic_f);
-    low_prio_spawner.must_spawn(sensor_f);
+    low_prio_spawner.spawn(i2s_mic_f.expect("task allocation failed"));
+    low_prio_spawner.spawn(sensor_f.expect("task allocation failed"));
 
     // TODO: should there be a main loop here? i think cpu monitoring sounds interesting
 

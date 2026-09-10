@@ -1,26 +1,23 @@
 //! TODO: totally unsure of prioritites. i should just start with everything on the same priority probably
 //! TODO: move this to a lib and then have multiple bins. one for the hat, one for the necklace, one for the net, etc. they should try to share code in the crate or in musical-lights-core.
-#![feature(cmp_minmax, slice_as_array, type_alias_impl_trait)]
 // #![feature(thread_sleep_until)]
 
 mod debug;
 mod light_patterns;
 mod sensor_uart;
 
-use biski64::Biski64Rng;
 use esp_idf_svc::{
     hal::{
         gpio::{AnyIOPin, Gpio25, Gpio26, Gpio33},
         i2s::{self, I2sDriver, I2S0},
-        prelude::Peripherals,
+        peripherals::Peripherals,
         uart::{config::Config, UartDriver},
         units::Hertz,
     },
     io::Read,
-    sys::{bootloader_random_disable, bootloader_random_enable, esp_random},
 };
 use musical_lights_core::{
-    audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Samples},
+    audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Envelope, Samples, DISPLAY_BANDS},
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
@@ -31,7 +28,6 @@ use musical_lights_core::{
     remap,
 };
 use once_cell::sync::Lazy;
-use rand::RngCore;
 use smart_leds::colors::BLACK;
 use smart_leds::{
     brightness, gamma,
@@ -83,7 +79,7 @@ const I2S_SAMPLE_SIZE: usize = (I2S_SAMPLE_RATE_HZ as f32 / FPS_TARGET) as usize
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
 
 // 24 buckets don't fit inside of 400! we collapse to 20 to fit in 400
-const AGGREGATED_OUTPUTS: usize = 20;
+const AGGREGATED_OUTPUTS: usize = DISPLAY_BANDS;
 
 const _SAFETY_CHECKS: () = {
     // assert!(FFT_INPUTS % I2S_SAMPLE_SIZE == 0);
@@ -148,14 +144,6 @@ fn main() -> eyre::Result<()> {
 
     // TODO: set up bluetooth or wifi. not sure what to do with them. but they give us a true rng
 
-    let mut neopixel_onboard: Ws2812Esp32Rmt<'_> =
-        Ws2812Esp32Rmt::new(peripherals.rmt.channel0, pins.gpio2)?;
-    // let mut neopixel_external1 = Ws2812Esp32Rmt::new(peripherals.rmt.channel1, pins.gpio21)?;
-    let mut neopixel_external2: AdafruitNet<'_> =
-        AdafruitNet::new(peripherals.rmt.channel2, pins.gpio22)?;
-    // let mut neopixel_external3 = Ws2812Esp32Rmt::new(peripherals.rmt.channel3, pins.gpio19)?;
-    // let mut neopixel_external4 = Ws2812Esp32Rmt::new(peripherals.rmt.channel4, pins.gpio23)?;
-
     /*
     // TODO: this baud rate needs to match the sensor board
     let uart1_config = Config::default().baudrate(Hertz(MESSAGE_BAUD_RATE));
@@ -185,27 +173,6 @@ fn main() -> eyre::Result<()> {
 
     // TODO: optionally turn on wifi so we can query shazam
 
-    // for using randomness, we could also turn on the bluetooth or wifi modules, but I don't have a use for them currently
-    let seed_high;
-    let seed_low;
-    unsafe {
-        // TODO: randome enable is only needed if wifi and bluetooth are both off
-        bootloader_random_enable();
-        seed_high = esp_random();
-        seed_low = esp_random();
-        bootloader_random_disable()
-    };
-
-    let seed: u64 = ((seed_high as u64) << 32) | (seed_low as u64);
-
-    let mut rng_1 = Biski64Rng::from_seed_for_stream(seed, 0, 2);
-    let mut rng_2 = Biski64Rng::from_seed_for_stream(seed, 1, 2);
-
-    // TODO: where should we use this rng?
-    let rng_1_hello = rng_1.next_u64();
-    let rng_2_hello = rng_2.next_u64();
-    debug!("rng {rng_1_hello} {rng_2_hello}");
-
     // unsafe { heap_caps_dump_all() };
 
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
@@ -216,10 +183,12 @@ fn main() -> eyre::Result<()> {
     let blink_neopixels_handle = thread::Builder::new()
         .name("blink_neopixels".to_string())
         .spawn(move || {
+            let mut neopixel_onboard = Ws2812Esp32Rmt::new(pins.gpio2)?;
+            let mut neopixel_external2 = AdafruitNet::new(pins.gpio22)?;
+
             blink_neopixels_task(
                 &mut neopixel_onboard,
                 &mut neopixel_external2,
-                rng_1,
                 &STATE,
                 fft_ready_rx,
             )
@@ -297,14 +266,12 @@ pub type AdafruitNet<'a> =
 fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut AdafruitNet<'_>,
-    mut rng: Biski64Rng,
     state: &'static Mutex<State>,
     audio_ready: flume::Receiver<MyBands>,
 ) -> eyre::Result<()> {
     info!("Start NeoPixel rainbow!");
 
     // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with the other art?
-    // let mut g_hue = rng.next_u32() as u8;
     let mut g_hue = 0;
     let mut slide_offset: usize = 0;
 
@@ -346,23 +313,8 @@ fn blink_neopixels_task(
 
     let mut fps = Box::new(FpsTracker::new("pixel"));
 
-    // Calculate α once at startup:
-    // TODO: re-use envelope code
-    // attack alpha
-    let atk_window_ms = 0.0_f32; // EMA window in ms
-    let atk_dt = 1.0 / FPS_TARGET; // seconds per update
-    let atk_tau = atk_window_ms * 1e-3; // seconds
-    let atk_alpha = (-atk_dt / atk_tau).exp(); // runtime α
-    let atk_alpha_q8 = (atk_alpha * 256.0).round() as u16;
-    let atk_one_minus_q8 = 256 - atk_alpha_q8;
-
-    // decay alpha
-    let decay_window_ms = 120.0_f32; // EMA window in ms
-    let decay_dt = 1.0 / FPS_TARGET; // seconds per update
-    let decay_tau = decay_window_ms * 1e-3; // seconds
-    let decay_alpha = (-decay_dt / decay_tau).exp(); // runtime α
-    let decay_alpha_q8 = (decay_alpha * 256.0).round() as u16;
-    let decay_one_minus_q8 = 256 - decay_alpha_q8;
+    let mut envelopes = [Envelope::new(0.0, 0.12, 0.0); AGGREGATED_OUTPUTS];
+    let mut last_frame = Instant::now();
 
     loop {
         debug!("Hue: {g_hue}");
@@ -375,13 +327,18 @@ fn blink_neopixels_task(
 
         let bands = audio_ready.recv()?;
         info!("{bands}");
+        let now = Instant::now();
+        let elapsed_s = now.duration_since(last_frame).as_secs_f32();
+        last_frame = now;
+        let smoothed = core::array::from_fn::<_, AGGREGATED_OUTPUTS, _>(|i| {
+            envelopes[i].update(bands.0[i] as f32, elapsed_s).round() as u8
+        });
 
         // TODO: gamma and brightness correct now?
         onboard_rgb_data[0] = hsv2rgb(base_hsv);
 
         // TODO: maybe we should average bands together so that a sound between two bands looks better?
-        let bands_iter = bands
-            .0
+        let bands_iter = smoothed
             .iter() // 20 items
             .flat_map(
                 move |&band|           // for each band...
@@ -396,18 +353,7 @@ fn blink_neopixels_task(
             .zip(fibonacci_hsv_rainbow_data.iter_mut())
             .zip(bands_iter)
         {
-            // TODO! this needs an EMA/Envelope! it is way too jumpy!
-            let prev = hsv.val as u16;
-            let inp = loudness as u16;
-            // fixed‑point EMA: (α*prev + (1–α)*inp + ½LSB) >> 8
-            let smooth = if inp > prev {
-                // attack
-                (atk_alpha_q8 * prev + atk_one_minus_q8 * inp + 128) >> 8
-            } else {
-                // decay
-                (decay_alpha_q8 * prev + decay_one_minus_q8 * inp + 128) >> 8
-            } as u8;
-            hsv.val = smooth;
+            hsv.val = loudness;
 
             // TODO: instead of hsv, do hsluv?
             *rgb = hsv2rgb(*hsv);
@@ -543,7 +489,7 @@ fn mic_task(
     let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
 
     // TODO: const setup?
-    let mut filter_bank = BarkBank::new(FPS_TARGET, I2S_SAMPLE_RATE_HZ as f32);
+    let mut filter_bank = BarkBank::new(I2S_SAMPLE_RATE_HZ as f32)?;
 
     i2s_driver.rx_enable()?;
     info!("I2S mic driver enabled");
@@ -556,7 +502,7 @@ fn mic_task(
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
-        let spectrum = filter_bank.push_samples(&i2s_sample_buf.0);
+        let spectrum = filter_bank.push_samples(&i2s_sample_buf.0)?;
 
         let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
         for (&x, b) in spectrum.0.iter().zip(bands.0.iter_mut()) {

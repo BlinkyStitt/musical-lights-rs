@@ -1,114 +1,83 @@
 # Musical Lights
 
-Rust code for making lights blink to music.
+Rust applications that make lights respond to audio.
 
-## Reading
+See the [upgrade plan](docs/upgrade-plan.md) for the agreed scope and added checks.
 
-- [The Rust Book](https://doc.rust-lang.org/book/)
-- Hanning and other window functions
-- FFT
-- A-weighting, ISO-226:2023, and other equal-level-loudness contours
-- Biquads
-- Bitbanging with SPI and RMT
-- Color spaces (HSLuv and RGB8)
-- Splines and Gradients
-- Gamma correction
-- Level shifters
-- wasm_bindgen
-- reactive signals
+The shared processor analyzes 24 Bark bands. It combines the lowest five into
+one bass output and returns 20 display values. Leptos, the terminal filter-bank
+visualizer, and ESP-IDF use this processor. Weighting, compression, adaptive
+normalization, and bass combination are visual approximations. They do not
+implement or claim compliance with an ISO loudness standard.
 
-## Core
+## Pinned tools
 
-The "core" library can be used on any platform. It does not use the std library or an allocator. This makes some things harder to build, but works on pretty much anything. There are some optional features that bring in "std" and other features.
+Non-ESP packages use `nightly-2026-09-10`. The toolchain files install rust-src,
+rustfmt, Clippy, and the WASM and ARM targets. Each package has its own manifest;
+the root workspace contains only `musical-lights-core`.
 
-    ```bash
-    RUST_LOG=trace cargo test --features log
-    ```
+```sh
+rustup toolchain install nightly-2026-09-10 --profile minimal \
+  --component rust-src,rustfmt,clippy \
+  --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
+python3 validation/install_tools.py web
+export PATH="$PWD/.tools/bin:$PATH"
+```
 
-## Mac
+This installs Node `26.8.2`, Trunk `0.22.0-beta.5`, Dioxus CLI `0.8.0-alpha.1`, and
+wasm-bindgen CLI `0.2.128`. Cargo manifests pin direct dependencies and the
+independent lockfiles freeze their resolved graphs. See [dependency inventory](docs/dependencies.md).
 
-    ```bash
-    cd musical-terminal
-    cargo run --release
-    ```
+For ESP32, install the named Xtensa toolchain explicitly:
 
-## Feather M0
+```sh
+python3 validation/install_tools.py esp
+export PATH="$PWD/.tools/bin:$PATH"
+espup install --toolchain-version 1.98.1.0 --name esp-1.98.1.0 \
+  --targets esp32 --export-file "$HOME/export-esp-1.98.1.0.sh"
+. "$HOME/export-esp-1.98.1.0.sh"
+```
 
-    ```bash
-    rustup target add thumbv6m-none-eabi
-    ```
+The installer uses espup `0.17.1` and ldproxy `0.3.5`. ESP-IDF targets `v6.1`.
+Use Python 3.10 or newer for IDF setup. See the [official espup instructions](https://github.com/esp-rs/espup#usage)
+and [Xtensa releases](https://github.com/esp-rs/rust-build/releases).
 
-    ```bash
-    cargo install cargo-hf2
-    ```
+## Run or build
 
-    ```bash
-    cd musical-feather-m0
-    cargo check
-    cargo hf2 --release
-    ```
+Run these commands from the named package directory.
 
-## STM32
+| Package | Command |
+| --- | --- |
+| musical-lights-core | `cargo test --locked --features log` |
+| musical-terminal | `cargo run --release --locked` |
+| musical-leptos | `trunk serve` |
+| musical-dioxus | `dx serve --web` |
+| musical-wasm | `python3 run.py` |
+| musical-feather-m0 | `cargo build --release --bins --locked` |
+| musical-stm32 | `cargo build --release --bins --locked` |
+| musical-adafruit-sparkle-embassy | `cargo build --release --bins --locked` |
+| musical-adafruit-sparkle-idf | `cargo build --release --bins --locked` |
 
-Setup:
+On macOS, install SDL2 for terminal examples and set its library search path:
 
-    ```bash
-    rustup target add thumbv7em-none-eabihf
-    ```
+```sh
+brew install sdl2
+export LIBRARY_PATH="$(brew --prefix sdl2)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+```
 
-    ```bash
-    cargo install cargo-hf2
-    ```
+## Validate
 
-Being careful about how the stm32 is powered, plug it into your computer's USB port. Then:
+From the repository root, with the ESP environment loaded:
 
-    ```bash
-    cd musical-stm32
-    cargo check
-    cargo run --release
-    ```
+```sh
+python3 validation/validate.py all
+```
 
-## TODO
+Select individual packages when needed, such as `core terminal`, `leptos dioxus
+wasm browser`, or `stm32 feather esp-embassy esp-idf`. Browser tests build no
+applications themselves; build the three web packages first.
 
-- [ ] defmt instead of log in musical-lights-core
-
-  - how should we handle both defmt and log being enabled? i just want one. should it exit out? should it use both?
-
-- <https://www.youtube.com/watch?v=PAsMlDptjx8>
-
-Bosi, M. & Goldberg, R. – “Filter Banks in Perceptual Audio Coding.”
-In Introduction to Digital Audio Coding and Standards, Chap 3, Springer, 2003.
-Classic tutorial on cascaded analysis banks (4‑pole, critical‑band spacing) used in MPEG/AAC.
-
-Zwicker, E. – “Procedure for Calculating Loudness of Time‑Variant Sound.” JASA (1977).
-Introduces the 20‑50 ms loudness integration window that modern short‑term models still use.
-
-Zwicker, E. & Fastl, H. – Psycho‑Acoustics: Facts and Models, 3 rd ed., Springer, 1999.
-Definitive reference for Bark scale, critical‑band masking, and temporal adaptation.
-
-Glasberg, B. & Moore, B. – “A Model of Loudness Applicable to Time‑Varying Sounds.” AES 113 (2002).
-Cube‑root compression and adaptive smoothing adopted in many codecs.
-
-ISO 532‑1 / ECMA‑418‑2 (2023) – Measurement of Perceived Loudness, Time‑Varying Method.
-Standardises the Zwicker/Glasberg short‑term loudness algorithm (30 ms integration).
-
-Moore, B., Glasberg, B. & Roberts, B. – “Refining the Calculation of Auditory Filter Bandwidth.” JASA (1984).
-Source of the ERB (= equivalent rectangular bandwidth) scale; often compared to Bark.
-
-Irino, T. & Patterson, R. – “A Time‑Domain, Level‑Dependent Gammatone Filter Bank.” ICASSP (2001).
-Shows how higher‑order (4‑pole) gammatone filters better match cochlear skirts.
-
-Brandenburg, K. & Bosi, M. – “Overview of MPEG‑1 Audio Layer III.” AES 101 (1996).
-Demonstrates Bark‑bank energy → dB → psycho‑model workflow in MP3.
-
-Herre, J. & Johnston, J. – “Ear to Ear: How MPEG‑4 Audio Perceptual Coding Works.” Proc. IEEE (2002).
-Details temporal noise shaping and dynamic gain, confirming 30 ms smoothing.
-
-Skoglund, J. & Valin, J.‑M. – “Voice and Audio Coding with Opus.” IETF Journal (2012).
-Modern codec still uses 4‑pole critical‑band banks for the CELT mode; illustrates per‑band adaptive gain.
-
-Schroeder, M. R. & Hall, J. W. – “Modeling Auditory Filter Shapes.” JASA (1974).
-Early evidence that auditory filters have ~12 dB/oct skirts—motivation for cascading identical biquads.
-
-Verhelst, W. et al. – “AES Recommended Practice for Loudness of Internet Audio Streaming.” AES TD1008 (2020).
-Applies short‑term lo
+[Validation evidence and limits](docs/validation.md) records tests, compiler
+identities, processor cost, and pending physical hardware checks. No validation
+command flashes firmware. The Feather application and several radio/sensor
+paths remain unfinished; successful links do not establish hardware operation.

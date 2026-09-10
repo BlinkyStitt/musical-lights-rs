@@ -5,60 +5,41 @@ edition = "2024"
 resolver = "2"
 
 [dependencies]
-ahrs = { version = "0.8.0", default-features = false }
-biquad = { version = "0.5.0", default-features = false }
-circular-buffer = { version = "1.2.0", default-features = false }
-cobs = { version = "0.5.0", default-features = false }
-crc = "3.4.0"
-defmt = { version = "1.0.1", default-features = false, optional = true }
-ed25519-dalek = { version = "2.2.0", default-features = false, features = [
-    "fast",
-    "serde",
-    "zeroize",
-] }
-embedded-io = "0.7.1"
-embedded-io-async = "0.7.0"
-embassy-time = { optional = true, version = "*" }
-enterpolation = { version = "0.3.0", default-features = false, features = [
+ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", rev = "0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9", default-features = false }
+biquad = { version = "=0.6.0", default-features = false }
+circular-buffer = { version = "=2.0.1", default-features = false }
+cobs = { version = "=0.5.1", default-features = false }
+crc = "=3.4.0"
+defmt = { version = "=1.1.1", default-features = false, optional = true }
+embassy-time = { optional = true, version = "=0.5.1" }
+enterpolation = { version = "=0.3.0", default-features = false, features = [
     "bspline",
     "linear",
 ] }
-extfn = "0.1.3"
-heapless = { version = "0.9.2", features = ["serde"] }
-i24 = { version = "2.2.5", default-features = false }
-itertools = { version = "0.14.0", default-features = false }
-log = { version = "*", default-features = false, optional = true }
-microfft = { version = "0.6.0", default-features = false, features = [
+heapless = { version = "=0.9.3", features = ["serde"] }
+i24 = { version = "=2.3.5", default-features = false }
+itertools = { version = "=0.15.0", default-features = false }
+log = { version = "=0.4.34", default-features = false, optional = true }
+microfft = { version = "=0.6.0", default-features = false, features = [
     "size-4096",
 ] }
-micromath = "2.1.0"
-nalgebra = { version = "0.34.1", default-features = false }
-num = { version = "0.4.3", default-features = false }
-num-complex = { version = "0.4.6", default-features = false }
-palette = { version = "0.7.6", default-features = false }
-postcard = { version = "1.1.3", features = ["experimental-derive", "use-crc"] }
-serde = { version = "1.0.228", default-features = false }
-smart-leds = "0.4.0"
-thiserror = { version = "2", default-features = false }
-pallete = "1.1.0"
-
-# TODO: these need std
-# eyre = { version = "0.6.12", default-features = false, features = [] }
-# flume = { version = "0.11.1", default-features = false, features = ["async"] }
+micromath = "=2.1.0"
+nalgebra = { version = "=0.35.0", default-features = false }
+num = { version = "=0.4.3", default-features = false }
+num-complex = { version = "=0.4.6", default-features = false }
+palette = { version = "=0.7.7", default-features = false }
+postcard = { version = "=1.1.3", features = ["experimental-derive", "use-crc"] }
+serde = { version = "=1.0.229", default-features = false }
+smart-leds = "=0.4.0"
+thiserror = { version = "=2.0.20", default-features = false }
 
 # # TODO: use these?
-# embedded-graphics = "0.8.1"
-# embedded-graphics-framebuf = "0.5.0"
-# cichlid = { version = "0.2.1", features = ["no-std"] }
 
 [dev-dependencies]
-test-log = "0.2.19"
+test-log = "=0.2.21"
 
 [features]
 
-# TODO: defmt should be optional. both defmt and log should be additive!
-
-# TODO: the crate is no_std, but then we have a no_std feature. should we have two members instead?
 default = ["std", "defmt"]
 
 alloc = [
@@ -69,7 +50,6 @@ alloc = [
     "palette/alloc",
     "postcard/alloc",
     "serde/alloc",
-    "ed25519-dalek/alloc",
     "defmt?/alloc",
 ]
 defmt = [
@@ -85,12 +65,10 @@ libm = [
     "enterpolation/libm",
     "num/libm",
     "num-complex/libm",
-    "heapless/portable-atomic",
 ]
 std = [
     "ahrs/std",
     "cobs/use_std",
-    "ed25519-dalek/std",
     "enterpolation/std",
     "i24/std",
     "log?/std",
@@ -102,3 +80,7 @@ std = [
     "serde/std",
     "thiserror/std",
 ]
+
+[[example]]
+name = "bark_cost"
+required-features = ["std"]

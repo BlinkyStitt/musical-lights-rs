@@ -1,34 +1,30 @@
-# Musical Lights in your Terminal
+# Musical lights in the terminal
 
-No embedded hardware? No problem. Run the code from your computer!
+Use Rust `nightly-2026-09-10`. The default binary uses the shared Bark processor:
+24 analysis bands, five combined bass bands, and 20 display values.
+The separate FFT binary and Pacman example remain available.
 
-## Mac Setup
+On macOS:
 
-    ```sh
-    brew install sdl2
+```sh
+brew install sdl2
+export LIBRARY_PATH="$(brew --prefix sdl2)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+```
 
-    export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
-    export CPATH="/opt/homebrew/include:$CPATH"
-    ```
+On Linux, install ALSA and SDL2 development libraries.
+From this directory:
 
-## Audio Visualizer
+```sh
+cargo run --release --locked
+cargo run --release --locked --bin fft
+cargo run --locked --example pacman
+cargo run --release --locked --example microphone_check
+```
 
-    ```sh
-    cargo run --release
-    ```
+The microphone check processes ten seconds without saving audio.
+The input path prefers Loopback Audio, then the MacBook microphone, then the
+system default. It uses a supported device rate, converts input to mono, and
+retains partial blocks between callbacks. A full display queue drops a block
+instead of blocking the audio callback. Stream errors appear in the log.
 
-## Pacman Example
-
-    ```sh
-    cargo run --example pacman
-    ```
-
-## Misc Thoughts
-
-i don't think an fft is the right thing to use. its for processing constant tones, not "transients". and musical notes are transients.
-
-we need a bunch of low and high pass filters. but can we do like a bunch of lows and then subtract them from eachother to calculate each? or do we need a bunch of low then high pass. esp32 might not be good enough for that but we'll see.
-
-## Bugs
-
-The first bin isn't ever lighting up. I think probably because of the a-weighting being too aggressive
+See [validation](../docs/validation.md) for builds, tests, and measured CPU cost.

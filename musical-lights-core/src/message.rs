@@ -48,7 +48,7 @@ pub const CRC: crc::Crc<CrcWidth> = crc::Crc::<CrcWidth>::new(&crc::CRC_16_IBM_S
 /// TODO: what size do these buffers need to be? make sure to leave room for the sentinel byte
 /// TODO: is writing to a buffer like this good? should we have a std version that returns a Vec?
 /// TODO: <https://github.com/jamesmunns/postcard/issues/117#issuecomment-2888769291>
-/// NOTE: this does not include the sentinel value, so be careful with how you send this?
+/// The returned length includes the final zero delimiter.
 pub fn serialize_with_crc_and_cobs<T>(
     value: &T,
     crc_buf: &mut [u8],
@@ -66,7 +66,7 @@ where
 
     // try_encode doesn't include the sentinel byte, so we need to add it manually
     // TODO: is this right?
-    output[size] = 0;
+    *output.get_mut(size).ok_or(cobs::DestBufTooSmallError)? = 0;
 
     Ok(size + 1)
 }
@@ -101,7 +101,7 @@ pub const fn max_size_with_crc<T: MaxSize>() -> usize {
 }
 
 pub const fn max_size_with_crc_and_cobs<T: MaxSize>() -> usize {
-    cobs::max_encoding_length(max_size_with_crc::<T>())
+    cobs::max_encoding_length(max_size_with_crc::<T>()) + 1
 }
 
 #[cfg(test)]
@@ -113,13 +113,13 @@ mod tests {
         /// the maximum size of the postcard serialized bytes with a CRC attached.
         const MESSAGE_MAX_SIZE_WITH_CRC: usize = max_size_with_crc::<Message>();
         /// the maximum size of the postcard serialized bytes with a CRC attached and cobs encoded.
-        /// TODO: this doesn't include the final 0 sentinel byte.
+        /// Includes the final zero delimiter.
         const MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS: usize = max_size_with_crc_and_cobs::<Message>();
 
         // encode the message into output
         // TODO: do we need a buffer? can we use the output as buf?
         let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
-        let mut output = [0u8; Message::POSTCARD_MAX_SIZE];
+        let mut output = [0u8; MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS];
 
         let message = Message::Orientation(Orientation::TopUp);
 
@@ -137,9 +137,41 @@ mod tests {
 
         println!("encoded: {sized_output:?}");
 
-        // TODO: don't we need a sentinel byte here?
         let deserialized_message: Message = deserialize_with_cobs_and_crc(sized_output).unwrap();
 
         assert_eq!(deserialized_message, message);
+    }
+    #[test]
+    fn worst_case_message_fits_and_corruption_is_rejected() {
+        let message = Message::PeerCoordinate(
+            PeerId(255),
+            Coordinate {
+                lat: f32::MAX,
+                lon: f32::MIN,
+            },
+        );
+        let mut scratch = [0; max_size_with_crc::<Message>()];
+        let mut frame = [0; max_size_with_crc_and_cobs::<Message>()];
+        let size = serialize_with_crc_and_cobs(&message, &mut scratch, &mut frame).unwrap();
+        assert_eq!(frame[size - 1], 0);
+        assert!(frame[..size - 1].iter().all(|&b| b != 0));
+        let mut good = frame;
+        assert_eq!(
+            deserialize_with_cobs_and_crc::<Message>(&mut good[..size]).unwrap(),
+            message
+        );
+        frame[2] ^= 0x40;
+        assert!(deserialize_with_cobs_and_crc::<Message>(&mut frame[..size]).is_err());
+    }
+
+    #[test]
+    fn missing_sentinel_space_returns_error() {
+        let mut scratch = [0; 8];
+        let mut frame = [0; 8];
+        let size = serialize_with_crc_and_cobs(&Message::Ping, &mut scratch, &mut frame).unwrap();
+        assert!(matches!(
+            serialize_with_crc_and_cobs(&Message::Ping, &mut scratch, &mut frame[..size - 1]),
+            Err(crate::errors::MyError::CobsDestBufTooSmall(_))
+        ));
     }
 }

@@ -1,11 +1,13 @@
 use crate::dependent_module;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{AudioContext, AudioWorkletNode, AudioWorkletNodeOptions};
 
+type AudioCallback = dyn FnMut(&mut [f32]) -> bool;
+
 #[wasm_bindgen]
-pub struct WasmAudioProcessor(Box<dyn FnMut(&mut [f32]) -> bool>);
+pub struct WasmAudioProcessor(Box<AudioCallback>);
 
 #[wasm_bindgen]
 impl WasmAudioProcessor {
@@ -16,7 +18,7 @@ impl WasmAudioProcessor {
         Box::into_raw(Box::new(self)) as usize
     }
     pub unsafe fn unpack(val: usize) -> Self {
-        *Box::from_raw(val as *mut _)
+        unsafe { *Box::from_raw(val as *mut _) }
     }
 }
 
@@ -24,9 +26,7 @@ impl WasmAudioProcessor {
 // whose samples should be played directly. Ideally, call wasm_audio based on
 // user interaction. Otherwise, resume the context on user interaction, so
 // playback starts reliably on all browsers.
-pub async fn wasm_audio(
-    process: Box<dyn FnMut(&mut [f32]) -> bool>,
-) -> Result<AudioContext, JsValue> {
+pub async fn wasm_audio(process: Box<AudioCallback>) -> Result<AudioContext, JsValue> {
     let ctx = AudioContext::new()?;
     prepare_wasm_audio(&ctx).await?;
     let node = wasm_audio_node(&ctx, process)?;
@@ -39,17 +39,15 @@ pub async fn wasm_audio(
 // this function.
 pub fn wasm_audio_node(
     ctx: &AudioContext,
-    process: Box<dyn FnMut(&mut [f32]) -> bool>,
+    process: Box<AudioCallback>,
 ) -> Result<AudioWorkletNode, JsValue> {
-    AudioWorkletNode::new_with_options(
-        ctx,
-        "WasmProcessor",
-        AudioWorkletNodeOptions::new().processor_options(Some(&js_sys::Array::of3(
-            &wasm_bindgen::module(),
-            &wasm_bindgen::memory(),
-            &WasmAudioProcessor(process).pack().into(),
-        ))),
-    )
+    let options = AudioWorkletNodeOptions::new();
+    options.set_processor_options(Some(&js_sys::Array::of3(
+        &wasm_bindgen::module(),
+        &wasm_bindgen::memory(),
+        &WasmAudioProcessor(process).pack().into(),
+    )));
+    AudioWorkletNode::new_with_options(ctx, "WasmProcessor", &options)
 }
 
 pub async fn prepare_wasm_audio(ctx: &AudioContext) -> Result<(), JsValue> {

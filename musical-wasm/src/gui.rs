@@ -1,5 +1,5 @@
 use crate::oscillator::Params;
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{AudioContext, HtmlInputElement, HtmlLabelElement};
 
 pub fn create_gui(params: &'static Params, ctx: AudioContext) {

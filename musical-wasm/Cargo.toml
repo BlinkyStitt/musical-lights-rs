@@ -2,21 +2,20 @@
 name = "wasm-audio-worklet"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.93"
 resolver = "2"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-console_log = "1.0.0"
-js-sys = "0.3.77"
-wasm-bindgen = "0.2.100"
-wasm-bindgen-futures = "0.4.50"
-console_error_panic_hook = "*"
+console_log = "=1.1.0"
+js-sys = "=0.3.105"
+wasm-bindgen = "=0.2.128"
+wasm-bindgen-futures = "=0.4.78"
+console_error_panic_hook = "=0.1.7"
 
 [dependencies.web-sys]
-version = "0.3.77"
+version = "=0.3.105"
 features = [
   "AudioContext",
   "AudioDestinationNode",

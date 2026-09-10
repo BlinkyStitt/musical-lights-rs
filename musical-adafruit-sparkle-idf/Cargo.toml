@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Bryan Stitt <bryan@stitthappens.com>"]
 edition = "2021"
 resolver = "2"
-rust-version = "1.77"
 
 [[bin]]
 name = "musical-adafruit-sparkle-idf"
@@ -27,42 +26,29 @@ musical-lights-core = { path = "../musical-lights-core", default-features = fals
     "alloc", "std", "log"
 ] }
 
-biski64 = { version = "0.3.2", default-features = false }
-dagc = "0.1.1"
-# embassy-time = {version = "0.4", features = ["generic-queue-8"]}
-embedded-graphics = { version = "0.8.1", features = ["nalgebra_support"] }
+dagc = "=0.1.1"
+embedded-graphics = { version = "=0.8.2", features = ["nalgebra_support"] }
 
-esp-idf-svc = "0.51"
-# esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver"] }
-# we need the "rmt-legacy" feature so that we can receive too. the newer driver only supports transmit
-# <https://github.com/esp-rs/esp-idf-hal/issues/512#issuecomment-3050467212>
-# esp-idf-hal = { version = "*", features = ["rmt-legacy"] }
-# esp-idf-sys = { version = "*", features = ["binstart"] }
+esp-idf-svc = "=0.52.1"
 
-eyre = "0.6.12"
-flume = "0.11.1"
-heapless = { version = "0.9.2", features = ["portable-atomic", "serde"] }
-itertools = { version = "0.14.0", default-features = false }
-infrared = "0.14.2"
-log = "0.4.28"
-once_cell = { version = "1.21.3", features = ["parking_lot", "portable-atomic", "critical-section"] }
-postcard = "1.1.3"
-rand = { version = "0.9.2", default-features = false, features = ["nightly"] }
-smart-leds = "0.4"
-smart-leds-trait = "0.3.2"
-static_cell = { version = "2.1.1", features = ["nightly"] }
-ws2812-esp32-rmt-driver = { version = "*", features = ["embedded-graphics-core", "smart-leds-trait", "std", "alloc"] }
-
-[patch.crates-io]
-# Patched until <https://github.com/korken89/biquad-rs/issues/15> is released. fixes have already been merged
-biquad = { git = "https://github.com/korken89/biquad-rs", rev = "9559e5f3bf9ff8e1415856d5ac27d7fb2714cedb"}
-
-# TODO: not sure about this
-# esp-idf-svc = { git = "https://github.com/esp-rs/esp-idf-svc.git", rev = "de032e3621d24852db936e3c1e534d6b015f5ee8" }
-# esp-idf-hal = { git = "https://github.com/esp-rs/esp-idf-hal.git", rev = "611a5aa1791d385a704a2af694909c25532622f0" }
-
-# # Patched until <https://github.com/jmg049/i24/pull/17> is released. it has already been merged
-# i24 = { git = "https://github.com/jmg049/i24.git", rev = "50cf8bfa5d1a357de3b2d09400a018fdeec6370c" }
+eyre = "=0.6.14"
+flume = "=0.12.0"
+heapless = { version = "=0.9.3", features = ["portable-atomic", "serde"] }
+itertools = { version = "=0.15.0", default-features = false }
+infrared = "=0.14.2"
+log = "=0.4.34"
+once_cell = { version = "=1.21.4", features = ["parking_lot", "portable-atomic", "critical-section"] }
+postcard = "=1.1.3"
+smart-leds = "=0.4.0"
+smart-leds-trait = "=0.3.2"
+static_cell = { version = "=2.1.1", features = [] }
+ws2812-esp32-rmt-driver = { version = "=0.15.0-alpha.1", features = ["embedded-graphics-core", "smart-leds-trait", "std", "alloc"] }
 
 [build-dependencies]
-embuild = "0.33.1"
+embuild = "=0.33.5"
+
+# Upstream revisions add ESP-IDF 6.x support beyond the published crates.
+[patch.crates-io]
+esp-idf-svc = { git = "https://github.com/esp-rs/esp-idf-svc", rev = "81d64e2b23d8f1984e137e3b9760054e4d2e90e8" }
+esp-idf-hal = { git = "https://github.com/esp-rs/esp-idf-hal", rev = "846cff17f3701b836fe461b6751d9e5c42b4b278" }
+esp-idf-sys = { git = "https://github.com/esp-rs/esp-idf-sys", rev = "33045844f467fb8c66dfd78c3cacb0e218c3d26a" }

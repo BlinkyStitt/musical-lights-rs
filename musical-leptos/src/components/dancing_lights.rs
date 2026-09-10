@@ -1,231 +1,130 @@
-use js_sys::Float64Array;
+use crate::wasm_audio::AudioSession;
 use leptos::prelude::*;
 use log::warn;
 use musical_lights_core::{
-    audio::{
-        AggregatedAmplitudesBuilder, AudioBuffer, BarkScaleBuilder, Decibels,
-        DownResistanceBuilder, ExponentialScaleBuilder, FlatWeighting, PeakScaledBuilder, Samples,
-        FFT,
-    },
+    audio::{BarkBank, DISPLAY_BANDS},
     lights::Gradient,
-    logging::{info, trace},
-    windows::HanningWindow,
 };
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-use web_sys::{MediaStream, MediaStreamConstraints, MessageEvent};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
-use crate::wasm_audio::wasm_audio;
-
-/// TODO: most things i've tested have given 512 samples at a time, but browsers give 128. this should probably not be a const
-const MIC_SAMPLES: usize = 128;
-const FFT_INPUTS: usize = 2048;
-
-/// bark scale has 24 bands.
-const NUM_BANDS: usize = 24;
-
-// /// TODO: 0-20kHz is way too wide for most music. but some electronic music and songs with female vocals actually do use the higher 
-// const MIN_FREQ: f32 = 0.0;
-// const MAX_FREQ: f32 = 12_000.0;
-
-/// maximum rate at which the visual loudness can decrease
-const DOWN_RATE: f32 = 0.0045;
-
-const FFT_OUTPUTS: usize = FFT_INPUTS / 2;
-
-/// Prompt the user for their microphone
-async fn load_media_stream() -> Result<MediaStream, JsValue> {
-    let navigator = window().navigator();
-
-    let mut constraints = MediaStreamConstraints::new();
-    constraints.set_audio(&JsValue::from(true));
-
-    let promise = navigator
-        .media_devices()
-        .unwrap()
-        .get_user_media_with_constraints(&constraints)
-        .unwrap();
-
-    let f = wasm_bindgen_futures::JsFuture::from(promise);
-
-    let stream: MediaStream = f.await?.unchecked_into();
-
-    Ok(stream)
+#[derive(Clone)]
+struct SessionOwner {
+    alive: Rc<Cell<bool>>,
+    session: Rc<RefCell<Option<AudioSession>>>,
 }
 
 #[component]
 pub fn DancingLights() -> impl IntoView {
-    // TODO: do this on button click
-    let (listen, set_listen) = create_signal(false);
-
-    // TODO: i think this needs to be a vec of signals
-    let (audio, set_audio) = create_signal([0.0; NUM_BANDS]);
-
-    let (sample_rate, set_sample_rate) = create_signal(None);
-
-    // let gradient = Gradient::<NUM_CHANNELS>::new_mermaid();
-    // TODO: use a signal for this so that we can change it real time
-    let gradient = Gradient::<NUM_BANDS>::new_rainbow(100.0, 75.0);
-
+    let (audio, set_audio) = signal([0.0; DISPLAY_BANDS]);
+    let (listening, set_listening) = signal(false);
+    let (starting, set_starting) = signal(false);
+    let (error, set_error) = signal(None::<String>);
+    let (sample_rate, set_sample_rate) = signal(0.0);
+    let owner = StoredValue::new_local(SessionOwner {
+        alive: Rc::new(Cell::new(true)),
+        session: Rc::new(RefCell::new(None)),
+    });
+    on_cleanup(move || {
+        owner.with_value(|owner| {
+            owner.alive.set(false);
+            if let Some(session) = owner.session.borrow_mut().take() {
+                session.stop();
+            }
+        })
+    });
+    let gradient = Gradient::<DISPLAY_BANDS>::new_rainbow(100.0, 75.0);
     let colors: Vec<_> = gradient
         .rgb_colors
         .iter()
-        .map(|x| format!("#{:02X}{:02X}{:02X}", x.r, x.g, x.b))
+        .map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b))
         .collect();
-
-    // // TODO: make this a signal so the user can change it?
-    // let peak_decay = 0.99;
-
-    // TODO: this is wrong. this runs immediatly, not on first click. why?
-    let start_listening = create_resource(listen, move |x| async move {
-        if !x {
-            return Ok(None);
+    let start = move |_| {
+        if starting.get_untracked() || listening.get_untracked() {
+            return;
         }
-
-        // TODO: this needs to come from the browser
-        let mut peak_scaled_builder = BarkScaleBuilder::new(48_000.);
-
-        let mut down_resistance_builder = DownResistanceBuilder::<NUM_BANDS>::new(DOWN_RATE);
-
-        let media_stream = load_media_stream()
-            .await
-            .map_err(|x| format!("media stream error: {:?}", x))?;
-
-        let media_stream_id = media_stream.id();
-
-        // // TODO: do we need this? does it or something on it need to be spawned?
-        // // TODO: how do we tell this to close?
-        // let promise = audio_ctx.resume().unwrap();
-        // let _ = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
-
-        info!("active media stream: {:?}", media_stream_id);
-
-        let (audio_ctx, audio_worklet_node) = wasm_audio(&media_stream)
-            .await
-            .map_err(|x| format!("audio_ctx error: {:?}", x))?;
-
-        info!("audio context: {:?}", audio_ctx);
-
-        let new_sample_rate = audio_ctx.sample_rate();
-
-        // TODO: is combining signals like this okay?
-        set_sample_rate(Some(new_sample_rate));
-
-        // TODO: what weighting?
-        let weighting = FlatWeighting;
-
-        let mut audio_buffer = AudioBuffer::<MIC_SAMPLES, FFT_INPUTS>::new();
-
-        let fft = FFT::<FFT_INPUTS, FFT_OUTPUTS>::new_with_window_and_weighting::<
-            HanningWindow<FFT_INPUTS>,
-            _,
-        >(weighting);
-
-        // let scale_builder = ExponentialScaleBuilder::<FFT_OUTPUTS, NUM_BANDS>::new(
-        //     MIN_FREQ,
-        //     MAX_FREQ,
-        //     new_sample_rate,
-        // );
-        let scale_builder = BarkScaleBuilder::new(new_sample_rate);
-
-        // let mut dancing_lights =
-        //     DancingLights::<AUDIO_Y, NUM_CHANNELS, { AUDIO_Y * NUM_CHANNELS }>::new(
-        //         gradient, peak_decay,
-        //     );
-
-        let onmessage_callback = Closure::new(move |x: MessageEvent| {
-            // TODO: this seems fragile. how do we be sure of the data type
-            let data = x.data();
-
-            let data = Float64Array::new(&data);
-
-            let data = data.to_vec();
-
-            trace!("raw inputs: {:#?}", data);
-
-            let samples_results: Result<[f64; MIC_SAMPLES], _> = data.try_into();
-
-            if let Ok(samples) = samples_results {
-                // our fft code wants f32, but js gives us f64
-                let samples = samples.map(|x| x as f32);
-
-                // TODO: actual audio processing
-                // TODO: this will actually be a vec of 120 f32s when we are done
-                audio_buffer.push_samples(Samples(samples));
-
-                // TODO: throttle this
-                let buffered = audio_buffer.samples();
-
-                let amplitudes = fft.weighted_amplitudes(buffered);
-
-                let visual_loudness = scale_builder.build(amplitudes).0;
-
-                let visual_loudness_db = Decibels::from_aggregated_amplitudes(visual_loudness);
-
-                // peak_scaled_builder pushes the quietest bins to 0 and the loudest to 1
-                let mut scaled_loudness = visual_loudness_db.0;
-                peak_scaled_builder.scale(&mut scaled_loudness);
-
-                down_resistance_builder.update(&mut scaled_loudness);
-
-                set_audio(scaled_loudness);
+        set_error.set(None);
+        let session = match AudioSession::new() {
+            Ok(session) => session,
+            Err(error) => {
+                set_error.set(Some(format!("Audio context: {error:?}")));
+                return;
+            }
+        };
+        let rate = session.sample_rate();
+        let mut bank = match BarkBank::new(rate) {
+            Ok(bank) => bank,
+            Err(error) => {
+                set_error.set(Some(error.to_string()));
+                return;
+            }
+        };
+        set_sample_rate.set(rate);
+        set_starting.set(true);
+        let owner = owner.get_value();
+        *owner.session.borrow_mut() = Some(session.clone());
+        let alive = owner.alive.clone();
+        leptos::task::spawn_local(async move {
+            let result = session
+                .start(move |samples| {
+                    if !alive.get() {
+                        return;
+                    }
+                    match samples {
+                        Some(samples) => match bank.push_samples(&samples) {
+                            Ok(bins) => set_audio.set(bins.0),
+                            Err(error) => {
+                                set_audio.set([0.0; DISPLAY_BANDS]);
+                                set_error.set(Some(error.to_string()));
+                            }
+                        },
+                        None => set_audio.set([0.0; DISPLAY_BANDS]),
+                    }
+                })
+                .await;
+            // A route can close while getUserMedia is still awaiting permission.
+            // Dropping its result releases any stream acquired after that close.
+            if !owner.alive.get() {
+                return;
+            }
+            set_starting.set(false);
+            match result {
+                Ok(()) => set_listening.set(true),
+                Err(error) => {
+                    if let Some(session) = owner.session.borrow_mut().take() {
+                        session.stop();
+                    }
+                    set_error.set(Some(format!("Microphone: {error:?}")));
+                }
             }
         });
-
-        let port = audio_worklet_node.port().unwrap();
-
-        port.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
-
-        Closure::forget(onmessage_callback);
-
-        Ok::<_, String>(Some(media_stream_id))
-    });
-
+    };
     view! {
-        // TODO: i think we have an error handler helper elsewhere
-        { move || match start_listening() {
-            None | Some(Ok(None)) => view! {
-                <button
-                    on:click= move |_| {
-                        set_listen(true)
-                    }
-                >
-                    Start Dancing (Microphone Access Required)
-                </button>
-            }.into_view(),
-            Some(Ok(Some(media_stream_id))) => view! {
-                // <button
-                //     on:click= move |_| {
-                //         // set_listen(false)
-                //         info!("todo: figure out how to turn off the media stream");
-                //     }
-                // >
-                //     Now Listening
-                // </button>
-
-                <div id="dancinglights">
-                    // TODO: change audio to be a vec of signals and then use a For
-                    // <For
-                    //     each={move || audio.get().into_iter().enumerate()}
-                    //     key=|(i, _val)| *i
-                    //     let:data
-                    // >
-                    //     <li>{data.1}</li>
-                    // </For>
-                    {audio().into_iter().enumerate().map(|(i, x)| audio_list_item(&colors[i], (x * 8.0) as u8)).collect_view()}
-                </div>
-
-                <p>Input ID: { media_stream_id }</p>
-
-                <p>Sample Rate: { sample_rate }Hz</p>
-            }.into_view(),
-            Some(Err(err)) => view! { <div>Error: {err}</div> }.into_view(),
-        }}
-
+        <button on:click=start disabled=move || starting.get() || listening.get()>
+            {move || if starting.get() { "Starting microphone…" } else { "Start Dancing (Microphone Access Required)" }}
+        </button>
+        <Show when=move || listening.get()>
+            <button on:click=move |_| {
+                owner.with_value(|owner| {
+                    if let Some(session) = owner.session.borrow_mut().take() { session.stop(); }
+                });
+                set_listening.set(false);
+                set_audio.set([0.0; DISPLAY_BANDS]);
+            }>"Stop listening"</button>
+            <p>"Sample Rate: " {move || sample_rate.get()} " Hz"</p>
+        </Show>
+        <p role="alert">{move || error.get()}</p>
+        <div id="dancinglights">
+            {move || audio.get().into_iter().enumerate()
+                .map(|(i, value)| audio_list_item(&colors[i], (value * 8.0) as u8)).collect_view()}
+        </div>
     }
 }
 
 /// TODO: i think this should be a component, but references make that unhappy
-pub fn audio_list_item(color: &str, x: u8) -> impl IntoView {
+pub fn audio_list_item(color: &str, x: u8) -> impl IntoView + use<> {
     let text = match x {
         0 => "󠀠",
         1 => "M",
