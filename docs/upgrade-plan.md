@@ -44,4 +44,10 @@ Review the complete diff, commit and push the repairs on `main`, then verify CI,
 - Put the microphone controls and complete graph directly below navigation. Move descriptive text below the app and reduce empty space. Check that phone and desktop users can see the graph without scrolling.
 - Keep the microphone repair, all 24 web bands, the panel's 20 rows of 20 pixels, the completed package/toolchain updates, and the canonical remote. Validate the changed page, commit, push, and check deployment again.
 
-Six display tests, native/WASM Clippy, the Trunk release build, and all 12 browser tests passed. Browser checks cover all frequency tooltips, the live-level floor, next-frame attack, continuous fall, repeated flashes, and animation cleanup. At 375/768/1440 pixels the graph appears above the description and fits in the first viewport. Commit, push, and deployment verification remain the delivery steps.
+Six display tests, native/WASM Clippy, the Trunk release build, and all 12 browser tests passed. Browser checks cover all frequency tooltips, the live-level floor, next-frame attack, continuous fall, repeated flashes, and animation cleanup. At 375/768/1440 pixels the graph appears above the description and fits in the first viewport. Commit `d9a71ef` delivered this update. All-package CI, Pages deployment, and live-site checks passed.
+
+## System color scheme
+
+Follow the user's system light/dark setting on initial load and when it changes. Apply one CSS theme to the complete page, retain the blue meters, and verify text and graph contrast at phone, tablet, and desktop widths.
+
+The Leptos checks and release build passed. All 15 browser tests passed, including both themes at all three widths, contrast, live setting changes, and color-vision simulations.

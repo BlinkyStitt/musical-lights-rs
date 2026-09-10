@@ -299,65 +299,89 @@ test('meters rise on the next frame, retain live levels, and fall without rapid 
   await expect(page.getByRole('alert')).toBeEmpty();
 });
 
-for (const width of [375, 768, 1440]) {
-  test(`spectrum is centered and readable at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
-    await page.goto(leptos);
-    const card = await page.locator('.audio-card').boundingBox();
-    expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-    const meters = await page.getByRole('meter').all();
-    expect(meters).toHaveLength(24);
-    const first = await meters[0].boundingBox();
-    const last = await meters[23].boundingBox();
-    expect(first.y).toBe(last.y);
-    expect(last.x + last.width).toBeLessThan(card.x + card.width);
-    await expect(page.getByRole('button', { name: 'Start listening' })).toBeInViewport();
-    await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
-    expect(first.y).toBeLessThan(200);
-    const description = await page.locator('.intro').boundingBox();
-    expect(description.y).toBeGreaterThan(first.y + first.height);
-    for (const meter of meters) {
-      const label = await meter.getAttribute('aria-label');
-      await meter.hover();
-      const tooltip = meter.getByRole('tooltip');
-      await expect(tooltip).toBeVisible();
-      await expect(tooltip).toHaveText(label);
-      const box = await tooltip.boundingBox();
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(width);
-    }
-    await page.mouse.move(0, 0);
-    await page.getByRole('button', { name: 'Start listening' }).focus();
-    await page.keyboard.press('Tab');
-    await expect(meters[0].getByRole('tooltip')).toBeVisible();
-    // Check actual text colors against the background they use.
-    const contrasts = await page.evaluate(() => {
-      const luminance = rgb => {
-        const channels = rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
-          v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-        });
-        return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
-      };
-      return ['.primary', '.control-note', '.mic-status', '.eyebrow', '.frequency-tooltip', '.how-it-works p', 'footer a'].map(selector => {
-        const node = document.querySelector(selector);
-        let parent = node;
-        while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;
-        const fore = luminance(getComputedStyle(node).color);
-        const back = luminance(getComputedStyle(parent).backgroundColor);
-        return { selector, ratio: (Math.max(fore, back) + .05) / (Math.min(fore, back) + .05) };
-      });
-    });
-    for (const { selector, ratio } of contrasts) expect(ratio, selector).toBeGreaterThanOrEqual(4.5);
-    await page.screenshot({ path: `test-results/leptos-layout-${width}.png`, fullPage: true });
-    if (width === 1440) {
-      const session = await page.context().newCDPSession(page);
-      for (const type of ['deuteranopia', 'protanopia', 'tritanopia']) {
-        await session.send('Emulation.setEmulatedVisionDeficiency', { type });
-        await page.screenshot({ path: `test-results/leptos-${type}.png`, fullPage: true });
+for (const colorScheme of ['light', 'dark']) {
+  for (const width of [375, 768, 1440]) {
+    test(`spectrum is centered and readable at ${width}px in ${colorScheme} mode`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+      await page.emulateMedia({ colorScheme });
+      await page.goto(leptos);
+      const card = await page.locator('.audio-card').boundingBox();
+      expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      const meters = await page.getByRole('meter').all();
+      expect(meters).toHaveLength(24);
+      const first = await meters[0].boundingBox();
+      const last = await meters[23].boundingBox();
+      expect(first.y).toBe(last.y);
+      expect(last.x + last.width).toBeLessThan(card.x + card.width);
+      await expect(page.getByRole('button', { name: 'Start listening' })).toBeInViewport();
+      await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
+      expect(first.y).toBeLessThan(200);
+      const description = await page.locator('.intro').boundingBox();
+      expect(description.y).toBeGreaterThan(first.y + first.height);
+      for (const meter of meters) {
+        const label = await meter.getAttribute('aria-label');
+        await meter.hover();
+        const tooltip = meter.getByRole('tooltip');
+        await expect(tooltip).toBeVisible();
+        await expect(tooltip).toHaveText(label);
+        const box = await tooltip.boundingBox();
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
       }
-    }
-  });
+      await page.mouse.move(0, 0);
+      await page.getByRole('button', { name: 'Start listening' }).focus();
+      await page.keyboard.press('Tab');
+      await expect(meters[0].getByRole('tooltip')).toBeVisible();
+      // Check actual text colors against the background they use.
+      const colors = await page.evaluate(() => {
+        const luminance = rgb => {
+          const channels = rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
+            v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+          });
+          return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+        };
+        const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+        const text = ['.primary', '.control-note', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
+          const node = document.querySelector(selector);
+          let parent = node;
+          while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;
+          const fore = luminance(getComputedStyle(node).color);
+          const back = luminance(getComputedStyle(parent).backgroundColor);
+          return { selector, ratio: contrast(fore, back) };
+        });
+        const surfaces = [document.documentElement, document.querySelector('.audio-card'), document.querySelector('.spectrum-panel')]
+          .map(node => luminance(getComputedStyle(node).backgroundColor));
+        const meter = luminance(getComputedStyle(document.querySelector('.meter-fill')).backgroundColor);
+        return { text, surfaces, meterContrast: contrast(meter, surfaces[2]) };
+      });
+      for (const surface of colors.surfaces) {
+        if (colorScheme === 'dark') expect(surface).toBeLessThan(.1);
+        else expect(surface).toBeGreaterThan(.8);
+      }
+      expect(colors.meterContrast).toBeGreaterThanOrEqual(3);
+      for (const { selector, ratio } of colors.text) expect(ratio, selector).toBeGreaterThanOrEqual(4.5);
+      await page.screenshot({ path: `test-results/leptos-layout-${width}-${colorScheme}.png`, fullPage: true });
+      if (width === 1440) {
+        const session = await page.context().newCDPSession(page);
+        for (const type of ['deuteranopia', 'protanopia', 'tritanopia']) {
+          await session.send('Emulation.setEmulatedVisionDeficiency', { type });
+          await page.screenshot({ path: `test-results/leptos-${type}-${colorScheme}.png`, fullPage: true });
+        }
+        await session.send('Emulation.setEmulatedVisionDeficiency', { type: 'none' });
+      }
+      // A system setting change updates the open page without replacing the app.
+      const background = await page.evaluate(() => {
+        window.themeMeters = [...document.querySelectorAll('.meter')];
+        return getComputedStyle(document.documentElement).backgroundColor;
+      });
+      await page.emulateMedia({ colorScheme: colorScheme === 'dark' ? 'light' : 'dark' });
+      await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).not.toBe(background);
+      expect(await page.evaluate(() => window.themeMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
+      await page.emulateMedia({ colorScheme });
+      await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(background);
+    });
+  }
 }
 
 test('Dioxus renders its visible page', async ({ page }) => {

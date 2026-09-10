@@ -21,6 +21,10 @@ The controls and graph appear directly below navigation. Descriptive text follow
 the app. The vertical labels read Quiet/Loud. Hover or focus a band to see its
 exact frequency edges.
 
+The page follows the system's light or dark color scheme, including changes while
+it is open. CSS applies the theme before the Rust application starts. Text,
+surfaces, controls, and tooltips adapt together; the meters retain their blue hue.
+
 Meters reach new peaks on the next screen frame. They retain short taps between
 frames, hold each new peak for 350 ms, then fall with increasing speed. A full-height
 fall takes about 0.63 seconds after the hold. Each bar stops at its current live
