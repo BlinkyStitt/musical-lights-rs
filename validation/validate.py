@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate each independent package from its own directory and pinned toolchain."""
+
 import argparse
 import os
 from pathlib import Path
@@ -9,10 +10,16 @@ ROOT = Path(__file__).resolve().parents[1]
 NIGHTLY = "nightly-2026-09-10"
 ESP = "esp-1.98.1.0"
 PACKAGES = {
-    "core": "musical-lights-core", "terminal": "musical-terminal",
-    "leptos": "musical-leptos", "dioxus": "musical-dioxus", "wasm": "musical-wasm",
-    "feather": "musical-feather-m0", "stm32": "musical-stm32",
-    "esp-embassy": "musical-adafruit-sparkle-embassy", "esp-idf": "musical-adafruit-sparkle-idf",
+    "core": "musical-lights-core",
+    "worklet": "musical-lights-worklet",
+    "terminal": "musical-terminal",
+    "leptos": "musical-leptos",
+    "dioxus": "musical-dioxus",
+    "wasm": "musical-wasm",
+    "feather": "musical-feather-m0",
+    "stm32": "musical-stm32",
+    "esp-embassy": "musical-adafruit-sparkle-embassy",
+    "esp-idf": "musical-adafruit-sparkle-idf",
 }
 
 
@@ -34,6 +41,61 @@ def validate(name):
         run(["npx", "playwright", "install", "chromium"], ROOT / "validation")
         run(["npm", "test"], ROOT / "validation")
         return
+    if name == "reference":
+        run(["uv", "sync", "--project", "validation/loudness", "--locked"], ROOT)
+        environment = ROOT / "validation/loudness/.venv/bin"
+        paths = [
+            "validation/loudness/validate.py",
+            "validation/lights",
+            "musical-lights-worklet/build.py",
+        ]
+        run([str(environment / "ruff"), "check"] + paths, ROOT)
+        run([str(environment / "ruff"), "format", "--check"] + paths, ROOT)
+        run([str(environment / "ty"), "check"] + paths, ROOT)
+        run(
+            [
+                str(environment / "python"),
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "validation/lights",
+            ],
+            ROOT,
+        )
+        run(
+            [
+                "cargo",
+                f"+{NIGHTLY}",
+                "build",
+                "--locked",
+                "--release",
+                "--example",
+                "loudness_trace",
+                "--features",
+                "std,log",
+            ],
+            ROOT / "musical-lights-core",
+        )
+        run([str(environment / "python"), "validation/loudness/validate.py"], ROOT)
+        run(
+            [
+                str(environment / "python"),
+                "validation/loudness/validate.py",
+                "--oracle",
+                "--cases",
+                "6",
+                "10",
+                "13",
+                "15",
+                "--archive",
+                ".cache/loudness/iso-532-1.zip",
+                "--cache",
+                ".cache/loudness-oracle",
+            ],
+            ROOT,
+        )
+        return
     directory = ROOT / PACKAGES[name]
     toolchain = ESP if name.startswith("esp-") else NIGHTLY
     cargo = ["cargo", f"+{toolchain}"]
@@ -41,21 +103,106 @@ def validate(name):
     run(cargo + ["fmt", "--all", "--", "--check"], directory)
     if name == "core":
         for features in [None, "std,log", "libm,log", "libm,alloc,log"]:
-            flags = [] if features is None else ["--no-default-features", "--features", features]
+            flags = (
+                []
+                if features is None
+                else ["--no-default-features", "--features", features]
+            )
             run(cargo + ["test", "--locked"] + flags, directory)
-        for features in ["libm", "libm,alloc", "libm,log", "libm,defmt,embassy", "libm,alloc,defmt,embassy", "std,alloc,log,defmt,embassy"]:
-            run(cargo + ["clippy", "--locked", "--no-default-features", "--features", features, "--", "-D", "warnings"], directory)
-        run(cargo + ["clippy", "--locked", "--all-targets", "--features", "log", "--", "-D", "warnings"], directory)
-        run(cargo + ["run", "--locked", "--release", "--example", "bark_cost", "--features", "std,log"], directory)
+        for features in [
+            "libm",
+            "libm,alloc",
+            "libm,log",
+            "libm,defmt,embassy",
+            "libm,alloc,defmt,embassy",
+            "std,alloc,log,defmt,embassy",
+        ]:
+            run(
+                cargo
+                + [
+                    "clippy",
+                    "--locked",
+                    "--no-default-features",
+                    "--features",
+                    features,
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
+                directory,
+            )
+        run(
+            cargo
+            + [
+                "clippy",
+                "--locked",
+                "--all-targets",
+                "--features",
+                "log",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            directory,
+        )
+        run(
+            cargo
+            + [
+                "run",
+                "--locked",
+                "--release",
+                "--example",
+                "loudness_cost",
+                "--features",
+                "std,log",
+            ],
+            directory,
+        )
+    elif name == "worklet":
+        run(
+            cargo
+            + [
+                "clippy",
+                "--locked",
+                "--target",
+                "wasm32-unknown-unknown",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            directory,
+        )
+        run(["python3", "build.py"], directory)
     elif name == "terminal":
         run(cargo + ["test", "--locked", "--lib"], directory)
-        run(cargo + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"], directory)
-        run(cargo + ["build", "--locked", "--release", "--bins", "--examples"], directory)
+        run(
+            cargo + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
+            directory,
+        )
+        run(
+            cargo + ["build", "--locked", "--release", "--bins", "--examples"],
+            directory,
+        )
     elif name in ["leptos", "dioxus", "wasm"]:
-        run(cargo + ["clippy", "--locked", "--target", "wasm32-unknown-unknown", "--", "-D", "warnings"], directory)
+        run(
+            cargo
+            + [
+                "clippy",
+                "--locked",
+                "--target",
+                "wasm32-unknown-unknown",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            directory,
+        )
         if name == "leptos":
             run(cargo + ["test", "--locked", "--lib"], directory)
-            run(cargo + ["clippy", "--locked", "--tests", "--", "-D", "warnings"], directory)
+            run(
+                cargo + ["clippy", "--locked", "--tests", "--", "-D", "warnings"],
+                directory,
+            )
             cli_version("trunk", "0.22.0-beta.5")
             cli_version("wasm-bindgen", "0.2.128")
             run(["trunk", "build", "--locked", "--release"], directory)
@@ -70,15 +217,30 @@ def validate(name):
         run(cargo + ["clippy", "--locked", "--bins"] + lint_flags, directory)
         run(cargo + ["build", "--locked", "--release", "--bins"], directory)
         if name == "feather":
-            run(cargo + ["build", "--locked", "--release", "--no-default-features", "--features", "use_semihosting"], directory)
+            run(
+                cargo
+                + [
+                    "build",
+                    "--locked",
+                    "--release",
+                    "--no-default-features",
+                    "--features",
+                    "use_semihosting",
+                ],
+                directory,
+            )
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("packages", nargs="+", choices=[*PACKAGES, "browser", "all"])
+    parser.add_argument(
+        "packages", nargs="+", choices=[*PACKAGES, "reference", "browser", "all"]
+    )
     args = parser.parse_args()
     os.environ["PATH"] = str(ROOT / ".tools/bin") + os.pathsep + os.environ["PATH"]
-    for name in ([*PACKAGES, "browser"] if "all" in args.packages else args.packages):
+    for name in (
+        [*PACKAGES, "reference", "browser"] if "all" in args.packages else args.packages
+    ):
         validate(name)
 
 

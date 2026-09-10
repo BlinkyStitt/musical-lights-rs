@@ -12,6 +12,7 @@ for (const colorScheme of ['light', 'dark']) {
         const NativeContext = window.AudioContext;
         window.AudioContext = class extends NativeContext {
           constructor(...args) { super(...args); window.testContext = this; }
+          get currentTime() { return window.edgeClock ? window.edgeClock() : super.currentTime; }
         };
         const NativeNode = window.AudioWorkletNode;
         window.AudioWorkletNode = class extends NativeNode {
@@ -28,6 +29,9 @@ for (const colorScheme of ['light', 'dark']) {
       await page.evaluate(async () => {
         await window.testContext.suspend();
         await new Promise(resolve => setTimeout(resolve, 50));
+        const origin = window.testContext.currentTime;
+        const started = performance.now();
+        window.edgeClock = () => origin + (performance.now() - started) / 1000;
         window.edgeNodes = [...document.querySelectorAll('.meter-edge')];
         window.readBands = () => window.edgeNodes.map(node => {
           const fill = node.previousElementSibling;
@@ -43,17 +47,19 @@ for (const colorScheme of ['light', 'dark']) {
           };
         });
         window.screenFrame = () => new Promise(resolve => requestAnimationFrame(now => queueMicrotask(() => resolve(now))));
-        let seed = 1;
         window.tap = () => {
-          // Real processor input: two complete windows of broad-band noise,
-          // then two silent windows, all before the next display frame.
-          const length = Math.round(window.testContext.sampleRate * 0.02) * 2;
-          const data = Float32Array.from({ length }, () => {
-            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-            return (seed / 2 ** 32 - 0.5) * 8;
-          });
-          window.testPort.dispatchEvent(new MessageEvent('message', { data }));
-          window.testPort.dispatchEvent(new MessageEvent('message', { data: new Float32Array(length) }));
+          // This checks DOM geometry and motion from the public snapshot contract.
+          // worklet.spec.mjs separately checks real PCM, attacks, and stalled delivery.
+          const at = window.edgeClock();
+          const state = new Float64Array(122);
+          state[0] = at;
+          state[1] = Number(matchMedia('(prefers-reduced-motion: reduce)').matches);
+          for (let band = 0; band < 24; band++) {
+            state.set([.6 + band * .01, 0, at + .350, 1, 0], 2 + band * 5);
+          }
+          window.testPort.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'frame', state, sones: 0, clipped: 0, calibration: 0 },
+          }));
         };
       });
       const peak = await page.evaluate(async () => {

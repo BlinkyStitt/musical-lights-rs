@@ -1,7 +1,5 @@
 use i24::I24;
 
-use crate::remap;
-
 const I24_MAX: f32 = I24::MAX.to_i32() as f32;
 
 /// TODO: better name. this is for 24-bit audio!
@@ -39,14 +37,7 @@ pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     // TODO: should chunk size be 2 or 4? i'm not sure how mono works
     for (chunk, x) in input.as_chunks::<2>().0.iter().zip(output.iter_mut()) {
         // TODO: is there an off-by-one error here? does a or b need to be moved by 1?
-        *x = remap(
-            // TODO: be or le?
-            i16::from_le_bytes([chunk[0], chunk[1]]) as f32,
-            i16::MIN as f32,
-            i16::MAX as f32,
-            -1.0,
-            1.0,
-        );
+        *x = i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / 32768.0;
 
         debug_assert!(*x >= -1.0);
         debug_assert!(*x <= 1.0);
@@ -55,6 +46,19 @@ pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn signed_16_bit_pcm_preserves_silence_sign_and_full_scale() {
+        let mut out = [0.0; 5];
+        super::parse_i2s_16_bit_mono_to_f32_array(
+            &[0, 0, 0, 128, 255, 127, 1, 0, 255, 255],
+            &mut out,
+        );
+        assert_eq!(
+            out,
+            [0.0, -1.0, 32767.0 / 32768.0, 1.0 / 32768.0, -1.0 / 32768.0]
+        );
+    }
+
     // TODO: test for 24-bit audio
     // TODO: test for 16-bit audio
     // TODO: test for 8-bit audio?

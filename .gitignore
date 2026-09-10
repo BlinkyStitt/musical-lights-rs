@@ -6,5 +6,7 @@
 /validation/node_modules/
 /validation/test-results/
 /validation/playwright-report/
-/.tools/
+/.tools
 **/__pycache__/
+/.cache/
+**/.venv/

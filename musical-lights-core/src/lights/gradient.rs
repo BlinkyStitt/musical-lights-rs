@@ -5,8 +5,7 @@ use enterpolation::{
 };
 #[allow(unused_imports)]
 use micromath::F32Ext;
-use palette::{Hsluv, Mix, white_point};
-use smart_leds::{RGB8, colors::BLACK, hsv::Hsv};
+use palette::{Hsluv, LinSrgb, Mix, white_point};
 
 use super::convert_color;
 
@@ -32,40 +31,25 @@ impl<C: Mix<Scalar = f32>> Merge<f32> for CustomColor<C> {
 
 #[derive(Copy, Clone)]
 pub struct Gradient<const N: usize> {
-    /// TODO: colors should probably be hsluv and convert later. then its easier to modify brightness and shift the color. but this is easier for now
-    pub rgb_colors: [RGB8; N],
-}
-
-/// TODO: keep this in hsluv?
-pub fn apply_greg_caitlin_wedding_spline<const N: usize>(buf: &mut [Hsv; N]) {
-    let spline = greg_caitlin_wedding_spline();
-
-    let color_iter = spline.take(N);
-
-    for (x, color) in buf.iter_mut().zip(color_iter) {
-        x.hue = ((color.0.hue.into_inner() / 360.0) * 255.0).round() as u8;
-        x.sat = (color.0.saturation * 255.0) as u8;
-        // TODO: whats the right way to convert luv to v?
-        x.val = (color.0.l * 255.0) as u8;
-    }
+    pub colors: [LinSrgb<f32>; N],
 }
 
 impl<const N: usize> Gradient<N> {
-    pub fn new(iter: impl Iterator<Item = RGB8>) -> Self {
-        let mut colors = [BLACK; N];
+    pub fn new(iter: impl Iterator<Item = LinSrgb<f32>>) -> Self {
+        let mut colors = [LinSrgb::new(0.0, 0.0, 0.0); N];
 
         for (x, color) in colors.iter_mut().zip(iter) {
             *x = color
         }
 
-        Self { rgb_colors: colors }
+        Self { colors }
     }
 
     // TODO: put this behind a feature? maybe it should be a function that takes a spline and goes into a Gradient?
     pub fn new_mermaid() -> Self {
         let spline = mermaid_spline();
 
-        let color_iter = spline.take(N).map(|x| convert_color(x.0).into());
+        let color_iter = spline.take(N).map(|x| convert_color(x.0));
 
         Self::new(color_iter)
     }
@@ -74,7 +58,7 @@ impl<const N: usize> Gradient<N> {
     pub fn new_greg_caitlin_wedding() -> Self {
         let spline = greg_caitlin_wedding_spline();
 
-        let color_iter = spline.take(N).map(|x| convert_color(x.0).into());
+        let color_iter = spline.take(N).map(|x| convert_color(x.0));
 
         Self::new(color_iter)
     }
@@ -91,7 +75,7 @@ impl<const N: usize> Gradient<N> {
 
         let color_iter = lin
             .take(N)
-            .map(|x| convert_color(Hsluv::new(x, saturation, luminance)).into());
+            .map(|x| convert_color(Hsluv::new(x, saturation, luminance)));
 
         Self::new(color_iter)
     }
@@ -115,14 +99,14 @@ impl<const N: usize> Gradient<N> {
 
 type GregCaitlinWeddingSpline = BSpline<
     BorderBuffer<Equidistant<f32>>,
-    [CustomColor<Hsluv<white_point::E>>; 8],
-    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 4>,
+    [CustomColor<Hsluv<white_point::D65>>; 8],
+    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::D65>>, 4>,
 >;
 
 /// TODO: pick colors
 pub fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
     //generate #128CF6
-    let dusty_blue: CustomColor<_> = Hsluv::<white_point::E>::new(208., 92.7, 96.5).into();
+    let dusty_blue: CustomColor<_> = Hsluv::<white_point::D65>::new(208., 92.7, 96.5).into();
 
     // generate #FB3936
     let pastel_red: CustomColor<_> = Hsluv::new(1.0, 78.5, 98.4).into();
@@ -148,8 +132,8 @@ pub fn greg_caitlin_wedding_spline() -> GregCaitlinWeddingSpline {
 /// TODO: return traits to make this easier to change
 type MermaidSpline = BSpline<
     BorderBuffer<Equidistant<f32>>,
-    [CustomColor<Hsluv<white_point::E>>; 4],
-    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::E>>, 4>,
+    [CustomColor<Hsluv<white_point::D65>>; 4],
+    enterpolation::ConstSpace<CustomColor<Hsluv<white_point::D65>>, 4>,
 >;
 
 /// --cobalt-blue: #004AADff;
@@ -164,7 +148,7 @@ type MermaidSpline = BSpline<
 /// TODO: return using Traits
 fn mermaid_spline() -> MermaidSpline {
     //generate #004AAD
-    let cobalt_blue: CustomColor<_> = Hsluv::<white_point::E>::new(258.3, 100.0, 33.8).into();
+    let cobalt_blue: CustomColor<_> = Hsluv::<white_point::D65>::new(258.3, 100.0, 33.8).into();
 
     // generate #865BDC
     let slate_blue: CustomColor<_> = Hsluv::new(275.1, 76.5, 49.2).into();
@@ -195,13 +179,13 @@ mod tests {
 
     #[test]
     fn rainbow_runs_from_red_to_purple() {
-        let colors = Gradient::<24>::new_rainbow(90.0, 58.0).rgb_colors;
+        let colors = Gradient::<24>::new_rainbow(90.0, 58.0).colors;
         let red = colors[0];
-        assert!(red.r > red.g.saturating_mul(4));
-        assert!(red.r > red.b.saturating_mul(4));
+        assert!(red.red > red.green * 4.0);
+        assert!(red.red > red.blue * 4.0);
         let purple = colors[23];
-        assert!(purple.b > purple.r);
-        assert!(purple.r > purple.g.saturating_mul(3));
+        assert!(purple.blue > purple.red);
+        assert!(purple.red > purple.green * 3.0);
         for (i, color) in colors.iter().enumerate() {
             assert!(!colors[..i].contains(color), "each band has its own color");
         }

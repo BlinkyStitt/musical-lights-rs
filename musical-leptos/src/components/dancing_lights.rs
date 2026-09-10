@@ -1,12 +1,12 @@
 use crate::{
     display::{DisplayAnimation, DisplayFrame},
     screen::ScreenSession,
-    wasm_audio::AudioSession,
+    wasm_audio::{AudioSession, AudioUpdate},
 };
 use leptos::prelude::*;
 use musical_lights_core::{
-    audio::{BARK_EDGES, BarkBank, DISPLAY_BANDS},
-    lights::Gradient,
+    audio::visual::{BARK_EDGES, DISPLAY_BANDS},
+    lights::{Gradient, screen_color},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -22,9 +22,15 @@ struct SessionOwner {
 
 #[component]
 pub fn DancingLights() -> impl IntoView {
-    let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).rgb_colors;
-    let (audio, set_audio) = signal(DisplayFrame::default());
+    let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).colors;
+    let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
     let (listening, set_listening) = signal(false);
+    let (capture_status, set_capture_status) =
+        signal(String::from("Uncalibrated · relative light activity"));
+    let (input_channel, set_input_channel) = signal(1u32);
+    let (reference_level, set_reference_level) = signal(94.0f64);
+    let (calibrating, set_calibrating) = signal(false);
+    let (clipped, set_clipped) = signal(0u64);
     let (starting, set_starting) = signal(false);
     let (error, set_error) = signal(None::<String>);
     let (sample_rate, set_sample_rate) = signal(0.0);
@@ -70,6 +76,8 @@ pub fn DancingLights() -> impl IntoView {
             return;
         }
         set_error.set(None);
+        set_clipped.set(0);
+        set_calibrating.set(false);
         set_frame_rate.set(None);
         let session = match AudioSession::new() {
             Ok(session) => session,
@@ -79,20 +87,9 @@ pub fn DancingLights() -> impl IntoView {
             }
         };
         let rate = session.sample_rate();
-        let mut bank = match BarkBank::new(rate) {
-            Ok(bank) => bank,
-            Err(error) => {
-                set_error.set(Some(error.to_string()));
-                return;
-            }
-        };
-        let Some(clock) = web_sys::window().and_then(|window| window.performance()) else {
-            set_error.set(Some("The browser display clock is unavailable.".into()));
-            return;
-        };
         let owner = owner.get_value();
         let alive = owner.alive.clone();
-        let animation = match DisplayAnimation::new(move |values, fps| {
+        let animation = match DisplayAnimation::new(session.clone(), move |values, fps| {
             if !alive.get() {
                 return;
             }
@@ -110,33 +107,49 @@ pub fn DancingLights() -> impl IntoView {
             }
         };
         *owner.animation.borrow_mut() = Some(animation.clone());
-        let mut error_until_ms = 0.0;
         set_sample_rate.set(rate);
         set_starting.set(true);
         *owner.session.borrow_mut() = Some(session.clone());
         let alive = owner.alive.clone();
+        let failure_owner = owner.clone();
         leptos::task::spawn_local(async move {
             let result = session
-                .start(move |samples| {
-                    if !alive.get() {
-                        return;
-                    }
-                    let now_ms = clock.now();
-                    let values = match bank.push_samples(&samples) {
-                        Ok(frame) => {
-                            if now_ms >= error_until_ms && error.get_untracked().is_some() {
-                                set_error.set(None);
+                .start(
+                    input_channel.get_untracked().saturating_sub(1),
+                    move |update| {
+                        if !alive.get() {
+                            return;
+                        }
+                        match update {
+                            AudioUpdate::Frame { snapshot, clipped } => {
+                                animation.push(snapshot);
+                                set_clipped.set(clipped);
                             }
-                            frame.bands().0
+                            AudioUpdate::Status(status) => {
+                                set_capture_status.set(status);
+                                set_calibrating.set(false);
+                            }
+                            AudioUpdate::Error(message) => {
+                                set_error.set(Some(message));
+                                set_calibrating.set(false);
+                                set_listening.set(false);
+                                set_starting.set(false);
+                                set_audio.set(DisplayFrame::default());
+                                set_frame_rate.set(None);
+                                let owner = failure_owner.clone();
+                                // Release the message closure after it returns.
+                                leptos::task::spawn_local(async move {
+                                    if let Some(session) = owner.session.borrow_mut().take() {
+                                        session.stop();
+                                    }
+                                    if let Some(animation) = owner.animation.borrow_mut().take() {
+                                        animation.stop();
+                                    }
+                                });
+                            }
                         }
-                        Err(error) => {
-                            error_until_ms = now_ms + 350.0;
-                            set_error.set(Some(error.to_string()));
-                            [0.0; DISPLAY_BANDS]
-                        }
-                    };
-                    animation.push(values);
-                })
+                    },
+                )
                 .await;
             // A route can close while getUserMedia is still awaiting permission.
             // Its result releases any stream acquired after that close.
@@ -145,7 +158,10 @@ pub fn DancingLights() -> impl IntoView {
             }
             set_starting.set(false);
             match result {
-                Ok(()) => set_listening.set(true),
+                Ok(()) => {
+                    set_capture_status.set(session.status());
+                    set_listening.set(true);
+                }
                 Err(error) => {
                     if let Some(session) = owner.session.borrow_mut().take() {
                         session.stop();
@@ -200,13 +216,13 @@ pub fn DancingLights() -> impl IntoView {
                     {BARK_EDGES.windows(2).enumerate().map(|(i, edges)| {
                         let label = format!("{}–{} Hz", edges[0], edges[1]);
                         let tooltip = label.clone();
-                        let color = colors[i];
-                        // The shared LED gradient uses linear sRGB channels.
+                        let color = screen_color(colors[i]);
+                        // Encode the shared linear color once for CSS.
                         let style = format!(
-                            "--band-color: color(srgb-linear {} {} {});",
-                            f32::from(color.r) / 255.0,
-                            f32::from(color.g) / 255.0,
-                            f32::from(color.b) / 255.0,
+                            "--band-color: color(srgb {} {} {});",
+                            color.red,
+                            color.green,
+                            color.blue,
                         );
                         view! {
                         <div class="meter" role="meter" aria-label=label tabindex="0" style=style
@@ -232,6 +248,25 @@ pub fn DancingLights() -> impl IntoView {
                 </span>
                 </span>
             </p>
+            <p class="calibration-status">{move || capture_status.get()}</p>
+            <details class="calibration-controls">
+                <summary>"Input calibration"</summary>
+
+                <p>"Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
+                <label>"Input channel "<input type="number" min="1" step="1" prop:value=move || input_channel.get() disabled=move || listening.get() || starting.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<u32>() { set_input_channel.set(value.max(1)); } }/></label>
+                <label>"Reference level (dB SPL) "<input type="number" step="0.1" prop:value=move || reference_level.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<f64>() { set_reference_level.set(value); } }/></label>
+                <button disabled=move || !listening.get() || calibrating.get() on:click=move |_| {
+                    owner.with_value(|owner| {
+                        if let Some(session) = owner.session.borrow().as_ref() {
+                            match session.calibrate(reference_level.get_untracked()) {
+                                Ok(()) => { set_calibrating.set(true); set_capture_status.set("Measuring reference for three seconds…".into()); },
+                                Err(error) => set_error.set(Some(format!("Calibration: {error:?}"))),
+                            }
+                        }
+                    });
+                }>"Measure reference"</button>
+                <p>{move || if clipped.get() > 0 { format!("Input reached full scale {} times. Check input gain.", clipped.get()) } else { String::new() }}</p>
+            </details>
             <p class="audio-error" role="alert">{move || error.get()}</p>
             <p class="screen-error" role="status">{move || screen_error.get()}</p>
         </section>

@@ -2,7 +2,7 @@
 name = "musical_terminal"
 version = "0.1.0"
 edition = "2024"
-default-run = "filter_bank"
+default-run = "loudness"
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -26,6 +26,9 @@ embedded-graphics-simulator = "=0.8.0"
 env_logger = "=0.11.11"
 flume = "=0.12.0"
 log = { version = "=0.4.34", features = ["std"] }
+resampler = "=0.5.1"
+sonic-rs = "=0.5.8"
+serde = { version = "=1.0.229", features = ["derive"] }
 musical-lights-core = { path = "../musical-lights-core", features = [
     "std",
     "log",

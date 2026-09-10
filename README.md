@@ -2,18 +2,13 @@
 
 Rust applications that make lights respond to audio.
 
-See the [upgrade plan](docs/upgrade-plan.md) for the agreed scope and added checks.
+The browser, terminal, and ESP32 share a continuous ISO 532-1 time-varying loudness model. It emits calibrated or explicitly uncalibrated sones every 2 ms. A separate visual stage applies shared gain, bouncing motion, and HSLuv color.
 
-The shared processor analyzes 24 Bark bands. The website and terminal display
-all bands separately. The 20×20 LED panel retains 20 rows, with the five bass
-bands combined before normalization. Leptos, the terminal filter-bank visualizer,
-and ESP-IDF use the same processor. Weighting, compression, adaptive
-normalization, and bass combination are visual approximations. They do not
-implement or claim compliance with an ISO loudness standard.
+The website and terminal show 24 bands. The 20×20 LED panel combines the first five into one bass row. Audio callbacks do not set the integration window, and slow displays do not drop audio samples.
 
-The processor integrates filtered power over continuous 20 ms windows before
-compression and normalization. Windows span audio callbacks. Partial windows
-retain the last complete output, including its silence state.
+See [the measurement and display contracts](docs/loudness.md), [validation results](docs/validation.md), and the [earlier upgrade plan](docs/upgrade-plan.md). Hardware calibration and bench validation remain required for physical measurement claims.
+
+The ISO reference validator uses Python 3.13 or newer and `uv` (tested with 0.10.5). Its dependency lockfile pins MoSQITo and the numerical tools.
 
 ## Pinned tools
 
@@ -54,6 +49,7 @@ Run these commands from the named package directory.
 | Package | Command |
 | --- | --- |
 | musical-lights-core | `cargo test --locked --features log` |
+| musical-lights-worklet | `python3 build.py` |
 | musical-terminal | `cargo run --release --locked` |
 | musical-leptos | `trunk serve` |
 | musical-dioxus | `dx serve --web` |

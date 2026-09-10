@@ -1,194 +1,45 @@
 # Validation record
 
-Validated on 2026-09-10 on an Apple M4 Max Mac. The complete `python3 validation/validate.py all` command passed again after the microphone repair, page redesign, and final layout choice: 24 separate web/terminal bands and the preserved 20-row LED panel. All nine package roots passed their checks and release builds. Both GitHub workflows passed at commits `6802973`, `cfca78c`, `d9a71ef`, `de3db52`, and `4331b54`. After adding rainbow bars, `python3 validation/validate.py core leptos browser` passed again.
+The current measurement contract and its limits are in [Audio, loudness, and light](loudness.md). The former empirical Bark processor and its 20 ms window are removed. Its previous test counts and timing measurements do not validate this implementation.
 
-## Exact tools
+## Reproduce
 
-- Host and ARM/WASM compiler: `nightly-2026-09-10`, `rustc 1.100.0-nightly (a36d05efa 2026-09-09)`. The official nightly channel manifest returned this date during the final review.
-- Xtensa compiler: named toolchain `esp-1.98.1.0`, `rustc 1.98.1-nightly (183f762d6 2026-09-08) (1.98.1.0)`, LLVM 21.1.3. Installed with espup 0.17.1 and an explicit toolchain version. The generated environment file was loaded for both ESP package roots.
-- ESP-IDF `v6.1`, with the three coordinated Git revisions in the [dependency inventory](dependencies.md).
-- Trunk 0.22.0-beta.5, Dioxus CLI 0.8.0-alpha.1, wasm-bindgen CLI 0.2.128, Node 26.8.2, Playwright 1.64.0-alpha-2026-09-10 with its matching Chromium.
-- actionlint 1.7.12 accepted both GitHub workflows. Python scripts passed compilation checks; JavaScript modules passed Node syntax checks.
+Use the pinned tools in the README. The ISO validator requires Python 3.13 or newer and uv (tested with 0.10.5). On macOS, load the ESP toolchain environment and provide SDL2's library path for the terminal examples. Chromium requires host access because the sandbox blocks its macOS service registration.
 
-The scripts run Cargo from each package directory with its pinned toolchain and `--locked`. The CLI builds use the package toolchain files. All active nightly configuration pins agree, and `rustup override list` reports no overrides.
+```sh
+python3 validation/validate.py all
+```
 
-## Results
+Individual targets are `core`, `worklet`, `terminal`, `leptos`, `dioxus`, `wasm`, `feather`, `stm32`, `esp-embassy`, `esp-idf`, `reference`, and `browser`. Build the three web applications before running browser tests. `reference` installs its locked Python environment, checks the validation tools, builds `loudness_trace`, and runs the ISO and MoSQITo comparisons.
 
-| Package | Passed checks |
-| --- | --- |
-| Core | 35 tests in each of four feature combinations; six additional feature combinations under Clippy; all targets under Clippy; release cost measurement |
-| Terminal | Three callback/downmix tests; Clippy for all targets; release build of all binaries and examples; bounded microphone and display check |
-| Leptos | Eleven display timing, white-border, live-level floor, and FPS tests; host test and WASM Clippy; Trunk release build; browser routes, microphone denial, live audio above nominal full scale at 44.1/48 kHz, stop, route cleanup, and late permission cleanup |
-| Dioxus | WASM Clippy; matching CLI release build; visible page rendering and six links |
-| Standalone WASM | WASM Clippy; complete `build.py`; browser execution of the shared-memory worklet with nonzero oscillator output |
-| Feather M0 | `thumbv6m-none-eabi` Clippy; release link with panic-halt and with semihosting |
-| STM32 | `thumbv7em-none-eabihf` Clippy and release links for all five binaries |
-| ESP Embassy | `xtensa-esp32-none-elf` Clippy and release links for the application and priority example |
-| ESP-IDF | `xtensa-esp32-espidf` Clippy and release link with ESP-IDF v6.1 |
+## Software checks
 
-The original 15 browser tests passed again with the screen and share changes. They use real browser AudioContexts and AudioWorklets. The live audio tests replace microphone acquisition with an oscillator stream at gain 4 and verify that samples above 1 reach the real worklet callback without an error. Separate input-worklet checks cover absent input, channel cancellation, extreme finite PCM, and block lengths of 64, 128, 256, and 511 samples. Tests confirm immediate context closure when a route closes before permission resolves, then stop any stream supplied later.
+All ten package validation targets passed, including formatting, Clippy, host tests and release links. The final suite passed 37 core tests in each of four feature configurations, six terminal tests, one Leptos host test, two profile-tool tests, and 37 browser/worklet checks with the standard three-worker configuration. Additional core feature combinations passed Clippy. The release builds include both ESP-IDF binaries.
 
-Page checks cover all 24 separate meters and five bass labels, stable DOM nodes, silence, error recovery, centered layouts at 375/768/1440 pixels, no horizontal overflow, text contrast, reduced motion, and rapid audio with queued callbacks. The complete graph is visible without scrolling at these sizes, and descriptive text follows it. Tests check Quiet/Loud labels, every band's exact frequency tooltip, keyboard focus, and removal of the counter and pause/resume controls. Screenshots were inspected, including color-vision simulations. The layout and contrast checks cover both system color schemes at all three widths. Text contrast is at least 4.5:1, and meter contrast against the graph is at least 3:1. Tests switch the system theme in both directions while the page stays open and confirm that the meter nodes remain intact.
+## Measurement evidence
 
-All 24 bars now use the shared rainbow gradient, from red bass to purple treble.
-Its HSLuv hue range is 12–285 degrees; the old endpoint of 255 stopped at blue.
-Native tests check the red and purple endpoints and 24 distinct colors. Browser
-layout tests send noise through a real AudioWorklet so every bar is visible. They
-check all 24 fill colors for 3:1 contrast in each theme, matching baseline colors,
-and fixed colors across audio updates and system theme changes. CSS explicitly
-uses the shared gradient's linear sRGB encoding. Phone and desktop screenshots
-show the rainbow with the existing compact layout, motion, tooltips, and FPS display.
+The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.
 
-Bars rise on the next screen frame without CSS easing. A new peak holds for 350 ms, then follows a critically damped fall that slows before reaching its live band level. Reduced Motion halves the release speed instead of using a single-step drop. The latest level remains valid between audio callbacks, so an absent callback cannot pull the bar below the live level. Native tests cover exact release timing at 30/60/120/144/240 Hz, short taps, braking when the floor rises during a fall, and reduced motion. FPS tests count actual elapsed animation intervals, including stalls. The browser compares the visible counter with independent animation timestamps while audio callbacks are suspended. The browser checks the actual rendered fast attack, retained live level, continuous fall to silence, and repeated queued taps at 100 heights in every band. The hold limits repeated flashes to at most three in any second, using the [WCAG flashing frequency limit](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html) as the design criterion. These checks do not provide a medical safety guarantee. Resource tests also verify that animation requests stop on microphone denial, Stop listening, route closure, and closure while permission remains pending.
+The checked-in [ISO report](loudness-results/iso.json), [MoSQITo report](loudness-results/mosqito.json), and plots for [cases 6](loudness-results/iso-6.svg), [10](loudness-results/iso-10.svg), [13](loudness-results/iso-13.svg) and [15](loudness-results/iso-15.svg) record this run.
 
-Core tests cover all 24 center frequencies and unity stage gain at 44.1/48 kHz, separate outputs including every bass band, rejected input without state changes, silence, zero range, bounded output, sample-duration envelope timing, fractional LED decay to zero, actual frame writes, FFT frequency detection, gradient boundaries, and message CRC/COBS bounds. New tests preserve the expected level ratio above nominal full scale, keep extreme finite transients bounded, and compare changing-level filter history against an unscaled reference. The panel test checks the original five-band sum before normalization and all 19 remaining outputs. Firmware asserts that 20 rows of 20 pixels fill exactly 400 pixels, and retains the row-based scroll step.
+Comparisons use the published time grid. No fitted level, time shift, or per-case gain is applied. Technical-sound worksheets omit a final incomplete 2 ms interval in some cases; the validator records that unmatched frame and retains it in the full stream/oracle checks. ISO signals remain outside version control. The validator verifies the original archive hash before use.
 
-The processor returns one borrowed `BarkFrame`. Its `bands()` output serves the website and terminal; `panel_rows()` serves the fixed LED geometry. Both use the same normalization function and the same filter/envelope state. The panel does not average already-normalized web values or use 16/17-pixel band segments.
+The shared model tests cover arbitrary callback partitions, a 10 ms tone burst, zero input, end-of-stream interpolation, exact sample timestamps, calibrated pressure units, non-finite input, missing samples, clipping reports, domain errors, and sustained 20/40/50/60/80 Hz tones. The review regression also checks a 30-second 50 Hz signal. The model emits identical sones and specific spectra for identical PCM divided into 1, 128, 800, whole-signal and irregular blocks.
 
-The earlier range check incorrectly treated nominal PCM full scale as a hard limit. [Web Audio permits values outside that range](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor scales each block and its carried filter state and runs the biquads in f32. It accumulates physical power in f64 across callbacks, then computes RMS before compression. It does not clip finite PCM. Empty and non-finite input still fail before state changes.
+Native tests check both signed 16-bit clipping rails and the production channel-selection path with opposite-phase stereo, preservation of all input samples, 44.1/48/96 kHz resampling amplitude and phase, callback partition roundoff, and rejection of a 30 kHz alias. Color tests compare the reference HSLuv primaries, black and white, the sRGB transfer function, monotonic LED response, one application of correction, white balance, and the 128 drive cap. Profile-tool tests check inverse measurements and invalid data.
 
-The callback-size repair uses continuous 20 ms power windows, rounded to the
-nearest sample. Compression, floor, peak, and silence updates use those same
-boundaries. Incomplete windows retain the previous result. Three new tests first
-failed against the callback-sized detector, then passed after the repair. They
-cover 128-sample, 800-sample, and uneven blocks, multiple windows in one callback,
-partial-window retention, silence, and a 30-second 50 Hz tone at amplitude 0.5.
-At both 44.1 and 48 kHz, the bass range during the final second is less than one
-percentage point and stays between 4% and 7%. The test also checks compressed
-level against the tone's expected RMS. These checks validate power integration;
-they do not establish equal perceived loudness or physical LED output.
+The motion tests cover 30/60/120/144/240 Hz sampling, short taps, stalls, live floors, fall braking, new peaks, white-edge decay, and combined bar/edge luminance reversals. Worklet tests verify the actual release WASM ABI, no module imports, bounded state transport, constant WASM memory after creation, channel selection, input failure, calibration across callbacks and host processing cost. Browser checks exercise real AudioContexts, live audio, calibration, capture settings, errors, stop/route cleanup, layout, color contrast, screen controls and share behavior.
 
-The combined `python3 validation/validate.py core leptos browser` command passed
-after the screen controls were finished. Formatting and focus/layout checks now
-include the fullscreen button and wake status. The browser motion test sends
-enough silence to complete an analysis window and allows the documented peak
-hold and damped fall to reach exact zero. Chromium requires host access because
-the sandbox blocks its macOS process startup.
+## Processing cost
 
-Core test combinations are default, `std,log`, `libm,log`, and `libm,alloc,log`. Clippy also checks `libm`, `libm,alloc`, `libm,log`, `libm,defmt,embassy`, `libm,alloc,defmt,embassy`, and `std,alloc,log,defmt,embassy`. Rust warnings are denied for these checks and the other packages except ESP-IDF.
+An Apple M4 Max host processed warmed two-tone PCM through the loudness model, visual gain and producer motion state. Input construction and I/O were outside timing. Each measurement processed 40 seconds of audio:
 
-## White borders
+| Input block | Wall time | Fraction of one host CPU core |
+| --- | ---: | ---: |
+| 128 samples | 0.2576 s | 0.644% |
+| 768 samples | 0.2594 s | 0.648% |
+| 800 samples | 0.2633 s | 0.658% |
 
-`python3 validation/validate.py leptos browser` passed after adding the white
-border effect: 11 native display tests, native/WASM Clippy, the locked Trunk
-release build, and all 31 browser/lifecycle checks. The existing microphone,
-fullscreen, wake-lock, share-preview, layout, and color checks still pass.
+`LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 34.02 ms (0.850% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
 
-Each new display peak lights a white one-pixel border with a small colored glow.
-The border shares the bar's 350 ms hold, then fades faster than the colored
-trail. The exponential fade loses 90% in 0.23 seconds; Reduced Motion doubles
-that duration. There is no independent pulse timer or audio processor. A steady
-input does not retrigger flashes, and queued peaks are retained until the next
-screen frame. Stop listening clears both heights and borders.
-
-Native checks cover 30/60/120/144/240 Hz, short taps, hold timing, faster border
-fade, exact settling, steady input, and delayed frames. A luminance model samples
-the white side and moving top edges at 100 heights every 2 ms. Rapid pulse periods
-from 20 to 800 ms stay within three flash pairs per rolling second in both motion
-modes and light/dark plots. This model covers solid borders; it is not a medical
-certification or an exhaustive analysis of browser antialiasing and blur.
-
-Browser checks send noise and silence through the real Bark processor. They
-verify all 24 borders, next-frame attack, faster fade, exact zero, stable rainbow
-fills, and persistent nodes. The white border remains one pixel thick and follows
-the bar height in fullscreen. Screenshots were inspected in light/dark themes
-and normal/reduced motion. No separate lights were added above the bars.
-
-## Screen controls and share preview
-
-All 31 browser and screen-lifecycle checks passed in the combined suite. The
-separate native wake-lock test also passed in a visible browser window.
-
-Screen lifecycle tests cover grants, system releases, denied requests without
-retry loops, hidden/visible transitions, pending requests invalidated by a tab
-change, and late grants after closure. Browser integration checks the mounted
-view's ownership of its lock even when microphone access fails. Unsupported
-APIs leave the app usable. Native API checks compare the status with the actual
-browser result: headless Chromium can deny the lock, while a visible Chromium
-window granted it and released it when the route closed. No test changes global
-system sleep settings or measures a full operating-system sleep interval.
-
-Fullscreen checks use real browser entry and exit, including an external exit
-event. At 375×812 and 1440×1000, the card fills the viewport and expands the graph
-while controls and FPS stay visible. Both system themes render correctly. Audio
-continues through fullscreen changes and closes when listening stops. Lifecycle
-tests also cover rejected requests and an entry that completes after view closure.
-
-Preview checks load HTML with JavaScript disabled and verify the title, Open
-Graph tags, canonical URL, and large-image Twitter card. The copied PNG returns
-HTTP 200 as `image/png` with 1200×630 dimensions. Mounting and route navigation
-retain one set of metadata. `npm run preview` regenerated the image from the
-actual rainbow palette, and the output was inspected. The preview uses a static
-illustration, not recorded microphone data. Production and sharing-platform
-cache checks remain for deployment after the combined PR merges.
-
-## Display motion and FPS
-
-A controlled Chromium comparison used the same 1 kHz tap in both versions:
-20 blocks of 128 samples at gain 4, followed by a silent block. The audio context
-was suspended before this input so ongoing capture could not change the release.
-The capture read computed meter transforms on every animation frame for 2.2 seconds
-with a 320-pixel graph. Both runs delivered 60.00 FPS and a 99th-percentile frame
-interval of 16.67 ms. This isolates the release curve; it does not measure the
-user's browser or prove that a physical display runs at 120 Hz.
-
-| Motion preference | Old largest fall per frame | New largest fall per frame |
-| --- | --- | --- |
-| Normal | 12.10 px | 6.40 px |
-| Reduced Motion | 174.35 px | 3.21 px |
-
-The old free fall accelerated into an abrupt stop. Reduced Motion used one large
-step. The new damped release slows near the live floor and brakes when that floor
-rises during descent. Reduced Motion uses half the release rate. Both retain
-immediate rises and the 350 ms peak hold. A numerical tail below 0.0001 of full
-height settles exactly to the live level; this is less than 0.04 pixels.
-
-The visible FPS counter measures animation intervals over at least one second,
-including delayed callbacks. Native tests cover 30/60/120/144/240 FPS and a full
-second stall. The browser test compares the counter with independent animation
-timestamps while audio callbacks are suspended, checks a gentle landing, and
-verifies that stopping clears the counter. The
-[browser controls animation callback timing](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame).
-The counter does not report audio block rate or physical GPU presentation.
-
-## Microphone and terminal display
-
-The latest ten-second microphone check received 3750 blocks at 48000 Hz. The input peak was 0.015137273. All 24 output values remained finite and bounded. The same `Bands` formatter used by the terminal visualizer printed 24 columns; this quiet input produced blank glyphs at its display scale. CPAL reported one buffer underrun/overrun during the check. The run then completed successfully, so this is functional evidence, not a claim of dropout-free capture.
-
-## Processor cost and memory
-
-`cargo run --release --locked --example bark_cost --features std,log` warms the processor with four seconds of contiguous two-tone PCM, then processes that data ten times. The input contains 80 Hz and 1 kHz components. Input construction is outside the timed section. Each measurement processes 40 seconds of audio. This is a host wall-clock processing measurement; it is not an ESP32 CPU measurement.
-
-| Sample rate | Samples per block | Wall time per block | Fraction of real-time budget |
-| --- | --- | --- | --- |
-| 44100 Hz | 128 | 6.52 us | 0.22% |
-| 44100 Hz | 794 | 40.08 us | 0.22% |
-| 48000 Hz | 128 | 6.56 us | 0.25% |
-| 48000 Hz | 794 | 41.23 us | 0.25% |
-
-These measurements include the 20 ms power-window repair. `size_of::<BarkBank>()`
-is 2336 bytes on this host, including the persistent f64 power sums. Processing
-allocates no heap storage and uses a 128-sample scratch array (512 bytes before
-compiler optimization). This size excludes caller-owned input/output buffers,
-other stack variables, browser resources, and firmware drivers. Total firmware
-memory and CPU cost still need measurements on each device.
-
-## Warnings and local setup
-
-ESP-IDF Clippy and linking report 32 warnings, mainly unused imports, variables, sensor state, and inactive pattern/UART code. These warnings remain visible. The validation script does not deny warnings for this package. The existing Embassy application also retains its existing allowance for unused development code.
-
-Cargo reports manifest warnings for retained dependency declarations and binary names. Leptos dependencies `attribute-derive-macro 0.10.5` and `proc-macro-error2 2.0.1` report future Rust incompatibility warnings. The current pinned compiler still builds them successfully. These are not claims of compatibility with a later compiler.
-
-GitHub also reports [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) for `glib 0.18.5` in the optional Dioxus Linux desktop dependency graph. The pinned newest Dioxus pre-release still brings this version through its GTK stack. The selected web target does not include `glib`; the independent lockfile records optional desktop dependencies too. This upstream desktop issue remains unresolved. No older dependency selection or compatibility patch hides it.
-
-The terminal release examples link SDL2 from `/opt/homebrew/opt/sdl2/lib`. Local ESP-IDF setup exposed a broken Homebrew Python 3.14.7 `pyexpat` reference to the macOS system libexpat. Installing expat 2.8.4, updating that extension's library reference, and signing the extension repaired the host Python environment. The original extension was saved in `/tmp/musical-pyexpat-original.so`. The application contains no workaround for that local installation fault.
-
-## Hardware limits
-
-No ARM or ESP32 boards were available. No firmware was flashed. Successful links do not prove microphone sampling, sensor readings, LoRa exchange, LED signal quality, or real-time operation on hardware. The [LED timing review](led-timing.md) records source evidence, selected timing, and the remaining physical checks.
-
-The Feather application still contains initialization only. The Embassy radio task remains a placeholder; its sensor initialization and I2S/LED tasks remain in the application. STM32 GPS and radio tasks still contain existing `todo!()` calls and will panic if reached after the sensor handshake. This upgrade does not claim to implement those unfinished functions.
-
-The standalone worklet requires shared WASM memory, rebuilt standard library atomics/TLS exports, and cross-origin isolation headers. The browser tests serve the required headers. Ordinary static hosting without those headers is not a supported worklet deployment.
-
-CI covers every package root plus the browser tests. The smoother-fall and FPS update at `4331b54` passed [all-root validation](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34471359337) and [Pages deployment](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/34471359398). The live page also passed a Chromium check with real worklet peaks above one, 24 meters, centered layout, route navigation, stream cleanup, and displayed FPS matching measured animation intervals. Check the rainbow commit's workflow results and live page after push.
+These are host measurements. They do not show ESP32 execution time or hardware accuracy. No board was flashed. Microphone calibration, I2S format, DMA stress, processing headroom, LED channel order, response curves, current draw and observed flicker remain bench checks. The LED thread explicitly reserves 16,000 stack bytes because its 4,800-byte linear palette exceeds the SDK default 3,072-byte thread stack. Actual stack high-water marks still require a board. The firmware exposes capture failures and includes a separate `light-check` program and profile generator for that work.

@@ -31,8 +31,20 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
       - run: python3 validation/install_tools.py web
-      - run: python3 validation/validate.py leptos dioxus wasm
+      - run: python3 validation/validate.py worklet leptos dioxus wasm
       - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium && npm test
+  loudness-reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14.7'
+      - name: Install reference environment tool
+        run: python3 -m pip install uv==0.10.5
+      - name: Install Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal
+      - run: python3 validation/validate.py reference
   esp:
     runs-on: ubuntu-latest
     strategy:
