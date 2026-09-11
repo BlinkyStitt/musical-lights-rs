@@ -62,6 +62,9 @@ test('a browser touch swipe across a live bar exits before release without a fre
   expect(await page.evaluate(() => inputRequests)).toBe(1);
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('live');
   await page.getByRole('button', { name: 'Stop listening' }).tap();
+  // Touch injection can finish before the browser dispatches its click.
+  // Wait for the button action, then require its synchronous track cleanup.
+  await expect(page.getByRole('button', { name: 'Start listening' })).toBeVisible();
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
   await page.evaluate(() => sourceContext.close());
   expect(errors).toEqual([]);
