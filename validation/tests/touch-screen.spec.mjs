@@ -61,9 +61,11 @@ test('a browser touch swipe across a live bar exits before release without a fre
   expect(events.some(event => event.type === 'pointercancel')).toBe(false);
   expect(await page.evaluate(() => inputRequests)).toBe(1);
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('live');
+  // Lift and move the finger from the graph to the controls. Linux Chromium
+  // suppresses an immediately injected post-swipe tap even on a plain page;
+  // a separate gesture after 200 ms delivers the click. Allow 50 ms margin.
+  await page.waitForTimeout(250);
   await page.getByRole('button', { name: 'Stop listening' }).tap();
-  // Touch injection can finish before the browser dispatches its click.
-  // Wait for the button action, then require its synchronous track cleanup.
   await expect(page.getByRole('button', { name: 'Start listening' })).toBeVisible();
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
   await page.evaluate(() => sourceContext.close());
