@@ -7,7 +7,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     Object.defineProperty(document, 'fullscreenEnabled', { value: false });
     Element.prototype.requestFullscreen = undefined;
     window.inputRequests = 0;
-    navigator.mediaDevices.getUserMedia = async () => {
+    MediaDevices.prototype.getUserMedia = async () => {
       window.inputRequests++;
       const context = new AudioContext();
       const oscillator = context.createOscillator();
