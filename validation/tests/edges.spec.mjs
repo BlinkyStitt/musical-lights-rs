@@ -97,7 +97,7 @@ for (const colorScheme of ['light', 'dark']) {
         expect(band.bottomDifference).toBeLessThan(1);
       }
       await page.screenshot({ path: `test-results/white-borders-fullscreen-${colorScheme}-${reducedMotion}.png` });
-      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+      await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Stop listening' }).click();
       await expect.poll(() => page.evaluate(() => window.readBands().every(band => band.level === 0 && band.edge === 0))).toBe(true);
       expect(await page.evaluate(() => window.edgeNodes.every((node, i) => node === document.querySelectorAll('.meter-edge')[i]))).toBe(true);

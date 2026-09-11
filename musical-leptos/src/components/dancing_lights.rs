@@ -11,6 +11,7 @@ use musical_lights_core::{
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
+    time::Duration,
 };
 
 #[derive(Clone)]
@@ -23,6 +24,41 @@ struct SessionOwner {
 #[component]
 pub fn DancingLights() -> impl IntoView {
     let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).colors;
+    let (selected_band, set_selected_band) = signal(None::<usize>);
+    let tooltip_timer = StoredValue::new(None::<TimeoutHandle>);
+    let clear_tooltip_timer = move || {
+        tooltip_timer.update_value(|timer| {
+            if let Some(timer) = timer.take() {
+                timer.clear();
+            }
+        });
+    };
+    on_cleanup(clear_tooltip_timer);
+    let show_band = move |index, transient| {
+        clear_tooltip_timer();
+        set_selected_band.set(Some(index));
+        if transient {
+            match set_timeout(
+                move || {
+                    set_selected_band.set(None);
+                    tooltip_timer.set_value(None);
+                },
+                Duration::from_secs(3),
+            ) {
+                Ok(timer) => tooltip_timer.set_value(Some(timer)),
+                Err(error) => {
+                    set_selected_band.set(None);
+                    log::warn!("Could not schedule frequency readout: {error:?}");
+                }
+            }
+        }
+    };
+    let hide_band = move |index| {
+        if selected_band.get_untracked() == Some(index) {
+            clear_tooltip_timer();
+            set_selected_band.set(None);
+        }
+    };
     let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
     let (listening, set_listening) = signal(false);
     let (capture_status, set_capture_status) =
@@ -193,9 +229,9 @@ pub fn DancingLights() -> impl IntoView {
                             {move || if starting.get() { "Starting microphone…" } else { "Start listening" }}
                         </button>
                     </Show>
-                    <button class="fullscreen-button"
+                    <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
-                        title="Show only the lights"
+                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; swipe down or press Escape to exit" }
                         on:click=move |_| screen.with_value(|session| {
                             if let Some(session) = session { session.toggle_fullscreen(); }
                         })>
@@ -209,11 +245,20 @@ pub fn DancingLights() -> impl IntoView {
                 </p>
             </div>
             <div class="spectrum-panel">
+                <p class="fullscreen-hint">"Swipe down to exit · Esc on keyboard"</p>
+                <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
+                    hidden=move || selected_band.get().is_none()
+                    style=move || selected_band.get().map(|index| {
+                        let color = screen_color(colors[index]);
+                        format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue)
+                    })>
+                    <span class="frequency-swatch" aria-hidden="true"></span>
+                    <span>{move || selected_band.get().map(|index| format!("{}–{} Hz", BARK_EDGES[index], BARK_EDGES[index + 1]))}</span>
+                </div>
                 <div class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></div>
                 <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble">
                     {BARK_EDGES.windows(2).enumerate().map(|(i, edges)| {
                         let label = format!("{}–{} Hz", edges[0], edges[1]);
-                        let tooltip = label.clone();
                         let color = screen_color(colors[i]);
                         // Encode the shared linear color once for CSS.
                         let style = format!(
@@ -224,13 +269,19 @@ pub fn DancingLights() -> impl IntoView {
                         );
                         view! {
                         <div class="meter" role="meter" aria-label=label tabindex="0" style=style
+                            aria-describedby=move || (selected_band.get() == Some(i)).then_some("frequency-readout")
+                            on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(i, false); } }
+                            on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(i); } }
+                            on:pointerdown=move |event| { if event.pointer_type() != "mouse" { show_band(i, true); } }
+                            on:pointercancel=move |_| hide_band(i)
+                            on:focus=move |event| { if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); } }
+                            on:blur=move |_| hide_band(i)
                             aria-valuemin="0" aria-valuemax="100"
                             aria-valuenow=move || (audio.get().levels[i] * 100.0).round() as u32>
                             <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get().levels[i])></div>
                             <div class="meter-edge" aria-hidden="true"
                                 style:height=move || format!("{}%", audio.get().levels[i] * 100.0)
                                 style:opacity=move || audio.get().edges[i].to_string()></div>
-                            <span class="frequency-tooltip" role="tooltip">{tooltip}</span>
                         </div>
                     }}).collect_view()}
                 </div>

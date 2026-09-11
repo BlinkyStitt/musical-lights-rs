@@ -133,7 +133,7 @@ impl<const N: usize> DisplaySnapshot<N> {
     fn advance(&mut self, at: f64) {
         let at = at.max(self.at);
         let rate = if self.reduced_motion { 3.0 } else { 6.0 };
-        let edge_rate = if self.reduced_motion { 5.0 } else { 10.0 };
+        let edge_rate = if self.reduced_motion { 20.0 } else { 30.0 };
         for band in &mut self.bands {
             if at > band.hold_until {
                 let elapsed = (at - self.at.max(band.hold_until)) as f32;
@@ -148,7 +148,13 @@ impl<const N: usize> DisplaySnapshot<N> {
                     band.height = band.target.activity;
                     band.velocity = 0.0;
                 }
-                band.edge *= Float::exp(-edge_rate * elapsed);
+                // The same critically damped fall as the bar, with a shorter
+                // tail. Integrate (1 + rate*t) * exp(-rate*t) from the hold's
+                // end so callback size and display refresh rate cannot change
+                // the fade. The hold still limits repeated full-white attacks.
+                let age = (self.at - band.hold_until).max(0.0) as f32;
+                band.edge *= (1.0 + edge_rate * elapsed / (1.0 + edge_rate * age))
+                    * Float::exp(-edge_rate * elapsed);
                 if band.edge <= 0.0001 || band.height == 0.0 {
                     band.edge = 0.0;
                 }
@@ -434,6 +440,32 @@ mod tests {
         }
         assert_eq!(state.frame(5.0).levels, [0.5; 24]);
         assert_eq!(state.frame(5.0).edges, [0.0; 24]);
+    }
+
+    #[test]
+    fn white_edge_has_a_short_damped_tail_without_changing_the_bar_fall() {
+        for (reduced, edge_rate, bar_rate) in [(false, 30.0, 6.0), (true, 20.0, 3.0)] {
+            let mut state = DisplaySnapshot::<1>::new(0.0);
+            state.push(0.0, [level(1.0)], reduced);
+            state.push(0.002, [level(0.0)], reduced);
+            assert_eq!(state.frame(0.350).edges, [1.0]);
+            for elapsed in [0.05, 0.1, 0.2, 0.3] {
+                let frame = state.frame(0.350 + elapsed);
+                let expected_edge = (1.0 + edge_rate * elapsed) * Float::exp(-edge_rate * elapsed);
+                let expected_bar = (1.0 + bar_rate * elapsed) * Float::exp(-bar_rate * elapsed);
+                assert!((frame.edges[0] as f64 - expected_edge).abs() < 1e-6);
+                assert!((frame.levels[0] as f64 - expected_bar).abs() < 1e-6);
+            }
+            assert!(state.frame(0.550).edges[0] < 0.1);
+            assert_eq!(state.frame(1.0).edges, [0.0]);
+            // Advancing the producer in small blocks gives the same fade as
+            // sampling one snapshot after a stalled render loop.
+            let reference = state.frame(0.55);
+            for step in 2..=275 {
+                state.push(step as f64 * 0.002, [level(0.0)], reduced);
+            }
+            assert!((state.frame(0.55).edges[0] - reference.edges[0]).abs() < 1e-6);
+        }
     }
 
     #[test]

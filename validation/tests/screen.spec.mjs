@@ -138,7 +138,7 @@ test('unsupported native screen APIs still allow the lights-only view', async ({
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
-  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
   await expect(page.getByRole('meter')).toHaveCount(24);
 });
@@ -223,7 +223,12 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
       await page.emulateMedia({ colorScheme });
       await page.screenshot({ path: `test-results/fullscreen-${viewport.width}-${colorScheme}.png` });
     }
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    // A real pointer drag exits without a persistent button over the lights.
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toHaveCSS('clip-path', 'inset(50%)');
+    await page.mouse.move(viewport.width / 2, 80);
+    await page.mouse.down();
+    await page.mouse.move(viewport.width / 2, 200, { steps: 5 });
+    await page.mouse.up();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     await expect(page.locator('.frame-rate')).toHaveText(/^[1-9][0-9]* FPS$/);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();

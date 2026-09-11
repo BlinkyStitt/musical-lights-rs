@@ -204,7 +204,7 @@ for (const colorScheme of ['light', 'dark']) {
       for (const meter of meters) {
         const label = await meter.getAttribute('aria-label');
         await meter.hover();
-        const tooltip = meter.getByRole('tooltip');
+        const tooltip = page.getByRole('tooltip');
         await expect(tooltip).toBeVisible();
         await expect(tooltip).toHaveText(label);
         const box = await tooltip.boundingBox();
@@ -216,7 +216,7 @@ for (const colorScheme of ['light', 'dark']) {
       await page.keyboard.press('Tab');
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
-      await expect(meters[0].getByRole('tooltip')).toBeVisible();
+      await expect(page.getByRole('tooltip')).toHaveText(await meters[0].getAttribute('aria-label'));
       // Exercise every colored bar through the real audio processor.
       await page.getByRole('button', { name: 'Start listening' }).click();
       await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);

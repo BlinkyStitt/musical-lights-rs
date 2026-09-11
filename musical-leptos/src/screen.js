@@ -12,6 +12,7 @@ export class VisualizerScreen {
     this.requestingLock = false;
     this.changingFullscreen = false;
     this.expanded = false;
+    this.swipe = null;
     this.visibility = 0;
     this.awake = 'Keeping screen awake…';
     this.error = '';
@@ -32,9 +33,31 @@ export class VisualizerScreen {
         this.toggleFullscreen();
       }
     };
+    this.onPointerDown = event => {
+      this.swipe = null;
+      if (this.expanded && event.isPrimary && event.button === 0
+          && this.element.contains(event.target)
+          && !event.target.closest('button, input, summary')) {
+        this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      }
+    };
+    this.onPointerUp = event => {
+      const swipe = this.swipe;
+      this.swipe = null;
+      if (!swipe || event.pointerId !== swipe.id) return;
+      const down = event.clientY - swipe.y;
+      const across = Math.abs(event.clientX - swipe.x);
+      if (this.expanded && down >= 80 && down > across * 1.5) {
+        this.toggleFullscreen();
+      }
+    };
+    this.onPointerCancel = () => { this.swipe = null; };
     this.document.addEventListener('visibilitychange', this.onVisibility);
     this.document.addEventListener('fullscreenchange', this.onFullscreen);
     this.document.addEventListener('keydown', this.onKey);
+    this.document.addEventListener('pointerdown', this.onPointerDown);
+    this.document.addEventListener('pointerup', this.onPointerUp);
+    this.document.addEventListener('pointercancel', this.onPointerCancel);
     this.acquireLock();
   }
 
@@ -49,6 +72,7 @@ export class VisualizerScreen {
 
   setExpanded(expanded) {
     this.expanded = expanded;
+    this.swipe = null;
     this.element.toggleAttribute('data-expanded', expanded);
     this.emit();
   }
@@ -149,6 +173,9 @@ export class VisualizerScreen {
     this.document.removeEventListener('visibilitychange', this.onVisibility);
     this.document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.document.removeEventListener('keydown', this.onKey);
+    this.document.removeEventListener('pointerdown', this.onPointerDown);
+    this.document.removeEventListener('pointerup', this.onPointerUp);
+    this.document.removeEventListener('pointercancel', this.onPointerCancel);
     this.setExpanded(false);
     this.releaseLock();
     if (this.document.fullscreenElement === this.element) {

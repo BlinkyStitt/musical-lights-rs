@@ -53,13 +53,13 @@ p { line-height: 1.65; }
 .audio-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 1rem; box-shadow: 0 12px 38px var(--shadow); }
 h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .mic-status { font-size: .74rem; color: var(--muted); background: var(--paper); border: 1px solid var(--line); border-radius: 50px; padding: .4rem .8rem; margin: 0; text-align: center; }
-.spectrum-panel { position: relative; padding: 1.8rem 1.5rem 1rem 3.3rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
+.spectrum-panel { position: relative; padding: 2.2rem 1.5rem 1rem 3.3rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
 #dancinglights { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: clamp(2px, .7vw, 8px); height: clamp(210px, 28vw, 320px); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); }
 .meter { position: relative; height: 100%; min-width: 0; border-bottom: 3px solid var(--band-color); }
 .meter-fill { position: absolute; inset: 0; background: var(--band-color); border-radius: 5px 5px 0 0; transform-origin: bottom; transform: scaleY(0); }
 .meter-edge { position: absolute; bottom: 0; left: 0; right: 0; height: 0; opacity: 0; border: 1px solid white; border-bottom: 0; border-radius: 5px 5px 0 0; box-shadow: inset 0 0 4px #FFFFFF99, 0 0 8px color-mix(in srgb, var(--band-color) 65%, transparent); pointer-events: none; }
 /* Heights come from the animation envelope; CSS must not delay an attack. */
-.meter-guide { position: absolute; top: 1.8rem; bottom: 2.85rem; left: .7rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
+.meter-guide { position: absolute; top: 2.2rem; bottom: 2.85rem; left: .7rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .spectrum-labels { display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; padding-top: 1rem; }
 .audio-controls { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-bottom: 1rem; }
 .button-row { display: flex; flex-wrap: wrap; gap: .65rem; }
@@ -76,11 +76,12 @@ button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
 .screen-error:not(:empty) { margin-top: .75rem; }
 html:has(.audio-card[data-expanded]), body:has(.audio-card[data-expanded]) { overflow: hidden; }
 .site-shell:has(.audio-card[data-expanded]) { visibility: hidden; }
-.audio-card[data-expanded] { visibility: visible; position: fixed; inset: 0; z-index: 100; width: 100%; height: 100dvh; margin: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); border: 0; border-radius: 0; overflow: hidden; background: var(--plot); }
+.audio-card[data-expanded] { visibility: visible; position: fixed; inset: 0; z-index: 100; width: 100%; height: 100dvh; margin: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); border: 0; border-radius: 0; overflow: hidden; background: var(--plot); touch-action: pinch-zoom; }
 .audio-card[data-expanded] .spectrum-panel { height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; }
 .audio-card[data-expanded] #dancinglights { height: 100%; min-height: 0; background: none; }
 .audio-card[data-expanded] .audio-controls { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: 0; }
-.audio-card[data-expanded] :is(.mic-status, .stop-listening, .meter-guide, .spectrum-labels, .control-note, .calibration-status, .calibration-controls) { display: none; }
+.audio-card[data-expanded] .fullscreen-button:not(:focus-visible) { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.audio-card[data-expanded] :is(.mic-status, .primary, .meter-guide, .spectrum-labels, .control-note, .calibration-status, .calibration-controls) { display: none; }
 .audio-card[data-expanded] :is(.audio-error, .screen-error):not(:empty) { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: .75rem; background: var(--surface); border-radius: 9px; }
 .audio-card::backdrop { background: var(--paper); }
 .audio-error { color: var(--ink); font-size: .82rem; margin: 0; overflow-wrap: anywhere; }
@@ -110,11 +111,14 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   .how-it-works { grid-template-columns: 1fr; gap: 1rem; }
   footer { flex-direction: column; gap: .5rem; }
 }
-.frequency-tooltip { display: none; position: absolute; bottom: calc(100% + .55rem); left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: .35rem .6rem; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: .75rem; pointer-events: none; }
-.meter:hover .frequency-tooltip, .meter:focus-visible .frequency-tooltip { display: block; }
-.meter:first-child .frequency-tooltip { left: 0; transform: none; }
-.meter:last-child .frequency-tooltip { left: auto; right: 0; transform: none; }
-.audio-card[data-expanded] .frequency-tooltip { top: max(4rem, env(safe-area-inset-top)); bottom: auto; }
+.frequency-tooltip { display: flex; align-items: center; gap: .45rem; position: absolute; top: .25rem; left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: .3rem .6rem; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: .75rem; pointer-events: none; }
+.frequency-tooltip[hidden] { display: none; }
+.frequency-swatch { width: .85rem; height: .85rem; flex: none; background: var(--band-color); border: 1px solid currentColor; }
+.audio-card[data-expanded] .frequency-tooltip { top: .75rem; }
+.fullscreen-hint { display: none; }
+.audio-card[data-expanded] .fullscreen-hint { display: block; position: absolute; top: .75rem; left: 50%; transform: translateX(-50%); z-index: 2; margin: 0; padding: .3rem .6rem; border-radius: 6px; color: var(--ink); background: var(--surface); font-size: .75rem; white-space: nowrap; pointer-events: none; animation: dismiss-hint 3s step-end forwards; }
+.spectrum-panel:has(.frequency-tooltip:not([hidden])) .fullscreen-hint { visibility: hidden; }
+@keyframes dismiss-hint { to { visibility: hidden; } }
 
 .calibration-status { margin: .25rem 0; font-size: .8rem; }
 .calibration-controls { margin-top: .5rem; font-size: .875rem; }
