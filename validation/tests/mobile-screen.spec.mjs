@@ -97,9 +97,9 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     await drag(page, ...gesture);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   }
-  // Use the real button. iOS can suppress document-level gesture events after
-  // Safari changes its viewport, but it delivers button activation reliably.
-  await page.locator('.audio-card').tap({ position: { x: 200, y: 20 } });
+  // Use the fixed Exit control in the top tap area. Safari can suppress
+  // document-level gesture events after it changes the viewport.
+  await exit.tap();
   await expect(page.locator('.site-header')).toBeVisible();
   await expect(page.locator('.calibration-controls')).toBeVisible();
   expect(await page.evaluate(() => scrollY)).toBe(initialScroll);
