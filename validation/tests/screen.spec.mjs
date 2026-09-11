@@ -247,8 +247,8 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
       await page.emulateMedia({ colorScheme });
       await page.screenshot({ path: `test-results/fullscreen-${viewport.width}-${colorScheme}.png` });
     }
-    // A real pointer drag exits without a persistent button over the lights.
-    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toHaveCSS('clip-path', 'inset(50%)');
+    // Keep the real exit button available to touch users in the fullscreen view.
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
     await page.mouse.move(viewport.width / 2, 80);
     await page.mouse.down();
     await page.mouse.move(viewport.width / 2, 200, { steps: 5 });

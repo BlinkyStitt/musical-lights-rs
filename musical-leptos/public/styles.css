@@ -80,7 +80,7 @@ html:has(.audio-card[data-expanded]), body:has(.audio-card[data-expanded]) { ove
 .audio-card[data-expanded] .spectrum-panel { height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; }
 .audio-card[data-expanded] #dancinglights { height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
 .audio-card[data-expanded] .audio-controls { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: 0; }
-.audio-card[data-expanded] .fullscreen-button:not(:focus-visible) { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.audio-card[data-expanded] .fullscreen-button { position: fixed; top: max(.75rem, env(safe-area-inset-top)); left: max(.75rem, env(safe-area-inset-left)); z-index: 101; width: auto; height: auto; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid var(--line); overflow: visible; clip-path: none; white-space: nowrap; pointer-events: auto; }
 .audio-card[data-expanded] :is(.mic-status, .primary, .meter-guide, .spectrum-labels, .control-note, .calibration-status, .calibration-controls) { display: none; }
 .audio-card[data-expanded] :is(.audio-error, .screen-error):not(:empty) { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: .75rem; background: var(--surface); border-radius: 9px; }
 .audio-card::backdrop { background: var(--paper); }

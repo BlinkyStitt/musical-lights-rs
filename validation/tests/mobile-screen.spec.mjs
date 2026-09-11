@@ -77,7 +77,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   const initialScroll = await page.evaluate(() => scrollY);
   await expand.tap();
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
-  await expect(exit).toHaveCSS('clip-path', 'inset(50%)');
+  await expect(exit).toBeVisible();
   await expect(page.locator('.site-header')).toBeHidden();
   await expect(page.locator('.calibration-controls')).toBeHidden();
   await expect(page.locator('.control-note')).toBeHidden();
@@ -97,8 +97,8 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     await drag(page, ...gesture);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   }
-  // iOS has a reliable tap path even when it does not deliver the complete
-  // captured swipe stream.
+  // Use the real button. iOS can suppress document-level gesture events after
+  // Safari changes its viewport, but it delivers button activation reliably.
   await page.locator('.audio-card').tap({ position: { x: 200, y: 20 } });
   await expect(page.locator('.site-header')).toBeVisible();
   await expect(page.locator('.calibration-controls')).toBeVisible();
