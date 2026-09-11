@@ -16,6 +16,7 @@ export class VisualizerScreen {
     this.changingFullscreen = false;
     this.expanded = false;
     this.swipe = null;
+    this.topTapHeight = 64;
     this.visibility = 0;
     this.awake = 'Keeping screen awake…';
     this.error = '';
@@ -40,6 +41,13 @@ export class VisualizerScreen {
     this.onPointerDown = event => {
       this.clearGesture();
       const touch = event.pointerType !== 'mouse';
+      if (this.expanded && touch && event.isPrimary && event.button === 0
+          && event.clientY <= this.topTapHeight) {
+        // iOS may not deliver a complete captured drag after a viewport
+        // gesture. Keep a direct, reliable touch target for leaving the view.
+        this.toggleFullscreen();
+        return;
+      }
       if ((this.expanded || touch) && event.isPrimary && event.button === 0
           && this.element.contains(event.target)
           && !event.target.closest('button, input, summary')) {

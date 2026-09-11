@@ -97,7 +97,9 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     await drag(page, ...gesture);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   }
-  await drag(page, 0, 100);
+  // iOS has a reliable tap path even when it does not deliver the complete
+  // captured swipe stream.
+  await page.locator('.audio-card').tap({ position: { x: 200, y: 20 } });
   await expect(page.locator('.site-header')).toBeVisible();
   await expect(page.locator('.calibration-controls')).toBeVisible();
   expect(await page.evaluate(() => scrollY)).toBe(initialScroll);
