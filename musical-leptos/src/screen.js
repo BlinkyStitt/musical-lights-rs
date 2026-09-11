@@ -1,11 +1,12 @@
 // Browser-owned screen resources follow the visualizer view, including requests
 // that finish after the view closes or the tab changes visibility.
 export class VisualizerScreen {
-  constructor(element, onChange) {
+  constructor(element, onChange, onBand) {
     this.element = element;
     this.document = element.ownerDocument;
     this.navigator = this.document.defaultView.navigator;
     this.onChange = onChange;
+    this.onBand = onBand;
     this.closed = false;
     this.lock = null;
     this.lockRelease = null;
@@ -34,31 +35,54 @@ export class VisualizerScreen {
       }
     };
     this.onPointerDown = event => {
-      this.swipe = null;
-      if (this.expanded && event.isPrimary && event.button === 0
+      this.clearGesture();
+      const touch = event.pointerType !== 'mouse';
+      if ((this.expanded || touch) && event.isPrimary && event.button === 0
           && this.element.contains(event.target)
           && !event.target.closest('button, input, summary')) {
-        this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        const band = event.target.closest('[role="meter"]');
+        if (!this.expanded && !band) return;
+        const index = band ? [...this.element.querySelectorAll('[role="meter"]')].indexOf(band) : -1;
+        this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY, touch, band: index, moved: false };
+        if (touch) this.onBand(null);
+        // Retain the gesture when the finger crosses a band or its animated fill.
+        this.element.setPointerCapture(event.pointerId);
       }
     };
-    this.onPointerUp = event => {
+    this.onPointerMove = event => {
       const swipe = this.swipe;
-      this.swipe = null;
       if (!swipe || event.pointerId !== swipe.id) return;
       const down = event.clientY - swipe.y;
       const across = Math.abs(event.clientX - swipe.x);
+      if (Math.hypot(across, down) > 10) swipe.moved = true;
       if (this.expanded && down >= 80 && down > across * 1.5) {
+        this.clearGesture();
         this.toggleFullscreen();
       }
     };
-    this.onPointerCancel = () => { this.swipe = null; };
+    this.onPointerUp = event => {
+      this.onPointerMove(event);
+      const swipe = this.swipe;
+      if (!swipe || event.pointerId !== swipe.id) return;
+      this.clearGesture();
+      if (swipe.touch && !swipe.moved && swipe.band >= 0) this.onBand(swipe.band);
+    };
+    this.onPointerCancel = () => this.clearGesture();
     this.document.addEventListener('visibilitychange', this.onVisibility);
     this.document.addEventListener('fullscreenchange', this.onFullscreen);
     this.document.addEventListener('keydown', this.onKey);
     this.document.addEventListener('pointerdown', this.onPointerDown);
+    this.document.addEventListener('pointermove', this.onPointerMove);
     this.document.addEventListener('pointerup', this.onPointerUp);
     this.document.addEventListener('pointercancel', this.onPointerCancel);
+    this.element.addEventListener('lostpointercapture', this.onPointerCancel);
     this.acquireLock();
+  }
+
+  clearGesture() {
+    const swipe = this.swipe;
+    this.swipe = null;
+    if (swipe && this.element.hasPointerCapture(swipe.id)) this.element.releasePointerCapture(swipe.id);
   }
 
   emit() {
@@ -72,7 +96,7 @@ export class VisualizerScreen {
 
   setExpanded(expanded) {
     this.expanded = expanded;
-    this.swipe = null;
+    this.clearGesture();
     this.element.toggleAttribute('data-expanded', expanded);
     this.emit();
   }
@@ -174,13 +198,16 @@ export class VisualizerScreen {
     this.document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.document.removeEventListener('keydown', this.onKey);
     this.document.removeEventListener('pointerdown', this.onPointerDown);
+    this.document.removeEventListener('pointermove', this.onPointerMove);
     this.document.removeEventListener('pointerup', this.onPointerUp);
     this.document.removeEventListener('pointercancel', this.onPointerCancel);
+    this.element.removeEventListener('lostpointercapture', this.onPointerCancel);
     this.setExpanded(false);
     this.releaseLock();
     if (this.document.fullscreenElement === this.element) {
       this.document.exitFullscreen().catch(() => {});
     }
     this.onChange = null;
+    this.onBand = null;
   }
 }

@@ -1,13 +1,16 @@
 import { test, expect } from '@playwright/test';
 
-async function swipe(page, dx, dy, cancel = false, multiTouch = false) {
-  const graph = page.locator('#dancinglights');
-  const box = await graph.boundingBox();
-  const pointer = { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, clientX: box.x + box.width / 2, clientY: box.y + 30 };
-  await graph.dispatchEvent('pointerdown', pointer);
-  if (multiTouch) await graph.dispatchEvent('pointerdown', { ...pointer, pointerId: 2, isPrimary: false });
-  if (cancel) await graph.dispatchEvent('pointercancel', pointer);
-  await graph.dispatchEvent('pointerup', { ...pointer, clientX: pointer.clientX + dx, clientY: pointer.clientY + dy });
+async function drag(page, dx, dy) {
+  // Playwright's WebKit transport supports touch taps, but no touch drags.
+  // Exercise native pointer capture here with a mouse; touch-screen covers
+  // trusted touch streams, cancellation, and multi-touch in Chromium.
+  const box = await page.getByRole('meter').nth(12).boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + 150;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 10 });
+  await page.mouse.up();
 }
 
 test('a tapped band shows its color and frequency above the graph for three seconds', async ({ page }) => {
@@ -89,12 +92,12 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await page.screenshot({ path: 'test-results/iphone-lights-only.png' });
   expect(await page.evaluate(() => inputRequests)).toBe(1);
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('live');
-  // A tap, sideways drag, short drag, cancellation, or pinch cannot exit.
-  for (const gesture of [[0, 0], [100, 90], [0, 79], [0, 100, true], [0, 100, false, true]]) {
-    await swipe(page, ...gesture);
+  // A tap, sideways drag, or short drag cannot exit.
+  for (const gesture of [[0, 0], [100, 90], [0, 79]]) {
+    await drag(page, ...gesture);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   }
-  await swipe(page, 0, 100);
+  await drag(page, 0, 100);
   await expect(page.locator('.site-header')).toBeVisible();
   await expect(page.locator('.calibration-controls')).toBeVisible();
   expect(await page.evaluate(() => scrollY)).toBe(initialScroll);

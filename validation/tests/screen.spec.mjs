@@ -29,11 +29,11 @@ function environment(request = async () => sentinel()) {
     document.dispatchEvent(new Event('fullscreenchange'));
   };
   const attributes = new Set();
-  const element = { ownerDocument: document, toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name), requestFullscreen: async () => {
+  const element = Object.assign(new EventTarget(), { ownerDocument: document, toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name), requestFullscreen: async () => {
     document.fullscreenElement = element;
     document.dispatchEvent(new Event('fullscreenchange'));
-  } };
-  const screen = new VisualizerScreen(element, (awake, full, error) => changes.push({ awake, full, error }));
+  } });
+  const screen = new VisualizerScreen(element, (awake, full, error) => changes.push({ awake, full, error }), () => {});
   const visible = value => {
     document.hidden = !value;
     document.dispatchEvent(new Event('visibilitychange'));

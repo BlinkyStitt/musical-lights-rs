@@ -77,11 +77,21 @@ pub fn DancingLights() -> impl IntoView {
     let screen = StoredValue::new_local(None::<ScreenSession>);
     let card = NodeRef::<leptos::html::Section>::new();
     card.on_load(move |element| {
-        let session = ScreenSession::new(&element, move |awake, full, error| {
-            set_wake_status.set(awake);
-            set_fullscreen.set(full);
-            set_screen_error.set(error);
-        });
+        let session = ScreenSession::new(
+            &element,
+            move |awake, full, error| {
+                set_wake_status.set(awake);
+                set_fullscreen.set(full);
+                set_screen_error.set(error);
+            },
+            move |band| match band {
+                Some(index) => show_band(index as usize, true),
+                None => {
+                    clear_tooltip_timer();
+                    set_selected_band.set(None);
+                }
+            },
+        );
         screen.set_value(Some(session));
     });
     on_cleanup(move || {
@@ -272,8 +282,6 @@ pub fn DancingLights() -> impl IntoView {
                             aria-describedby=move || (selected_band.get() == Some(i)).then_some("frequency-readout")
                             on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(i, false); } }
                             on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(i); } }
-                            on:pointerdown=move |event| { if event.pointer_type() != "mouse" { show_band(i, true); } }
-                            on:pointercancel=move |_| hide_band(i)
                             on:focus=move |event| { if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); } }
                             on:blur=move |_| hide_band(i)
                             aria-valuemin="0" aria-valuemax="100"

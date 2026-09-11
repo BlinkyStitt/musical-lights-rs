@@ -5,7 +5,11 @@ extern "C" {
     type VisualizerScreen;
 
     #[wasm_bindgen(constructor)]
-    fn new(element: &web_sys::HtmlElement, on_change: &js_sys::Function) -> VisualizerScreen;
+    fn new(
+        element: &web_sys::HtmlElement,
+        on_change: &js_sys::Function,
+        on_band: &js_sys::Function,
+    ) -> VisualizerScreen;
 
     #[wasm_bindgen(method, js_name = toggleFullscreen)]
     fn toggle_fullscreen(this: &VisualizerScreen);
@@ -20,18 +24,26 @@ type ScreenChange = Closure<dyn FnMut(String, bool, String)>;
 pub struct ScreenSession {
     screen: VisualizerScreen,
     _on_change: ScreenChange,
+    _on_band: Closure<dyn FnMut(Option<u32>)>,
 }
 
 impl ScreenSession {
     pub fn new(
         element: &web_sys::HtmlElement,
         on_change: impl FnMut(String, bool, String) + 'static,
+        on_band: impl FnMut(Option<u32>) + 'static,
     ) -> Self {
         let callback = Closure::new(on_change);
-        let screen = VisualizerScreen::new(element, callback.as_ref().unchecked_ref());
+        let on_band = Closure::new(on_band);
+        let screen = VisualizerScreen::new(
+            element,
+            callback.as_ref().unchecked_ref(),
+            on_band.as_ref().unchecked_ref(),
+        );
         Self {
             screen,
             _on_change: callback,
+            _on_band: on_band,
         }
     }
 
