@@ -17,19 +17,24 @@ function environment(request = async () => sentinel()) {
   const document = new EventTarget();
   const changes = [];
   const requests = [];
+  const orientation = new EventTarget();
+  const window = Object.assign(new EventTarget(), {
+    navigator: { wakeLock: { request: type => {
+      requests.push(type);
+      return request();
+    } } },
+    screen: { orientation },
+  });
   document.hidden = false;
   document.fullscreenEnabled = true;
   document.fullscreenElement = null;
-  document.defaultView = { navigator: { wakeLock: { request: type => {
-    requests.push(type);
-    return request();
-  } } } };
+  document.defaultView = window;
   document.exitFullscreen = async () => {
     document.fullscreenElement = null;
     document.dispatchEvent(new Event('fullscreenchange'));
   };
   const attributes = new Set();
-  const element = Object.assign(new EventTarget(), { ownerDocument: document, toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name), requestFullscreen: async () => {
+  const element = Object.assign(new EventTarget(), { ownerDocument: document, hasPointerCapture: () => false, toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name), requestFullscreen: async () => {
     document.fullscreenElement = element;
     document.dispatchEvent(new Event('fullscreenchange'));
   } });
@@ -38,7 +43,7 @@ function environment(request = async () => sentinel()) {
     document.hidden = !value;
     document.dispatchEvent(new Event('visibilitychange'));
   };
-  return { document, element, screen, changes, requests, visible, attributes };
+  return { document, element, screen, changes, requests, visible, attributes, window, orientation };
 }
 
 test('screen lock follows visibility and closes without later callbacks', async () => {
@@ -101,6 +106,25 @@ test('visibility changes during a pending wake request release the stale lock', 
   expect(current.released).toBe(false);
   env.screen.close();
   expect(current.releases).toBe(1);
+});
+
+test('viewport and orientation changes cancel gestures and close removes listeners', () => {
+  const env = environment();
+  const gesture = { id: 1 };
+
+  env.screen.swipe = gesture;
+  env.window.dispatchEvent(new Event('resize'));
+  expect(env.screen.swipe).toBe(null);
+
+  env.screen.swipe = gesture;
+  env.orientation.dispatchEvent(new Event('change'));
+  expect(env.screen.swipe).toBe(null);
+
+  env.screen.close();
+  env.screen.swipe = gesture;
+  env.window.dispatchEvent(new Event('resize'));
+  env.orientation.dispatchEvent(new Event('change'));
+  expect(env.screen.swipe).toBe(gesture);
 });
 
 test('fullscreen follows external exits, keeps expansion after rejection, and closes late entries', async () => {

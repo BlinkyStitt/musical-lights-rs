@@ -68,8 +68,16 @@ impl<const N: usize> Gradient<N> {
     pub fn new_rainbow(saturation: f32, luminance: f32) -> Self {
         // HSLuv hue is in degrees, not the LED HSV byte range of 0–255.
         let lin = Linear::builder()
-            .elements([12.0, 285.0])
-            .knots([0.0, 1.0])
+            .elements([12.0, 38.0, 85.0, 127.0, 192.0, 258.0, 285.0])
+            .knots([
+                0.0,
+                1.0 / 6.0,
+                2.0 / 6.0,
+                3.0 / 6.0,
+                4.0 / 6.0,
+                5.0 / 6.0,
+                1.0,
+            ])
             .build()
             .unwrap();
 
@@ -189,6 +197,35 @@ mod tests {
         for (i, color) in colors.iter().enumerate() {
             assert!(!colors[..i].contains(color), "each band has its own color");
         }
+    }
+
+    #[test]
+    fn rainbow_uses_balanced_hsluv_anchors() {
+        let anchors = [12.0, 38.0, 85.0, 127.0, 192.0, 258.0, 285.0];
+        let colors = Gradient::<7>::new_rainbow(90.0, 58.0).colors;
+
+        for (color, hue) in colors.into_iter().zip(anchors) {
+            let expected = convert_color(palette::Hsluv::new(hue, 90.0, 58.0));
+            assert_eq!(color, expected, "anchor hue {hue}");
+        }
+    }
+
+    #[test]
+    fn rainbow_interpolates_endpoints_and_stays_finite() {
+        let colors = Gradient::<24>::new_rainbow(90.0, 58.0).colors;
+        assert_eq!(
+            colors[0],
+            convert_color(palette::Hsluv::new(12.0, 90.0, 58.0))
+        );
+        assert_eq!(
+            colors[23],
+            convert_color(palette::Hsluv::new(285.0, 90.0, 58.0))
+        );
+        assert!(colors.iter().all(|color| {
+            [color.red, color.green, color.blue]
+                .into_iter()
+                .all(f32::is_finite)
+        }));
     }
 
     #[test_log::test]

@@ -4,7 +4,9 @@ export class VisualizerScreen {
   constructor(element, onChange, onBand) {
     this.element = element;
     this.document = element.ownerDocument;
-    this.navigator = this.document.defaultView.navigator;
+    this.window = this.document.defaultView;
+    this.navigator = this.window.navigator;
+    this.orientation = this.window.screen?.orientation;
     this.onChange = onChange;
     this.onBand = onBand;
     this.closed = false;
@@ -28,6 +30,7 @@ export class VisualizerScreen {
       }
     };
     this.onFullscreen = () => this.setExpanded(this.document.fullscreenElement === this.element);
+    this.onViewportChange = () => this.clearGesture();
     this.onKey = event => {
       if (event.key === 'Escape' && this.expanded) {
         event.preventDefault();
@@ -76,6 +79,10 @@ export class VisualizerScreen {
     this.document.addEventListener('pointerup', this.onPointerUp);
     this.document.addEventListener('pointercancel', this.onPointerCancel);
     this.element.addEventListener('lostpointercapture', this.onPointerCancel);
+    this.window.addEventListener?.('resize', this.onViewportChange);
+    this.window.addEventListener?.('orientationchange', this.onViewportChange);
+    this.window.visualViewport?.addEventListener?.('resize', this.onViewportChange);
+    this.orientation?.addEventListener?.('change', this.onViewportChange);
     this.acquireLock();
   }
 
@@ -202,6 +209,10 @@ export class VisualizerScreen {
     this.document.removeEventListener('pointerup', this.onPointerUp);
     this.document.removeEventListener('pointercancel', this.onPointerCancel);
     this.element.removeEventListener('lostpointercapture', this.onPointerCancel);
+    this.window.removeEventListener?.('resize', this.onViewportChange);
+    this.window.removeEventListener?.('orientationchange', this.onViewportChange);
+    this.window.visualViewport?.removeEventListener?.('resize', this.onViewportChange);
+    this.orientation?.removeEventListener?.('change', this.onViewportChange);
     this.setExpanded(false);
     this.releaseLock();
     if (this.document.fullscreenElement === this.element) {
