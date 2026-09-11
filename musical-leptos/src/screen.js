@@ -11,6 +11,7 @@ export class VisualizerScreen {
     this.lockRelease = null;
     this.requestingLock = false;
     this.changingFullscreen = false;
+    this.expanded = false;
     this.visibility = 0;
     this.awake = 'Keeping screen awake…';
     this.error = '';
@@ -24,9 +25,16 @@ export class VisualizerScreen {
         this.acquireLock();
       }
     };
-    this.onFullscreen = () => this.emit();
+    this.onFullscreen = () => this.setExpanded(this.document.fullscreenElement === this.element);
+    this.onKey = event => {
+      if (event.key === 'Escape' && this.expanded) {
+        event.preventDefault();
+        this.toggleFullscreen();
+      }
+    };
     this.document.addEventListener('visibilitychange', this.onVisibility);
     this.document.addEventListener('fullscreenchange', this.onFullscreen);
+    this.document.addEventListener('keydown', this.onKey);
     this.acquireLock();
   }
 
@@ -34,10 +42,15 @@ export class VisualizerScreen {
     if (this.closed) return;
     this.onChange(
       this.awake,
-      this.document.fullscreenElement === this.element,
-      !!this.document.fullscreenEnabled && typeof this.element.requestFullscreen === 'function',
+      this.expanded,
       this.error,
     );
+  }
+
+  setExpanded(expanded) {
+    this.expanded = expanded;
+    this.element.toggleAttribute('data-expanded', expanded);
+    this.emit();
   }
 
   async acquireLock() {
@@ -105,17 +118,25 @@ export class VisualizerScreen {
     this.changingFullscreen = true;
     this.error = '';
     try {
-      // Call before any await: entering fullscreen needs the button gesture.
-      if (this.document.fullscreenElement === this.element) {
-        await this.document.exitFullscreen();
+      if (this.expanded) {
+        if (this.document.fullscreenElement === this.element) {
+          await this.document.exitFullscreen();
+        }
+        this.setExpanded(false);
       } else {
-        await this.element.requestFullscreen();
+        // The lights-only view is the action on every browser. Native
+        // fullscreen additionally hides browser chrome where supported.
+        this.setExpanded(true);
+        if (this.document.fullscreenEnabled && typeof this.element.requestFullscreen === 'function') {
+          // Keep the request within the button's user gesture.
+          await this.element.requestFullscreen().catch(() => {});
+        }
       }
       if (this.closed && this.document.fullscreenElement === this.element) {
         await this.document.exitFullscreen();
       }
     } catch {
-      this.error = 'Fullscreen is unavailable. You can keep using the visualizer here.';
+      this.error = 'Could not exit fullscreen. Use the browser’s fullscreen control.';
     } finally {
       this.changingFullscreen = false;
       this.emit();
@@ -127,6 +148,8 @@ export class VisualizerScreen {
     this.closed = true;
     this.document.removeEventListener('visibilitychange', this.onVisibility);
     this.document.removeEventListener('fullscreenchange', this.onFullscreen);
+    this.document.removeEventListener('keydown', this.onKey);
+    this.setExpanded(false);
     this.releaseLock();
     if (this.document.fullscreenElement === this.element) {
       this.document.exitFullscreen().catch(() => {});

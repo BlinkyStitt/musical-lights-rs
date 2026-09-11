@@ -4,7 +4,7 @@ The current measurement contract and its limits are in [Audio, loudness, and lig
 
 ## Reproduce
 
-Use the pinned tools in the README. The ISO validator requires Python 3.13 or newer and uv (tested with 0.10.5). On macOS, load the ESP toolchain environment and provide SDL2's library path for the terminal examples. Chromium requires host access because the sandbox blocks its macOS service registration.
+Use the pinned tools in the README. The ISO validator requires Python 3.13 or newer and uv (tested with 0.10.5). On macOS, load the ESP toolchain environment and provide SDL2's library path for the terminal examples. Browser validation installs and runs both Chromium and WebKit.
 
 ```sh
 python3 validation/validate.py all
@@ -12,11 +12,17 @@ python3 validation/validate.py all
 
 Individual targets are `core`, `worklet`, `terminal`, `leptos`, `dioxus`, `wasm`, `feather`, `stm32`, `esp-embassy`, `esp-idf`, `reference`, and `browser`. Build the three web applications before running browser tests. `reference` installs its locked Python environment, checks the validation tools, builds `loudness_trace`, and runs the ISO and MoSQITo comparisons.
 
+For Codex on macOS, run `python3 validation/validate.py browser` with approved host access (`sandbox_permissions: "require_escalated"`). The filesystem sandbox can block browser service registration even when network access is enabled. Keep normal commands in `workspace-write` and permit approval requests with `approval_policy = "on-request"`; disabling the sandbox for the whole session is unnecessary. Project configuration cannot override a managed session policy. See [Codex approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security). A sandbox launch error alone does not establish that browser tests are unavailable: request host access and report its actual result.
+
 ## Software checks
 
 All ten package validation targets passed on 2026-09-11, including formatting, Clippy, host tests and release links. The final suite passed 38 core tests in each of four feature configurations, eight terminal tests, one Leptos host test, two profile-tool tests, and 38 browser/worklet checks with the standard three-worker configuration. Additional core feature combinations passed Clippy. The release builds include both ESP-IDF binaries.
 
 The full run initially stopped because `ty` selected the system Python environment. The runner now selects the locked reference environment explicitly and checks its own source too. The remaining `reference browser` targets then passed. Both review regressions failed against the reviewed implementation before the fixes.
+
+The subsequent iPhone fullscreen repair passed the Leptos validation target and all 41 browser/worklet checks with three workers on 2026-09-11. The browser suite now includes WebKit with an iPhone 13 device profile. The new regression reproduced the disabled button against the prior release build. It checks touch entry and exit, portrait and landscape viewport sizes, uninterrupted live audio, scroll restoration, route cleanup, and a rejected native fullscreen request. Chromium checks still require actual native fullscreen entry and browser-driven exit. Python lint, format and type checks for the changed runner also passed.
+
+Fullscreen now expands the same graph into a lights-only page view on every browser. Where supported, the native API also hides browser chrome. The expanded view keeps an Exit button and hides the surrounding page and secondary controls. On iPhone Safari, the page cannot remove browser chrome through the unsupported element Fullscreen API; see [WebKit issue 206854](https://bugs.webkit.org/show_bug.cgi?id=206854). These WebKit tests run on the Mac. They do not verify a physical iPhone, Safari's address bar, or device safe-area insets.
 
 ## Measurement evidence
 

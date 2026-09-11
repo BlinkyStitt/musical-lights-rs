@@ -37,15 +37,13 @@ pub fn DancingLights() -> impl IntoView {
     let (frame_rate, set_frame_rate) = signal(None::<f64>);
     let (wake_status, set_wake_status) = signal(String::from("Keeping screen awake…"));
     let (fullscreen, set_fullscreen) = signal(false);
-    let (fullscreen_available, set_fullscreen_available) = signal(false);
     let (screen_error, set_screen_error) = signal(String::new());
     let screen = StoredValue::new_local(None::<ScreenSession>);
     let card = NodeRef::<leptos::html::Section>::new();
     card.on_load(move |element| {
-        let session = ScreenSession::new(&element, move |awake, full, available, error| {
+        let session = ScreenSession::new(&element, move |awake, full, error| {
             set_wake_status.set(awake);
             set_fullscreen.set(full);
-            set_fullscreen_available.set(available);
             set_screen_error.set(error);
         });
         screen.set_value(Some(session));
@@ -180,7 +178,7 @@ pub fn DancingLights() -> impl IntoView {
             <div class="audio-controls">
                 <div class="button-row">
                     <Show when=move || !listening.get() fallback=move || view! {
-                        <button class="primary" on:click=move |_| {
+                        <button class="primary stop-listening" on:click=move |_| {
                             owner.with_value(|owner| {
                                 if let Some(session) = owner.session.borrow_mut().take() { session.stop(); }
                                 if let Some(animation) = owner.animation.borrow_mut().take() { animation.stop(); }
@@ -195,9 +193,9 @@ pub fn DancingLights() -> impl IntoView {
                             {move || if starting.get() { "Starting microphone…" } else { "Start listening" }}
                         </button>
                     </Show>
-                    <button class="fullscreen-button" disabled=move || !fullscreen_available.get()
+                    <button class="fullscreen-button"
                         aria-pressed=move || fullscreen.get().to_string()
-                        title=move || if fullscreen_available.get() { "Expand the visualizer" } else { "Fullscreen is unavailable in this browser" }
+                        title="Show only the lights"
                         on:click=move |_| screen.with_value(|session| {
                             if let Some(session) = session { session.toggle_fullscreen(); }
                         })>

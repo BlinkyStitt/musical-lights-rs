@@ -28,16 +28,17 @@ function environment(request = async () => sentinel()) {
     document.fullscreenElement = null;
     document.dispatchEvent(new Event('fullscreenchange'));
   };
-  const element = { ownerDocument: document, requestFullscreen: async () => {
+  const attributes = new Set();
+  const element = { ownerDocument: document, toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name), requestFullscreen: async () => {
     document.fullscreenElement = element;
     document.dispatchEvent(new Event('fullscreenchange'));
   } };
-  const screen = new VisualizerScreen(element, (awake, full, available, error) => changes.push({ awake, full, available, error }));
+  const screen = new VisualizerScreen(element, (awake, full, error) => changes.push({ awake, full, error }));
   const visible = value => {
     document.hidden = !value;
     document.dispatchEvent(new Event('visibilitychange'));
   };
-  return { document, element, screen, changes, requests, visible };
+  return { document, element, screen, changes, requests, visible, attributes };
 }
 
 test('screen lock follows visibility and closes without later callbacks', async () => {
@@ -69,7 +70,6 @@ test('screen lock follows visibility and closes without later callbacks', async 
 test('a rejected wake request leaves fullscreen available without retry loops', async () => {
   const env = environment(async () => { throw new DOMException('Power saving', 'NotAllowedError'); });
   await expect.poll(() => env.changes.at(-1).awake).toBe('Screen may sleep');
-  expect(env.changes.at(-1).available).toBe(true);
   expect(env.changes.at(-1).error).toBe('');
   await env.screen.toggleFullscreen();
   expect(env.changes.at(-1).full).toBe(true);
@@ -103,7 +103,7 @@ test('visibility changes during a pending wake request release the stale lock', 
   expect(current.releases).toBe(1);
 });
 
-test('fullscreen reflects external exits, rejects failures, and closes late entries', async () => {
+test('fullscreen follows external exits, keeps expansion after rejection, and closes late entries', async () => {
   const env = environment();
   await env.screen.toggleFullscreen();
   expect(env.changes.at(-1).full).toBe(true);
@@ -111,12 +111,16 @@ test('fullscreen reflects external exits, rejects failures, and closes late entr
   expect(env.changes.at(-1).full).toBe(false);
   env.element.requestFullscreen = async () => { throw new TypeError('Denied'); };
   await env.screen.toggleFullscreen();
-  expect(env.changes.at(-1).error).toContain('Fullscreen is unavailable');
+  expect(env.changes.at(-1).error).toBe('');
+  expect(env.changes.at(-1).full).toBe(true);
+  expect(env.attributes.has('data-expanded')).toBe(true);
+  await env.screen.toggleFullscreen();
   expect(env.changes.at(-1).full).toBe(false);
   let resolve;
   env.element.requestFullscreen = () => new Promise(done => { resolve = done; });
   const entry = env.screen.toggleFullscreen();
   env.screen.close();
+  expect(env.attributes.has('data-expanded')).toBe(false);
   const count = env.changes.length;
   env.document.fullscreenElement = env.element;
   resolve(); await entry;
@@ -124,14 +128,17 @@ test('fullscreen reflects external exits, rejects failures, and closes late entr
   expect(env.changes).toHaveLength(count);
 });
 
-test('unsupported screen APIs leave the visualizer usable', async ({ page }) => {
+test('unsupported native screen APIs still allow the lights-only view', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'wakeLock', { value: undefined });
     Object.defineProperty(document, 'fullscreenEnabled', { value: false });
   });
   await page.goto('http://127.0.0.1:8101');
   await expect(page.locator('.wake-status')).toHaveText('Screen wake lock unavailable');
-  await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
   await expect(page.getByRole('meter')).toHaveCount(24);
 });
@@ -204,21 +211,24 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     const before = await page.locator('#dancinglights').boundingBox();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    expect(await page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
     const card = await page.locator('.audio-card').boundingBox();
     expect(card).toEqual({ x: 0, y: 0, ...viewport });
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
     expect((await page.locator('#dancinglights').boundingBox()).height).toBeGreaterThan(before.height + 100);
-    await expect(page.getByRole('button', { name: 'Stop listening' })).toBeInViewport();
-    await expect(page.locator('.frame-rate')).toHaveText(/^[1-9][0-9]* FPS$/);
+    await expect(page.getByRole('button', { name: 'Stop listening' })).toBeHidden();
+    await expect(page.locator('.control-note')).toBeHidden();
+    await expect(page.locator('.site-header')).toBeHidden();
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });
       await page.screenshot({ path: `test-results/fullscreen-${viewport.width}-${colorScheme}.png` });
     }
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
+    await expect(page.locator('.frame-rate')).toHaveText(/^[1-9][0-9]* FPS$/);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
     // Native browser exit emits the same event as Escape or browser controls.
     await page.evaluate(() => document.exitFullscreen());
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();

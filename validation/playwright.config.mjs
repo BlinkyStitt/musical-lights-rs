@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -6,6 +6,10 @@ export default defineConfig({
   workers: 3,
   reporter: 'list',
   use: { headless: true, screenshot: 'only-on-failure' },
+  projects: [
+    { name: 'chromium', testIgnore: '**/mobile-screen.spec.mjs', use: { browserName: 'chromium' } },
+    { name: 'iphone-webkit', testMatch: '**/mobile-screen.spec.mjs', use: { ...devices['iPhone 13'], browserName: 'webkit' } },
+  ],
   webServer: {
     command: 'node server.mjs',
     url: 'http://127.0.0.1:8101/',

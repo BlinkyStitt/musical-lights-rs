@@ -38,7 +38,7 @@ def cli_version(binary, version):
 def validate(name):
     if name == "browser":
         run(["npm", "ci", "--ignore-scripts"], ROOT / "validation")
-        run(["npx", "playwright", "install", "chromium"], ROOT / "validation")
+        run(["npx", "playwright", "install", "chromium", "webkit"], ROOT / "validation")
         run(["npm", "test"], ROOT / "validation")
         return
     if name == "reference":

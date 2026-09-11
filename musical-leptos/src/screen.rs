@@ -14,7 +14,7 @@ extern "C" {
     fn close(this: &VisualizerScreen);
 }
 
-type ScreenChange = Closure<dyn FnMut(String, bool, bool, String)>;
+type ScreenChange = Closure<dyn FnMut(String, bool, String)>;
 
 /// Keep the callback alive until the browser resources have closed.
 pub struct ScreenSession {
@@ -25,7 +25,7 @@ pub struct ScreenSession {
 impl ScreenSession {
     pub fn new(
         element: &web_sys::HtmlElement,
-        on_change: impl FnMut(String, bool, bool, String) + 'static,
+        on_change: impl FnMut(String, bool, String) + 'static,
     ) -> Self {
         let callback = Closure::new(on_change);
         let screen = VisualizerScreen::new(element, callback.as_ref().unchecked_ref());
