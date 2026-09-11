@@ -6,6 +6,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  pages: write
+  id-token: write
 jobs:
   rust:
     runs-on: ubuntu-latest
@@ -66,3 +68,21 @@ jobs:
         run: |
           . "$RUNNER_TEMP/export-esp.sh"
           python3 validation/validate.py ${{ matrix.package }}
+  pages:
+    needs: [rust, web, loudness-reference, esp]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install pinned Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
+      - run: python3 validation/install_tools.py web
+      - run: python3 validation/validate.py leptos
+      - uses: actions/configure-pages@v6.0.0
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: ./musical-leptos/dist
+      - uses: actions/deploy-pages@v5.0.1
+        id: deployment
