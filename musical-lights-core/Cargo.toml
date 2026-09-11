@@ -6,7 +6,6 @@ resolver = "2"
 
 [dependencies]
 ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", rev = "0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9", default-features = false }
-biquad = { version = "=0.6.0", default-features = false }
 circular-buffer = { version = "=2.0.1", default-features = false }
 cobs = { version = "=0.5.1", default-features = false }
 crc = "=3.4.0"
@@ -82,5 +81,9 @@ std = [
 ]
 
 [[example]]
-name = "bark_cost"
+name = "loudness_cost"
+required-features = ["std"]
+
+[[example]]
+name = "loudness_trace"
 required-features = ["std"]

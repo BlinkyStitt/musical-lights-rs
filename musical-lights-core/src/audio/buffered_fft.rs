@@ -1,6 +1,6 @@
 //! Use an FFT and a circular buffer to process audio.
 //!
-//! The live Bark visualizers use [`super::BarkBank`]. This FFT remains available
+//! The live loudness visualizers use [`super::loudness::LoudnessMeter`]. This FFT remains available
 //! for the terminal FFT example and the STM32 jacket.
 //!
 //! This is the first design I used (inspired by things built with a Teensy Audio Board).

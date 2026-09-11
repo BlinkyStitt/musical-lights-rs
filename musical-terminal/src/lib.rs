@@ -1,3 +1,4 @@
+pub mod loudness;
 use anyhow::{Context, bail, ensure};
 use cpal::{
     FromSample, Sample, SampleFormat, SampleRate, SizedSample, Stream, StreamConfig,
@@ -18,30 +19,7 @@ pub struct MicrophoneStream<const SAMPLES: usize> {
 impl<const SAMPLES: usize> MicrophoneStream<SAMPLES> {
     pub fn try_new(preferred_rate: u32) -> anyhow::Result<Self> {
         ensure!(SAMPLES > 0, "microphone block size must be positive");
-        let host = cpal::default_host();
-        let mut preferred = None;
-        for device in host.input_devices()? {
-            let description = device.description()?;
-            info!("host input device: {}", description.name());
-            if description.name() == "Loopback Audio" {
-                preferred = Some(device);
-                break;
-            }
-            if description.name() == "MacBook Pro Microphone" {
-                preferred = Some(device);
-            }
-        }
-        let device = preferred
-            .or_else(|| host.default_input_device())
-            .context("no microphone input device is available")?;
-        let default = device.default_input_config()?;
-        let supported = device.supported_input_configs()?.find(|config| {
-            config.sample_format() == default.sample_format()
-                && config.channels() == default.channels()
-                && config.min_sample_rate() <= preferred_rate
-                && preferred_rate <= config.max_sample_rate()
-        });
-        let selected = supported.map_or(default, |config| config.with_sample_rate(preferred_rate));
+        let (device, selected) = input_configuration(preferred_rate)?;
         let sample_rate = selected.sample_rate();
         let format = selected.sample_format();
         let config = selected.config();
@@ -123,6 +101,36 @@ impl<const N: usize> MonoBlocks<N> {
             }
         }
     }
+}
+
+fn input_configuration(
+    preferred_rate: u32,
+) -> anyhow::Result<(cpal::Device, cpal::SupportedStreamConfig)> {
+    let host = cpal::default_host();
+    let mut preferred = None;
+    for device in host.input_devices()? {
+        let description = device.description()?;
+        info!("host input device: {}", description.name());
+        if description.name() == "Loopback Audio" {
+            preferred = Some(device);
+            break;
+        }
+        if description.name() == "MacBook Pro Microphone" {
+            preferred = Some(device);
+        }
+    }
+    let device = preferred
+        .or_else(|| host.default_input_device())
+        .context("no microphone input device is available")?;
+    let default = device.default_input_config()?;
+    let supported = device.supported_input_configs()?.find(|config| {
+        config.sample_format() == default.sample_format()
+            && config.channels() == default.channels()
+            && config.min_sample_rate() <= preferred_rate
+            && preferred_rate <= config.max_sample_rate()
+    });
+    let selected = supported.map_or(default, |config| config.with_sample_rate(preferred_rate));
+    Ok((device, selected))
 }
 
 #[cfg(test)]

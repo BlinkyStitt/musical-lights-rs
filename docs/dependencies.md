@@ -8,7 +8,6 @@ The user requested current releases and pre-releases. These major upgrades requi
 | --- | --- | --- |
 | ahrs | `0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9` | core, stm32 |
 | anyhow | `=1.0.104` | terminal |
-| biquad | `=0.6.0` | core |
 | circular-buffer | `=2.0.1` | core, stm32 |
 | cobs | `=0.5.1` | core |
 | console_error_panic_hook | `=0.1.7` | leptos, wasm |
@@ -57,7 +56,7 @@ The user requested current releases and pre-releases. These major upgrades requi
 | lsm9ds1 | `eacd62cb6a1c2dda962ed8d2546566925472e586` | stm32, esp-embassy |
 | microfft | `=0.6.0` | core |
 | micromath | `=2.1.0` | core, stm32 |
-| musical-lights-core | `../musical-lights-core` | terminal, leptos, dioxus, feather, stm32, esp-embassy, esp-idf |
+| musical-lights-core | `../musical-lights-core` | terminal, leptos, worklet, dioxus, feather, stm32, esp-embassy, esp-idf |
 | nalgebra | `=0.35.0` | core, stm32 |
 | num | `=0.4.3` | core, leptos |
 | num-complex | `=0.4.6` | core |
@@ -67,7 +66,9 @@ The user requested current releases and pre-releases. These major upgrades requi
 | panic-probe | `=1.0.0` | stm32 |
 | panic-semihosting | `=0.7.0` | feather |
 | postcard | `=1.1.3` | core, stm32, esp-idf |
-| serde | `=1.0.229` | core, stm32 |
+| serde | `=1.0.229` | core, stm32, terminal |
+| sonic-rs | `=0.5.8` | terminal calibration profiles |
+| resampler | `=0.5.1` | terminal non-48-kHz input |
 | smart-leds | `=0.4.0` | core, stm32, esp-embassy, esp-idf |
 | smart-leds-matrix | `=0.2.0` | terminal |
 | smart-leds-trait | `=0.3.2` | stm32, esp-idf |
@@ -95,7 +96,7 @@ The user requested current releases and pre-releases. These major upgrades requi
 
 The three IDF entries are the only crates.io patches. Their lockfile versions remain 0.52.1, 0.46.2, and 0.37.2; their Git revisions contain the additional support. ESP-IDF v6.1 resolves to `fff9895c82d744c7237be8847347bdd1b07c6643`.
 
-Published biquad 0.6.0 replaces the previous fork. The frequency-response tests verify its normalized cutoff calculation and unity center gain after numerator normalization. All obsolete biquad, i24, and Embassy patches are removed.
+The ISO loudness implementation replaces the empirical Bark bank and removes the biquad dependency. MoSQITo 1.2.1 is a pinned validation oracle, not a runtime dependency. See `validation/loudness/uv.lock` and `THIRD_PARTY_NOTICES.md`.
 
 Unused ESP networking dependencies bleps, embassy-net, esp-wifi, and smoltcp were removed. esp-rtos replaces esp-hal-embassy. Core no longer depends on unused ed25519-dalek, embedded-io, embedded-io-async, extfn, or the unrelated pallete crate. STM32 no longer pulls in unused anyhow. IDF no longer initializes an unused RNG or retains the unused biski64/rand dependency pair.
 

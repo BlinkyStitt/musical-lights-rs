@@ -2,26 +2,30 @@
 //! TODO: move this to a lib and then have multiple bins. one for the hat, one for the necklace, one for the net, etc. they should try to share code in the crate or in musical-lights-core.
 // #![feature(thread_sleep_until)]
 
+mod capture;
 mod debug;
 mod light_patterns;
+mod light_profile;
 mod sensor_uart;
 
-use esp_idf_svc::{
-    hal::{
-        gpio::{AnyIOPin, Gpio25, Gpio26, Gpio33},
-        i2s::{self, I2sDriver, I2S0},
-        peripherals::Peripherals,
-        uart::{config::Config, UartDriver},
-        units::Hertz,
-    },
-    io::Read,
+use esp_idf_svc::hal::{
+    gpio::{AnyIOPin, Gpio25, Gpio26, Gpio33},
+    i2s::I2S0,
+    peripherals::Peripherals,
+    uart::{config::Config, UartDriver},
+    units::Hertz,
 };
 use musical_lights_core::{
-    audio::{parse_i2s_16_bit_mono_to_f32_array, BarkBank, Envelope, Samples, PANEL_ROWS},
+    audio::{
+        loudness::{LoudnessMeter, SoundField},
+        parse_i2s_16_bit_mono_to_f32_array,
+        visual::{DisplaySnapshot, VisualGain, PANEL_ROWS},
+        Samples,
+    },
     compass::{Coordinate, Magnetometer},
     errors::MyError,
     fps::FpsTracker,
-    lights::{apply_greg_caitlin_wedding_spline, Bands, Gradient},
+    lights::Gradient,
     logging::{debug, error, info, warn},
     message::{Message, PeerId, MESSAGE_BAUD_RATE},
     orientation::Orientation,
@@ -63,17 +67,14 @@ const NUM_ONBOARD_NEOPIXELS: usize = 1;
 /// the 1x2 net is 20x40 == 800 pixels.
 const NUM_FIBONACCI_NEOPIXELS: usize = 400;
 
-/// TODO: 44.1kHz? 48kHz? 96Khz?
-const I2S_SAMPLE_RATE_HZ: u32 = 44_100;
+/// The time-varying loudness model requires this analysis rate.
+const I2S_SAMPLE_RATE_HZ: u32 = 48_000;
 
 // TODO: if this isn't perfectly divisible, then the target will probably be off. maybe make it easy to round up?
 const FPS_TARGET: f32 = 55.5;
 
-/// we wait for the i2s to give this many samples, then pass them to the fft for processing with some windowing over these and some older ones
-/// different sample rates and FFT_INPUTS are a good idea here!
-///
-/// TODO: refactored. fft isn't relevant anymore. scale this based off a desired FPS
-const I2S_SAMPLE_SIZE: usize = (I2S_SAMPLE_RATE_HZ as f32 / FPS_TARGET) as usize;
+/// DMA read size; filter and integration state continue across every read.
+const I2S_SAMPLE_SIZE: usize = 768;
 
 /// TODO: with 24-bit audio, this should use `size_of::<i32>`
 const I2S_U8_BUFFER_SIZE: usize = I2S_SAMPLE_SIZE * size_of::<i16>();
@@ -91,7 +92,19 @@ const _SAFETY_CHECKS: () = {
 
 const MY_BAND_MAX: u8 = 128;
 
-type MyBands = Bands<AGGREGATED_OUTPUTS, MY_BAND_MAX>;
+#[derive(Clone, Copy)]
+struct PanelAudio {
+    snapshot: DisplaySnapshot<PANEL_ROWS>,
+    origin: Option<Instant>,
+    failed: bool,
+}
+static PANEL_AUDIO: Lazy<Mutex<PanelAudio>> = Lazy::new(|| {
+    Mutex::new(PanelAudio {
+        snapshot: DisplaySnapshot::new(0.0),
+        origin: None,
+        failed: false,
+    })
+});
 
 /// TODO: add a lot more to this
 /// TODO: max capacity on the HashMap?
@@ -178,26 +191,23 @@ fn main() -> eyre::Result<()> {
     // unsafe { heap_caps_dump_all() };
 
     // TODO: is there a better way to do signals? i think there probably is something built into esp32
-    let (mut fft_ready_tx, fft_ready_rx) = flume::bounded::<MyBands>(1);
 
     // TODO: how do we spawn on a specific core? though the spi driver should be able to use DMA
     // TODO: thread priority?
     let blink_neopixels_handle = thread::Builder::new()
         .name("blink_neopixels".to_string())
+        // The linear palette alone uses 4,800 bytes, above IDF's default
+        // pthread stack. Leave room for the output buffer and renderer calls.
+        .stack_size(16_000)
         .spawn(move || {
             let mut neopixel_onboard = Ws2812Esp32Rmt::new(pins.gpio2)?;
             let mut neopixel_external2 = AdafruitNet::new(pins.gpio22)?;
 
-            blink_neopixels_task(
-                &mut neopixel_onboard,
-                &mut neopixel_external2,
-                &STATE,
-                fft_ready_rx,
-            )
-            .inspect_err(|err| {
-                error!("Error in blink_neopixels_task");
-                error!("{err:?}");
-            })
+            blink_neopixels_task(&mut neopixel_onboard, &mut neopixel_external2, &STATE)
+                .inspect_err(|err| {
+                    error!("Error in blink_neopixels_task");
+                    error!("{err:?}");
+                })
         })?;
 
     // TODO: make sure this has the highest priority?
@@ -205,15 +215,11 @@ fn main() -> eyre::Result<()> {
         .name("mic".to_string())
         .stack_size(16_000)
         .spawn(move || {
-            mic_task(
-                peripherals.i2s0,
-                pins.gpio26,
-                pins.gpio33,
-                pins.gpio25,
-                &mut fft_ready_tx,
-            )
-            .inspect_err(|err| {
+            mic_task(peripherals.i2s0, pins.gpio26, pins.gpio33, pins.gpio25).inspect_err(|err| {
                 error!("Error in mic task: {err}");
+                if let Ok(mut state) = PANEL_AUDIO.lock() {
+                    state.failed = true;
+                }
             })
         })?;
 
@@ -264,192 +270,57 @@ fn main() -> eyre::Result<()> {
 pub type AdafruitNet<'a> =
     LedPixelEsp32Rmt<'a, smart_leds::RGB<u8>, LedPixelColorImpl<3, 0, 1, 2, 255>>;
 
-// TODO: i'd really love to do this without locking state, but i think we need to.
 fn blink_neopixels_task(
     neopixel_onboard: &mut Ws2812Esp32Rmt<'_>,
     neopixel_external: &mut AdafruitNet<'_>,
-    state: &'static Mutex<State>,
-    audio_ready: flume::Receiver<MyBands>,
+    _state: &'static Mutex<State>,
 ) -> eyre::Result<()> {
-    info!("Start NeoPixel rainbow!");
-
-    // TOOD: don't start randomly. use the current time (from the gps) so we are in perfect sync with the other art?
-    let mut g_hue = 0;
-    let mut slide_offset: usize = 0;
-
-    // TODO: Hsl instead of Hsv?
-    let mut base_hsv = Hsv {
-        hue: g_hue,
-        sat: 255,
-        val: 8, // TODO: get this initial val from config
-    };
-
-    // TODO: do we want these boxed? they are large. maybe they should be statics instead?
-    static ONBOARD_RGB_DATA: ConstStaticCell<[RGB8; NUM_ONBOARD_NEOPIXELS]> =
-        ConstStaticCell::new([BLACK; NUM_ONBOARD_NEOPIXELS]);
-    let onboard_rgb_data = ONBOARD_RGB_DATA.take();
-
-    // TODO: use embedded_graphics crate?
-    static FIBONACCI_RGB_DATA: ConstStaticCell<[RGB8; NUM_FIBONACCI_NEOPIXELS]> =
-        ConstStaticCell::new([BLACK; NUM_FIBONACCI_NEOPIXELS]);
-    let fibonacci_rgb_data = FIBONACCI_RGB_DATA.take();
-
-    /// TODO: use the hsluv color space longer? or maybe one of the others. theres soooo many options
-    static FIBINACCI_HSV_RAINBOW_DATA: ConstStaticCell<[Hsv; NUM_FIBONACCI_NEOPIXELS]> =
-        ConstStaticCell::new(
-            [Hsv {
-                hue: 0,
-                sat: 0,
-                val: 0,
-            }; NUM_FIBONACCI_NEOPIXELS],
-        );
-    let fibonacci_hsv_rainbow_data = FIBINACCI_HSV_RAINBOW_DATA.take();
-
-    // TODO: make this configurable at run time.
-    // rainbow(base_hsv, fibonacci_hsv_rainbow_data.as_mut_slice(), 1);
-    apply_greg_caitlin_wedding_spline(fibonacci_hsv_rainbow_data);
-
-    // TODO: we need a helper binary for testing led panels:
-    // - for onboard, we should display a test pattern. 1 red flash, then 2 green flashes, then 3 blue flashes, then 4 white flashes
-    // - for fibonacci, we should display a test pattern of 1 red, 1 blank, 2 green, 1 blank, 3 blue, 1 blank, then 4 whites. then whole panel red
-
-    let mut fps = Box::new(FpsTracker::new("pixel"));
-
-    let mut envelopes = [Envelope::new(0.0, 0.12, 0.0); AGGREGATED_OUTPUTS];
-    let mut last_frame = Instant::now();
-
+    let palette = Gradient::<NUM_FIBONACCI_NEOPIXELS>::new_greg_caitlin_wedding();
+    let response = crate::light_profile::led_response()?;
+    info!("LED response measured: {}", response.is_measured());
+    let started = Instant::now();
+    let interval = Duration::from_secs_f32(1.0 / FPS_TARGET);
+    let mut pixels = [BLACK; NUM_FIBONACCI_NEOPIXELS];
+    let mut fps = FpsTracker::new("pixel");
     loop {
-        debug!("Hue: {g_hue}");
-
-        base_hsv = Hsv {
-            hue: g_hue,
-            sat: 255,
-            val: 255,
-        };
-
-        let bands = audio_ready.recv()?;
-        info!("{bands}");
-        let now = Instant::now();
-        let elapsed_s = now.duration_since(last_frame).as_secs_f32();
-        last_frame = now;
-        let smoothed = core::array::from_fn::<_, AGGREGATED_OUTPUTS, _>(|i| {
-            envelopes[i].update(bands.0[i] as f32, elapsed_s).round() as u8
-        });
-
-        // TODO: gamma and brightness correct now?
-        onboard_rgb_data[0] = hsv2rgb(base_hsv);
-
-        // TODO: maybe we should average bands together so that a sound between two bands looks better?
-        let bands_iter = smoothed
-            .iter() // 20 items
-            .flat_map(
-                move |&band|           // for each band...
-                repeat_n(band, PIXELS_PER_ROW), // exactly one physical row
-            );
-
-        // add the loudness to the lights and then convert the hsv data into rgb data
-        // TODO: move the slide offset code here so that we don't slide all patterns. we only want to slide the pretty patterns. the compass things shouldn't slide
-        // TODO: dither here? i don't think neopixels are fast enough
-        for ((rgb, hsv), loudness) in fibonacci_rgb_data
-            .iter_mut()
-            .zip(fibonacci_hsv_rainbow_data.iter_mut())
-            .zip(bands_iter)
-        {
-            hsv.val = loudness;
-
-            // TODO: instead of hsv, do hsluv?
-            *rgb = hsv2rgb(*hsv);
+        let tick = Instant::now();
+        let state = *PANEL_AUDIO.lock().map_err(|_| MyError::PoisonLock)?;
+        if state.failed {
+            neopixel_external.write(repeat_n(BLACK, NUM_FIBONACCI_NEOPIXELS))?;
+            eyre::bail!("audio input failed; panel stopped");
         }
-
-        // slide the rgb data slowly. divide to slow things down. wrap it so we don't get an out of bounds error
-        // TODO? multiply by the number of outputs so that each color jumps to the next row instead of sliding around the columns first
-        let slow_slide_offset =
-            (slide_offset / 4 / PIXELS_PER_ROW * PIXELS_PER_ROW) % NUM_FIBONACCI_NEOPIXELS;
-        let fibonacci_rgb_iter = fibonacci_rgb_data[slow_slide_offset..]
-            .iter()
-            .chain(fibonacci_rgb_data[..slow_slide_offset].iter())
-            .copied();
-
-        /*
-        // TODO: do something to force a faked state for the first 5 seconds. during that time, we should play the "startup" pattern
-        // TODO: this clone is too slow, but a critical section mutex also shouldn't be held open for long
-        let unlocked_state = state.lock().map_err(|_| MyError::PoisonLock)?;
-
-        // TODO: have a way to smoothly transition between patterns
-        // TODO: new random g_hue whenever the pattern changes?
-        let fibonacci_rgb_iter = match unlocked_state.orientation {
-            Orientation::FaceDown => {
-                // state isn't needed in this orientation. drop it now
-                drop(unlocked_state);
-
-                flashlight(fibonacci_rgb_data.as_mut_slice());
-
-                todo!();
-            }
-            Orientation::FaceUp => {
-                // TODO: clone it into a box?
-                compass(base_hsv, fibonacci_rgb_data.as_mut_slice(), &unlocked_state);
-
-                drop(unlocked_state);
-
-                todo!();
-            }
-            Orientation::LeftUp | Orientation::RightUp | Orientation::TopUp => {
-                // TODO: some state might be useful here. clone just whats needed
-                drop(unlocked_state);
-
-                // TODO: if we have mic data, display one of the musical patterns
-                rainbow(base_hsv, fibonacci_rgb_data.as_mut_slice());
-
-                todo!();
-            }
-            Orientation::Unknown => {
-                // TODO: cycle between different patterns
-                loading(base_hsv, fibonacci_rgb_data.as_mut_slice(), &unlocked_state);
-
-                drop(unlocked_state);
-
-                todo!();
-            }
-            Orientation::TopDown => {
-                // TODO: some state might be useful here. clone just whats needed
-                drop(unlocked_state);
-
-                clock(base_hsv, fibonacci_rgb_data.as_mut_slice());
-
-                todo!();
-            }
-        };
-        */
-
-        // TODO: check that this is the right gamma correction for our leds
-        // TODO: dithering
-        // TODO: the docs for brightness and gamma are confusing. they say opposite things unless I just can't read?
-        // TODO: brightness isn't right. we want fastled's modified brightness helper that is meant for video (never fade to 0. always display some)
-        neopixel_onboard.write(brightness(gamma(onboard_rgb_data.iter().cloned()), 8))?;
-
-        // TODO: gamma? brightness?
-        neopixel_external.write(fibonacci_rgb_iter)?;
-
-        // TODO: better to change things based on time or on frame counts?
-        // - time means that we can run different hardware and they will match better
-        // - frame counts mean that there won't be any rounding errors
-        g_hue = g_hue.wrapping_add(1);
-
-        // TODO: make this a config option?
-        slide_offset = slide_offset.wrapping_add(1);
-
+        let audio_time = state
+            .origin
+            .map_or(0.0, |origin| origin.elapsed().as_secs_f64());
+        let levels = state.snapshot.frame(audio_time).levels;
+        for (i, pixel) in pixels.iter_mut().enumerate() {
+            // Preserve the 8/255 ambient light intent and 128 drive cap.
+            let light = (8.0 + (MY_BAND_MAX as f32 - 8.0) * levels[i / PIXELS_PER_ROW]) / 255.0;
+            *pixel = response.encode(palette.colors[i] * light, MY_BAND_MAX);
+        }
+        let elapsed = started.elapsed().as_secs_f64();
+        let offset = ((elapsed * f64::from(FPS_TARGET) / 4.0 / PIXELS_PER_ROW as f64) as usize
+            * PIXELS_PER_ROW)
+            % NUM_FIBONACCI_NEOPIXELS;
+        neopixel_external.write(pixels[offset..].iter().chain(&pixels[..offset]).copied())?;
+        let hue = (elapsed * f64::from(FPS_TARGET)) as u64 as u8;
+        neopixel_onboard.write(brightness(
+            gamma(
+                [hsv2rgb(Hsv {
+                    hue,
+                    sat: 255,
+                    val: 255,
+                })]
+                .into_iter(),
+            ),
+            8,
+        ))?;
         fps.tick();
+        sleep(interval.saturating_sub(tick.elapsed()));
     }
 }
 
-fn mic_task(
-    i2s: I2S0,
-    bclk: Gpio26,
-    ws: Gpio33,
-    din: Gpio25,
-    audio_ready: &mut flume::Sender<MyBands>,
-) -> eyre::Result<()> {
+fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()> {
     info!("Start I2S mic!");
 
     static I2S_BUF: ConstStaticCell<[u8; I2S_U8_BUFFER_SIZE]> =
@@ -462,40 +333,19 @@ fn mic_task(
     let i2s_sample_buf = I2S_SAMPLE_BUF.take();
     info!("i2s_sample_buf created");
 
-    let i2s_channel_cfg = i2s::config::Config::default()
-        .frames_per_buffer(I2S_SAMPLE_SIZE as u32)
-        .dma_buffer_count(4);
-
-    let i2s_clk_cfg = i2s::config::StdClkConfig::new(
-        I2S_SAMPLE_RATE_HZ,
-        i2s::config::ClockSource::Apll,
-        i2s::config::MclkMultiple::M256, // TODO: there is no mclk pin attached though?
+    let calibration = crate::light_profile::input_calibration()?;
+    info!(
+        "Microphone scale: {} Pa/unit, measured: {}",
+        calibration.pascals_per_unit(),
+        calibration.is_measured()
     );
-    // let i2s_clk_cfg = i2s::config::StdClkConfig::from_sample_rate_hz(I2S_SAMPLE_RATE_HZ);
-
-    let i2s_slot_cfg = i2s::config::StdSlotConfig::philips_slot_default(
-        i2s::config::DataBitWidth::Bits16,
-        i2s::config::SlotMode::Mono,
-    );
-
-    let i2s_gpio_cfg = i2s::config::StdGpioConfig::default();
-
-    // philips doesn't let us set the clocks
-    // let i2s_config =
-    //     i2s::config::StdConfig::philips(I2S_SAMPLE_RATE_HZ, i2s::config::DataBitWidth::Bits16);
-
-    let i2s_config =
-        i2s::config::StdConfig::new(i2s_channel_cfg, i2s_clk_cfg, i2s_slot_cfg, i2s_gpio_cfg);
-
-    // TODO: do we want the mclk pin?
-    let mut i2s_driver = I2sDriver::new_std_rx(i2s, &i2s_config, bclk, din, None::<AnyIOPin>, ws)?;
-
-    // TODO: const setup?
-    let mut filter_bank = BarkBank::new(I2S_SAMPLE_RATE_HZ as f32)?;
-
-    i2s_driver.rx_enable()?;
-    info!("I2S mic driver enabled");
-
+    let mut meter = LoudnessMeter::new(calibration, SoundField::Free);
+    let mut gain = VisualGain::default();
+    let mut snapshot = DisplaySnapshot::new(0.0);
+    let mut sample_index = 0u64;
+    let mut i2s_driver = capture::Capture::new(i2s, bclk, ws, din, I2S_SAMPLE_SIZE)?;
+    let origin = Instant::now();
+    info!("I2S enabled: 48000 Hz, left channel, signed 16-bit PCM");
     log_stack_high_water_mark("mic", None);
 
     loop {
@@ -504,21 +354,23 @@ fn mic_task(
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
-        let spectrum = filter_bank.push_samples(&i2s_sample_buf.0)?.panel_rows();
-
-        let mut bands = Bands([0; AGGREGATED_OUTPUTS]);
-        for (&x, b) in spectrum.0.iter().zip(bands.0.iter_mut()) {
-            *b = remap(x, 0., 1., 8., MY_BAND_MAX as f32) as u8;
+        meter.push_pcm(&i2s_sample_buf.0, sample_index, |frame| {
+            snapshot.push(
+                frame.sample_index as f64 / 48_000.0,
+                gain.map(&frame).panel_rows,
+                false,
+            );
+        })?;
+        sample_index += I2S_SAMPLE_SIZE as u64;
+        i2s_driver.check_continuity()?;
+        // Only visual state may be superseded; all audio and attacks were consumed.
+        if let Ok(mut state) = PANEL_AUDIO.try_lock() {
+            *state = PanelAudio {
+                snapshot,
+                origin: Some(origin),
+                failed: false,
+            };
         }
-
-        // notify blink_neopixels_task. that way instead of a timer we get the fastest FPS we can push without any delay.
-        if audio_ready.try_send(bands).is_err() {
-            // TODO: count how many times this errors?
-            warn!("fft was faster than the pixels");
-        }
-
-        // TODO: this is too verbose. maybe this should take the log level as an arg? or only display once per second? maybe put this into the fps counter?
-        // log_stack_high_water_mark("mic loop", None);
     }
 }
 

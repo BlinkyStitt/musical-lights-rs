@@ -109,3 +109,9 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .meter:hover .frequency-tooltip, .meter:focus-visible .frequency-tooltip { display: block; }
 .meter:first-child .frequency-tooltip { left: 0; transform: none; }
 .meter:last-child .frequency-tooltip { left: auto; right: 0; transform: none; }
+
+.calibration-status { margin: .25rem 0; font-size: .8rem; }
+.calibration-controls { margin-top: .5rem; font-size: .875rem; }
+.calibration-controls summary { cursor: pointer; }
+.calibration-controls label { display: block; margin: .5rem 0; }
+.calibration-controls input { width: 6rem; margin-left: .25rem; font: inherit; }

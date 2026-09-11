@@ -9,5 +9,6 @@ exclude = [
     "musical-stm32",
     "musical-terminal",
     "musical-wasm",
+    "musical-lights-worklet",
 ]
 resolver = "2"

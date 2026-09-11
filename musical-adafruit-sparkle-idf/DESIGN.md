@@ -1,40 +1,13 @@
 # Audio and LED processing
 
-The active ESP-IDF application uses `BarkBank` from `musical-lights-core`.
-Its analyzed `BarkFrame` supplies `panel_rows()` for this 20×20 layout. The web
-and terminal renderers use `bands()` to show all 24 bands separately. Both
-layouts use the same filtering, envelopes, and normalization code.
-It reads normalized mono PCM through I2S at 44,100 Hz.
+The active application uses the shared `LoudnessMeter`, `VisualGain`, and `DisplaySnapshot`. See the [measurement and display contracts](../docs/loudness.md) for units, timing, calibration, validation and limits.
 
-1. Validate the full input block before changing processor state.
-2. Filter each sample through 24 Bark bands. Each band has two biquad stages.
-   Each stage has unity gain at its center frequency. The original edges and
-   bandwidth multiplier of three remain in use.
-3. Compute block RMS, apply the retained empirical frequency weight, and raise
-   the result to the power 0.23.
-4. Update each peak and floor envelope using the actual block duration.
-   The peak uses 22 ms attack and 10 s release. The floor rises over 10 s and
-   falls immediately.
-5. Sum the first five band values, floors, and peaks into one bass value. Keep
-   the remaining 19 bands separate. Normalize to the adaptive range, with the
-   retained peak floor of twice the tracked minimum. Clamp the result to [0, 1].
-6. Return zero for silence or a zero normalization range.
-7. Map the 20 display values to the existing brightness range, 8 through 128.
-   Keep each LED envelope as a float until the final brightness conversion.
-   Preserve the panel mapping, palette, scrolling, and onboard brightness limit.
-   Every output fills exactly one 20-pixel row. A compile-time assertion requires
-   20 rows × 20 pixels to match the 400-pixel frame. The scroll step remains one
-   physical row.
+`capture.rs` owns a 48 kHz ESP-IDF receive channel and the I2S/pin tokens. It uses the existing Philips mono left-channel format and pins. A sticky interrupt flag reports DMA overflow. Blocking reads have a timeout. Any capture/model error ends analysis; the LED thread clears the panel.
 
-These stages form an artistic visualizer. They approximate loudness; they do
-not implement ISO 226, ISO 532, or another calibrated loudness model.
+The microphone thread processes every sample and loudness frame before it publishes a complete latest visual state. The LED thread copies that state under a short mutex and advances motion using audio elapsed time. Rendering cannot discard unprocessed audio or reset peak timing.
 
-Invalid sample rates, empty input, and non-finite samples return typed errors.
-Finite peaks outside nominal PCM full scale remain valid. Block scaling keeps
-filter arithmetic bounded without clipping the signal. Filters also reject rates whose
-coefficients cannot form a finite, stable filter in f32.
+The panel has twenty rows of twenty pixels. Five low Bark bands form one bass row, and nineteen higher bands each have one row. The wedding palette stays in linear RGB until the measured LED response or explicit unmeasured default maps it to bytes. Ambient light intent stays at 8/255 and the drive cap stays at 128. Row scrolling uses elapsed time at the previous rate.
 
-The LED thread creates and owns its RMT drivers. The current driver does not
-support moving an initialized encoder between threads. Sensor UART and several
-orientation-based patterns remain compiled but inactive, as in the prior
-application. They are not part of the tested physical audio path.
+`light_profile.rs` is the single deployment calibration profile. Generate it from measurements with `validation/lights/profile.py`. `light-check` is a separate bench program for channel order, ramps and timed pulses. Neither program claims measured color until a profile has been measured and validated.
+
+Each LED thread creates and owns its RMT driver. Sensor UART and orientation patterns remain inactive. The software checks compile both firmware binaries; they do not flash a board or validate its processing headroom.

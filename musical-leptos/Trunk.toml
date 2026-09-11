@@ -1,5 +1,10 @@
 [tools]
 wasm_bindgen = "0.2.128"
 
+[[hooks]]
+stage = "pre_build"
+command = "python3"
+command_arguments = ["../musical-lights-worklet/build.py"]
+
 [serve]
 headers = {"Cross-Origin-Opener-Policy" = "same-origin", "Cross-Origin-Embedder-Policy" = "credentialless"}
