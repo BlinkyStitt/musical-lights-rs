@@ -12,9 +12,10 @@ pub const BALLOON_COUNT: usize = 12;
 const MAX_DT: f64 = 1.0 / 30.0;
 // Graph heights per second squared. Gravity always uses page coordinates;
 // device orientation supplies only the much smaller wind contribution.
-const GRAVITY: f64 = 2.4;
-const MAX_SPEED: f64 = 2.4;
-const REST_SPEED: f64 = 0.1;
+const GRAVITY: f64 = 4.8;
+const REDUCED_GRAVITY: f64 = 2.4;
+const MAX_SPEED: f64 = 3.2;
+const REST_SPEED: f64 = 0.2;
 const CONTACT_SLOP: f64 = 0.0005;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -235,7 +236,7 @@ impl BalloonWorld {
             let before = balloon.position;
             let mut force = Vector {
                 x: self.wind.x,
-                y: self.wind.y - GRAVITY,
+                y: self.wind.y,
             };
             if !self.reduced {
                 balloon.velocity.x += self.shake.x;
@@ -274,7 +275,12 @@ impl BalloonWorld {
             integrate_axis(
                 &mut balloon.position.y,
                 &mut balloon.velocity.y,
-                force.y * motion_scale,
+                force.y * motion_scale
+                    - if self.reduced {
+                        REDUCED_GRAVITY
+                    } else {
+                        GRAVITY
+                    },
                 drag,
                 dt,
             );

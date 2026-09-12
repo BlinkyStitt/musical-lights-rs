@@ -1,17 +1,18 @@
 //! A DOM-free numeric WASM interface, owned by one AudioWorklet instance.
 //! All allocation occurs when creating the processor. No browser API imports.
 use musical_lights_core::audio::{
+    browser_visual::BrowserSnapshot,
     loudness::{Calibration, LoudnessError, LoudnessMeter, SAMPLE_RATE, SoundField},
-    visual::{DISPLAY_BANDS, DisplaySnapshot, VisualGain},
+    visual::VisualGain,
 };
 
 const INPUT_CAPACITY: usize = 4096;
-const SNAPSHOT_SIZE: usize = DisplaySnapshot::<DISPLAY_BANDS>::TRANSPORT_LEN;
+const SNAPSHOT_SIZE: usize = BrowserSnapshot::TRANSPORT_LEN;
 
 struct AudioProcessor {
     meter: LoudnessMeter,
     gain: VisualGain,
-    display: DisplaySnapshot<DISPLAY_BANDS>,
+    display: BrowserSnapshot,
     input: [f32; INPUT_CAPACITY],
     snapshot: [f64; SNAPSHOT_SIZE],
     started: bool,
@@ -31,7 +32,7 @@ impl AudioProcessor {
         Self {
             meter: LoudnessMeter::new(calibration, SoundField::Free),
             gain: VisualGain::default(),
-            display: DisplaySnapshot::new(0.0),
+            display: BrowserSnapshot::new(0.0),
             input: [0.0; INPUT_CAPACITY],
             snapshot: [0.0; SNAPSHOT_SIZE],
             started: false,
@@ -57,7 +58,7 @@ impl AudioProcessor {
         }
         if !self.started {
             self.meter.reset(first_sample);
-            self.display = DisplaySnapshot::new(first_sample as f64 / SAMPLE_RATE as f64);
+            self.display = BrowserSnapshot::new(first_sample as f64 / SAMPLE_RATE as f64);
             self.started = true;
         }
         // Validate before either calibration or model state changes.
@@ -86,7 +87,7 @@ impl AudioProcessor {
                     *sones = frame.sones;
                     display.push(
                         frame.sample_index as f64 / SAMPLE_RATE as f64,
-                        gain.map(&frame).bands,
+                        gain.map_browser(&frame),
                         reduced,
                     );
                 },
@@ -128,7 +129,7 @@ impl AudioProcessor {
                     self.meter.reset(first_sample + (offset + count) as u64);
                     self.gain = VisualGain::default();
                     self.latest_sones = 0.0;
-                    self.display = DisplaySnapshot::new(
+                    self.display = BrowserSnapshot::new(
                         (first_sample + (offset + count) as u64) as f64 / SAMPLE_RATE as f64,
                     );
                 }

@@ -1,12 +1,15 @@
 use crate::{
     balloons::{BalloonAnimation, BalloonWorld},
-    display::{DisplayAnimation, DisplayFrame},
+    display::DisplayAnimation,
     screen::ScreenSession,
     wasm_audio::{AudioSession, AudioUpdate},
 };
 use leptos::prelude::*;
 use musical_lights_core::{
-    audio::visual::{BARK_EDGES, DISPLAY_BANDS},
+    audio::{
+        browser_visual::{BrowserFrame, SLICES_PER_GROUP, slice_colors, slice_frequency_edges},
+        visual::{BARK_EDGES, DISPLAY_BANDS},
+    },
     lights::{Gradient, screen_color},
 };
 use std::{
@@ -40,7 +43,8 @@ impl SessionOwner {
 #[component]
 pub fn DancingLights() -> impl IntoView {
     let palette = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0);
-    let colors = palette.colors;
+    let colors = slice_colors(90.0, 58.0);
+    let frequency_edges = slice_frequency_edges();
     let idle_balloons = BalloonWorld::new(palette);
     let (selected_band, set_selected_band) = signal(None::<usize>);
     let tooltip_timer = StoredValue::new(None::<TimeoutHandle>);
@@ -77,7 +81,7 @@ pub fn DancingLights() -> impl IntoView {
             set_selected_band.set(None);
         }
     };
-    let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
+    let (audio, set_audio) = signal(BrowserFrame::default());
     let (listening, set_listening) = signal(false);
     let (capture_status, set_capture_status) =
         signal(String::from("Uncalibrated · relative light activity"));
@@ -164,7 +168,7 @@ pub fn DancingLights() -> impl IntoView {
                 return;
             }
             if let Some(balloons) = balloons.borrow().as_ref() {
-                balloons.push(values);
+                balloons.push(values.bands);
             }
             if audio.get_untracked() != values {
                 set_audio.set(values);
@@ -209,7 +213,7 @@ pub fn DancingLights() -> impl IntoView {
                                 set_calibrating.set(false);
                                 set_listening.set(false);
                                 set_starting.set(false);
-                                set_audio.set(DisplayFrame::default());
+                                set_audio.set(BrowserFrame::default());
                                 set_frame_rate.set(None);
                                 let owner = failure_owner.clone();
                                 // Release the message closure after it returns.
@@ -252,7 +256,7 @@ pub fn DancingLights() -> impl IntoView {
                             set_listening.set(false);
                             set_frame_rate.set(None);
                             set_error.set(None);
-                            set_audio.set(DisplayFrame::default());
+                            set_audio.set(BrowserFrame::default());
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
@@ -283,35 +287,38 @@ pub fn DancingLights() -> impl IntoView {
                         format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue)
                     })>
                     <span class="frequency-swatch" aria-hidden="true"></span>
-                    <span>{move || selected_band.get().map(|index| format!("{}–{} Hz", BARK_EDGES[index], BARK_EDGES[index + 1]))}</span>
+                    <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[index], frequency_edges[index + 1]))}</span>
                 </div>
-                <div class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></div>
                 <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble">
-                    {BARK_EDGES.windows(2).enumerate().map(|(i, edges)| {
-                        let label = format!("{}–{} Hz", edges[0], edges[1]);
-                        let color = screen_color(colors[i]);
-                        // Encode the shared linear color once for CSS.
-                        let style = format!(
-                            "--band-color: color(srgb {} {} {});",
-                            color.red,
-                            color.green,
-                            color.blue,
-                        );
+                    {BARK_EDGES.windows(2).enumerate().map(|(group, edges)| {
+                        let color = screen_color(palette.colors[group]);
+                        let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
                         view! {
-                        <div class="meter" role="meter" aria-label=label tabindex="0" style=style
-                            aria-describedby=move || (selected_band.get() == Some(i)).then_some("frequency-readout")
-                            on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(i, false); } }
-                            on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(i); } }
-                            on:focus=move |event| { if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); } }
-                            on:blur=move |_| hide_band(i)
-                            aria-valuemin="0" aria-valuemax="100"
-                            aria-valuenow=move || (audio.get().levels[i] * 100.0).round() as u32>
-                            <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get().levels[i])></div>
-                            <div class="meter-edge" aria-hidden="true"
-                                style:height=move || format!("calc((100% - var(--balloon-headroom)) * {})", audio.get().levels[i])
-                                style:opacity=move || audio.get().edges[i].to_string()></div>
-                        </div>
-                    }}).collect_view()}
+                            <div class="bark-group" role="group"
+                                aria-label=format!("{}–{} Bark, {}–{} Hz", group, group + 1, edges[0], edges[1]) style=style>
+                                {(0..SLICES_PER_GROUP).map(|local| {
+                                    let i = group * SLICES_PER_GROUP + local;
+                                    let label = format!("≈ {}–{} Hz", frequency_edges[i], frequency_edges[i + 1]);
+                                    view! {
+                                        <div class="meter" role="meter" aria-label=label tabindex="0"
+                                            aria-describedby=move || (selected_band.get() == Some(i)).then_some("frequency-readout")
+                                            on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(i, false); } }
+                                            on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(i); } }
+                                            on:focus=move |event| { if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); } }
+                                            on:blur=move |_| hide_band(i)
+                                            aria-valuemin="0" aria-valuemax="100"
+                                            aria-valuenow=move || audio.with(|frame| (frame.slices[i] * 100.0).round() as u32)>
+                                            <div class="meter-fill" style:transform=move || audio.with(|frame| format!("scaleY({})", frame.slices[i]))></div>
+                                        </div>
+                                    }
+                                }).collect_view()}
+                                <div class="meter-edge" aria-hidden="true"
+                                    style:height=move || audio.with(|frame| format!("calc((100% - 3px - var(--balloon-headroom)) * {})", frame.group_heights[group]))
+                                    style:opacity=move || audio.with(|frame| frame.bands.edges[group].to_string())></div>
+                            </div>
+                        }
+                    }).collect_view()}
+                    <span class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></span>
                     <span class="balloon-layer" aria-hidden="true" node_ref=balloon_layer>
                         {idle_balloons.balloons.iter().map(|balloon| view! {
                             <span class="balloon" style=balloon.style()></span>

@@ -17,6 +17,31 @@ fn geometry() -> Geometry {
     }
 }
 
+#[test]
+fn free_space_gravity_covers_visible_distance_in_half_a_second() {
+    for (reduced, minimum) in [(false, 0.5), (true, 0.1)] {
+        let mut world = world();
+        world.reduced = reduced;
+        // Keep the measured sphere far from the floor and every other body.
+        world.balloons[0].position = Vector { x: 0.04, y: 0.9 };
+        for (i, other) in world.balloons.iter_mut().enumerate().skip(1) {
+            other.width_in_bars = 0.1;
+            other.position = Vector {
+                x: 0.3 + i as f64 * 0.05,
+                y: 0.1,
+            };
+        }
+        for _ in 0..30 {
+            world.step(1.0 / 60.0, DisplayFrame::default(), geometry());
+        }
+        let distance = 0.9 - world.balloons[0].position.y;
+        assert!(
+            distance >= minimum,
+            "reduced={reduced}, distance={distance}"
+        );
+    }
+}
+
 fn frame(band: usize, level: f32) -> DisplayFrame<DISPLAY_BANDS> {
     let mut frame = DisplayFrame::default();
     frame.levels[band] = level;
@@ -67,7 +92,8 @@ fn sphere_contract_floor_impact_bounces_then_gravity_returns_it_downward() {
     // The remaining substeps continue the rebound after the floor impact.
     assert!((radius.y..radius.y + 0.012).contains(&world.balloons[0].position.y));
     assert_eq!(world.balloons[0].color, color);
-    for _ in 0..22 {
+    // Check after the apex and before the faster second floor impact.
+    for _ in 0..12 {
         world.step(1.0 / 60.0, DisplayFrame::default(), geometry());
     }
     assert!(world.balloons[0].velocity.y < 0.0);
@@ -97,7 +123,7 @@ fn free_fall_agrees_across_refresh_rates_and_reduced_motion_still_falls() {
     assert!(reduced.balloons[0].position.y < initial - 0.01);
     assert!(
         initial - reference.balloons[0].position.y
-            > 5.0 * (initial - reduced.balloons[0].position.y)
+            > 4.0 * (initial - reduced.balloons[0].position.y)
     );
 }
 
@@ -550,7 +576,15 @@ fn a_resting_floor_contact_does_not_bounce_from_one_frame_of_gravity() {
     world.reduced = false;
     world.tilt(45.0, 0.0, 0.0);
     let radius = geometry().radii(&world.balloons[0]);
-    world.balloons[0].position.y = radius.y;
+    world.balloons[0].position = Vector {
+        x: 0.03,
+        y: radius.y,
+    };
+    // Test floor rest in free space, without a falling neighbor hitting it.
+    for (i, other) in world.balloons.iter_mut().enumerate().skip(1) {
+        other.width_in_bars = 0.1;
+        other.position.x = 0.3 + i as f64 * 0.05;
+    }
     for _ in 0..30 {
         world.step(MAX_DT, DisplayFrame::default(), geometry());
         assert_eq!(world.balloons[0].position.y, radius.y);

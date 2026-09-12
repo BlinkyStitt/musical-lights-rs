@@ -1,0 +1,11 @@
+{
+  "baselineSha256": "0f7edd44275b37aa2770f5a1df16085145fecf38bada8c31573d2386e93424af",
+  "currentSha256": "44e3914af6b45885c432cdd5b888d878a708268f08f85fa5f25406d771116b21",
+  "samples": 4800000,
+  "audioSeconds": 100,
+  "quantum": 128,
+  "comparedSnapshots": 37500,
+  "aggregateValues": 146,
+  "bitIdentical": true,
+  "workload": "Deterministic tones and noise; silence and four amplitudes; Reduced Motion toggles every 10 seconds"
+}

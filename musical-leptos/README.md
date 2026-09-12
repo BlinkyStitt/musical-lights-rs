@@ -1,8 +1,11 @@
 # Leptos musical lights
 
 This application uses Leptos 0.9.0-beta in CSR mode and the shared Bark processor.
-It renders all 24 analysis bands separately. It uses the browser's actual sample
-rate and block lengths. Stop listening or leave the view to release the microphone.
+It renders 240 loudness samples across the 24-Bark scale, spaced at 0.1 Bark.
+These samples describe the model's loudness curve within its 24-Bark range.
+They are not 240 independent critical bands or auditory channels. The audio
+context requests 48 kHz; processing follows its actual block lengths.
+Stop listening or leave the view to release the microphone.
 
 Use Rust `nightly-2026-09-10`, Trunk `0.22.0-beta.5`, and wasm-bindgen `0.2.128`.
 Install the pinned CLIs with `python3 validation/install_tools.py web` from the
@@ -18,8 +21,11 @@ Configure static hosting to return `index.html` for application routes.
 The current Pages workflow preserves the site's root URL.
 
 The controls and graph appear directly below navigation. Descriptive text follows
-the app. The vertical labels read Quiet/Loud. Hover or focus a band to see its
-exact frequency edges.
+the app. The vertical labels read Quiet/Loud. Hover, keyboard focus, or touch
+reveals an approximate frequency label.
+Intermediate Hz values are interpolated display labels within the established
+integer-Bark endpoints. They are not exact filter boundaries. Touch readouts
+keep the existing three-second timeout and gesture handling.
 
 Twelve decorative spheres sit above the bars. Their diameters range from 0.55 to
 four bar widths. Motion starts when the graph appears and continues with the
@@ -46,7 +52,10 @@ Sphere-to-sphere collisions, resting contact, and nearby bars do not change the
 color. The sphere retains its color until a later bar impact, including when
 listening stops and starts again.
 
-Reduced Motion disables shake impulses and reduces gravity, mouse forces, and
+Gravity is 4.8 graph heights/s² normally and 2.4 with Reduced Motion.
+A sphere released in free space falls at least half a graph height in half a
+second normally, or one tenth with Reduced Motion. Speed is capped at 3.2 graph
+units/s. Reduced Motion disables shake impulses and reduces mouse forces and
 bar impulses. It applies stronger damping and softer bounces. Gravity still
 points down the page. Collision correction keeps the bodies outside the bars.
 The graph reserves room above fully raised bars, including in fullscreen.
@@ -73,20 +82,41 @@ settings or keep a hidden tab awake. Pending requests also release after closure
 
 The page follows the system's light or dark color scheme, including changes while
 it is open. CSS applies the theme before the Rust application starts. Text,
-surfaces, controls, and tooltips adapt together. Each meter keeps a fixed rainbow
-color from the shared `Gradient::new_rainbow`: red bass, then orange, yellow,
+surfaces, controls, and tooltips adapt together. Each group of ten samples keeps
+one fixed rainbow color from the shared `Gradient::new_rainbow`: red bass, then orange, yellow,
 green, blue, and purple treble. The baseline uses the same color as its bar.
 The gradient uses 90% saturation and 58% perceptual lightness. Its linear sRGB
-channels go directly into CSS `color(srgb-linear …)` so the browser applies the
-correct display encoding. Colors do not change with volume or the system theme.
+channels pass through `screen_color` once and use CSS `color(srgb …)`. Colors
+do not change with volume or the system theme.
 
-Each bar gains a white border and a small glow on a new display peak. The border
-uses the same 350 ms peak hold as the bar, then fades exponentially. It loses
-90% of its brightness in 0.23 seconds after the hold, ahead of the colored trail.
-Reduced Motion doubles that fade duration. Steady levels do not retrigger it.
-The border follows the bar's actual height with a constant one-pixel outline,
-including in fullscreen. This adapts the white accents in Bryan's hat video to
-the web bars; it does not add a separate row of lights.
+Adjacent samples touch to form one continuous filled spectrum. There are no
+sample gaps, hue changes within a group, rounded tops, or side outlines. Faint
+separators mark integer-Bark boundaries. Each sample rises and falls on its own.
+One thin white top edge spans each group. It follows that group's tallest current
+sample and uses the unchanged aggregate attack opacity. A fine peak alone cannot
+invent a new aggregate attack. Steady sound lets the edge fade while the colored
+spectrum remains. The 24 accessible groups contain 240 accessible meters.
+
+Measured slice loudness is `specific_sones_per_bark[i] * 0.1` sones. Ten measured
+slice values sum to the aggregate band's loudness, within floating-point rounding.
+For display, one aggregate-driven adaptive gain advances once per loudness frame.
+Its exponential is computed once and reused for all values. Fine heights use
+`min(1.25 * x / (1 + x), 1)` with `x = gain * density`. Thus `x = 4` reaches the
+LOUD line. This fixed artistic scale makes fine detail visible without independent
+sample or group normalization. It does not change measured sones. The grid and
+LOUD label cover the fill area; the sphere headroom sits above that scale.
+
+The terminal, LEDs, and sphere collisions retain the existing 24-band activity
+and motion contract. Sphere geometry comes from the 24 group containers, so a
+four-bar sphere remains four group widths across. The aggregate collision surface
+can differ from the displayed fine curve; group maxima do not drive physics.
+
+One transferable snapshot contains 1,588 f64 values (12,704 payload bytes): the
+146-value aggregate motion state followed by the 1,442-value fine state. Their
+audio time and Reduced Motion headers must match. The decoder rejects malformed
+or inconsistent data and closes that audio session. There is no old-format browser
+fallback. One snapshot can wait for acknowledgement; analysis continues while the
+UI is delayed and the next acknowledgement releases current state, not a backlog.
 
 Meters reach new peaks on the next screen frame. They retain short taps between
 frames and hold each new peak for 350 ms. A critically damped fall then starts
@@ -100,13 +130,11 @@ Audio analysis runs at the full input rate. One reusable animation callback draw
 the existing nodes and is cancelled when listening stops or the view closes,
 including pending microphone permission. There is no separate pause/resume state.
 
-The shared processor integrates filtered power over 20 ms windows: 882 samples
-at 44.1 kHz or 960 at 48 kHz. Compression and adaptive normalization update only
-after a complete window. A callback can complete zero, one, or several windows;
-the display receives the latest complete result. Partial windows retain that
-result. A fully silent window produces zero, while filters and envelopes still
-advance. Analysis can add up to one window of delay before the display receives
-a new level.
+The shared loudness model runs at 48 kHz and emits a complete loudness frame every
+96 samples (2 ms). A worklet callback can complete zero, one, or several frames.
+It consumes each frame to preserve attacks, then transfers the latest full motion
+state when the UI has acknowledged the previous packet. Audio callbacks do not
+set the screen frame rate. Silence still advances the model and motion state.
 
 The FPS counter measures that animation callback over at least one second. It
 includes delayed frames and does not count audio callbacks or depend on bar
@@ -117,11 +145,11 @@ not physical monitor refresh or GPU presentation.
 
 The visibility hold uses the [WCAG 2.2 flashing criterion](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html)
 as its design limit: a newly lit height stays lit long enough to prevent more
-than three repeated flash cycles in any second. The white border shares that
+than three repeated flash cycles in any second. The white top edge shares that
 hold and only brightens with a new bar peak, so it has no independent flash
 clock. Tests also examine luminance changes as its top edge passes a colored
 pixel. These checks do not provide a medical safety guarantee. The rainbow
-colors and page background stay fixed while the border fades.
+colors and page background stay fixed while the edge fades.
 
 Floating-point PCM can exceed its nominal [-1, 1] range, as specified by the
 [Web Audio standard](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor

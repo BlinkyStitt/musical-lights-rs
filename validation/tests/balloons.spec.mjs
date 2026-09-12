@@ -76,14 +76,20 @@ async function prepare(page, permission = 'granted') {
       y: 1 - Number.parseFloat(node.style.top) / 100,
       color: node.style.getPropertyValue('--balloon-color'),
     }));
-    window.sendBalloonBars = levels => {
+    window.sendBalloonBars = (levels, fineLevels = levels) => {
       const at = window.balloonClock();
-      const state = new Float64Array(146);
+      const state = new Float64Array(1588);
       state[0] = at;
       state[1] = Number(matchMedia('(prefers-reduced-motion: reduce)').matches);
+      state[146] = at;
+      state[147] = state[1];
       for (let band = 0; band < 24; band++) {
         const level = levels[band] ?? 0;
         state.set([level, 0, at + 100, 0, level, level], 2 + band * 6);
+        for (let local = 0; local < 10; local++) {
+          const fine = fineLevels[band] ?? 0;
+          state.set([fine, 0, at + 100, 0, fine, fine / 10], 148 + (band * 10 + local) * 6);
+        }
       }
       window.balloonNode.port.dispatchEvent(new MessageEvent('message', {
         data: { type: 'frame', state, sones: 0, clipped: 0, calibration: 0 },
@@ -128,7 +134,7 @@ for (const width of [375, 1440]) {
     await expect(page.locator('.balloon-layer')).toHaveAttribute('aria-hidden', 'true');
     await expect(page.locator('.balloon-layer')).toHaveCSS('pointer-events', 'none');
     const dimensions = await page.evaluate(() => {
-      const bar = document.querySelector('.meter').getBoundingClientRect();
+      const bar = document.querySelector('.bark-group').getBoundingClientRect();
       return [...document.querySelectorAll('.balloon')].map(node => node.getBoundingClientRect().width / bar.width);
     });
     expect(Math.min(...dimensions)).toBeCloseTo(.55, 1);
@@ -142,7 +148,7 @@ for (const width of [375, 1440]) {
         radius: getComputedStyle(node).borderRadius,
         knot: getComputedStyle(node, '::after').content,
         color: node.style.getPropertyValue('--balloon-color').trim(),
-        expected: document.querySelectorAll('.meter')[band].style.getPropertyValue('--band-color').trim(),
+        expected: document.querySelectorAll('.bark-group')[band].style.getPropertyValue('--band-color').trim(),
       };
     }));
     for (const body of bodies) {
@@ -284,7 +290,7 @@ test('synthetic tilt and shake events move balloons and reduced motion damps inp
   expect(errors).toEqual([]);
 });
 
-test('reduced motion reduces pointer displacement and stops residual movement', async ({ page }) => {
+test('reduced motion damps pointer displacement while gravity continues', async ({ page }) => {
   const distances = [];
   const errors = await prepare(page);
   for (const reducedMotion of ['no-preference', 'reduce']) {
@@ -298,10 +304,11 @@ test('reduced motion reduces pointer displacement and stops residual movement', 
       await window.advanceBalloons(120);
     });
     if (reducedMotion === 'reduce') {
-      const before = await page.evaluate(() => window.readBalloons());
-      await page.evaluate(() => window.advanceBalloons(60));
-      const after = await page.evaluate(() => window.readBalloons());
-      for (let i = 0; i < 12; i++) expect(after[i].x).toBeCloseTo(before[i].x, 6);
+      const falling = await page.evaluate(() => window.readBalloons());
+      // Contact can move bodies sideways as gravity forms a pile. Do not
+      // mistake that motion for residual pointer force or require it to stop.
+      expect(falling[4].y).toBeLessThan(after.y);
+      expect(falling[4].color).toBe(after.color);
     }
   }
   expect(distances[1]).toBeGreaterThan(0);
@@ -451,3 +458,28 @@ for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
     expect(errors).toEqual([]);
   });
 }
+
+
+test('fine group maxima do not replace the 24 aggregate collision surfaces', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const errors = await prepare(page);
+  await startFrozen(page);
+  const before = (await page.evaluate(() => window.readBalloons()))[0];
+  await page.evaluate(async () => {
+    window.sendBalloonBars(Array(24).fill(0), Array(24).fill(1));
+    await window.advanceBalloons(6);
+  });
+  const fineOnly = (await page.evaluate(() => window.readBalloons()))[0];
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '100');
+  expect(fineOnly.y).toBeLessThan(before.y);
+  expect(fineOnly.color).toBe(before.color);
+  await page.evaluate(async () => {
+    window.sendBalloonBars(Array(24).fill(1), Array(24).fill(0));
+    await window.advanceBalloons(6);
+  });
+  const aggregateHit = (await page.evaluate(() => window.readBalloons()))[0];
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '0');
+  expect(aggregateHit.y).toBeGreaterThan(before.y + .1);
+  expect(aggregateHit.color).not.toBe(before.color);
+  expect(errors).toEqual([]);
+});

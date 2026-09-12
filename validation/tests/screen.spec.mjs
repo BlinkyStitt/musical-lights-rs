@@ -164,7 +164,7 @@ test('unsupported native screen APIs still allow the lights-only view', async ({
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
-  await expect(page.getByRole('meter')).toHaveCount(24);
+  await expect(page.getByRole('meter')).toHaveCount(240);
 });
 
 test('the mounted view owns its wake lock independently of microphone permission', async ({ page }) => {

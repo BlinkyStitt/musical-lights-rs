@@ -32,6 +32,28 @@ The reported swipe failure exposed a gap in those 43 checks: the mobile helper d
 
 Linux CI exposed a separate input-harness issue after the successful swipe: Chromium received the immediately injected Stop tap but suppressed its click. Waiting for the button result did not fix it. An isolated Linux image with the pinned Node and Playwright versions reproduced this on a plain HTML button and drag area without application code. A 200 ms gap between the swipe release and the next tap delivered the click; slower swipe movement alone did not. The regression allows 250 ms to lift and move the finger before tapping Stop once, then still requires the Start button and an ended microphone track. It does not retry the tap or bypass touch input. The corrected tests passed five consecutive Linux runs (20 touch checks), all 42 Linux Chromium checks, and all 47 Mac browser/worklet checks.
 
+## Continuous browser spectrum
+
+The 2026-09-12 change renders 240 accessible meters in 24 fixed color groups.
+The core suite passed 48 tests in each of four feature configurations, plus all
+feature-matrix Clippy checks. The worklet and Leptos validation targets passed,
+including 27 Leptos host tests and release builds. Terminal tests (8), Clippy,
+and release binaries/examples passed with the installed SDL2 library path.
+Dioxus, standalone WASM, Feather M0, STM32, ESP Embassy, and ESP-IDF validation
+and release builds passed. ESP validation used its installed compiler path,
+Python 3.14, and libclang; ESP-IDF required host access for its component
+manager process query. No firmware was flashed. All 72 browser/worklet checks
+passed with the pinned tools and standard three-worker configuration. The suite
+covers accessibility roles and labels, contrast, touch and keyboard readouts,
+independent motion, grouped attack edges, malformed transport, 24-region sphere
+physics, stronger gravity, and audio/route/fullscreen cleanup.
+
+The [release comparison and screenshots](spectrum-results/README.md) record
+actual desktop Chromium and Mac iPhone-profile WebKit frame delivery, transport,
+decode/effects cost, memory, and delayed-UI recovery against PR #4. A separate
+100-second release-WASM comparison confirms bit-identical aggregate output.
+These results do not establish physical-device timing or production deployment.
+
 ## Measurement evidence
 
 The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.
@@ -58,6 +80,6 @@ An Apple M4 Max host processed warmed two-tone PCM through the loudness model, v
 | 768 samples | 0.2601 s | 0.650% |
 | 800 samples | 0.2598 s | 0.650% |
 
-`LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 33.82 ms (0.846% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. Each browser snapshot contains 146 `f64` values (1,168 bytes), including the acoustic input used by peak detection. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
+`LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 33.82 ms (0.846% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. That earlier browser snapshot contained 146 `f64` values (1,168 bytes), including the acoustic input used by peak detection. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
 
 These are host measurements. They do not show ESP32 execution time or hardware accuracy. No board was flashed. Microphone calibration, I2S format, DMA stress, processing headroom, LED channel order, response curves, current draw and observed flicker remain bench checks. The LED thread explicitly reserves 16,000 stack bytes because its 4,800-byte linear palette exceeds the SDK default 3,072-byte thread stack. Actual stack high-water marks still require a board. The firmware exposes capture failures and includes a separate `light-check` program and profile generator for that work.

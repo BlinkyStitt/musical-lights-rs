@@ -71,7 +71,7 @@ impl BalloonAnimation {
         let graph = layer
             .parent_element()
             .ok_or_else(|| JsValue::from_str("No spectrum graph"))?;
-        let meters = elements(&graph, ".meter")?;
+        let meters = elements(&graph, ".bark-group")?;
         if nodes.len() != BALLOON_COUNT || meters.len() != DISPLAY_BANDS {
             return Err(JsValue::from_str("Incomplete balloon or meter layer"));
         }
