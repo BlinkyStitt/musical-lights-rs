@@ -14,6 +14,14 @@ Individual targets are `core`, `worklet`, `terminal`, `leptos`, `dioxus`, `wasm`
 
 For Codex on macOS, run `python3 validation/validate.py browser` with approved host access (`sandbox_permissions: "require_escalated"`). The filesystem sandbox can block browser service registration even when network access is enabled. Keep normal commands in `workspace-write` and permit approval requests with `approval_policy = "on-request"`; disabling the sandbox for the whole session is unnecessary. Project configuration cannot override a managed session policy. See [Codex approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security). A sandbox launch error alone does not establish that browser tests are unavailable: request host access and report its actual result.
 
+The browser and preview suites check startup serially before test workers start.
+Each selected project must launch its configured browser, open a blank page,
+and close the browser. A failure stops the run with a nonzero exit status and
+the original browser error. This limits a startup failure to one failed launch
+per invocation. The browser still needs the OS permissions described above.
+`npm test` first runs harness regressions with a small executable that exits
+unsuccessfully; these tests verify failure handling without crashing a browser.
+
 ## Software checks
 
 All ten package validation targets passed on 2026-09-11, including formatting, Clippy, host tests and release links. The final suite passed 38 core tests in each of four feature configurations, eight terminal tests, one Leptos host test, two profile-tool tests, and 38 browser/worklet checks with the standard three-worker configuration. Additional core feature combinations passed Clippy. The release builds include both ESP-IDF binaries.
@@ -53,6 +61,24 @@ actual desktop Chromium and Mac iPhone-profile WebKit frame delivery, transport,
 decode/effects cost, memory, and delayed-UI recovery against PR #4. A separate
 100-second release-WASM comparison confirms bit-identical aggregate output.
 These results do not establish physical-device timing or production deployment.
+
+### Browser startup crash investigation
+
+The 2026-09-12 review rerun produced macOS crash notices before the application
+loaded. Chromium's saved launch log reports `bootstrap_check_in` with
+`Permission denied (1100)`, followed by `SIGTRAP`. WebKit aborted during macOS
+application registration. These match the command sandbox restriction above.
+The test runner then launched new browsers for subsequent tests despite the
+same startup failure. With a controlled failing executable, the original
+configuration made six launch attempts for six tests. The startup check now
+stops after the first attempt, retains the error, and starts no test workers.
+Separate regressions check selection of Chromium and WebKit with `--project`.
+
+After the change, all three harness regressions, all 72 browser/worklet checks,
+and the share-image preview check passed with the pinned tools. The browser
+and preview runs used approved host access on the Mac. No new Chromium or
+WebKit crash reports appeared during verification. These checks cover the
+existing release builds; this change modifies the validation harness only.
 
 ## Measurement evidence
 
