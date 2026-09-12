@@ -6,43 +6,29 @@ async function prepare(page, permission = 'granted') {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(({ permission }) => {
-    const request = window.requestAnimationFrame.bind(window);
-    const cancel = window.cancelAnimationFrame.bind(window);
+    // Control time from mount onward so idle gravity and listening use the
+    // same deterministic clock. IDs remain valid wasm-bindgen i32 handles.
     const pending = new Map();
     let nextId = 1;
-    let manual = false;
+    window.balloonNow = performance.now();
     window.balloonAnimationCalls = 0;
     window.requestAnimationFrame = callback => {
       const id = nextId++;
-      const native = manual ? null : request(now => {
-        pending.delete(id);
-        window.balloonAnimationCalls++;
-        callback(now);
-      });
-      pending.set(id, { callback, native });
+      pending.set(id, callback);
       return id;
     };
     window.cancelAnimationFrame = id => {
-      const entry = pending.get(id);
-      if (entry?.native !== null) cancel(entry?.native);
       pending.delete(id);
     };
     window.pendingBalloons = () => pending.size;
-    window.freezeBalloons = async () => {
-      manual = true;
-      // Drain the already scheduled native callbacks once. Subsequent requests
-      // use small i32 IDs and a deterministic timestamp, through the real RAF.
-      await new Promise(resolve => request(() => request(resolve)));
-      window.balloonNow = performance.now();
-    };
     window.advanceBalloons = async count => {
       for (let i = 0; i < count; i++) {
         window.balloonNow += 1000 / 60;
         const callbacks = [...pending.entries()];
-        for (const [id, entry] of callbacks) {
+        for (const [id, callback] of callbacks) {
           if (!pending.delete(id)) continue;
           window.balloonAnimationCalls++;
-          entry.callback(window.balloonNow);
+          callback(window.balloonNow);
         }
         // Let Leptos apply the DisplayFrame before observing DOM geometry.
         await Promise.resolve();
@@ -115,7 +101,6 @@ async function startFrozen(page) {
   await page.evaluate(async () => {
     await window.balloonContext.suspend();
     await new Promise(resolve => setTimeout(resolve, 50));
-    await window.freezeBalloons();
     const origin = window.balloonContext.currentTime;
     const started = window.balloonNow;
     window.balloonClock = () => origin + (window.balloonNow - started) / 1000;
@@ -124,16 +109,19 @@ async function startFrozen(page) {
 }
 
 async function repel(page, index = 4, frames = 45) {
-  const box = await page.locator('.balloon').nth(index).boundingBox();
   const before = await page.evaluate(index => window.readBalloons()[index], index);
-  await page.mouse.move(box.x + box.width * .3, box.y + box.height * .5);
-  await page.evaluate(frames => window.advanceBalloons(frames), frames);
+  // Keep a real mouse near the falling sphere instead of expecting it to hover.
+  for (let advanced = 0; advanced < frames; advanced += 12) {
+    const box = await page.locator('.balloon').nth(index).boundingBox();
+    await page.mouse.move(box.x + box.width * .3, box.y + box.height * .5);
+    await page.evaluate(count => window.advanceBalloons(count), Math.min(12, frames - advanced));
+  }
   const after = await page.evaluate(index => window.readBalloons()[index], index);
   return { before, after };
 }
 
 for (const width of [375, 1440]) {
-  test(`12 idle balloons keep meter and accessibility contracts at ${width}px`, async ({ page }) => {
+  test(`12 round spheres start with colors from x position at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const errors = await prepare(page);
     await expect(page.locator('#dancinglights > div')).toHaveCount(24);
@@ -145,12 +133,98 @@ for (const width of [375, 1440]) {
     });
     expect(Math.min(...dimensions)).toBeCloseTo(.55, 1);
     expect(Math.max(...dimensions)).toBeCloseTo(4, 1);
+    await expect(page.locator('.balloon-string')).toHaveCount(0);
+    const bodies = await page.locator('.balloon').evaluateAll(nodes => nodes.map(node => {
+      const box = node.getBoundingClientRect();
+      const band = Math.floor(Number.parseFloat(node.style.left) / 100 * 24);
+      return {
+        width: box.width, height: box.height,
+        radius: getComputedStyle(node).borderRadius,
+        knot: getComputedStyle(node, '::after').content,
+        color: node.style.getPropertyValue('--balloon-color').trim(),
+        expected: document.querySelectorAll('.meter')[band].style.getPropertyValue('--band-color').trim(),
+      };
+    }));
+    for (const body of bodies) {
+      expect(Math.abs(body.width - body.height)).toBeLessThan(.1);
+      expect(body.radius).toBe('50%');
+      expect(body.knot).toBe('none');
+      expect(body.color).toBe(body.expected);
+    }
     const initial = await page.evaluate(() => window.readBalloons());
     await page.mouse.move(200, 200);
-    await page.waitForTimeout(100);
-    expect(await page.evaluate(() => window.readBalloons())).toEqual(initial);
+    await page.evaluate(() => window.advanceBalloons(12));
+    const falling = await page.evaluate(() => window.readBalloons());
+    expect(falling[0].y).toBeLessThan(initial[0].y - .02);
+    expect(falling.map(body => body.color)).toEqual(initial.map(body => body.color));
     expect(await page.evaluate(() => window.motionPermissionCalls)).toEqual([]);
-    expect(await page.evaluate(() => window.pendingBalloons())).toBe(0);
+    expect(await page.evaluate(() => window.pendingBalloons())).toBe(1);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('flat phone gravity accelerates spheres down the page and the floor bounces them', async ({ page }) => {
+  const errors = await prepare(page);
+  await startFrozen(page);
+  const motion = await page.evaluate(async () => {
+    window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 }));
+    window.dispatchEvent(new DeviceMotionEvent('devicemotion', {
+      acceleration: { x: 0, y: 0, z: 0 }, accelerationIncludingGravity: { x: 0, y: 0, z: 9.81 },
+    }));
+    const positions = [window.readBalloons()[0]];
+    await window.advanceBalloons(8); positions.push(window.readBalloons()[0]);
+    await window.advanceBalloons(8); positions.push(window.readBalloons()[0]);
+    const trajectory = [];
+    for (let frame = 0; frame < 90; frame++) {
+      await window.advanceBalloons(1); trajectory.push(window.readBalloons()[0]);
+    }
+    return { positions, trajectory };
+  });
+  const [start, middle, end] = motion.positions;
+  expect(start.y - end.y).toBeGreaterThan(.08);
+  expect(middle.y - end.y).toBeGreaterThan(start.y - middle.y);
+  expect(motion.trajectory.some((p, i, path) => i > 0 && p.y > path[i - 1].y + .002)).toBe(true);
+  expect(motion.trajectory.every(p => p.color === start.color)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+for (const width of [375, 1440]) {
+  test(`spheres collide without overlap or color transfer with the microphone off at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const errors = await prepare(page);
+    const result = await page.evaluate(async () => {
+      const initial = window.readBalloons();
+      const layer = document.querySelector('.balloon-layer').getBoundingClientRect();
+      const radii = [...document.querySelectorAll('.balloon')].map(node => node.getBoundingClientRect().width / 2);
+      let maximumOverlap = 0;
+      let touched = false;
+      let shifted = false;
+      let retainedColors = true;
+      for (let frame = 0; frame < 240; frame++) {
+        await window.advanceBalloons(1);
+        const bodies = window.readBalloons();
+        for (const [i, a] of bodies.entries()) {
+          retainedColors &&= a.color === initial[i].color;
+          shifted ||= Math.abs(a.x - initial[i].x) > .005;
+          for (let j = i + 1; j < bodies.length; j++) {
+            const b = bodies[j];
+            const distance = Math.hypot((a.x - b.x) * layer.width, (a.y - b.y) * layer.height);
+            const overlap = radii[i] + radii[j] - distance;
+            maximumOverlap = Math.max(maximumOverlap, overlap);
+            touched ||= overlap > -.5;
+          }
+        }
+      }
+      return { maximumOverlap, touched, shifted, retainedColors };
+    });
+    // Gravity has no horizontal force. Sideways motion here comes from contact.
+    expect(result).toMatchObject({ touched: true, shifted: true, retainedColors: true });
+    expect(result.maximumOverlap).toBeLessThan(.5);
+    expect(await page.evaluate(() => window.motionPermissionCalls)).toEqual([]);
+    await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
+    const { before, after } = await repel(page, 4, 30);
+    expect(after.x).toBeGreaterThan(before.x);
+    expect(after.color).toBe(before.color);
     expect(errors).toEqual([]);
   });
 }
@@ -178,33 +252,35 @@ test('mouse repulsion moves a balloon across other colors without recoloring it'
 
 test('synthetic tilt and shake events move balloons and reduced motion damps input', async ({ page }) => {
   const errors = await prepare(page);
-  await startFrozen(page);
-  const before = await page.evaluate(() => window.readBalloons()[4]);
-  const tilted = await page.evaluate(async () => {
-    window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 45 }));
-    await window.advanceBalloons(90);
-    return window.readBalloons()[4];
-  });
-  expect(tilted.x).toBeGreaterThan(before.x + .015);
-  const shaken = await page.evaluate(async () => {
-    window.dispatchEvent(new DeviceMotionEvent('devicemotion', { acceleration: { x: 20, y: 0, z: 0 } }));
-    await window.advanceBalloons(12);
-    return window.readBalloons()[4];
-  });
-  expect(shaken.x).toBeLessThan(tilted.x - .02);
-  expect(shaken.color).toBe(before.color);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.evaluate(async () => {
-    window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 }));
-    await window.advanceBalloons(300);
-  });
-  const reducedBefore = await page.evaluate(() => window.readBalloons());
-  const reducedAfter = await page.evaluate(async () => {
-    window.dispatchEvent(new DeviceMotionEvent('devicemotion', { acceleration: { x: 20, y: 0, z: 0 } }));
-    await window.advanceBalloons(12);
-    return window.readBalloons();
-  });
-  for (const [i, balloon] of reducedAfter.entries()) expect(balloon.x).toBeCloseTo(reducedBefore[i].x, 4);
+  const tiltDisplacements = [];
+  for (const reducedMotion of ['no-preference', 'reduce']) {
+    await page.emulateMedia({ reducedMotion });
+    const outcomes = {};
+    for (const input of ['none', 'tilt', 'shake']) {
+      await page.goto(url);
+      await startFrozen(page);
+      outcomes[input] = await page.evaluate(async input => {
+        if (input === 'tilt') window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 45 }));
+        if (input === 'shake') window.dispatchEvent(new DeviceMotionEvent('devicemotion', { acceleration: { x: 20, y: 0, z: 0 } }));
+        await window.advanceBalloons(30);
+        return window.readBalloons();
+      }, input);
+    }
+    // Compare the same initial world and duration, with gravity in every run.
+    const tilt = outcomes.tilt[4].x - outcomes.none[4].x;
+    expect(tilt).toBeGreaterThan(0);
+    tiltDisplacements.push(tilt);
+    if (reducedMotion === 'reduce') {
+      expect(outcomes.shake).toEqual(outcomes.none);
+    } else {
+      expect(tilt).toBeGreaterThan(.001);
+      expect(outcomes.shake[4].x).toBeLessThan(outcomes.none[4].x - .04);
+    }
+    for (const input of ['tilt', 'shake']) {
+      expect(outcomes[input].map(body => body.color)).toEqual(outcomes.none.map(body => body.color));
+    }
+  }
+  expect(tiltDisplacements[0]).toBeGreaterThan(tiltDisplacements[1] * 3);
   expect(errors).toEqual([]);
 });
 
@@ -259,7 +335,10 @@ test('rising bars push overlapping balloons and only new impacts blend their col
     window.sendBalloonBars(levels);
     await window.advanceBalloons(3);
   });
-  expect((await page.evaluate(() => window.readBalloons()))[0]).toEqual(before[0]);
+  const near = (await page.evaluate(() => window.readBalloons()))[0];
+  expect(near.x).toBe(before[0].x);
+  expect(near.color).toBe(before[0].color);
+  expect(near.y).toBeLessThan(before[0].y);
   const hit = await page.evaluate(async () => {
     window.sendBalloonBars(Array(24).fill(1));
     await window.advanceBalloons(3);
@@ -268,7 +347,7 @@ test('rising bars push overlapping balloons and only new impacts blend their col
   expect(hit[0].y).toBeGreaterThan(before[0].y + .1);
   expect(hit[0].color).not.toBe(before[0].color);
   await page.evaluate(() => window.advanceBalloons(120));
-  expect((await page.evaluate(() => window.readBalloons())).map(b => b.color)).toEqual(hit.map(b => b.color));
+  expect((await page.evaluate(() => window.readBalloons()))[0].color).toBe(hit[0].color);
   const geometry = await page.evaluate(() => {
     const layer = document.querySelector('.balloon-layer').getBoundingClientRect();
     const barTop = document.querySelector('.meter-fill').getBoundingClientRect().top;
@@ -285,7 +364,7 @@ test('rising bars push overlapping balloons and only new impacts blend their col
   expect(errors).toEqual([]);
 });
 
-test('fullscreen reuses balloons and stop, restart, and route cleanup release resources', async ({ page }) => {
+test('fullscreen reuses spheres, Stop keeps gravity, and route cleanup releases resources', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors = await prepare(page);
   const idleListeners = await page.evaluate(() => window.balloonListeners());
@@ -293,7 +372,7 @@ test('fullscreen reuses balloons and stop, restart, and route cleanup release re
   const activeListeners = await page.evaluate(() => window.balloonListeners());
   expect(activeListeners.devicemotion).toBe(1);
   expect(activeListeners.deviceorientation).toBe(1);
-  expect(activeListeners.pointermove).toBe(idleListeners.pointermove + 1);
+  expect(activeListeners.pointermove).toBe(idleListeners.pointermove);
   await page.evaluate(() => { window.originalBalloons = [...document.querySelectorAll('.balloon')]; });
   for (let i = 0; i < 2; i++) {
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -308,15 +387,17 @@ test('fullscreen reuses balloons and stop, restart, and route cleanup release re
   }
   expect(await page.evaluate(() => window.originalBalloons.every((node, i) => node === document.querySelectorAll('.balloon')[i]))).toBe(true);
   await page.getByRole('button', { name: 'Stop listening' }).click();
-  expect(await page.evaluate(() => window.pendingBalloons())).toBe(0);
+  expect(await page.evaluate(() => window.pendingBalloons())).toBe(1);
   expect(await page.evaluate(() => window.balloonListeners())).toEqual(idleListeners);
   const stopped = await page.evaluate(() => window.readBalloons());
-  await page.mouse.move(300, 300);
+  await page.mouse.move(0, 0);
   await page.evaluate(async () => {
     window.dispatchEvent(new DeviceMotionEvent('devicemotion', { acceleration: { x: 20, y: 0, z: 0 } }));
     await window.advanceBalloons(10);
   });
-  expect(await page.evaluate(() => window.readBalloons())).toEqual(stopped);
+  const falling = await page.evaluate(() => window.readBalloons());
+  expect(falling[0].y).toBeLessThan(stopped[0].y);
+  expect(falling.map(body => body.color)).toEqual(stopped.map(body => body.color));
   await page.getByRole('button', { name: 'Start listening' }).click();
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   expect(await page.evaluate(() => window.balloonListeners())).toEqual(activeListeners);
@@ -328,7 +409,7 @@ test('fullscreen reuses balloons and stop, restart, and route cleanup release re
 });
 
 for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
-  test(`late motion permission cannot restart balloons after ${end}`, async ({ page }) => {
+  test(`late motion permission cannot restore sensors after ${end}`, async ({ page }) => {
     const errors = await prepare(page, 'pending');
     const idleListeners = await page.evaluate(() => window.balloonListeners());
     if (end === 'microphone denial') {
@@ -346,14 +427,23 @@ for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
         await expect(page.getByRole('alert')).toContainText('Audio processor failed');
       }
     }
-    await expect.poll(() => page.evaluate(() => window.pendingBalloons())).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.pendingBalloons())).toBe(end === 'route' ? 0 : 1);
     const calls = await page.evaluate(() => window.balloonAnimationCalls);
+    const before = await page.evaluate(() => window.readBalloons());
     await page.evaluate(async () => {
       for (const resolve of window.resolveMotion) resolve('granted');
       await new Promise(resolve => setTimeout(resolve, 100));
       window.dispatchEvent(new DeviceMotionEvent('devicemotion', { acceleration: { x: 20, y: 0, z: 0 } }));
+      await window.advanceBalloons(12);
     });
-    expect(await page.evaluate(() => window.balloonAnimationCalls)).toBe(calls);
+    if (end === 'route') {
+      expect(await page.evaluate(() => window.balloonAnimationCalls)).toBe(calls);
+    } else {
+      expect(await page.evaluate(() => window.balloonAnimationCalls)).toBe(calls + 12);
+      const after = await page.evaluate(() => window.readBalloons());
+      expect(after[0].y).toBeLessThan(before[0].y - .02);
+      expect(after.map(body => body.color)).toEqual(before.map(body => body.color));
+    }
     const listeners = await page.evaluate(() => window.balloonListeners());
     expect(listeners.devicemotion).toBe(0);
     expect(listeners.deviceorientation).toBe(0);

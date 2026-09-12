@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('iPhone sensor denial preserves balloon mouse input and stop removes listeners', async ({ page }) => {
+test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -30,10 +30,12 @@ test('iPhone sensor denial preserves balloon mouse input and stop removes listen
   await page.mouse.move(box.x + box.width * .25, box.y + box.height * .5);
   await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.left))).toBeGreaterThan(before + .2);
   await page.getByRole('button', { name: 'Stop listening' }).tap();
-  const stopped = await balloon.getAttribute('style');
-  await page.mouse.move(box.x + box.width * .25, box.y + box.height * .5);
-  await page.waitForTimeout(150);
-  expect(await balloon.getAttribute('style')).toBe(stopped);
+  await page.mouse.move(0, 0);
+  const stopped = await balloon.evaluate(node => ({
+    top: Number.parseFloat(node.style.top), color: node.style.getPropertyValue('--balloon-color'),
+  }));
+  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.top))).toBeGreaterThan(stopped.top + .1);
+  expect(await balloon.evaluate(node => node.style.getPropertyValue('--balloon-color'))).toBe(stopped.color);
   await expect(page.getByRole('alert')).toBeEmpty();
   await page.evaluate(() => window.balloonSourceContext.close());
   expect(errors).toEqual([]);

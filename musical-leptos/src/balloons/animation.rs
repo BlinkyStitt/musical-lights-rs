@@ -16,6 +16,10 @@ extern "C" {
     ) -> BalloonInput;
     #[wasm_bindgen(method)]
     fn close(this: &BalloonInput);
+    #[wasm_bindgen(method, js_name = startMotion)]
+    fn start_motion(this: &BalloonInput);
+    #[wasm_bindgen(method, js_name = stopMotion)]
+    fn stop_motion(this: &BalloonInput);
 }
 
 type SensorCallback = Closure<dyn FnMut(f64, f64, f64)>;
@@ -33,8 +37,8 @@ impl Drop for InputResources {
     }
 }
 
-/// Idle instances keep only the world and nodes. Start/stop owns a single RAF
-/// and the input listeners independently of pending microphone permission.
+/// The mounted graph owns one RAF and mouse input. Microphone sessions own
+/// only optional sensor input and bar updates; gravity also runs with audio off.
 pub struct BalloonAnimation(Rc<RefCell<Resources>>);
 
 struct Resources {
@@ -124,14 +128,13 @@ impl BalloonAnimation {
             }
         });
         resources.borrow_mut().callback = Some(callback);
-        Ok(Self(resources))
+        let animation = Self(resources);
+        animation.connect_input();
+        animation.0.borrow_mut().schedule()?;
+        Ok(animation)
     }
 
-    /// Call directly from the user's click, before any asynchronous audio work.
-    pub fn start(&self) -> Result<(), JsValue> {
-        if self.0.borrow().input.is_some() {
-            return Ok(());
-        }
+    fn connect_input(&self) {
         let weak = Rc::downgrade(&self.0);
         let pointer = Closure::new(move |x: f64, y: f64, inside: bool| {
             if let Some(resources) = weak.upgrade() {
@@ -166,18 +169,25 @@ impl BalloonAnimation {
             _tilt: tilt,
             _shake: shake,
         });
-        if let Err(error) = resources.schedule() {
-            resources.stop();
-            return Err(error);
+    }
+
+    /// Call directly from the user's click, before any asynchronous audio work.
+    pub fn start_listening(&self) {
+        if let Some(input) = &self.0.borrow().input {
+            input.input.start_motion();
         }
-        Ok(())
     }
 
     pub fn push(&self, frame: DisplayFrame<DISPLAY_BANDS>) {
         self.0.borrow_mut().frame = frame;
     }
-    pub fn stop(&self) {
-        self.0.borrow_mut().stop();
+    pub fn stop_listening(&self) {
+        let mut resources = self.0.borrow_mut();
+        if let Some(input) = &resources.input {
+            input.input.stop_motion();
+        }
+        resources.frame = DisplayFrame::default();
+        resources.world.clear_motion();
     }
 }
 
@@ -234,7 +244,6 @@ impl Resources {
         self.input.take();
         self.last_ms = None;
         self.frame = DisplayFrame::default();
-        self.world.clear_input();
     }
 }
 
