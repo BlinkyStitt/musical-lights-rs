@@ -1,5 +1,44 @@
 import { test, expect } from '@playwright/test';
 
+test('iPhone sensor denial preserves balloon mouse input and stop removes listeners', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => {
+    window.sensorRequests = [];
+    for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
+      Object.defineProperty(window[name], 'requestPermission', { value: () => {
+        window.sensorRequests.push({ name, active: navigator.userActivation.isActive });
+        return Promise.resolve('denied');
+      } });
+    }
+    MediaDevices.prototype.getUserMedia = async () => {
+      const context = new AudioContext();
+      window.balloonSourceContext = context;
+      return context.createMediaStreamDestination().stream;
+    };
+  });
+  await page.goto('http://127.0.0.1:8101');
+  await page.getByRole('button', { name: 'Start listening' }).tap();
+  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
+  const calls = await page.evaluate(() => window.sensorRequests);
+  expect(calls).toHaveLength(2);
+  expect(calls.every(call => call.active)).toBe(true);
+  const balloon = page.locator('.balloon').nth(4);
+  const before = await balloon.evaluate(node => Number.parseFloat(node.style.left));
+  const box = await balloon.boundingBox();
+  await page.mouse.move(box.x + box.width * .25, box.y + box.height * .5);
+  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.left))).toBeGreaterThan(before + .2);
+  await page.getByRole('button', { name: 'Stop listening' }).tap();
+  const stopped = await balloon.getAttribute('style');
+  await page.mouse.move(box.x + box.width * .25, box.y + box.height * .5);
+  await page.waitForTimeout(150);
+  expect(await balloon.getAttribute('style')).toBe(stopped);
+  await expect(page.getByRole('alert')).toBeEmpty();
+  await page.evaluate(() => window.balloonSourceContext.close());
+  expect(errors).toEqual([]);
+});
+
 async function drag(page, dx, dy) {
   // Playwright's WebKit transport supports touch taps, but no touch drags.
   // Exercise native pointer capture here with a mouse; touch-screen covers

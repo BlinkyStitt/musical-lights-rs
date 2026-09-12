@@ -1,4 +1,5 @@
 use crate::{
+    balloons::{BalloonAnimation, BalloonWorld},
     display::{DisplayAnimation, DisplayFrame},
     screen::ScreenSession,
     wasm_audio::{AudioSession, AudioUpdate},
@@ -19,11 +20,28 @@ struct SessionOwner {
     alive: Rc<Cell<bool>>,
     session: Rc<RefCell<Option<AudioSession>>>,
     animation: Rc<RefCell<Option<DisplayAnimation>>>,
+    balloons: Rc<RefCell<Option<BalloonAnimation>>>,
+}
+
+impl SessionOwner {
+    fn stop(&self) {
+        if let Some(session) = self.session.borrow_mut().take() {
+            session.stop();
+        }
+        if let Some(animation) = self.animation.borrow_mut().take() {
+            animation.stop();
+        }
+        if let Some(balloons) = self.balloons.borrow().as_ref() {
+            balloons.stop();
+        }
+    }
 }
 
 #[component]
 pub fn DancingLights() -> impl IntoView {
-    let colors = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0).colors;
+    let palette = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0);
+    let colors = palette.colors;
+    let idle_balloons = BalloonWorld::new(palette);
     let (selected_band, set_selected_band) = signal(None::<usize>);
     let tooltip_timer = StoredValue::new(None::<TimeoutHandle>);
     let clear_tooltip_timer = move || {
@@ -103,16 +121,20 @@ pub fn DancingLights() -> impl IntoView {
         alive: Rc::new(Cell::new(true)),
         session: Rc::new(RefCell::new(None)),
         animation: Rc::new(RefCell::new(None)),
+        balloons: Rc::new(RefCell::new(None)),
+    });
+    let balloon_layer = NodeRef::<leptos::html::Span>::new();
+    balloon_layer.on_load(move |element| {
+        match BalloonAnimation::new(&element, BalloonWorld::new(palette)) {
+            Ok(balloons) => owner.with_value(|owner| *owner.balloons.borrow_mut() = Some(balloons)),
+            Err(error) => log::warn!("Could not prepare balloons: {error:?}"),
+        }
     });
     on_cleanup(move || {
         owner.with_value(|owner| {
             owner.alive.set(false);
-            if let Some(session) = owner.session.borrow_mut().take() {
-                session.stop();
-            }
-            if let Some(animation) = owner.animation.borrow_mut().take() {
-                animation.stop();
-            }
+            owner.stop();
+            owner.balloons.borrow_mut().take();
         })
     });
     let start = move |_| {
@@ -132,10 +154,21 @@ pub fn DancingLights() -> impl IntoView {
         };
         let rate = session.sample_rate();
         let owner = owner.get_value();
+        if let Some(balloons) = owner.balloons.borrow().as_ref()
+            && let Err(error) = balloons.start()
+        {
+            session.stop();
+            set_error.set(Some(format!("Balloons: {error:?}")));
+            return;
+        }
         let alive = owner.alive.clone();
+        let balloons = owner.balloons.clone();
         let animation = match DisplayAnimation::new(session.clone(), move |values, fps| {
             if !alive.get() {
                 return;
+            }
+            if let Some(balloons) = balloons.borrow().as_ref() {
+                balloons.push(values);
             }
             if audio.get_untracked() != values {
                 set_audio.set(values);
@@ -146,6 +179,8 @@ pub fn DancingLights() -> impl IntoView {
         }) {
             Ok(animation) => animation,
             Err(error) => {
+                session.stop();
+                owner.stop();
                 set_error.set(Some(format!("Display: {error:?}")));
                 return;
             }
@@ -183,12 +218,7 @@ pub fn DancingLights() -> impl IntoView {
                                 let owner = failure_owner.clone();
                                 // Release the message closure after it returns.
                                 leptos::task::spawn_local(async move {
-                                    if let Some(session) = owner.session.borrow_mut().take() {
-                                        session.stop();
-                                    }
-                                    if let Some(animation) = owner.animation.borrow_mut().take() {
-                                        animation.stop();
-                                    }
+                                    owner.stop();
                                 });
                             }
                         }
@@ -207,12 +237,7 @@ pub fn DancingLights() -> impl IntoView {
                     set_listening.set(true);
                 }
                 Err(error) => {
-                    if let Some(session) = owner.session.borrow_mut().take() {
-                        session.stop();
-                    }
-                    if let Some(animation) = owner.animation.borrow_mut().take() {
-                        animation.stop();
-                    }
+                    owner.stop();
                     set_frame_rate.set(None);
                     set_error.set(Some(format!("Microphone: {error:?}")));
                 }
@@ -226,8 +251,7 @@ pub fn DancingLights() -> impl IntoView {
                     <Show when=move || !listening.get() fallback=move || view! {
                         <button class="primary stop-listening" on:click=move |_| {
                             owner.with_value(|owner| {
-                                if let Some(session) = owner.session.borrow_mut().take() { session.stop(); }
-                                if let Some(animation) = owner.animation.borrow_mut().take() { animation.stop(); }
+                                owner.stop();
                             });
                             set_listening.set(false);
                             set_frame_rate.set(None);
@@ -288,10 +312,15 @@ pub fn DancingLights() -> impl IntoView {
                             aria-valuenow=move || (audio.get().levels[i] * 100.0).round() as u32>
                             <div class="meter-fill" style:transform=move || format!("scaleY({})", audio.get().levels[i])></div>
                             <div class="meter-edge" aria-hidden="true"
-                                style:height=move || format!("{}%", audio.get().levels[i] * 100.0)
+                                style:height=move || format!("calc((100% - var(--balloon-headroom)) * {})", audio.get().levels[i])
                                 style:opacity=move || audio.get().edges[i].to_string()></div>
                         </div>
                     }}).collect_view()}
+                    <span class="balloon-layer" aria-hidden="true" node_ref=balloon_layer>
+                        {idle_balloons.balloons.iter().map(|balloon| view! {
+                            <span class="balloon" style=balloon.style()><span class="balloon-string"></span></span>
+                        }).collect_view()}
+                    </span>
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
