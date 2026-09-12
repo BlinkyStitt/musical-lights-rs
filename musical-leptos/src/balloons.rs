@@ -9,9 +9,12 @@ use musical_lights_core::{
 };
 
 pub const BALLOON_COUNT: usize = 12;
-pub const BODY_ASPECT: f64 = 0.82;
 const MAX_DT: f64 = 1.0 / 30.0;
-const MAX_SPEED: f64 = 0.8;
+// Graph heights per second squared. Gravity always uses page coordinates;
+// device orientation supplies only the much smaller wind contribution.
+const GRAVITY: f64 = 2.4;
+const MAX_SPEED: f64 = 2.4;
+const REST_SPEED: f64 = 0.1;
 const CONTACT_SLOP: f64 = 0.0005;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -80,7 +83,7 @@ struct Bar {
 }
 
 /// Actual meter bounds, normalized to the layer. Headroom leaves space above
-/// a full-height bar. Width/height preserves the body's CSS aspect ratio.
+/// a full-height bar. Width/height keeps each body circular in screen pixels.
 #[derive(Clone, Copy, Debug)]
 struct Geometry {
     bars: [Bar; DISPLAY_BANDS],
@@ -93,7 +96,7 @@ impl Geometry {
         let x = balloon.width_in_bars * (self.bars[0].right - self.bars[0].left) * 0.5;
         Vector {
             x,
-            y: x * self.aspect / BODY_ASPECT,
+            y: x * self.aspect,
         }
     }
 }
@@ -109,7 +112,6 @@ pub struct BalloonWorld {
     shake: Vector,
     shake_cooldown: f64,
     reduced: bool,
-    elapsed: f64,
 }
 
 impl BalloonWorld {
@@ -117,15 +119,18 @@ impl BalloonWorld {
         let palette = palette.colors.map(|c| [c.red, c.green, c.blue]);
         let widths = [0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5];
         Self {
-            balloons: std::array::from_fn(|i| Balloon {
-                width_in_bars: widths[i],
-                position: Vector {
+            balloons: std::array::from_fn(|i| {
+                let position = Vector {
                     x: 0.08 + (i % 6) as f64 * 0.16 + (i / 6) as f64 * 0.01,
                     y: 0.52 + (i / 6) as f64 * 0.2 + (i % 3) as f64 * 0.025,
-                },
-                velocity: Vector::default(),
-                color: palette[(i * 7 + 5) % DISPLAY_BANDS],
-                contacts: [false; DISPLAY_BANDS],
+                };
+                Balloon {
+                    width_in_bars: widths[i],
+                    position,
+                    velocity: Vector::default(),
+                    color: palette[(position.x * DISPLAY_BANDS as f64) as usize],
+                    contacts: [false; DISPLAY_BANDS],
+                }
             }),
             palette,
             previous_levels: [0.0; DISPLAY_BANDS],
@@ -135,7 +140,6 @@ impl BalloonWorld {
             shake: Vector::default(),
             shake_cooldown: 0.0,
             reduced: false,
-            elapsed: 0.0,
         }
     }
 
@@ -168,15 +172,13 @@ impl BalloonWorld {
         self.shake_cooldown = 0.18;
     }
 
-    fn clear_input(&mut self) {
-        self.pointer = None;
+    fn clear_motion(&mut self) {
         self.wind = Vector::default();
         self.target_wind = Vector::default();
         self.shake = Vector::default();
         self.shake_cooldown = 0.0;
         self.previous_levels.fill(0.0);
         for balloon in &mut self.balloons {
-            balloon.velocity = Vector::default();
             balloon.contacts.fill(false);
         }
     }
@@ -186,24 +188,56 @@ impl BalloonWorld {
         if dt == 0.0 {
             return;
         }
-        self.elapsed += dt;
+        // Limit travel relative to the smallest sphere so fast bodies cannot
+        // pass through each other between collision checks.
+        let minimum_radius = self
+            .balloons
+            .iter()
+            .map(|balloon| geometry.radii(balloon).y)
+            .fold(f64::INFINITY, f64::min);
+        if minimum_radius <= 0.0 {
+            return;
+        }
+        let speed = self
+            .balloons
+            .iter()
+            .map(|balloon| {
+                ((balloon.velocity.x + self.shake.x) * geometry.aspect)
+                    .hypot(balloon.velocity.y + self.shake.y)
+            })
+            .fold(0.0, f64::max);
+        let steps = ((speed + (GRAVITY + 2.0) * dt) * dt / (minimum_radius * 0.5))
+            .ceil()
+            .clamp(1.0, 64.0) as usize;
+        let levels = frame
+            .levels
+            .map(|level| finite(level as f64).clamp(0.0, 1.0) * geometry.bar_height);
+        let previous = self.previous_levels;
+        for step in 1..=steps {
+            let progress = step as f64 / steps as f64;
+            let levels = std::array::from_fn(|band| {
+                previous[band] + (levels[band] - previous[band]) * progress
+            });
+            self.advance(dt / steps as f64, levels, geometry);
+        }
+    }
+
+    fn advance(&mut self, dt: f64, levels: [f64; DISPLAY_BANDS], geometry: Geometry) {
         self.shake_cooldown = (self.shake_cooldown - dt).max(0.0);
         let wind_mix = 1.0 - (-dt * 1.5).exp();
         self.wind.x += (self.target_wind.x - self.wind.x) * wind_mix;
         self.wind.y += (self.target_wind.y - self.wind.y) * wind_mix;
-        let levels = frame
-            .levels
-            .map(|level| finite(level as f64).clamp(0.0, 1.0) * geometry.bar_height);
         let motion_scale = if self.reduced { 0.2 } else { 1.0 };
-        let damping = (-dt * if self.reduced { 9.0 } else { 2.5 }).exp();
+        let drag = if self.reduced { 9.0 } else { 0.6 };
+        let restitution = if self.reduced { 0.15 } else { 0.7 };
         for (index, balloon) in self.balloons.iter_mut().enumerate() {
             let radius = geometry.radii(balloon);
             let before = balloon.position;
-            let mut force = self.wind;
+            let mut force = Vector {
+                x: self.wind.x,
+                y: self.wind.y - GRAVITY,
+            };
             if !self.reduced {
-                // Slow, deterministic float. No random per-frame input.
-                force.x += (self.elapsed * 0.7 + index as f64 * 1.9).sin() * 0.018;
-                force.y += (self.elapsed * 0.9 + index as f64).cos() * 0.012;
                 balloon.velocity.x += self.shake.x;
                 balloon.velocity.y += self.shake.y;
             }
@@ -230,11 +264,21 @@ impl BalloonWorld {
                     force.y += direction.y * strength;
                 }
             }
-            balloon.velocity.x = (balloon.velocity.x + force.x * dt * motion_scale) * damping;
-            balloon.velocity.y = (balloon.velocity.y + force.y * dt * motion_scale) * damping;
+            integrate_axis(
+                &mut balloon.position.x,
+                &mut balloon.velocity.x,
+                force.x * motion_scale,
+                drag,
+                dt,
+            );
+            integrate_axis(
+                &mut balloon.position.y,
+                &mut balloon.velocity.y,
+                force.y * motion_scale,
+                drag,
+                dt,
+            );
             balloon.velocity = balloon.velocity.bounded(MAX_SPEED);
-            balloon.position.x += balloon.velocity.x * dt;
-            balloon.position.y += balloon.velocity.y * dt;
             let incoming = balloon.velocity;
             let candidate = balloon.position;
             let mut contacts = [false; DISPLAY_BANDS];
@@ -289,47 +333,165 @@ impl BalloonWorld {
                     balloon.velocity.y = balloon.velocity.y.max(0.0);
                 }
                 let rise = top - self.previous_levels[band];
-                if rise > 1e-6 && !balloon.contacts[band] {
-                    let approach = (-(incoming.x * normal.x + incoming.y * normal.y)).max(0.0);
-                    let impulse = (rise / dt * 0.1 + approach * 0.65).min(0.7);
-                    balloon.velocity.x += normal.x * impulse * motion_scale;
-                    balloon.velocity.y += normal.y * impulse * motion_scale;
+                let approach = (-(incoming.x * normal.x + incoming.y * normal.y)).max(0.0);
+                if !balloon.contacts[band] && (rise > 1e-6 || approach > REST_SPEED) {
+                    let rebound = if approach > REST_SPEED {
+                        approach * restitution
+                    } else {
+                        0.0
+                    };
+                    let outgoing =
+                        ((rise / dt * 0.1).clamp(0.0, 0.7) * motion_scale + rebound).min(MAX_SPEED);
+                    let current = balloon.velocity.x * normal.x + balloon.velocity.y * normal.y;
+                    let change = (outgoing - current).max(0.0);
+                    balloon.velocity.x += normal.x * change;
+                    balloon.velocity.y += normal.y * change;
+                    // A resting contact has no impact. A falling sphere can
+                    // bounce off a stationary bar without gaining energy.
+                    let impulse = approach + outgoing;
                     balloon.impact_color(self.palette[band], impulse);
                 }
             }
             balloon.contacts = contacts;
             balloon.velocity = balloon.velocity.bounded(MAX_SPEED);
-            clamp_axis(&mut balloon.position.x, &mut balloon.velocity.x, radius.x);
-            // A side correction or wall clamp can place a wide body over another
-            // bar. Project above that surface without adding energy or color.
-            for (band, bar) in geometry.bars.iter().enumerate() {
-                if balloon.position.x + radius.x > bar.left
-                    && balloon.position.x - radius.x < bar.right
-                    && balloon.position.y - radius.y < levels[band]
-                {
-                    balloon.position.y = levels[band] + radius.y;
-                    balloon.velocity.y = balloon.velocity.y.max(0.0);
+            constrain(balloon, geometry, levels, restitution);
+        }
+        // Revisit contacts in a stable order to resolve piles against bars and
+        // walls. Position corrections add neither velocity nor color.
+        for _ in 0..32 {
+            let mut overlap: f64 = 0.0;
+            for i in 0..BALLOON_COUNT {
+                let (left, right) = self.balloons.split_at_mut(i + 1);
+                for other in right {
+                    overlap = overlap.max(collide(&mut left[i], other, geometry, restitution));
                 }
             }
-            clamp_axis(&mut balloon.position.y, &mut balloon.velocity.y, radius.y);
+            for balloon in &mut self.balloons {
+                constrain(balloon, geometry, levels, restitution);
+                balloon.velocity = balloon.velocity.bounded(MAX_SPEED);
+            }
+            if overlap < 1e-7 {
+                break;
+            }
         }
         self.shake = Vector::default();
         self.previous_levels = levels;
     }
 }
 
+/// Resolve two circles in graph-height units, including the horizontal aspect
+/// ratio. Mass follows circle area; impulses conserve momentum and lose energy.
+/// Only bar impacts own color changes, so this operation never touches color.
+fn collide(a: &mut Balloon, b: &mut Balloon, geometry: Geometry, restitution: f64) -> f64 {
+    let ra = geometry.radii(a).y;
+    let rb = geometry.radii(b).y;
+    let delta = Vector {
+        x: (b.position.x - a.position.x) * geometry.aspect,
+        y: b.position.y - a.position.y,
+    };
+    let distance = delta.x.hypot(delta.y);
+    let overlap = ra + rb - distance;
+    if overlap < 0.0 {
+        return 0.0;
+    }
+    let normal = if distance > 1e-12 {
+        Vector {
+            x: delta.x / distance,
+            y: delta.y / distance,
+        }
+    } else {
+        Vector { x: 1.0, y: 0.0 }
+    };
+    let inverse_a = 1.0 / (ra * ra);
+    let inverse_b = 1.0 / (rb * rb);
+    let share_a = inverse_a / (inverse_a + inverse_b);
+    let share_b = 1.0 - share_a;
+    a.position.x -= normal.x * overlap * share_a / geometry.aspect;
+    a.position.y -= normal.y * overlap * share_a;
+    b.position.x += normal.x * overlap * share_b / geometry.aspect;
+    b.position.y += normal.y * overlap * share_b;
+    let relative = (b.velocity.x - a.velocity.x) * geometry.aspect * normal.x
+        + (b.velocity.y - a.velocity.y) * normal.y;
+    if relative < 0.0 {
+        let bounce = if -relative > REST_SPEED {
+            restitution
+        } else {
+            0.0
+        };
+        let impulse = -(1.0 + bounce) * relative;
+        a.velocity.x -= normal.x * impulse * share_a / geometry.aspect;
+        a.velocity.y -= normal.y * impulse * share_a;
+        b.velocity.x += normal.x * impulse * share_b / geometry.aspect;
+        b.velocity.y += normal.y * impulse * share_b;
+    }
+    overlap
+}
+
+fn constrain(
+    balloon: &mut Balloon,
+    geometry: Geometry,
+    levels: [f64; DISPLAY_BANDS],
+    restitution: f64,
+) {
+    let radius = geometry.radii(balloon);
+    clamp_axis(
+        &mut balloon.position.x,
+        &mut balloon.velocity.x,
+        radius.x,
+        restitution,
+    );
+    // A collision correction can place a body over another surface. Restore
+    // support without counting the correction as another bar impact.
+    for (band, bar) in geometry.bars.iter().enumerate() {
+        if levels[band] > 0.0
+            && balloon.position.x + radius.x > bar.left
+            && balloon.position.x - radius.x < bar.right
+            && balloon.position.y - radius.y < levels[band]
+        {
+            balloon.position.y = levels[band] + radius.y;
+            balloon.velocity.y = balloon.velocity.y.max(0.0);
+        }
+    }
+    clamp_axis(
+        &mut balloon.position.y,
+        &mut balloon.velocity.y,
+        radius.y,
+        restitution,
+    );
+}
+
 fn finite(value: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
 }
 
-fn clamp_axis(position: &mut f64, velocity: &mut f64, radius: f64) {
+/// Exact constant-acceleration/linear-drag integration makes free fall agree
+/// across refresh rates without the old slow oscillating float.
+fn integrate_axis(position: &mut f64, velocity: &mut f64, force: f64, drag: f64, dt: f64) {
+    let response = -(-drag * dt).exp_m1() / drag;
+    *position += *velocity * response + force * (dt - response) / drag;
+    *velocity += (force - drag * *velocity) * response;
+}
+
+fn clamp_axis(position: &mut f64, velocity: &mut f64, radius: f64, restitution: f64) {
     let radius = radius.min(0.5);
     if *position < radius {
         *position = radius;
-        *velocity = velocity.max(0.0);
+        if *velocity < 0.0 {
+            *velocity = if -*velocity > REST_SPEED {
+                -*velocity * restitution
+            } else {
+                0.0
+            };
+        }
     } else if *position > 1.0 - radius {
         *position = 1.0 - radius;
-        *velocity = velocity.min(0.0);
+        if *velocity > 0.0 {
+            *velocity = if *velocity > REST_SPEED {
+                -*velocity * restitution
+            } else {
+                0.0
+            };
+        }
     }
 }
 

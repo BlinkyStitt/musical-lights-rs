@@ -62,6 +62,12 @@ async function expectAnimationStopped(page) {
   expect(await page.evaluate(() => window.animationCalls)).toBe(calls);
 }
 
+async function expectOnlySphereAnimation(page) {
+  await expect.poll(() => page.evaluate(() => window.pendingAnimationFrames.size)).toBe(1);
+  const calls = await page.evaluate(() => window.animationCalls);
+  await expect.poll(() => page.evaluate(() => window.animationCalls)).toBeGreaterThan(calls);
+}
+
 test('microphone denial displays an error and closes the audio context', async ({ page }) => {
   await trackContexts(page);
   await page.addInitScript(() => {
@@ -72,7 +78,7 @@ test('microphone denial displays an error and closes the audio context', async (
   await expect(page.getByRole('alert')).toContainText('Microphone denied');
   await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
-  await expectAnimationStopped(page);
+  await expectOnlySphereAnimation(page);
 });
 
 for (const rate of [44100, 48000]) {
@@ -126,7 +132,7 @@ for (const rate of [44100, 48000]) {
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
-    await expectAnimationStopped(page);
+    await expectOnlySphereAnimation(page);
     await expect(page.locator('.frame-rate')).toHaveText('— FPS');
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     await page.evaluate(() => window.inputContext.close());

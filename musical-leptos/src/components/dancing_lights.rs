@@ -32,7 +32,7 @@ impl SessionOwner {
             animation.stop();
         }
         if let Some(balloons) = self.balloons.borrow().as_ref() {
-            balloons.stop();
+            balloons.stop_listening();
         }
     }
 }
@@ -154,12 +154,8 @@ pub fn DancingLights() -> impl IntoView {
         };
         let rate = session.sample_rate();
         let owner = owner.get_value();
-        if let Some(balloons) = owner.balloons.borrow().as_ref()
-            && let Err(error) = balloons.start()
-        {
-            session.stop();
-            set_error.set(Some(format!("Balloons: {error:?}")));
-            return;
+        if let Some(balloons) = owner.balloons.borrow().as_ref() {
+            balloons.start_listening();
         }
         let alive = owner.alive.clone();
         let balloons = owner.balloons.clone();
@@ -318,7 +314,7 @@ pub fn DancingLights() -> impl IntoView {
                     }}).collect_view()}
                     <span class="balloon-layer" aria-hidden="true" node_ref=balloon_layer>
                         {idle_balloons.balloons.iter().map(|balloon| view! {
-                            <span class="balloon" style=balloon.style()><span class="balloon-string"></span></span>
+                            <span class="balloon" style=balloon.style()></span>
                         }).collect_view()}
                     </span>
                 </div>

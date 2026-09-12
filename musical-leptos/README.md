@@ -21,10 +21,14 @@ The controls and graph appear directly below navigation. Descriptive text follow
 the app. The vertical labels read Quiet/Loud. Hover or focus a band to see its
 exact frequency edges.
 
-Twelve decorative balloons sit above the bars. Their widths range from 0.55 to
-four bar widths. Start listening activates their motion. Move a mouse near a
-balloon to repel it. Device tilt supplies slow wind, and a shake supplies a short
-impulse. Touch gestures still control the graph and fullscreen view.
+Twelve decorative spheres sit above the bars. Their diameters range from 0.55 to
+four bar widths. Motion starts when the graph appears and continues with the
+microphone off. Steady gravity pulls them toward the bottom of the page, even
+when a phone lies flat on its back. They accelerate as they fall and bounce off
+each other, bars, and graph edges. Move a mouse near a sphere to repel it.
+Device tilt supplies a small wind force, and a shake supplies a short impulse.
+Gravity stays in page coordinates and is stronger than the tilt wind. Touch
+gestures still control the graph and fullscreen view.
 
 The Start listening click also requests device motion permission where required.
 If that request fails, is denied, or the sensor API is unavailable, mouse input
@@ -32,24 +36,29 @@ continues to work. Shake input uses acceleration without gravity; devices that
 cannot provide it still support tilt when available. No sensor input is required
 to use the microphone.
 
-Each balloon starts with a fixed color from the graph's rainbow palette. A new
-impact with a rising bar blends its current color toward that bar's fixed color.
+Each sphere starts with the graph's rainbow color at its horizontal center.
+Its initial position selects the color once. A new impact with a bar blends
+its current color toward that bar's fixed color, including when a falling
+sphere bounces off a stationary bar.
 Stronger impacts produce a larger change, limited to a 50% blend per impact.
 The blend uses linear sRGB and `screen_color` encodes the result once for CSS.
-Static contact and nearby bars do not change the color. The balloon retains its
-color until a later impact, including when listening stops and starts again.
+Sphere-to-sphere collisions, resting contact, and nearby bars do not change the
+color. The sphere retains its color until a later bar impact, including when
+listening stops and starts again.
 
-Reduced Motion disables autonomous float and shake impulses. It also reduces
-mouse and bar impulses and applies stronger damping. Collision correction still
-keeps the bodies outside the bars. The graph reserves room above fully raised
-bars, including in fullscreen. Balloons do not receive pointer input or appear
-in the accessibility tree.
+Reduced Motion disables shake impulses and reduces gravity, mouse forces, and
+bar impulses. It applies stronger damping and softer bounces. Gravity still
+points down the page. Collision correction keeps the bodies outside the bars.
+The graph reserves room above fully raised bars, including in fullscreen.
+Spheres do not block pointer input or appear in the accessibility tree.
 
-Balloon physics writes directly to the existing decorative nodes on animation
-frames. Stop listening, microphone permission failure, audio failure, and route
-cleanup cancel its pending frame and remove its input listeners. Late motion
-permission results cannot restart a closed session. Sensor permission denial
-keeps mouse behavior active for the current audio session.
+Sphere physics writes directly to the existing decorative nodes on animation
+frames. Stop listening, microphone permission failure, and audio failure clear
+the bar levels and remove sensor listeners. Gravity, momentum, sphere collisions,
+and mouse input continue. Route cleanup cancels the pending frame and removes
+all input listeners. Late motion permission results cannot restore sensors for
+a closed audio session. Sensor permission denial leaves gravity and mouse input
+active.
 
 Fullscreen expands the visualizer and keeps the microphone controls available.
 Use Exit fullscreen or the browser's fullscreen exit to return to the page.

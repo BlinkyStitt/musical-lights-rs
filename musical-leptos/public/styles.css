@@ -58,10 +58,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 /* Headroom fits a four-bar body even when every meter reaches its full height.
    The absolute span preserves the 24 direct meter divs and all hit targets. */
 .balloon-layer { --bar-width: calc((100% - 23 * var(--bar-gap)) / 24); position: absolute; inset: 0 0 3px; z-index: 1; overflow: hidden; pointer-events: none; }
-.balloon { position: absolute; display: block; width: calc(var(--bar-width) * var(--balloon-bars)); aspect-ratio: .82; transform: translate(-50%, -50%); border-radius: 48% 48% 46% 46%; background: var(--balloon-color); box-shadow: inset -3px -5px 8px #00000026, 0 2px 5px #0000001a; pointer-events: none; }
-.balloon::before { content: ""; position: absolute; left: 20%; top: 14%; width: 23%; height: 32%; border-radius: 50%; background: #ffffff75; transform: rotate(25deg); }
-.balloon::after { content: ""; position: absolute; top: 97%; left: 40%; width: 20%; height: 9%; background: var(--balloon-color); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
-.balloon-string { position: absolute; display: block; left: 48%; top: 105%; width: 15%; height: 45%; border-left: 1px solid var(--muted); border-radius: 50%; pointer-events: none; }
+.balloon { position: absolute; display: block; width: calc(var(--bar-width) * var(--balloon-bars)); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle at 30% 25%, #ffffff85, transparent 60%), var(--balloon-color); box-shadow: inset -3px -5px 8px #00000030, 0 2px 5px #0000001a; pointer-events: none; }
 .meter { position: relative; height: 100%; min-width: 0; border-bottom: 3px solid var(--band-color); }
 .meter-fill { position: absolute; inset: var(--balloon-headroom) 0 0; background: var(--band-color); border-radius: 5px 5px 0 0; transform-origin: bottom; transform: scaleY(0); }
 .meter-edge { position: absolute; bottom: 0; left: 0; right: 0; height: 0; opacity: 0; border: 1px solid white; border-bottom: 0; border-radius: 5px 5px 0 0; box-shadow: inset 0 0 4px #FFFFFF99, 0 0 8px color-mix(in srgb, var(--band-color) 65%, transparent); pointer-events: none; }
