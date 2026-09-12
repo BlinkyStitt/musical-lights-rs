@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::{components::*, path};
 
+mod balloons;
 mod components;
 mod display;
 mod pages;
