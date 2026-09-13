@@ -136,6 +136,51 @@ local app-server session loaded the trusted project layer and confirmed
 or a model turn. These are local results; CI and deployment have separate
 status.
 
+## 24 rounded browser bars
+
+The 2026-09-13 change returns the browser to the shared 24-band display and
+doubles the decorative spheres from 12 to 24. The curved collision surfaces
+use the same quarter-width corner radius as CSS. Collision substeps include
+bar rise, so a fast attack cannot pass through a sphere. A full white overlay
+uses the existing attack envelope and covers the colored baseline too.
+
+Pinned `core`, `worklet`, `leptos`, and `wasm` validation passed locally. Core
+ran 41 tests in each of four feature configurations and passed its Clippy
+feature matrix. Leptos passed 29 host tests, host and WASM Clippy, formatting,
+and its release build. New physics regressions reproduced vertical-only
+corner rebounds and bars crossing spheres before the fixes.
+
+All 92 browser/worklet tests passed with host access and the standard three
+workers. Chromium and WebKit both check 24-bar geometry, full-height glow,
+keyboard access, readout labels, fullscreen exit, and route cleanup. The suite
+also checks 24 sphere bodies, separation against rendered rounded corners,
+mouse and sensor input, touch gestures, and the three-second readout timeout.
+No new macOS browser crash reports appeared during these checks.
+
+A 100-second deterministic release-WASM comparison against PR #6 checked
+37,500 snapshots and total sones. All 146 shared motion values remained
+bit-identical. The browser now transfers only those 146 f64 values (1,168 bytes).
+The 240 internal loudness samples remain part of the acoustic model.
+
+The [release measurements](rounded-bars-results/current.json) used five seconds
+of warmup and 30 seconds of real AudioWorklet input per browser. Desktop Chromium
+delivered 60.00 animation frames/s; Mac WebKit with an iPhone 13 profile delivered
+60.49. The 95th-percentile callback cost through queued microtasks was 4.24 ms
+and 6.72 ms respectively. Both recovered after a deliberate 300 ms UI stall
+with only one old packet. These are Mac measurements, not physical iPhone
+measurements. The [desktop](rounded-bars-results/desktop.png) and
+[mobile](rounded-bars-results/mobile.png) screenshots show the release app;
+their FPS labels include the deliberate stall after the measurement window.
+The share-image renderer also passed.
+
+Linux CI exposed a test-fixture failure in the added WebKit audio checks:
+garbage collection can discard an override on the native `MediaDevices`
+instance. An explicit browser collection reproduced both startup failures
+locally. Those fixtures now override `MediaDevices.prototype`, as the existing
+iPhone checks do, and collect garbage before capture to preserve the regression.
+
+These results describe local validation. CI and deployment have separate status.
+
 ## Measurement evidence
 
 The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.

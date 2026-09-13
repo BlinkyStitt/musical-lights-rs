@@ -46,7 +46,7 @@ struct Resources {
     layer: HtmlElement,
     nodes: Vec<HtmlElement>,
     meters: Vec<HtmlElement>,
-    fill: HtmlElement,
+    track: HtmlElement,
     world: BalloonWorld,
     frame: DisplayFrame<DISPLAY_BANDS>,
     geometry: Geometry,
@@ -75,8 +75,8 @@ impl BalloonAnimation {
         if nodes.len() != BALLOON_COUNT || meters.len() != DISPLAY_BANDS {
             return Err(JsValue::from_str("Incomplete balloon or meter layer"));
         }
-        let fill = meters[0]
-            .query_selector(".meter-fill")?
+        let track = meters[0]
+            .query_selector(".meter-track")?
             .ok_or_else(|| JsValue::from_str("No meter drawing area"))?
             .dyn_into()?;
         let reduced_motion = window.match_media("(prefers-reduced-motion: reduce)")?;
@@ -85,7 +85,7 @@ impl BalloonAnimation {
             layer: layer.clone(),
             nodes,
             meters,
-            fill,
+            track,
             world,
             frame: DisplayFrame::default(),
             geometry: Geometry {
@@ -95,6 +95,7 @@ impl BalloonAnimation {
                 }; DISPLAY_BANDS],
                 bar_height: 0.0,
                 aspect: 1.0,
+                baseline: 0.0,
             },
             size: (0.0, 0.0),
             reduced_motion,
@@ -214,8 +215,8 @@ impl Resources {
                 right: (bar.right() - bounds.left()) / size.0,
             }
         });
-        // The untransformed fill excludes the headroom and meter baseline.
-        let bar_height = self.fill.client_height() as f64 / size.1;
+        // The fixed track excludes the headroom and the colored baseline.
+        let bar_height = self.track.get_bounding_client_rect().height() / size.1;
         if self.geometry.bar_height > 0.0 {
             for level in &mut self.world.previous_levels {
                 *level *= bar_height / self.geometry.bar_height;
@@ -225,6 +226,8 @@ impl Resources {
             bars,
             bar_height,
             aspect: size.0 / size.1,
+            baseline: (self.meters[0].get_bounding_client_rect().bottom() - bounds.bottom())
+                / size.1,
         };
     }
 

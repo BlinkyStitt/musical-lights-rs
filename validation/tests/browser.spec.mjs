@@ -2,13 +2,13 @@ import { test, expect } from '@playwright/test';
 import { meterPoint } from '../meter-input.mjs';
 const leptos = 'http://127.0.0.1:8101';
 
-test('Leptos renders routes and 240 meters without the temporary counter', async ({ page }) => {
+test('Leptos renders routes and 24 meters without the temporary counter', async ({ page }) => {
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.log('page error:', error.message); });
   await page.goto(leptos);
   await expect(page.getByRole('heading', { name: 'Musical Lights' })).toBeVisible();
   await expect(page.locator('#dancinglights > div')).toHaveCount(24);
   expect(await page.getByRole('meter').evaluateAll(nodes => nodes.slice(0, 5).map(n => n.getAttribute('aria-label'))))
-    .toEqual(['≈ 0–10 Hz', '≈ 10–20 Hz', '≈ 20–30 Hz', '≈ 30–40 Hz', '≈ 40–50 Hz']);
+    .toEqual(['≈ 0–100 Hz', '≈ 100–200 Hz', '≈ 200–300 Hz', '≈ 300–400 Hz', '≈ 400–510 Hz']);
   await expect(page.getByRole('button', { name: /Click me|counter/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Pause display|Resume display/i })).toHaveCount(0);
   await expect(page.getByText('Every band has room')).toHaveCount(0);
@@ -83,7 +83,7 @@ test('microphone denial displays an error and closes the audio context', async (
 });
 
 for (const rate of [44100, 48000]) {
-  test(`real audio peaks above full scale update 240 meters at ${rate} Hz and release resources`, async ({ page }) => {
+  test(`real audio peaks above full scale update 24 meters at ${rate} Hz and release resources`, async ({ page }) => {
     const errors = []; page.on('pageerror', error => { errors.push(error.message); console.log('page error:', error.message); });
     await trackAnimation(page);
     await page.addInitScript(({ rate }) => {
@@ -115,7 +115,7 @@ for (const rate of [44100, 48000]) {
       };
     }, { rate });
     await page.goto(leptos);
-    await expect(page.getByRole('meter')).toHaveCount(240);
+    await expect(page.getByRole('meter')).toHaveCount(24);
     const bandColors = await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
     await page.getByRole('button', { name: 'Start listening' }).click();
     await expect(page.getByText(`Sample rate: 48000 Hz`)).toBeVisible();
@@ -198,9 +198,9 @@ for (const colorScheme of ['light', 'dark']) {
       expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
       const meters = await page.getByRole('meter').all();
-      expect(meters).toHaveLength(240);
+      expect(meters).toHaveLength(24);
       const first = await meters[0].boundingBox();
-      const last = await meters[239].boundingBox();
+      const last = await meters[23].boundingBox();
       expect(first.y).toBe(last.y);
       expect(last.x + last.width).toBeLessThan(card.x + card.width);
       await expect(page.getByRole('button', { name: 'Start listening' })).toBeInViewport();
@@ -208,7 +208,7 @@ for (const colorScheme of ['light', 'dark']) {
       expect(first.y).toBeLessThan(200);
       const description = await page.locator('.intro').boundingBox();
       expect(description.y).toBeGreaterThan(first.y + first.height);
-      for (const meter of meters.filter((_, i) => i % 10 === 0 || i === 239)) {
+      for (const meter of meters) {
         const { x, y, label } = await meterPoint(page, meter);
         await page.mouse.move(x, y);
         const tooltip = page.getByRole('tooltip');
@@ -250,7 +250,7 @@ for (const colorScheme of ['light', 'dark']) {
           .map(node => luminance(getComputedStyle(node).backgroundColor));
         const meters = [...document.querySelectorAll('.meter-fill')].map(node => {
           const color = getComputedStyle(node).backgroundColor;
-          return { color, ratio: contrast(luminance(color), surfaces[2]), baseline: getComputedStyle(node.parentElement).borderBottomColor };
+          return { color, ratio: contrast(luminance(color), surfaces[2]), bottomInset: getComputedStyle(node).bottom };
         });
         return { text, surfaces, meters };
       });
@@ -259,9 +259,9 @@ for (const colorScheme of ['light', 'dark']) {
         else expect(surface).toBeGreaterThan(.8);
       }
       expect(new Set(colors.meters.map(meter => meter.color)).size).toBe(24);
-      for (const { color, ratio, baseline } of colors.meters) {
+      for (const { color, ratio, bottomInset } of colors.meters) {
         expect(ratio, color).toBeGreaterThanOrEqual(3);
-        expect(baseline).toBe(color);
+        expect(bottomInset).toBe('-3px');
       }
       for (const { selector, ratio } of colors.text) expect(ratio, selector).toBeGreaterThanOrEqual(4.5);
       await page.screenshot({ path: `test-results/leptos-layout-${width}-${colorScheme}.png`, fullPage: true });

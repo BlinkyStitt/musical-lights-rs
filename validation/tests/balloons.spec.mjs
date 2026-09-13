@@ -76,20 +76,14 @@ async function prepare(page, permission = 'granted') {
       y: 1 - Number.parseFloat(node.style.top) / 100,
       color: node.style.getPropertyValue('--balloon-color'),
     }));
-    window.sendBalloonBars = (levels, fineLevels = levels) => {
+    window.sendBalloonBars = (levels) => {
       const at = window.balloonClock();
-      const state = new Float64Array(1588);
+      const state = new Float64Array(146);
       state[0] = at;
       state[1] = Number(matchMedia('(prefers-reduced-motion: reduce)').matches);
-      state[146] = at;
-      state[147] = state[1];
       for (let band = 0; band < 24; band++) {
         const level = levels[band] ?? 0;
         state.set([level, 0, at + 100, 0, level, level], 2 + band * 6);
-        for (let local = 0; local < 10; local++) {
-          const fine = fineLevels[band] ?? 0;
-          state.set([fine, 0, at + 100, 0, fine, fine / 10], 148 + (band * 10 + local) * 6);
-        }
       }
       window.balloonNode.port.dispatchEvent(new MessageEvent('message', {
         data: { type: 'frame', state, sones: 0, clipped: 0, calibration: 0 },
@@ -97,7 +91,7 @@ async function prepare(page, permission = 'granted') {
     };
   }, { permission });
   await page.goto(url);
-  await expect(page.locator('.balloon')).toHaveCount(12);
+  await expect(page.locator('.balloon')).toHaveCount(24);
   return errors;
 }
 
@@ -127,7 +121,7 @@ async function repel(page, index = 4, frames = 45) {
 }
 
 for (const width of [375, 1440]) {
-  test(`12 round spheres start with colors from x position at ${width}px`, async ({ page }) => {
+  test(`24 round spheres start with colors from x position at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const errors = await prepare(page);
     await expect(page.locator('#dancinglights > div')).toHaveCount(24);
@@ -239,7 +233,8 @@ test('mouse repulsion moves a balloon across other colors without recoloring it'
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors = await prepare(page);
   await startFrozen(page);
-  const { before, after } = await repel(page, 4, 240);
+  // Follow a small ball that can move through the gaps between larger bodies.
+  const { before, after } = await repel(page, 0, 240);
   expect(after.x).toBeGreaterThan(before.x + 1 / 24);
   expect(after.color).toBe(before.color);
   const calls = await page.evaluate(() => window.motionPermissionCalls);
@@ -357,15 +352,26 @@ test('rising bars push overlapping balloons and only new impacts blend their col
   expect((await page.evaluate(() => window.readBalloons()))[0].color).toBe(hit[0].color);
   const geometry = await page.evaluate(() => {
     const layer = document.querySelector('.balloon-layer').getBoundingClientRect();
-    const barTop = document.querySelector('.meter-fill').getBoundingClientRect().top;
+    const bars = [...document.querySelectorAll('.meter-fill')].map(node => ({
+      box: node.getBoundingClientRect(),
+      corner: Number.parseFloat(getComputedStyle(node).borderTopLeftRadius),
+    }));
     return [...document.querySelectorAll('.balloon')].map(node => {
       const body = node.getBoundingClientRect();
-      return { top: body.top, bottom: body.bottom, layerTop: layer.top, barTop };
+      const x = body.x + body.width / 2, y = body.y + body.height / 2;
+      // A circle may sit lower between two rounded caps. Measure its distance
+      // to the actual CSS surface, rather than intersecting bounding boxes.
+      const overlaps = bars.map(({ box, corner }) => {
+        const dx = Math.max(box.left + corner - x, 0, x - (box.right - corner));
+        const dy = Math.max(box.top + corner - y, 0);
+        return body.width / 2 + corner - Math.hypot(dx, dy);
+      });
+      return { top: body.top, layerTop: layer.top, maximumBarOverlap: Math.max(...overlaps) };
     });
   });
   for (const body of geometry) {
     expect(body.top).toBeGreaterThanOrEqual(body.layerTop - 1);
-    expect(body.bottom).toBeLessThanOrEqual(body.barTop + 1);
+    expect(body.maximumBarOverlap).toBeLessThan(1);
   }
   await page.screenshot({ path: 'test-results/balloon-impacts.png', fullPage: true });
   expect(errors).toEqual([]);
@@ -460,25 +466,25 @@ for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
 }
 
 
-test('fine group maxima do not replace the 24 aggregate collision surfaces', async ({ page }) => {
+test('the 24 visible bar heights also drive sphere collisions', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors = await prepare(page);
   await startFrozen(page);
   const before = (await page.evaluate(() => window.readBalloons()))[0];
   await page.evaluate(async () => {
-    window.sendBalloonBars(Array(24).fill(0), Array(24).fill(1));
+    window.sendBalloonBars(Array(24).fill(0));
     await window.advanceBalloons(6);
   });
-  const fineOnly = (await page.evaluate(() => window.readBalloons()))[0];
-  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '100');
-  expect(fineOnly.y).toBeLessThan(before.y);
-  expect(fineOnly.color).toBe(before.color);
+  const silent = (await page.evaluate(() => window.readBalloons()))[0];
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '0');
+  expect(silent.y).toBeLessThan(before.y);
+  expect(silent.color).toBe(before.color);
   await page.evaluate(async () => {
-    window.sendBalloonBars(Array(24).fill(1), Array(24).fill(0));
+    window.sendBalloonBars(Array(24).fill(1));
     await window.advanceBalloons(6);
   });
   const aggregateHit = (await page.evaluate(() => window.readBalloons()))[0];
-  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '100');
   expect(aggregateHit.y).toBeGreaterThan(before.y + .1);
   expect(aggregateHit.color).not.toBe(before.color);
   expect(errors).toEqual([]);

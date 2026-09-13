@@ -25,11 +25,6 @@ impl Default for VisualGain {
 impl VisualGain {
     /// One gain for the canonical 24-band spectrum, regardless of panel layout.
     pub fn map(&mut self, frame: &LoudnessFrame) -> VisualLevels {
-        self.map_with_gain(frame).0
-    }
-
-    /// Advance once and return the same gain for every output of this frame.
-    pub(super) fn map_with_gain(&mut self, frame: &LoudnessFrame) -> (VisualLevels, f32) {
         let bands = frame.bands();
         let maximum = bands.iter().copied().fold(0.0_f32, f32::max) as f64;
         if frame.sones >= 0.1 && maximum > 0.0 {
@@ -40,7 +35,7 @@ impl VisualGain {
         }
         let gain = Float::exp(self.log_gain) as f32;
         let compress = |value| compress(gain, value);
-        let levels = VisualLevels {
+        VisualLevels {
             bands: bands.map(compress),
             panel_rows: core::array::from_fn(|row| {
                 compress(if row == 0 {
@@ -49,13 +44,12 @@ impl VisualGain {
                     bands[row + BASS_BANDS - 1]
                 })
             }),
-        };
-        (levels, gain)
+        }
     }
 }
 
 /// Apply a frame's shared gain without changing the measured value.
-pub(super) fn compress(gain: f32, value: f32) -> BandLevel {
+fn compress(gain: f32, value: f32) -> BandLevel {
     let x = gain * value;
     BandLevel {
         activity: x / (1.0 + x),
@@ -359,17 +353,16 @@ mod tests {
         assert_eq!(gain.log_gain, previous_gain);
     }
     #[test]
-    fn combined_bar_and_white_edge_limit_flashes_under_rapid_changes() {
-        // Sample the fixed side edge and the moving top edge at each height.
-        // Count luminance reversals >= 0.1, including a white border crossing a
-        // pixel that was already colored. Height-only checks miss that case.
+    fn combined_bar_and_glow_limit_flashes_under_rapid_changes() {
+        // Sample the whole white glow at each height, including changes over
+        // already colored pixels. Count luminance reversals of at least 0.1.
         for reduced_motion in [false, true] {
             for period_ms in [20, 80, 150, 250, 350, 500, 800] {
                 for plot_luminance in [0.01_f32, 0.92] {
                     let mut display = DisplaySnapshot::<24>::new(0.0);
-                    let mut previous = [plot_luminance; 200];
-                    let mut direction = [0_i8; 200];
-                    let mut reversals: [Vec<usize>; 200] = core::array::from_fn(|_| Vec::new());
+                    let mut previous = [plot_luminance; 100];
+                    let mut direction = [0_i8; 100];
+                    let mut reversals: [Vec<usize>; 100] = core::array::from_fn(|_| Vec::new());
                     for ms in (0..6000).step_by(2) {
                         let input = if ms % period_ms < 10 { 1.0 } else { 0.0 };
                         display.push(
@@ -378,18 +371,13 @@ mod tests {
                             reduced_motion,
                         );
                         let frame = display.frame(ms as f64 / 1000.0);
-                        for pixel in 0..200 {
-                            let y = ((pixel % 100) as f32 + 0.5) / 100.0;
+                        for pixel in 0..100 {
+                            let y = (pixel as f32 + 0.5) / 100.0;
                             let height = frame.levels[0];
                             let lit = y <= height;
-                            let border = pixel < 100 || height - y <= 1.0 / 320.0;
                             let luminance = if lit {
                                 let color = 0.26;
-                                if border {
-                                    color + (1.0 - color) * frame.edges[0]
-                                } else {
-                                    color
-                                }
+                                color + (1.0 - color) * frame.edges[0]
                             } else {
                                 plot_luminance
                             };

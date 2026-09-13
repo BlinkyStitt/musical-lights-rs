@@ -15,8 +15,8 @@ const processors = await Promise.all(paths.map(async path => {
     sha256: createHash('sha256').update(bytes).digest('hex') };
 }));
 const [baseline, current] = processors;
-assert.equal(baseline.wasm.processor_snapshot_length(baseline.handle), 146);
-assert.equal(current.wasm.processor_snapshot_length(current.handle), 1588);
+assert(baseline.wasm.processor_snapshot_length(baseline.handle) >= 146);
+assert.equal(current.wasm.processor_snapshot_length(current.handle), 146);
 const samples = 48000 * 100;
 let seed = 1, compared = 0;
 try {

@@ -28,7 +28,7 @@ pub fn Home() -> impl IntoView {
                 <section class="intro" aria-labelledby="page-title">
                     <p class="eyebrow">"ABOUT THE DISPLAY"</p>
                     <h1 id="page-title">"Musical Lights"</h1>
-                    <p>"A detailed sound spectrum in 24 color regions."</p>
+                    <p>"24 colorful bars bring your sound to life."</p>
                 </section>
                 <section class="how-it-works" aria-label="About the display">
                     <div><h3>"An easier pace"</h3><p>"Meters rise with each beat, then fall gently. Tap, hover, or focus the spectrum to see approximate frequency labels."</p></div>

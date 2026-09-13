@@ -14,6 +14,7 @@ fn geometry() -> Geometry {
         }),
         bar_height: 0.65,
         aspect: 1.2,
+        baseline: 0.0,
     }
 }
 
@@ -144,7 +145,10 @@ fn starting_sizes_positions_and_palette_are_deterministic() {
     assert_eq!(first.balloons, world().balloons);
     assert_eq!(
         first.balloons.map(|b| b.width_in_bars),
-        [0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5]
+        [
+            0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5, 0.65, 1.0, 1.2, 0.8, 1.4,
+            0.55, 0.7, 1.1, 1.6, 0.9, 1.3, 0.6
+        ]
     );
     let first = world();
     assert_eq!(first.balloons[0].position, Vector { x: 0.08, y: 0.52 });
@@ -267,6 +271,29 @@ fn boundaries_reflect_outward_motion_and_keep_inward_motion() {
     velocity = -0.4;
     clamp_axis(&mut position, &mut velocity, 0.1, 0.7);
     assert_eq!((position, velocity), (0.9, -0.4));
+}
+
+#[test]
+fn a_fast_rise_cannot_pass_through_balls_above_rounded_corners() {
+    let mut geometry = geometry();
+    geometry.aspect = 1.8;
+    geometry.bars = std::array::from_fn(|i| Bar {
+        left: i as f64 / 24.0,
+        right: (i as f64 + 0.95) / 24.0,
+    });
+    let mut world = world();
+    let mut frame = DisplayFrame::default();
+    frame.levels.fill(1.0);
+    world.step(1.0 / 60.0, frame, geometry);
+    for ball in &world.balloons {
+        // Even a ball directly above a gap rests on the facing circular caps.
+        let corner =
+            (geometry.bars[0].right - geometry.bars[0].left) * geometry.aspect * BAR_CORNER_RATIO;
+        assert!(
+            ball.position.y - geometry.radii(ball).y >= geometry.bar_height - corner,
+            "ball passed through rising bars: {ball:?}"
+        );
+    }
 }
 
 #[test]
@@ -416,37 +443,47 @@ fn stronger_rise_and_incoming_speed_create_larger_color_shifts() {
 #[test]
 fn simultaneous_hits_blend_in_ascending_bar_order() {
     let mut world = world();
-    world.balloons[0].width_in_bars = 4.0;
-    world.balloons[0].position = Vector { x: 0.5, y: 0.35 };
-    let mut expected = world.balloons[0].clone();
-    let radius = geometry().radii(&expected);
-    let hits: Vec<_> = geometry()
-        .bars
-        .iter()
-        .enumerate()
-        .filter(|(_, bar)| {
-            expected.position.x + radius.x >= bar.left
-                && expected.position.x - radius.x <= bar.right
-        })
-        .map(|(i, _)| i)
-        .collect();
-    assert_eq!(hits, [10, 11, 12, 13]);
-    // Use a normal-speed, saturated impact so each blend reaches the 50% cap.
     world.reduced = false;
-    world.balloons[0].velocity.y = -1.0;
-    for i in hits {
-        expected.impact_color(world.palette[i], 1.0);
+    let geometry = geometry();
+    for (i, other) in world.balloons.iter_mut().enumerate().skip(1) {
+        other.width_in_bars = 0.05;
+        other.position = Vector {
+            x: 0.6 + i as f64 * 0.014,
+            y: 0.1,
+        };
     }
-    world.step(
-        MAX_DT,
-        DisplayFrame {
-            levels: [1.0; DISPLAY_BANDS],
-            edges: [0.0; DISPLAY_BANDS],
-        },
-        geometry(),
-    );
+    // A circle centered over the gap touches the two facing rounded caps.
+    // Outer bars do not collide just because they enter its bounding box.
+    world.balloons[0].width_in_bars = 1.0;
+    let radius = geometry.radii(&world.balloons[0]).y;
+    let corner =
+        (geometry.bars[11].right - geometry.bars[11].left) * geometry.aspect * BAR_CORNER_RATIO;
+    let x = (geometry.bars[11].right + geometry.bars[12].left) * 0.5;
+    let dx = (x - geometry.bars[11].right) * geometry.aspect + corner;
+    let top = 0.4;
+    world.balloons[0].position = Vector {
+        x,
+        y: top - corner + ((radius + corner).powi(2) - dx.powi(2)).sqrt(),
+    };
+    world.balloons[0].velocity.y = -3.0;
+    let mut levels = [0.0; DISPLAY_BANDS];
+    levels[11] = top;
+    levels[12] = top;
+    world.previous_levels = levels;
+    let mut expected = world.balloons[0].clone();
+    expected.impact_color(world.palette[11], 1.0);
+    expected.impact_color(world.palette[12], 1.0);
+    world.advance(1.0 / 240.0, levels, geometry);
     assert_eq!(world.balloons[0].color, expected.color);
-    assert!(world.balloons[0].position.y - radius.y >= geometry().bar_height);
+    assert_eq!(
+        world.balloons[0]
+            .contacts
+            .iter()
+            .enumerate()
+            .filter_map(|(i, hit)| hit.then_some(i))
+            .collect::<Vec<_>>(),
+        [11, 12]
+    );
 }
 
 #[test]
@@ -590,4 +627,49 @@ fn a_resting_floor_contact_does_not_bounce_from_one_frame_of_gravity() {
         assert_eq!(world.balloons[0].position.y, radius.y);
         assert_eq!(world.balloons[0].velocity.y, 0.0);
     }
+}
+
+#[test]
+fn rounded_caps_deflect_falling_balls_outward_with_mirrored_impulses() {
+    let geometry = geometry();
+    let bar = geometry.bars[8];
+    let top = 0.6_f32 as f64 * geometry.bar_height;
+    let corner = (bar.right - bar.left) * geometry.aspect * BAR_CORNER_RATIO;
+    let mut velocities = Vec::new();
+    for side in [-1.0, 1.0] {
+        let mut world = world();
+        world.reduced = false;
+        for (i, other) in world.balloons.iter_mut().enumerate().skip(1) {
+            other.width_in_bars = 0.05;
+            other.position = Vector {
+                x: 0.6 + i as f64 * 0.014,
+                y: 0.1,
+            };
+        }
+        let radius = geometry.radii(&world.balloons[0]).y;
+        let center = if side < 0.0 {
+            bar.left + corner / geometry.aspect
+        } else {
+            bar.right - corner / geometry.aspect
+        };
+        world.balloons[0].position = Vector {
+            x: center + side * 0.7 * (corner + radius) / geometry.aspect,
+            y: top - corner + 0.7 * (corner + radius) + 0.001,
+        };
+        world.balloons[0].velocity.y = -1.0;
+        world.previous_levels[8] = top;
+        let color = world.balloons[0].color;
+        world.step(1.0 / 240.0, frame(8, 0.6), geometry);
+        let ball = &world.balloons[0];
+        assert!(
+            ball.velocity.x * side > 0.2,
+            "corner must throw the ball outward: {:?}",
+            ball.velocity
+        );
+        assert_ne!(ball.color, color);
+        assert!((ball.velocity.x * geometry.aspect).hypot(ball.velocity.y) < 1.03);
+        velocities.push(ball.velocity);
+    }
+    assert!((velocities[0].x + velocities[1].x).abs() < 1e-10);
+    assert!((velocities[0].y - velocities[1].y).abs() < 1e-10);
 }

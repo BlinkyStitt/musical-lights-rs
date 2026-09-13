@@ -6,7 +6,6 @@
 //! TODO: bucket by note
 mod amplitudes;
 mod bark_scale;
-pub mod browser_visual;
 mod buffered_fft;
 mod decibels;
 mod down_resistance_builder;

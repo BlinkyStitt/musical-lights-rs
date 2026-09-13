@@ -29,7 +29,7 @@ test('share metadata and image work without JavaScript', async ({ browser, reque
 
 test('mounting and navigation preserve a single set of share metadata', async ({ page }) => {
   await page.goto('http://127.0.0.1:8101');
-  await expect(page.getByRole('meter')).toHaveCount(240);
+  await expect(page.getByRole('meter')).toHaveCount(24);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'About Musical Lights' })).toBeVisible();
   for (const property of ['og:title', 'og:description', 'og:image', 'og:type', 'og:url']) {

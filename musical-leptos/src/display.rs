@@ -1,5 +1,5 @@
 use crate::wasm_audio::AudioSession;
-use musical_lights_core::audio::browser_visual::{BrowserFrame, BrowserSnapshot};
+use musical_lights_core::audio::visual::{DISPLAY_BANDS, DisplayFrame, DisplaySnapshot};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
@@ -37,7 +37,7 @@ pub struct DisplayAnimation(Rc<RefCell<Option<AnimationResources>>>);
 struct AnimationResources {
     window: web_sys::Window,
     reduced_motion: Option<web_sys::MediaQueryList>,
-    display: BrowserSnapshot,
+    display: DisplaySnapshot<DISPLAY_BANDS>,
     session: AudioSession,
     motion: bool,
     frame_rate: FrameRate,
@@ -48,7 +48,7 @@ struct AnimationResources {
 impl DisplayAnimation {
     pub fn new(
         session: AudioSession,
-        mut on_frame: impl FnMut(BrowserFrame, Option<f64>) + 'static,
+        mut on_frame: impl FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>) + 'static,
     ) -> Result<Self, JsValue> {
         let window =
             web_sys::window().ok_or_else(|| JsValue::from_str("Browser window is unavailable"))?;
@@ -58,7 +58,7 @@ impl DisplayAnimation {
         let resources = Rc::new(RefCell::new(Some(AnimationResources {
             window,
             reduced_motion,
-            display: BrowserSnapshot::new(session.time()),
+            display: DisplaySnapshot::new(session.time()),
             session,
             motion,
             frame_rate: FrameRate::default(),
@@ -117,7 +117,7 @@ impl DisplayAnimation {
         self.0.borrow_mut().take();
     }
 
-    pub fn push(&self, snapshot: BrowserSnapshot) {
+    pub fn push(&self, snapshot: DisplaySnapshot<DISPLAY_BANDS>) {
         if let Some(resources) = self.0.borrow_mut().as_mut()
             && snapshot.timestamp() >= resources.display.timestamp()
         {
