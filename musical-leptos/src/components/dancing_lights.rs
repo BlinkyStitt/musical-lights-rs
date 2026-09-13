@@ -7,7 +7,9 @@ use crate::{
 use leptos::prelude::*;
 use musical_lights_core::{
     audio::{
-        browser_visual::{BrowserFrame, SLICES_PER_GROUP, slice_colors, slice_frequency_edges},
+        browser_visual::{
+            BROWSER_SLICES, BrowserFrame, SLICES_PER_GROUP, slice_colors, slice_frequency_edges,
+        },
         visual::{BARK_EDGES, DISPLAY_BANDS},
     },
     lights::{Gradient, screen_color},
@@ -46,6 +48,29 @@ pub fn DancingLights() -> impl IntoView {
     let colors = slice_colors(90.0, 58.0);
     let frequency_edges = slice_frequency_edges();
     let idle_balloons = BalloonWorld::new(palette);
+    let (active_sample, set_active_sample) = signal(0usize);
+    let sample_nodes = StoredValue::new(std::array::from_fn::<_, BROWSER_SLICES, _>(|_| {
+        NodeRef::<leptos::html::Div>::new()
+    }));
+    let navigate_sample = move |event: web_sys::KeyboardEvent| {
+        if event.alt_key() || event.ctrl_key() || event.meta_key() || event.shift_key() {
+            return;
+        }
+        let index = active_sample.get_untracked();
+        let next = match event.key().as_str() {
+            "ArrowLeft" => index.saturating_sub(1),
+            "ArrowRight" => (index + 1).min(BROWSER_SLICES - 1),
+            "Home" => 0,
+            "End" => BROWSER_SLICES - 1,
+            _ => return,
+        };
+        event.prevent_default();
+        if let Some(sample) = sample_nodes.with_value(|nodes| nodes[next].get_untracked())
+            && let Err(error) = sample.focus()
+        {
+            log::warn!("Could not focus spectrum sample: {error:?}");
+        }
+    };
     let (selected_band, set_selected_band) = signal(None::<usize>);
     let tooltip_timer = StoredValue::new(None::<TimeoutHandle>);
     let clear_tooltip_timer = move || {
@@ -265,7 +290,7 @@ pub fn DancingLights() -> impl IntoView {
                     </Show>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
-                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; tap the top or press Escape to exit" }
+                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; click Exit fullscreen to return" }
                         on:click=move |_| screen.with_value(|session| {
                             if let Some(session) = session { session.toggle_fullscreen(); }
                         })>
@@ -279,7 +304,7 @@ pub fn DancingLights() -> impl IntoView {
                 </p>
             </div>
             <div class="spectrum-panel">
-                <p class="fullscreen-hint">"Tap the top to exit · Esc on keyboard"</p>
+                <p class="fullscreen-hint">"Click Exit fullscreen"</p>
                 <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
                     hidden=move || selected_band.get().is_none()
                     style=move || selected_band.get().map(|index| {
@@ -289,7 +314,7 @@ pub fn DancingLights() -> impl IntoView {
                     <span class="frequency-swatch" aria-hidden="true"></span>
                     <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[index], frequency_edges[index + 1]))}</span>
                 </div>
-                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble">
+                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble" on:keydown=navigate_sample>
                     {BARK_EDGES.windows(2).enumerate().map(|(group, edges)| {
                         let color = screen_color(palette.colors[group]);
                         let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
@@ -300,11 +325,16 @@ pub fn DancingLights() -> impl IntoView {
                                     let i = group * SLICES_PER_GROUP + local;
                                     let label = format!("≈ {}–{} Hz", frequency_edges[i], frequency_edges[i + 1]);
                                     view! {
-                                        <div class="meter" role="meter" aria-label=label tabindex="0"
+                                        <div class="meter" role="meter" aria-label=label
+                                            node_ref=sample_nodes.with_value(|nodes| nodes[i])
+                                            tabindex=move || if active_sample.get() == i { "0" } else { "-1" }
                                             aria-describedby=move || (selected_band.get() == Some(i)).then_some("frequency-readout")
                                             on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(i, false); } }
                                             on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(i); } }
-                                            on:focus=move |event| { if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); } }
+                                            on:focus=move |event| {
+                                                set_active_sample.set(i);
+                                                if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); }
+                                            }
                                             on:blur=move |_| hide_band(i)
                                             aria-valuemin="0" aria-valuemax="100"
                                             aria-valuenow=move || audio.with(|frame| (frame.slices[i] * 100.0).round() as u32)>

@@ -14,6 +14,42 @@ Individual targets are `core`, `worklet`, `terminal`, `leptos`, `dioxus`, `wasm`
 
 For Codex on macOS, run `python3 validation/validate.py browser` with approved host access (`sandbox_permissions: "require_escalated"`). The filesystem sandbox can block browser service registration even when network access is enabled. Keep normal commands in `workspace-write` and permit approval requests with `approval_policy = "on-request"`; disabling the sandbox for the whole session is unnecessary. Project configuration cannot override a managed session policy. See [Codex approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security). A sandbox launch error alone does not establish that browser tests are unavailable: request host access and report its actual result.
 
+Run these commands from the repository root with `.tools/bin` on `PATH`:
+
+```sh
+export PATH="$PWD/.tools/bin:$PATH"
+python3 validation/validate.py leptos
+python3 validation/validate.py browser
+```
+
+For a focused browser check, use host access with this command. Add test files,
+`--grep`, or `--project` after the configuration path:
+
+```sh
+.tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs
+```
+
+The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
+and network access. `.codex/rules/browser-tests.rules` allows the two browser
+command prefixes above outside the sandbox. Rules match command tokens; run
+from the repository root so the relative paths select this repository's tools.
+The Python prefix also matches extra validation targets after `browser`.
+
+Codex loads trusted project configuration and rules at startup. Restart Codex
+after changing them. Existing session or CLI overrides and managed restrictions
+can still take precedence. See [configuration precedence](https://learn.chatgpt.com/docs/config-file/config-basic)
+and [project rules](https://learn.chatgpt.com/docs/agent-configuration/rules).
+Check the command matches without launching a browser:
+
+```sh
+codex execpolicy check --rules .codex/rules/browser-tests.rules -- python3 validation/validate.py browser
+codex execpolicy check --rules .codex/rules/browser-tests.rules -- .tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs --project webkit-spectrum
+```
+
+The rule file includes matching and nonmatching examples. Codex checks these
+examples when it loads the file. Unrelated Python, Node, and shell commands do
+not receive host access from these rules.
+
 The browser and preview suites check startup serially before test workers start.
 Each selected project must launch its configured browser, open a blank page,
 and close the browser. A failure stops the run with a nonzero exit status and
@@ -79,6 +115,26 @@ and the share-image preview check passed with the pinned tools. The browser
 and preview runs used approved host access on the Mac. No new Chromium or
 WebKit crash reports appeared during verification. These checks cover the
 existing release builds; this change modifies the validation harness only.
+
+### Spectrum keyboard access and Codex project rules
+
+The 2026-09-12 keyboard fix passed pinned Leptos validation, including 27 host
+tests, Clippy, formatting, and the release build. All 84 browser/worklet checks
+and three startup harness regressions passed with host access on macOS. The
+new Tab-stop regression first failed in Chromium and WebKit against the prior
+release: it found 240 Tab stops instead of one.
+
+Both engines now check all 240 samples in both arrow directions, direct Tab
+exits, remembered focus, Home/End, endpoints, modified keys, visible focus,
+mouse/touch readouts, fullscreen exit, and route cleanup. Screenshot checks
+cover light and dark modes at 375 and 1440 CSS pixels. No new browser crash
+reports appeared during validation.
+
+Codex CLI 0.154.0 passed all 17 rule examples with `execpolicy check`. A fresh
+local app-server session loaded the trusted project layer and confirmed
+`on-request`, `workspaceWrite`, and network access without session overrides
+or a model turn. These are local results; CI and deployment have separate
+status.
 
 ## Measurement evidence
 
