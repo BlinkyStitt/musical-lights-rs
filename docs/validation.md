@@ -205,6 +205,13 @@ passed all 29 host tests, formatting, host/WASM Clippy, and the release build.
 The full host browser suite passed all 92 tests. No new browser crash reports
 appeared. These are local results; CI and deployment have separate status.
 
+The first Linux CI run then passed 91 browser tests and failed one peak-opacity
+assertion: the wall clock had advanced past the hold before WebKit read the
+synthetic frame. Deployment remained blocked. A deliberate 500 ms read delay
+reproduced that failure locally. The fixture now advances its synthetic audio
+clock explicitly through peak, fade, and rest, while retaining that delay.
+All 92 browser tests passed locally after the repair; production timing is unchanged.
+
 ## Measurement evidence
 
 The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.

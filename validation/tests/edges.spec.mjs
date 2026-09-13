@@ -32,9 +32,10 @@ for (const colorScheme of ['light', 'dark']) {
       await page.evaluate(async () => {
         await window.testContext.suspend();
         await new Promise(resolve => setTimeout(resolve, 50));
-        const origin = window.testContext.currentTime;
-        const started = performance.now();
-        window.edgeClock = () => origin + (performance.now() - started) / 1000;
+        // These snapshots use a synthetic audio clock. Host scheduling must not
+        // advance past the attack peak before a slow browser draws the frame.
+        window.edgeNow = window.testContext.currentTime;
+        window.edgeClock = () => window.edgeNow;
         window.edgeNodes = [...document.querySelectorAll('.meter-glow')];
         window.readBands = () => window.edgeNodes.map(node => {
           const fill = node.parentElement;
@@ -80,6 +81,8 @@ for (const colorScheme of ['light', 'dark']) {
       });
       const peak = await page.evaluate(async () => {
         window.tap();
+        // Reproduce a delayed CI read without advancing synthetic audio time.
+        await new Promise(resolve => setTimeout(resolve, 500));
         await window.screenFrame();
         return window.readBands();
       });
@@ -103,11 +106,13 @@ for (const colorScheme of ['light', 'dark']) {
         expect(band.animation).toBe('none');
       }
       await page.screenshot({ path: `test-results/bar-glow-${testInfo.project.name}-${colorScheme}-${reducedMotion}.png`, fullPage: true });
+      await page.evaluate(() => { window.edgeNow += .75; });
       await expect.poll(() => page.evaluate(() => Math.max(...window.readBands().map(band => band.edge)))).toBeLessThan(0.1);
       const fading = await page.evaluate(() => window.readBands());
       expect(fading.some(band => band.level > 0.01)).toBe(true);
       for (const [i, band] of fading.entries()) expect(band.edge).toBeLessThan(band.level / peak[i].level);
-      await expect.poll(() => page.evaluate(() => window.readBands().every(band => band.level === 0 && band.edge === 0)), { timeout: 7000 }).toBe(true);
+      await page.evaluate(() => { window.edgeNow += 10; });
+      await expect.poll(() => page.evaluate(() => window.readBands().every(band => band.level === 0 && band.edge === 0))).toBe(true);
       expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor))).toEqual(palette);
       // Fullscreen keeps the thin border inside all four edges, including the baseline.
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
