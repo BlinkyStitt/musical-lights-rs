@@ -175,6 +175,11 @@ for (const colorScheme of ['light', 'dark']) {
   for (const width of [375, 768, 1440]) {
     test(`spectrum is centered and readable at ${width}px in ${colorScheme} mode`, async ({ page }) => {
       await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+      if (width === 375) {
+        // Slow scheduling exposed a compressed-body animation stall in CI.
+        const cpu = await page.context().newCDPSession(page);
+        await cpu.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+      }
       await page.emulateMedia({ colorScheme });
       await page.addInitScript(() => {
         navigator.mediaDevices.getUserMedia = async () => {
@@ -225,6 +230,8 @@ for (const colorScheme of ['light', 'dark']) {
       await page.keyboard.press('Tab');
       await expect(page.getByRole('tooltip')).toHaveText(await meters[0].getAttribute('aria-label'));
       // Exercise every colored bar through the real audio processor.
+      // Include a collection pause before the first live bar attack.
+      await page.requestGC();
       await page.getByRole('button', { name: 'Start listening' }).click();
       await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
       // Check actual text colors against the background they use.

@@ -227,14 +227,15 @@ impl BalloonWorld {
             .zip(previous)
             .map(|(level, previous)| (level - previous).max(0.0))
             .fold(0.0, f64::max);
-        // Limit travel on each axis to half that body's extent. A thin vertical
-        // capsule does not need tiny vertical steps because its width is small.
-        // Keep bar rise in the vertical bound so attacks cannot cross a body.
+        // Use resting dimensions for integration. Contact pressure can make an
+        // axis arbitrarily thin; it must not multiply the work for a whole
+        // frame. Swept pair contacts below catch fast compressed bodies between
+        // these steps. Bar rise still advances through the resting-size bound.
         let steps = self
             .balloons
             .iter()
             .map(|balloon| {
-                let radius = geometry.radii(balloon);
+                let radius = geometry.rest_radii(balloon);
                 let x = ((balloon.velocity.x + self.shake.x).abs() + 2.0 * dt) * dt;
                 let y =
                     ((balloon.velocity.y + self.shake.y).abs() + (GRAVITY + 2.0) * dt) * dt + rise;
@@ -252,6 +253,7 @@ impl BalloonWorld {
     }
 
     fn advance(&mut self, dt: f64, levels: [f64; DISPLAY_BANDS], geometry: Geometry) {
+        let previous = self.balloons.each_ref().map(|ball| ball.position);
         self.shake_cooldown = (self.shake_cooldown - dt).max(0.0);
         let wind_mix = 1.0 - (-dt * 1.5).exp();
         self.wind.x += (self.target_wind.x - self.wind.x) * wind_mix;
@@ -378,6 +380,20 @@ impl BalloonWorld {
             balloon.contacts = contacts;
             balloon.velocity = balloon.velocity.bounded(MAX_SPEED);
             constrain(balloon, geometry, levels, restitution);
+        }
+        for i in 0..BALLOON_COUNT {
+            let (left, right) = self.balloons.split_at_mut(i + 1);
+            for (offset, other) in right.iter_mut().enumerate() {
+                if let Some(hit) = swept_body_contact(
+                    &left[i],
+                    other,
+                    previous[i],
+                    previous[i + 1 + offset],
+                    geometry,
+                ) {
+                    resolve_pair(&mut left[i], other, geometry, restitution, hit);
+                }
+            }
         }
         self.resolve_contacts(geometry, levels, restitution);
         self.shake = Vector::default();
@@ -563,12 +579,15 @@ fn body_contact(a: &Balloon, b: &Balloon, geometry: Geometry) -> Option<BarConta
         x: sa.x + sb.x,
         y: sa.y + sb.y,
     };
+    capsule_contact(delta, core, ca + cb)
+}
+
+fn capsule_contact(delta: Vector, core: Vector, round: f64) -> Option<BarContact> {
     let offset = Vector {
         x: delta.x - delta.x.clamp(-core.x, core.x),
         y: delta.y - delta.y.clamp(-core.y, core.y),
     };
     let distance = offset.x.hypot(offset.y);
-    let round = ca + cb;
     if distance > 1e-12 {
         return (distance <= round).then_some(BarContact {
             normal: Vector {
@@ -599,6 +618,112 @@ fn body_contact(a: &Balloon, b: &Balloon, geometry: Geometry) -> Option<BarConta
     })
 }
 
+/// Sweep relative centers through the capsules' Minkowski sum: four straight
+/// sides and four circular corners. Contact at any point in the step preserves
+/// body ordering even if two very thin bodies finish on opposite sides.
+fn swept_body_contact(
+    a: &Balloon,
+    b: &Balloon,
+    previous_a: Vector,
+    previous_b: Vector,
+    geometry: Geometry,
+) -> Option<BarContact> {
+    let (sa, ca) = capsule(geometry.radii(a), geometry.aspect);
+    let (sb, cb) = capsule(geometry.radii(b), geometry.aspect);
+    let core = Vector {
+        x: sa.x + sb.x,
+        y: sa.y + sb.y,
+    };
+    let round = ca + cb;
+    let start = Vector {
+        x: (previous_b.x - previous_a.x) * geometry.aspect,
+        y: previous_b.y - previous_a.y,
+    };
+    let end = Vector {
+        x: (b.position.x - a.position.x) * geometry.aspect,
+        y: b.position.y - a.position.y,
+    };
+    if start.x.min(end.x) > core.x + round
+        || start.x.max(end.x) < -core.x - round
+        || start.y.min(end.y) > core.y + round
+        || start.y.max(end.y) < -core.y - round
+    {
+        return None;
+    }
+    let travel = Vector {
+        x: end.x - start.x,
+        y: end.y - start.y,
+    };
+    let length_squared = travel.x * travel.x + travel.y * travel.y;
+    if length_squared < 1e-24 {
+        return None;
+    }
+    let mut first = (f64::INFINITY, Vector::default());
+    let mut consider = |time: f64, normal: Vector| {
+        if (-1e-9..=1.0).contains(&time)
+            && time < first.0
+            && travel.x * normal.x + travel.y * normal.y < 0.0
+        {
+            first = (time.max(0.0), normal);
+        }
+    };
+    if let Some(hit) = capsule_contact(start, core, round) {
+        consider(0.0, hit.normal);
+    }
+    for sign in [-1.0, 1.0] {
+        if travel.x.abs() > 1e-12 {
+            let time = (sign * (core.x + round) - start.x) / travel.x;
+            if (start.y + travel.y * time).abs() <= core.y {
+                consider(time, Vector { x: sign, y: 0.0 });
+            }
+        }
+        if travel.y.abs() > 1e-12 {
+            let time = (sign * (core.y + round) - start.y) / travel.y;
+            if (start.x + travel.x * time).abs() <= core.x {
+                consider(time, Vector { x: 0.0, y: sign });
+            }
+        }
+        for other_sign in [-1.0, 1.0] {
+            let center = Vector {
+                x: sign * core.x,
+                y: other_sign * core.y,
+            };
+            let offset = Vector {
+                x: start.x - center.x,
+                y: start.y - center.y,
+            };
+            let along = offset.x * travel.x + offset.y * travel.y;
+            let distance_squared = offset.x * offset.x + offset.y * offset.y;
+            let discriminant = along * along - length_squared * (distance_squared - round * round);
+            if discriminant < 0.0 {
+                continue;
+            }
+            let time = (-along - discriminant.sqrt()) / length_squared;
+            let point = Vector {
+                x: start.x + travel.x * time - center.x,
+                y: start.y + travel.y * time - center.y,
+            };
+            if point.x * sign >= 0.0 && point.y * other_sign >= 0.0 {
+                let length = point.x.hypot(point.y);
+                if length > 0.0 {
+                    consider(
+                        time,
+                        Vector {
+                            x: point.x / length,
+                            y: point.y / length,
+                        },
+                    );
+                }
+            }
+        }
+    }
+    let normal = first.1;
+    let depth = core.x * normal.x.abs() + core.y * normal.y.abs() + round
+        - end.x * normal.x
+        - end.y * normal.y;
+    (first.0.is_finite() && depth > 0.0).then_some(BarContact { normal, depth })
+}
+
 /// Mass follows the resting circle area, even while the body compresses.
 /// Contact impulses conserve momentum and lose energy.
 /// Only bar impacts own color changes, so this operation never touches color.
@@ -606,6 +731,17 @@ fn collide(a: &mut Balloon, b: &mut Balloon, geometry: Geometry, restitution: f6
     let Some(hit) = body_contact(a, b, geometry) else {
         return 0.0;
     };
+    resolve_pair(a, b, geometry, restitution, hit);
+    hit.depth
+}
+
+fn resolve_pair(
+    a: &mut Balloon,
+    b: &mut Balloon,
+    geometry: Geometry,
+    restitution: f64,
+    hit: BarContact,
+) {
     let normal = hit.normal;
     let ra = geometry.rest_radii(a).y;
     let rb = geometry.rest_radii(b).y;
@@ -642,7 +778,6 @@ fn collide(a: &mut Balloon, b: &mut Balloon, geometry: Geometry, restitution: f6
         b.velocity.x += normal.x * impulse * share_b / geometry.aspect;
         b.velocity.y += normal.y * impulse * share_b;
     }
-    hit.depth
 }
 
 fn constrain(

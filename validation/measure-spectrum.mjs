@@ -143,7 +143,11 @@ try {
       await page.getByRole('button', { name: 'Start listening' }).click();
       await page.getByRole('button', { name: 'Stop listening' }).waitFor();
       await page.waitForTimeout(5000);
-      await page.evaluate(() => window.resetMeasureStats());
+      const startup = await page.evaluate(() => {
+        const stats = window.measureStats;
+        window.resetMeasureStats();
+        return stats;
+      });
       await page.waitForTimeout(30000);
       const stats = await page.evaluate(() => window.measureStats);
       assert(stats.messages.length > 100, 'Measure the actual worklet, not idle RAF');
@@ -183,6 +187,7 @@ try {
       await page.evaluate(() => window.measureInput.context.close());
       assert.deepEqual(errors, []);
       result.profiles.push({ name, browser: browser.version(), measuredSeconds: seconds, meters,
+        startupAppRafCallbackMs: summary(startup.frameCosts),
         fps: (stats.frames.length - 1) / seconds, frameIntervalMs: summary(intervals),
         appRafCallbackMs: summary(stats.frameCosts), appRafThroughMicrotaskMs: summary(stats.flushCosts),
         messageDecodeAndAckMs: summary(stats.decodeCosts), messages: stats.messages.length, acknowledgements: stats.acks,
