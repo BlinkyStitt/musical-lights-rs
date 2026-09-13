@@ -290,7 +290,7 @@ pub fn DancingLights() -> impl IntoView {
                     </Show>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
-                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; tap the top or press Escape to exit" }
+                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; click Exit fullscreen to return" }
                         on:click=move |_| screen.with_value(|session| {
                             if let Some(session) = session { session.toggle_fullscreen(); }
                         })>
@@ -304,7 +304,7 @@ pub fn DancingLights() -> impl IntoView {
                 </p>
             </div>
             <div class="spectrum-panel">
-                <p class="fullscreen-hint">"Tap the top to exit · Esc on keyboard"</p>
+                <p class="fullscreen-hint">"Click Exit fullscreen"</p>
                 <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
                     hidden=move || selected_band.get().is_none()
                     style=move || selected_band.get().map(|index| {
