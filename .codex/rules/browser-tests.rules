@@ -1,0 +1,37 @@
+# Run from the repository root. Browser startup needs macOS host access.
+prefix_rule(
+    pattern = ["python3", "validation/validate.py", "browser"],
+    decision = "allow",
+    justification = "Run the repository browser validation with macOS browser service access.",
+    match = [
+        "python3 validation/validate.py browser",
+        "python3 validation/validate.py browser leptos",
+    ],
+    not_match = [
+        "python3 validation/validate.py leptos",
+        "python3 validation/validate.py all",
+        "python3 validation/other.py browser",
+        "python3 -c 'print(1)'",
+        "node validation/server.mjs",
+        "sh -c 'python3 validation/validate.py browser'",
+    ],
+)
+
+prefix_rule(
+    pattern = [".tools/bin/node", "validation/node_modules/@playwright/test/cli.js", "test", "--config", "validation/playwright.config.mjs"],
+    decision = "allow",
+    justification = "Run focused repository Playwright tests with macOS browser service access.",
+    match = [
+        ".tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs",
+        ".tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs spectrum-keyboard --project webkit-spectrum",
+    ],
+    not_match = [
+        ".tools/bin/node validation/node_modules/@playwright/test/cli.js install chromium",
+        ".tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/preview.config.mjs",
+        ".tools/bin/node validation/server.mjs",
+        ".tools/bin/node -e 'console.log(1)'",
+        "node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs",
+        "python3 validation/other.py",
+        "sh -c '.tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs'",
+    ],
+)

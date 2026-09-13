@@ -63,6 +63,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .bark-group { position: relative; min-width: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); }
 .bark-group + .bark-group::after { content: ""; position: absolute; inset: var(--balloon-headroom) auto 3px 0; width: 1px; background: var(--line); opacity: .45; pointer-events: none; }
 .meter { position: relative; height: 100%; min-width: 0; border-bottom: 3px solid var(--band-color); }
+.meter:focus-visible { z-index: 2; }
 .meter-fill { position: absolute; inset: var(--balloon-headroom) 0 0; background: var(--band-color); border-radius: 0; transform-origin: bottom; transform: scaleY(0); }
 .meter-edge { position: absolute; bottom: 3px; left: 0; right: 0; height: 0; opacity: 0; border: 0; border-top: 1px solid white; pointer-events: none; }
 /* Heights come from the animation envelope; CSS must not delay an attack. */
