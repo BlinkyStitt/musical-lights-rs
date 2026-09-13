@@ -212,6 +212,52 @@ reproduced that failure locally. The fixture now advances its synthetic audio
 clock explicitly through peak, fade, and rest, while retaining that delay.
 All 92 browser tests passed locally after the repair; production timing is unchanged.
 
+## Compact chart and compressible balls
+
+The 2026-09-13 follow-up replaces headroom based on chart width with 5% of
+chart height. LOUD, the top grid line, and the maximum bar height share that
+inset in normal and fullscreen views. The normal chart no longer adds a second
+area for large balls. The 24 bars, 24 balls, and 1-pixel white inner border remain.
+
+Contact pressure changes a ball's width and height. It draws and collides as a
+rounded capsule, then recovers its round shape as space opens. Contact response
+also moves neighboring bodies. A compressed ball can pass through a real gap;
+bar impacts still control color changes. WebKit rounded percentage centering
+transforms, so the renderer now positions each body's exact bounds directly.
+A visible minimum compression size could exceed a bar gap. The size floor now
+serves only numerical stability. Pressure causes a smaller shape change as a
+ball gets thinner.
+
+Pinned `leptos` validation passed formatting, host/WASM Clippy, all 33 native
+tests, and the release build. The native checks cover full-height bar pressure,
+shape recovery, all 24 bars with narrow gaps, and 10,000 steps of bounded motion.
+
+All 119 browser/worklet checks passed locally with three workers. The WebKit
+project now includes the full ball suite. Checks cover 5% headroom, contact
+geometry, compression and recovery at 375/1440 pixels in both motion settings,
+mouse and sensor input, color persistence, keyboard access, labels, the inner
+border, fullscreen exit, and audio/route cleanup. Mouse checks compare the same
+crowd with and without input. Sensor fixtures dispatch their public event fields
+in both engines; they do not depend on native constructors that WebKit forbids.
+
+The [release measurement](compact-balls-results/release.json) ran five seconds
+of warmup and 30 seconds of real AudioWorklet input per browser. Chromium and
+the WebKit iPhone profile both held 60 FPS. Animation callback p95 was 2.03 ms
+and 3.10 ms respectively; including queued microtasks gave 2.03 ms and 3.12 ms.
+Both acknowledged every measured snapshot and recovered from a 300 ms page
+stall with one old packet followed by current state. The 1,168-byte transport
+and worklet memory size remained unchanged. No new browser crash reports
+appeared during the local runs. The release screenshots follow the forced
+stall, so their FPS labels include that interruption. These are local results;
+CI and deployment have separate status.
+
+Saved pressure and recovery images show the [desktop chart under pressure](compact-balls-results/desktop-compressed.png),
+[desktop recovery](compact-balls-results/desktop-recovered.png),
+[mobile WebKit pressure](compact-balls-results/mobile-webkit-compressed.png), and
+[mobile WebKit recovery](compact-balls-results/mobile-webkit-recovered.png).
+These are Mac browser checks, including an iPhone profile, rather than measurements
+on a physical phone.
+
 ## Measurement evidence
 
 The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.

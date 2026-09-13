@@ -14,9 +14,11 @@ for (const width of [320, 375, 1440]) {
       const groups = [...document.querySelectorAll('.bark-group')];
       const meters = [...document.querySelectorAll('.meter')];
       const track = document.querySelector('.meter-track').getBoundingClientRect();
+      const graph = document.querySelector('#dancinglights').getBoundingClientRect();
       const guide = document.querySelector('.meter-guide > span').getBoundingClientRect();
       return {
         guideDifference: Math.abs(guide.y + guide.height / 2 - track.top),
+        headroom: (track.top - graph.top) / graph.height,
         groups: groups.map(node => ({ count: node.querySelectorAll('[role=meter]').length,
           color: getComputedStyle(node.querySelector('.meter-fill')).backgroundColor })),
         gaps: meters.slice(1).map((node, i) => node.getBoundingClientRect().left - meters[i].getBoundingClientRect().right),
@@ -31,6 +33,7 @@ for (const width of [320, 375, 1440]) {
       };
     });
     expect(geometry.guideDifference).toBeLessThan(1);
+    expect(geometry.headroom).toBeCloseTo(.05, 3);
     expect(geometry.groups.map(group => group.count)).toEqual(Array(24).fill(1));
     expect(new Set(geometry.groups.map(group => group.color)).size).toBe(24);
     for (const gap of geometry.gaps) expect(gap).toBeGreaterThanOrEqual(.98);
@@ -81,7 +84,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await expect.poll(() => page.evaluate(() => window.transportContext.state)).toBe('closed');
   await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '0');
   const sphere = page.locator('.balloon').nth(6);
-  const top = await sphere.evaluate(node => node.style.top);
-  await expect.poll(() => sphere.evaluate(node => node.style.top)).not.toBe(top);
+  const top = await sphere.evaluate(node => node.style.getPropertyValue('--balloon-y'));
+  await expect.poll(() => sphere.evaluate(node => node.style.getPropertyValue('--balloon-y'))).not.toBe(top);
   expect(errors).toEqual([]);
 });

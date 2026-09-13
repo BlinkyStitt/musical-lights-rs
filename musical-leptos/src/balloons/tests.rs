@@ -248,8 +248,14 @@ fn frame_stalls_invalid_inputs_and_long_motion_stay_bounded() {
         );
         for balloon in &stalled.balloons {
             let radius = geometry().radii(balloon);
-            assert!((radius.x..=1.0 - radius.x).contains(&balloon.position.x));
-            assert!((radius.y..=1.0 - radius.y).contains(&balloon.position.y));
+            assert!(
+                (radius.x - 1e-7..=1.0 - radius.x + 1e-7).contains(&balloon.position.x),
+                "horizontal bounds: {balloon:?}"
+            );
+            assert!(
+                (radius.y - 1e-7..=1.0 - radius.y + 1e-7).contains(&balloon.position.y),
+                "vertical bounds: {balloon:?}"
+            );
             assert!(balloon.velocity.x.hypot(balloon.velocity.y) <= MAX_SPEED + 1e-12);
             assert!(
                 balloon
@@ -263,14 +269,20 @@ fn frame_stalls_invalid_inputs_and_long_motion_stay_bounded() {
 
 #[test]
 fn boundaries_reflect_outward_motion_and_keep_inward_motion() {
-    let mut position = -0.1;
-    let mut velocity = -0.4;
-    clamp_axis(&mut position, &mut velocity, 0.1, 0.7);
-    assert_eq!((position, velocity), (0.1, 0.4 * 0.7));
-    position = 1.1;
-    velocity = -0.4;
-    clamp_axis(&mut position, &mut velocity, 0.1, 0.7);
-    assert_eq!((position, velocity), (0.9, -0.4));
+    let mut ball = world().balloons[0].clone();
+    ball.position = Vector { x: -0.01, y: 0.5 };
+    ball.velocity.x = -0.4;
+    let color = ball.color;
+    constrain_walls(&mut ball, geometry(), 0.7);
+    assert!((ball.position.x - geometry().radii(&ball).x).abs() < 1e-12);
+    assert!((ball.velocity.x - 0.4 * 0.7).abs() < 1e-12);
+    assert!(ball.deformation.x < 1.0);
+    ball.position.x = 1.01;
+    ball.velocity.x = -0.4;
+    constrain_walls(&mut ball, geometry(), 0.7);
+    assert!((ball.position.x + geometry().radii(&ball).x - 1.0).abs() < 1e-12);
+    assert_eq!(ball.velocity.x, -0.4);
+    assert_eq!(ball.color, color);
 }
 
 #[test]
@@ -286,14 +298,98 @@ fn a_fast_rise_cannot_pass_through_balls_above_rounded_corners() {
     frame.levels.fill(1.0);
     world.step(1.0 / 60.0, frame, geometry);
     for ball in &world.balloons {
-        // Even a ball directly above a gap rests on the facing circular caps.
-        let corner =
-            (geometry.bars[0].right - geometry.bars[0].left) * geometry.aspect * BAR_CORNER_RATIO;
-        assert!(
-            ball.position.y - geometry.radii(ball).y >= geometry.bar_height - corner,
-            "ball passed through rising bars: {ball:?}"
-        );
+        // A compressed body can fit through a real gap. It must remain outside
+        // every solid bar, including each rounded cap.
+        for bar in geometry.bars {
+            let hit = bar_contact(
+                ball.position,
+                geometry.radii(ball),
+                bar,
+                geometry.bar_height,
+                geometry,
+                false,
+                0.0,
+            );
+            assert!(
+                hit.is_none_or(|hit| hit.depth < CONTACT_SLOP),
+                "body inside rising bar: {ball:?}, contact={hit:?}"
+            );
+        }
     }
+}
+
+#[test]
+fn narrow_gaps_do_not_leave_compressed_bodies_inside_bars() {
+    let geometry = Geometry {
+        bars: std::array::from_fn(|i| Bar {
+            left: i as f64 / 24.0,
+            right: (i as f64 + 0.95) / 24.0,
+        }),
+        bar_height: 0.95,
+        aspect: 3.0,
+        ..geometry()
+    };
+    let mut world = world();
+    let mut frame = DisplayFrame::default();
+    frame.levels.fill(1.0);
+    for _ in 0..120 {
+        world.step(1.0 / 60.0, frame, geometry);
+        for ball in &world.balloons {
+            for bar in geometry.bars {
+                let hit = bar_contact(
+                    ball.position,
+                    geometry.radii(ball),
+                    bar,
+                    geometry.bar_height,
+                    geometry,
+                    false,
+                    0.0,
+                );
+                assert!(
+                    hit.is_none_or(|hit| hit.depth < CONTACT_SLOP),
+                    "compressed body inside a bar: {ball:?}, contact={hit:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_ball_compresses_above_a_full_height_bar_and_recovers() {
+    let geometry = Geometry {
+        bar_height: 0.95,
+        aspect: 3.0,
+        ..geometry()
+    };
+    let mut world = world();
+    // Isolate compression between a raised bar and the ceiling. The crowded
+    // case above separately checks all 24 bars and their real gaps.
+    over_bar(&mut world, 8, 0.5);
+    world.balloons[0].width_in_bars = 4.0;
+    for (i, other) in world.balloons.iter_mut().enumerate().skip(1) {
+        other.width_in_bars = 0.05;
+        other.position = Vector {
+            x: 0.6 + i as f64 * 0.014,
+            y: 0.1,
+        };
+    }
+    world.step(1.0 / 60.0, frame(8, 1.0), geometry);
+    let ball = &world.balloons[0];
+    let radius = geometry.radii(ball);
+    assert!(ball.position.y + radius.y <= 1.0 + 1e-6);
+    assert!(
+        ball.position.y - radius.y >= geometry.bar_height - CONTACT_SLOP,
+        "bar clearance {}, ball {ball:?}",
+        ball.position.y - radius.y - geometry.bar_height
+    );
+    let compressed = ball.deformation.y;
+    assert!(compressed < 0.3);
+    let colors = world.balloons.clone().map(|ball| ball.color);
+    for _ in 0..120 {
+        world.step(1.0 / 60.0, DisplayFrame::default(), geometry);
+    }
+    assert!(world.balloons[0].deformation.y > compressed + 0.3);
+    assert_eq!(world.balloons.map(|ball| ball.color), colors);
 }
 
 #[test]
@@ -303,9 +399,9 @@ fn rising_bar_pushes_up_and_static_contact_does_not_add_energy_or_color() {
     let original = world.balloons[0].color;
     world.step(MAX_DT, frame(8, 0.5), geometry());
     let balloon = &world.balloons[0];
-    assert_eq!(
-        balloon.position.y,
-        0.5 * geometry().bar_height + geometry().radii(balloon).y
+    assert!(
+        (balloon.position.y - 0.5 * geometry().bar_height - geometry().radii(balloon).y).abs()
+            < 1e-12
     );
     assert!(balloon.velocity.y > 0.0);
     assert_ne!(balloon.color, original);
@@ -505,9 +601,9 @@ fn stopping_audio_clears_sensors_and_bars_but_keeps_momentum_mouse_and_color() {
 
 #[test]
 fn sphere_collision_conserves_momentum_loses_energy_and_never_transfers_color() {
-    let mut a = world().balloons[0].clone();
-    let mut b = world().balloons[1].clone();
     for aspect in [0.5, 1.2, 3.0] {
+        let mut a = world().balloons[0].clone();
+        let mut b = world().balloons[1].clone();
         let geometry = Geometry {
             aspect,
             ..geometry()
@@ -536,9 +632,11 @@ fn sphere_collision_conserves_momentum_loses_energy_and_never_transfers_color() 
         assert!((before.1 - after.1).abs() < 1e-12);
         assert!(after.2 < before.2);
         assert_eq!((a.color, b.color), colors);
-        let separation =
-            ((a.position.x - b.position.x) * aspect).hypot(a.position.y - b.position.y);
-        assert!((separation - ra - rb).abs() < 1e-12);
+        for _ in 0..8 {
+            collide(&mut a, &mut b, geometry, 0.7);
+        }
+        assert!(body_contact(&a, &b, geometry).is_none_or(|hit| hit.depth < 1e-8));
+        assert!(a.deformation.x < 1.0 || a.deformation.y < 1.0);
     }
 }
 
@@ -557,6 +655,50 @@ fn sphere_gaps_separating_contacts_and_coincident_centers_are_stable() {
     assert_eq!((a.velocity.x, b.velocity.x), (-0.2, 0.3));
     assert!(a.position.x < b.position.x);
     assert_eq!((a.color, b.color), colors);
+}
+
+#[test]
+fn capsule_contacts_distinguish_round_ends_from_bounding_boxes() {
+    let geometry = Geometry {
+        aspect: 1.0,
+        ..geometry()
+    };
+    let mut a = world().balloons[0].clone();
+    a.width_in_bars = 6.4; // Resting radius 0.1 in these measured bar bounds.
+    a.position = Vector { x: 0.3, y: 0.3 };
+    a.deformation = Vector { x: 2.0, y: 1.0 };
+    let mut b = a.clone();
+    b.deformation = Vector { x: 1.0, y: 2.0 };
+    b.position = Vector { x: 0.55, y: 0.55 };
+    assert!(body_contact(&a, &b, geometry).is_none());
+    b.position = Vector { x: 0.5, y: 0.5 };
+    let hit = body_contact(&a, &b, geometry).unwrap();
+    assert!((hit.depth - (0.2 - 0.1 * 2.0_f64.sqrt())).abs() < 1e-12);
+    assert!((hit.normal.x - 0.5_f64.sqrt()).abs() < 1e-12);
+    assert!((hit.normal.y - hit.normal.x).abs() < 1e-12);
+}
+
+#[test]
+fn a_compressed_free_body_recovers_without_recoloring() {
+    let mut world = world();
+    world.balloons[0].position = Vector { x: 0.04, y: 0.85 };
+    world.balloons[0].deformation = Vector { x: 1.1, y: 0.3 };
+    for (i, other) in world.balloons.iter_mut().enumerate().skip(1) {
+        other.width_in_bars = 0.1;
+        other.position = Vector {
+            x: 0.3 + i as f64 * 0.025,
+            y: 0.2,
+        };
+    }
+    let color = world.balloons[0].color;
+    for _ in 0..25 {
+        world.step(1.0 / 120.0, DisplayFrame::default(), geometry());
+    }
+    let ball = &world.balloons[0];
+    assert!(ball.deformation.y > 0.75 && ball.deformation.y < 1.0);
+    assert!(ball.position.y > 0.7);
+    assert_eq!(ball.contacts, [false; DISPLAY_BANDS]);
+    assert_eq!(ball.color, color);
 }
 
 #[test]
@@ -592,14 +734,8 @@ fn gravity_forms_non_overlapping_piles_without_color_transfer() {
             world.step(MAX_DT, DisplayFrame::default(), geometry());
             for (i, a) in world.balloons.iter().enumerate() {
                 for b in &world.balloons[i + 1..] {
-                    let separation = ((a.position.x - b.position.x) * geometry().aspect)
-                        .hypot(a.position.y - b.position.y);
-                    let radii = geometry().radii(a).y + geometry().radii(b).y;
-                    assert!(
-                        separation >= radii - 0.0005,
-                        "overlap {}",
-                        radii - separation
-                    );
+                    let overlap = body_contact(a, b, geometry()).map_or(0.0, |hit| hit.depth);
+                    assert!(overlap <= 0.0005, "overlap {overlap}");
                 }
             }
         }
@@ -624,7 +760,8 @@ fn a_resting_floor_contact_does_not_bounce_from_one_frame_of_gravity() {
     }
     for _ in 0..30 {
         world.step(MAX_DT, DisplayFrame::default(), geometry());
-        assert_eq!(world.balloons[0].position.y, radius.y);
+        let ball = &world.balloons[0];
+        assert!((ball.position.y - geometry().radii(ball).y).abs() < 1e-12);
         assert_eq!(world.balloons[0].velocity.y, 0.0);
     }
 }

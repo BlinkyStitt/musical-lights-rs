@@ -45,6 +45,11 @@ deflect balls sideways. A 1-pixel white inner border follows all four edges,
 including the rounded top and baseline. The center keeps its fixed color at
 peak glow. The border uses the existing acoustic attack envelope.
 
+The maximum bar level sits 5% below the top of the chart. Balls compress into
+rounded capsules under contact pressure, push neighboring bodies, and recover
+their resting shape as space opens. Rendering and collision checks share the
+same dimensions. The compact layout adds no separate area for large balls.
+
 The producer consumes every loudness frame and updates a complete motion snapshot. A new visual peak restarts its 350 ms hold and white glow only when the band's input sones also rise. Gain changes can raise the current bar floor immediately but cannot restart the peak effect. The bar then follows a critically damped fall at 6/s, or 3/s with Reduced Motion. The glow uses the same damped-motion curve with a shorter tail: `(1 + r*t) * exp(-r*t)`, where `t` starts at the end of the hold and `r` is 30/s, or 20/s with Reduced Motion. The glow loses 90% of its opacity in about 130 ms after the hold, or 195 ms with Reduced Motion. The hold still limits rapid repeated white attacks. A value within 0.0001 of its target settles exactly. The renderer samples that snapshot using audio time. Tests cover 30, 60, 120, 144, and 240 Hz, delayed drawing, steady levels through adaptive gain, short taps, the shorter glow tail across callback sizes, and combined bar/edge luminance reversals. These tests do not establish universal photosensitivity safety for all content and devices.
 
 The browser runs analysis in its own AudioWorklet WASM instance. It preallocates its input and state buffers and imports no browser functions into WASM. The browser snapshot has 146 f64 values: an audio-time and Reduced Motion header followed by six motion values for each of 24 bands. At most one display message waits for acknowledgement; audio processing continues while the page stalls. Native and ESP capture process audio before the latest visual-state handoff. Neither live path queues raw audio for a slower renderer.

@@ -25,8 +25,11 @@ reveals an approximate frequency label.
 Hz labels use the established integer-Bark endpoints. Touch readouts
 keep the existing three-second timeout and gesture handling.
 
-Twenty-four decorative spheres sit above the bars. Their diameters range from 0.55 to
-four bar widths. Motion starts when the graph appears and continues with the
+Twenty-four decorative balls move among the bars. Their resting diameters range
+from 0.55 to four bar widths. Contact pressure compresses them into rounded
+capsules. They push each other sideways and recover their round shape when
+space opens. Drawing and collisions use the same width, height, and end radius.
+Motion starts when the graph appears and continues with the
 microphone off. Steady gravity pulls them toward the bottom of the page, even
 when a phone lies flat on its back. They accelerate as they fall and bounce off
 each other, bars, and graph edges. Rounded bar corners send corner hits sideways.
@@ -56,8 +59,11 @@ A sphere released in free space falls at least half a graph height in half a
 second normally, or one tenth with Reduced Motion. Speed is capped at 3.2 graph
 units/s. Reduced Motion disables shake impulses and reduces mouse forces and
 bar impulses. It applies stronger damping and softer bounces. Gravity still
-points down the page. Collision correction keeps the bodies outside the bars.
-The graph reserves room above fully raised bars, including in fullscreen.
+points down the page. Collision correction keeps the bodies outside solid bar
+surfaces; a sufficiently compressed body can pass through a real gap.
+The graph leaves 5% of its height above the maximum bar level, including in
+fullscreen. It adds no separate space for large balls. Contacts resolve when
+the graph first receives its size and whenever that size changes.
 Spheres do not block pointer input or appear in the accessibility tree.
 
 Sphere physics writes directly to the existing decorative nodes on animation
@@ -100,7 +106,7 @@ The model still calculates 240 specific-loudness values internally. It integrate
 each set of ten values into one Bark band, then applies one shared adaptive gain
 and the existing 24-band motion model. Browser bars, sphere collisions, terminal,
 and LEDs use that same band activity. The grid and LOUD label cover the fill
-area; sphere headroom sits above that scale.
+area; the 5% headroom sits above that scale.
 
 One transferable snapshot contains 146 f64 values (1,168 payload bytes): audio
 time, Reduced Motion, and six motion values for each of 24 bands. The decoder
