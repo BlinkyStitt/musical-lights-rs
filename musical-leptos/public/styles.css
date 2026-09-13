@@ -65,7 +65,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .meter:focus-visible { z-index: 2; }
 .meter-track { position: absolute; inset: var(--balloon-headroom) 0 3px; }
 .meter-fill { position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--band-color); border-radius: var(--bar-cap-radius) var(--bar-cap-radius) 0 0; overflow: hidden; }
-.meter-glow { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; }
+.meter-glow { position: absolute; inset: 0; border: 1px solid white; border-radius: inherit; background: transparent; opacity: 0; pointer-events: none; }
 /* Heights come from the animation envelope; CSS must not delay an attack. */
 .meter-guide { position: absolute; top: var(--balloon-headroom); bottom: 3px; left: -2.6rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .meter-guide > :first-child { transform: translateY(-50%); }

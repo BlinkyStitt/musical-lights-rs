@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 for (const colorScheme of ['light', 'dark']) {
   for (const reducedMotion of ['no-preference', 'reduce']) {
-    test(`full-bar glow follows attacks and fades over rainbow bars in ${colorScheme}, ${reducedMotion}`, async ({ page }) => {
+    test(`inner-border glow follows attacks and preserves rainbow centers in ${colorScheme}, ${reducedMotion}`, async ({ page }, testInfo) => {
       const width = colorScheme === 'dark' ? 1440 : 375;
       await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
       await page.emulateMedia({ colorScheme, reducedMotion });
@@ -40,12 +40,22 @@ for (const colorScheme of ['light', 'dark']) {
           const fill = node.parentElement;
           const track = fill.parentElement;
           const style = getComputedStyle(node);
+          const fillStyle = getComputedStyle(fill);
           const box = node.getBoundingClientRect();
           const bar = fill.getBoundingClientRect();
           return {
             level: (bar.height - 3) / track.getBoundingClientRect().height,
             edge: Number(style.opacity), color: style.backgroundColor,
             image: style.backgroundImage,
+            borders: ['Top', 'Right', 'Bottom', 'Left'].map(side => ({
+              width: style[`border${side}Width`],
+              color: style[`border${side}Color`],
+              style: style[`border${side}Style`],
+            })),
+            radii: ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(corner => style[`border${corner}Radius`]),
+            fillRadii: ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(corner => fillStyle[`border${corner}Radius`]),
+            fillColor: fillStyle.backgroundColor,
+            innerWidth: node.clientWidth, innerHeight: node.clientHeight,
             topDifference: Math.abs(box.top - bar.top),
             bottomDifference: Math.abs(box.bottom - bar.bottom),
             widthDifference: Math.abs(box.width - bar.width),
@@ -73,39 +83,43 @@ for (const colorScheme of ['light', 'dark']) {
         await window.screenFrame();
         return window.readBands();
       });
-      for (const band of peak) {
-        expect(band.level).toBeGreaterThan(0);
-        expect(band.edge).toBe(1);
-        expect(band.color).toBe('rgb(255, 255, 255)');
+      const expectInnerBorder = (band, index) => {
+        expect(band.color).toBe('rgba(0, 0, 0, 0)');
         expect(band.image).toBe('none');
-        expect(band.topDifference).toBeLessThan(1);
+        expect(band.borders).toEqual(Array(4).fill({ width: '1px', color: 'rgb(255, 255, 255)', style: 'solid' }));
+        expect(band.radii).toEqual(band.fillRadii);
+        expect(band.innerWidth).toBeGreaterThan(0);
+        expect(band.innerHeight).toBeGreaterThan(0);
+        expect(band.fillColor).toBe(palette[index]);
+        expect(band.topDifference).toBeLessThan(.01);
         expect(band.bottomDifference).toBeLessThan(.01);
         expect(band.widthDifference).toBeLessThan(.01);
+      };
+      for (const [index, band] of peak.entries()) {
+        expect(band.level).toBeGreaterThan(0);
+        expect(band.edge).toBe(1);
+        expectInnerBorder(band, index);
         expect(band.transition).toBe('0s');
         expect(band.animation).toBe('none');
       }
-      await page.screenshot({ path: `test-results/bar-glow-${colorScheme}-${reducedMotion}.png`, fullPage: true });
+      await page.screenshot({ path: `test-results/bar-glow-${testInfo.project.name}-${colorScheme}-${reducedMotion}.png`, fullPage: true });
       await expect.poll(() => page.evaluate(() => Math.max(...window.readBands().map(band => band.edge)))).toBeLessThan(0.1);
       const fading = await page.evaluate(() => window.readBands());
       expect(fading.some(band => band.level > 0.01)).toBe(true);
       for (const [i, band] of fading.entries()) expect(band.edge).toBeLessThan(band.level / peak[i].level);
       await expect.poll(() => page.evaluate(() => window.readBands().every(band => band.level === 0 && band.edge === 0)), { timeout: 7000 }).toBe(true);
       expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor))).toEqual(palette);
-      // Fullscreen keeps glow over the whole fill, including its baseline.
+      // Fullscreen keeps the thin border inside all four edges, including the baseline.
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Exit fullscreen' })).toBeVisible();
       const full = await page.evaluate(async () => {
         window.tap(); await window.screenFrame(); return window.readBands();
       });
-      for (const band of full) {
+      for (const [index, band] of full.entries()) {
         expect(band.edge).toBe(1);
-        expect(band.color).toBe('rgb(255, 255, 255)');
-        expect(band.image).toBe('none');
-        expect(band.topDifference).toBeLessThan(1);
-        expect(band.bottomDifference).toBeLessThan(.01);
-        expect(band.widthDifference).toBeLessThan(.01);
+        expectInnerBorder(band, index);
       }
-      await page.screenshot({ path: `test-results/bar-glow-fullscreen-${colorScheme}-${reducedMotion}.png` });
+      await page.screenshot({ path: `test-results/bar-glow-fullscreen-${testInfo.project.name}-${colorScheme}-${reducedMotion}.png` });
       await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Stop listening' }).click();
       await expect.poll(() => page.evaluate(() => window.readBands().every(band => band.level === 0 && band.edge === 0))).toBe(true);

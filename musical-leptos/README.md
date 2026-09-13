@@ -90,11 +90,11 @@ do not change with volume or the system theme.
 
 The 24 accessible groups each contain one accessible meter. Bars have narrow
 gaps and circular top corners with a radius of one quarter of the bar width.
-A solid white glow covers the full colored fill, including its baseline, and
-fades with the existing attack envelope. The bar keeps its color after the glow
-fades. One Tab stop remembers the last focused bar. Left/Right moves one bar;
-Home/End selects the endpoints. Tab exits to Input calibration and Shift+Tab
-returns to Fullscreen.
+A 1-pixel white inner border follows all four edges, including the rounded top
+and baseline. It fades with the existing attack envelope. The center keeps its
+color even at peak glow. One Tab stop remembers the last focused bar.
+Left/Right moves one bar; Home/End selects the endpoints. Tab exits to Input
+calibration and Shift+Tab returns to Fullscreen.
 
 The model still calculates 240 specific-loudness values internally. It integrates
 each set of ten values into one Bark band, then applies one shared adaptive gain
@@ -137,7 +137,7 @@ The visibility hold uses the [WCAG 2.2 flashing criterion](https://www.w3.org/WA
 as its design limit: a newly lit height stays lit long enough to prevent more
 than three repeated flash cycles in any second. The white glow shares that
 hold and only brightens with a new bar peak, so it has no independent flash
-clock. The glow covers the full bar and fades with its acoustic attack envelope.
+clock. The inner border fades with its acoustic attack envelope.
 These checks do not provide a medical safety guarantee. The rainbow
 colors and page background stay fixed while the glow fades.
 
