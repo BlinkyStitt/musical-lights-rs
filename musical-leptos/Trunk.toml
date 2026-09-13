@@ -6,5 +6,10 @@ stage = "pre_build"
 command = "python3"
 command_arguments = ["../musical-lights-worklet/build.py"]
 
+[[hooks]]
+stage = "post_build"
+command = "python3"
+command_arguments = ["publish_routes.py"]
+
 [serve]
 headers = {"Cross-Origin-Opener-Policy" = "same-origin", "Cross-Origin-Embedder-Policy" = "credentialless"}

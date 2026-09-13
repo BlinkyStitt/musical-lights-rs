@@ -16,8 +16,16 @@ trunk build --release --locked
 ```
 
 The release output is `dist/`. Microphone access needs HTTPS or localhost.
-Configure static hosting to return `index.html` for application routes.
-The current Pages workflow preserves the site's root URL.
+The post-build hook publishes the built entry document at `about/index.html`
+and `404.html`. GitHub Pages redirects `/about` to `/about/` and serves the
+About page with HTTP 200, including direct visits and refreshes. Unknown paths
+start the same Leptos router through Pages' custom 404 document and retain
+HTTP 404. The generated `<base href="/">` keeps scripts, styles, and WASM at the
+site root when a nested URL loads. No client redirect or URL encoding is needed.
+Add each new non-root page route to `publish_routes.py` when adding it to `App`.
+The browser test server uses static files and the emitted 404 document, so a
+missing route entry cannot silently pass as HTTP 200. The Pages workflow deploys
+this output after all validation jobs pass.
 
 The controls and graph appear directly below navigation. Descriptive text follows
 the app. The vertical labels read Quiet/Loud. Hover, keyboard focus, or touch
