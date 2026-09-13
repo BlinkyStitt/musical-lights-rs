@@ -41,8 +41,9 @@ One slow gain follows the strongest of the 24 bands. Its target maps that band t
 The browser displays 24 Bark bands with the same aggregate activity that drives
 the spheres, terminal, and LEDs. Each bar keeps one fixed HSLuv color and has
 slightly rounded top corners. Circular collision normals at those corners
-deflect balls sideways. A solid white glow covers each whole bar, including
-the colored baseline. It uses the existing acoustic attack envelope.
+deflect balls sideways. A 1-pixel white inner border follows all four edges,
+including the rounded top and baseline. The center keeps its fixed color at
+peak glow. The border uses the existing acoustic attack envelope.
 
 The producer consumes every loudness frame and updates a complete motion snapshot. A new visual peak restarts its 350 ms hold and white glow only when the band's input sones also rise. Gain changes can raise the current bar floor immediately but cannot restart the peak effect. The bar then follows a critically damped fall at 6/s, or 3/s with Reduced Motion. The glow uses the same damped-motion curve with a shorter tail: `(1 + r*t) * exp(-r*t)`, where `t` starts at the end of the hold and `r` is 30/s, or 20/s with Reduced Motion. The glow loses 90% of its opacity in about 130 ms after the hold, or 195 ms with Reduced Motion. The hold still limits rapid repeated white attacks. A value within 0.0001 of its target settles exactly. The renderer samples that snapshot using audio time. Tests cover 30, 60, 120, 144, and 240 Hz, delayed drawing, steady levels through adaptive gain, short taps, the shorter glow tail across callback sizes, and combined bar/edge luminance reversals. These tests do not establish universal photosensitivity safety for all content and devices.
 

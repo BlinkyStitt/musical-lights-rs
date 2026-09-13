@@ -181,6 +181,30 @@ iPhone checks do, and collect garbage before capture to preserve the regression.
 
 These results describe local validation. CI and deployment have separate status.
 
+## White inner-border correction
+
+The follow-up on 2026-09-13 replaces the solid white fill from the preceding
+release with a 1-pixel inner border. White follows the rounded top, both sides,
+and bottom edge; the center keeps its rainbow color even at peak opacity.
+The attack envelope, bar geometry, and sphere physics stay unchanged.
+
+The new browser regression failed against the previous release because its
+center was opaque white. After the CSS fix, all eight focused Chromium/WebKit
+checks passed across light/dark themes and normal/Reduced Motion, both in the
+page and fullscreen. They check transparent centers, fixed fill colors, all
+four border widths and colors, matching corner radii, and unchanged dimensions.
+The [desktop](inner-border-results/desktop.png) and
+[mobile-size fullscreen](inner-border-results/mobile-fullscreen.png) screenshots
+show the corrected release build at a test-injected attack peak. Both browsers
+ran on macOS; the screenshots above this section show the earlier solid fill.
+
+Pinned `core` validation passed 41 tests in each of four feature configurations
+and its Clippy matrix. Its luminance regression now samples the side border,
+moving top edge, colored center, and bottom baseline. Pinned `leptos` validation
+passed all 29 host tests, formatting, host/WASM Clippy, and the release build.
+The full host browser suite passed all 92 tests. No new browser crash reports
+appeared. These are local results; CI and deployment have separate status.
+
 ## Measurement evidence
 
 The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.

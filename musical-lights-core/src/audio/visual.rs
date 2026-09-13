@@ -354,15 +354,20 @@ mod tests {
     }
     #[test]
     fn combined_bar_and_glow_limit_flashes_under_rapid_changes() {
-        // Sample the whole white glow at each height, including changes over
-        // already colored pixels. Count luminance reversals of at least 0.1.
+        // Sample a side border and the center column of a 320 px bar with its
+        // 3 px baseline. The center stays colored except for the moving 1 px
+        // top border and fixed bottom border. Count reversals of at least 0.1.
+        const HEIGHT: usize = 320;
+        const BASELINE: usize = 3;
+        const COLUMN: usize = HEIGHT + BASELINE;
+        const PIXELS: usize = 2 * COLUMN;
         for reduced_motion in [false, true] {
             for period_ms in [20, 80, 150, 250, 350, 500, 800] {
                 for plot_luminance in [0.01_f32, 0.92] {
                     let mut display = DisplaySnapshot::<24>::new(0.0);
-                    let mut previous = [plot_luminance; 100];
-                    let mut direction = [0_i8; 100];
-                    let mut reversals: [Vec<usize>; 100] = core::array::from_fn(|_| Vec::new());
+                    let mut previous = [plot_luminance; PIXELS];
+                    let mut direction = [0_i8; PIXELS];
+                    let mut reversals: [Vec<usize>; PIXELS] = core::array::from_fn(|_| Vec::new());
                     for ms in (0..6000).step_by(2) {
                         let input = if ms % period_ms < 10 { 1.0 } else { 0.0 };
                         display.push(
@@ -371,13 +376,20 @@ mod tests {
                             reduced_motion,
                         );
                         let frame = display.frame(ms as f64 / 1000.0);
-                        for pixel in 0..100 {
-                            let y = (pixel as f32 + 0.5) / 100.0;
+                        for pixel in 0..PIXELS {
+                            let row = pixel % COLUMN;
+                            let y = (row as f32 + 0.5 - BASELINE as f32) / HEIGHT as f32;
                             let height = frame.levels[0];
                             let lit = y <= height;
                             let luminance = if lit {
                                 let color = 0.26;
-                                color + (1.0 - color) * frame.edges[0]
+                                let border =
+                                    pixel < COLUMN || row == 0 || height - y <= 1.0 / HEIGHT as f32;
+                                if border {
+                                    color + (1.0 - color) * frame.edges[0]
+                                } else {
+                                    color
+                                }
                             } else {
                                 plot_luminance
                             };
