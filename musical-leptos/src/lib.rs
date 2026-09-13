@@ -33,7 +33,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/about") view=About />
                     </Routes>
                 </main>
-                <footer>"Made for music, built with Rust. "<a href="https://github.com/BlinkyStitt/musical-lights-rs">"View the source ↗"</a></footer>
+                <footer><a href="https://github.com/BlinkyStitt/musical-lights-rs">"View the source ↗"</a></footer>
             </Router>
         </div>
     }
