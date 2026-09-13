@@ -75,7 +75,13 @@ the graph first receives its size and whenever that size changes.
 Spheres do not block pointer input or appear in the accessibility tree.
 
 Sphere physics writes directly to the existing decorative nodes on animation
-frames. Stop listening, microphone permission failure, and audio failure clear
+frames. Collision checks reject separated bounds before computing contact
+distances. Bounded graph distances use squared arithmetic and square roots,
+avoiding the general-purpose WASM `hypot` path. The renderer caches style handles
+and encodes a sphere's color only when an impact changes it. See the
+[fullscreen performance measurements](../docs/validation.md#fullscreen-physics-performance).
+The release compiler and WASM optimizer use level 3 to favor execution speed.
+Stop listening, microphone permission failure, and audio failure clear
 the bar levels and remove sensor listeners. Gravity, momentum, sphere collisions,
 and mouse input continue. Route cleanup cancels the pending frame and removes
 all input listeners. Late motion permission results cannot restore sensors for

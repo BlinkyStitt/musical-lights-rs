@@ -2,6 +2,26 @@ import { test, expect } from '@playwright/test';
 
 const url = 'http://127.0.0.1:8101';
 
+test('idle frames do not resend unchanged sphere colors', async ({ page }) => {
+  await page.addInitScript(() => {
+    const setProperty = CSSStyleDeclaration.prototype.setProperty;
+    window.balloonColorWrites = 0;
+    CSSStyleDeclaration.prototype.setProperty = function(name, ...args) {
+      if (name === '--balloon-color') window.balloonColorWrites++;
+      return setProperty.call(this, name, ...args);
+    };
+  });
+  const errors = await prepare(page);
+  const colors = await page.evaluate(() => window.readBalloons().map(ball => ball.color));
+  await page.evaluate(async () => {
+    window.balloonColorWrites = 0;
+    await window.advanceBalloons(60);
+  });
+  expect(await page.evaluate(() => window.readBalloons().map(ball => ball.color))).toEqual(colors);
+  expect(await page.evaluate(() => window.balloonColorWrites)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
 async function prepare(page, permission = 'granted') {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
