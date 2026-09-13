@@ -258,6 +258,32 @@ Saved pressure and recovery images show the [desktop chart under pressure](compa
 These are Mac browser checks, including an iPhone profile, rather than measurements
 on a physical phone.
 
+### Compressed-body stepping
+
+Linux CI passed the builds and 116 of 119 browser checks, then blocked Pages
+because three narrow-screen audio checks timed out. The microphone was still
+running. A Mac reproduction with fourfold CPU throttling recorded animation
+callbacks lasting several seconds. A compressed extent had made the solver
+select thousands of integration steps for the next frame.
+
+Integration now uses resting body sizes. Collision checks follow each pair's
+relative path through the capsule shape, including straight sides and rounded
+corners, so thin bodies cannot cross between steps. The 375-pixel layout checks
+retain their audio assertions and run with CPU throttling plus a collection
+pause before capture. All six repeated throttled cases passed after the fix.
+The longest measured callback in that diagnostic fell from 17.67 seconds to
+0.52 seconds under fourfold throttling and three concurrent workers.
+
+Pinned Leptos validation passed all 35 native tests, formatting, host/WASM
+Clippy, and the release build. The full local browser/worklet suite passed all
+119 checks. The measurement tool now records startup callback costs before
+its steady-state window. The [new release measurement](ball-stepping-results/release.json)
+recorded 60.00 FPS in Chromium and 59.89 FPS in the WebKit iPhone profile on Mac.
+Startup callback maxima were 29.07 ms and 18.94 ms; steady callback p95 was
+1.84 ms and 1.98 ms. Both recovered from the 300 ms page stall with one old
+packet followed by current state. CI and deployment remain separate from these
+local results.
+
 ## Measurement evidence
 
 The unchanged ISO supplementary archive has SHA-256 `d17b2c6d66a28550ed145c3e1ae5af6ee5917b90e584358285686b1fc61edca7`. All twenty time-varying reference cases (6–25) passed the reference comparison. Every compared point was inside the inner tolerance. The largest total-loudness error was 0.017017 sone, in case 6. The comparisons against the separate MoSQITo Python implementation for cases 6, 10, 13 and 15 passed, including all 240 specific-loudness bins. Their largest total error was 0.023393 sone in case 15.

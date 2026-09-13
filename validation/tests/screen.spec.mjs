@@ -230,6 +230,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
       };
     });
     await page.goto('http://127.0.0.1:8101');
+    await page.requestGC();
     await page.getByRole('button', { name: 'Start listening' }).click();
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
     const before = await page.locator('#dancinglights').boundingBox();

@@ -702,6 +702,56 @@ fn a_compressed_free_body_recovers_without_recoloring() {
 }
 
 #[test]
+fn fast_compressed_bodies_cannot_cross_between_integration_steps() {
+    let mut world = world();
+    world.reduced = false;
+    for (i, other) in world.balloons.iter_mut().enumerate().skip(2) {
+        other.width_in_bars = 0.05;
+        other.position = Vector {
+            x: 0.6 + i as f64 * 0.014,
+            y: 0.1,
+        };
+    }
+    for (i, ball) in world.balloons.iter_mut().take(2).enumerate() {
+        ball.width_in_bars = 1.0;
+        ball.deformation = Vector { x: 0.001, y: 1.0 };
+        ball.position = Vector {
+            x: 0.4 + i as f64 * 0.005,
+            y: 0.6,
+        };
+        ball.velocity.x = if i == 0 { 0.6 } else { -0.6 };
+    }
+    let colors = (world.balloons[0].color, world.balloons[1].color);
+    world.step(1.0 / 60.0, DisplayFrame::default(), geometry());
+    let [a, b, ..] = &world.balloons;
+    assert!(a.position.x < b.position.x);
+    assert!(a.velocity.x < 0.0 && b.velocity.x > 0.0);
+    assert_eq!((a.color, b.color), colors);
+}
+
+#[test]
+fn capsule_sweeps_detect_rounded_corner_crossings_and_reject_misses() {
+    let geometry = Geometry {
+        aspect: 1.0,
+        ..geometry()
+    };
+    let mut a = world().balloons[0].clone();
+    a.width_in_bars = 6.4;
+    a.deformation = Vector { x: 2.0, y: 1.0 };
+    a.position = Vector { x: 0.3, y: 0.3 };
+    let mut b = a.clone();
+    b.deformation = Vector { x: 1.0, y: 2.0 };
+    let before = Vector { x: 0.55, y: 0.55 };
+    b.position = Vector { x: 0.05, y: 0.05 };
+    assert!(body_contact(&a, &b, geometry).is_none());
+    let hit = swept_body_contact(&a, &b, a.position, before, geometry).unwrap();
+    assert!((hit.normal.x - 0.5_f64.sqrt()).abs() < 1e-12);
+    assert!((hit.normal.y - hit.normal.x).abs() < 1e-12);
+    b.position = Vector { x: 0.65, y: 0.55 };
+    assert!(swept_body_contact(&a, &b, a.position, before, geometry).is_none());
+}
+
+#[test]
 fn fast_small_spheres_cannot_pass_through_each_other() {
     let mut world = world();
     world.reduced = false;
