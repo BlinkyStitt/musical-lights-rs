@@ -49,6 +49,7 @@ def validate(name):
             "validation/loudness/validate.py",
             "validation/lights",
             "musical-lights-worklet/build.py",
+            "musical-leptos/publish_routes.py",
         ]
         run([str(environment / "ruff"), "check"] + paths, ROOT)
         run([str(environment / "ruff"), "format", "--check"] + paths, ROOT)

@@ -11,13 +11,29 @@ const servers = roots.map(([port, directory]) => {
   const root = resolve(directory);
   const server = createServer(async (request, response) => {
     try {
-      const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
+      const url = new URL(request.url, 'http://localhost');
+      const pathname = decodeURIComponent(url.pathname);
       let file = resolve(root, `.${pathname}`);
       if (file !== root && !file.startsWith(root + sep)) { response.writeHead(403).end(); return; }
-      try { if ((await stat(file)).isDirectory()) file = resolve(file, 'index.html'); }
-      catch { if (!extname(file)) file = resolve(root, 'index.html'); }
-      const body = await readFile(file);
-      response.writeHead(200, {
+      let status = 200;
+      let body;
+      try {
+        if ((await stat(file)).isDirectory()) {
+          if (!url.pathname.endsWith('/')) {
+            response.writeHead(301, { Location: `${url.pathname}/${url.search}` }).end();
+            return;
+          }
+          file = resolve(file, 'index.html');
+        }
+        body = await readFile(file);
+      } catch (error) {
+        if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+        // Match static hosting: only an emitted entry file can return 200.
+        file = resolve(root, '404.html');
+        body = await readFile(file);
+        status = 404;
+      }
+      response.writeHead(status, {
         'Content-Type': contentTypes[extname(file)] ?? 'application/octet-stream',
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
