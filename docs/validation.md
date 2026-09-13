@@ -14,6 +14,14 @@ Individual targets are `core`, `worklet`, `terminal`, `leptos`, `dioxus`, `wasm`
 
 For Codex on macOS, run `python3 validation/validate.py browser` with approved host access (`sandbox_permissions: "require_escalated"`). The filesystem sandbox can block browser service registration even when network access is enabled. Keep normal commands in `workspace-write` and permit approval requests with `approval_policy = "on-request"`; disabling the sandbox for the whole session is unnecessary. Project configuration cannot override a managed session policy. See [Codex approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security). A sandbox launch error alone does not establish that browser tests are unavailable: request host access and report its actual result.
 
+The browser and preview suites check startup serially before test workers start.
+Each selected project must launch its configured browser, open a blank page,
+and close the browser. A failure stops the run with a nonzero exit status and
+the original browser error. This limits a startup failure to one failed launch
+per invocation. The browser still needs the OS permissions described above.
+`npm test` first runs harness regressions with a small executable that exits
+unsuccessfully; these tests verify failure handling without crashing a browser.
+
 ## Software checks
 
 All ten package validation targets passed on 2026-09-11, including formatting, Clippy, host tests and release links. The final suite passed 38 core tests in each of four feature configurations, eight terminal tests, one Leptos host test, two profile-tool tests, and 38 browser/worklet checks with the standard three-worker configuration. Additional core feature combinations passed Clippy. The release builds include both ESP-IDF binaries.
@@ -31,6 +39,46 @@ The reported swipe failure exposed a gap in those 43 checks: the mobile helper d
 `touch-screen.spec.mjs` uses Chromium's browser input protocol to produce trusted touch events on a live bar, and checks exit before release, capture, uninterrupted audio, tap/drag separation, normal page scrolling, cancellation, and multi-touch. WebKit's Playwright transport supports touch taps but not touch drags; its tests now use real mouse drags for capture instead of fabricated touch events. WebKit still checks actual touch taps and three-second expiry. The Leptos validation target and all 47 browser/worklet checks passed on 2026-09-11. These checks do not replace testing on a physical iPhone.
 
 Linux CI exposed a separate input-harness issue after the successful swipe: Chromium received the immediately injected Stop tap but suppressed its click. Waiting for the button result did not fix it. An isolated Linux image with the pinned Node and Playwright versions reproduced this on a plain HTML button and drag area without application code. A 200 ms gap between the swipe release and the next tap delivered the click; slower swipe movement alone did not. The regression allows 250 ms to lift and move the finger before tapping Stop once, then still requires the Start button and an ended microphone track. It does not retry the tap or bypass touch input. The corrected tests passed five consecutive Linux runs (20 touch checks), all 42 Linux Chromium checks, and all 47 Mac browser/worklet checks.
+
+## Continuous browser spectrum
+
+The 2026-09-12 change renders 240 accessible meters in 24 fixed color groups.
+The core suite passed 48 tests in each of four feature configurations, plus all
+feature-matrix Clippy checks. The worklet and Leptos validation targets passed,
+including 27 Leptos host tests and release builds. Terminal tests (8), Clippy,
+and release binaries/examples passed with the installed SDL2 library path.
+Dioxus, standalone WASM, Feather M0, STM32, ESP Embassy, and ESP-IDF validation
+and release builds passed. ESP validation used its installed compiler path,
+Python 3.14, and libclang; ESP-IDF required host access for its component
+manager process query. No firmware was flashed. All 72 browser/worklet checks
+passed with the pinned tools and standard three-worker configuration. The suite
+covers accessibility roles and labels, contrast, touch and keyboard readouts,
+independent motion, grouped attack edges, malformed transport, 24-region sphere
+physics, stronger gravity, and audio/route/fullscreen cleanup.
+
+The [release comparison and screenshots](spectrum-results/README.md) record
+actual desktop Chromium and Mac iPhone-profile WebKit frame delivery, transport,
+decode/effects cost, memory, and delayed-UI recovery against PR #4. A separate
+100-second release-WASM comparison confirms bit-identical aggregate output.
+These results do not establish physical-device timing or production deployment.
+
+### Browser startup crash investigation
+
+The 2026-09-12 review rerun produced macOS crash notices before the application
+loaded. Chromium's saved launch log reports `bootstrap_check_in` with
+`Permission denied (1100)`, followed by `SIGTRAP`. WebKit aborted during macOS
+application registration. These match the command sandbox restriction above.
+The test runner then launched new browsers for subsequent tests despite the
+same startup failure. With a controlled failing executable, the original
+configuration made six launch attempts for six tests. The startup check now
+stops after the first attempt, retains the error, and starts no test workers.
+Separate regressions check selection of Chromium and WebKit with `--project`.
+
+After the change, all three harness regressions, all 72 browser/worklet checks,
+and the share-image preview check passed with the pinned tools. The browser
+and preview runs used approved host access on the Mac. No new Chromium or
+WebKit crash reports appeared during verification. These checks cover the
+existing release builds; this change modifies the validation harness only.
 
 ## Measurement evidence
 
@@ -58,6 +106,6 @@ An Apple M4 Max host processed warmed two-tone PCM through the loudness model, v
 | 768 samples | 0.2601 s | 0.650% |
 | 800 samples | 0.2598 s | 0.650% |
 
-`LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 33.82 ms (0.846% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. Each browser snapshot contains 146 `f64` values (1,168 bytes), including the acoustic input used by peak detection. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
+`LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 33.82 ms (0.846% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. That earlier browser snapshot contained 146 `f64` values (1,168 bytes), including the acoustic input used by peak detection. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
 
 These are host measurements. They do not show ESP32 execution time or hardware accuracy. No board was flashed. Microphone calibration, I2S format, DMA stress, processing headroom, LED channel order, response curves, current draw and observed flicker remain bench checks. The LED thread explicitly reserves 16,000 stack bytes because its 4,800-byte linear palette exceeds the SDK default 3,072-byte thread stack. Actual stack high-water marks still require a board. The firmware exposes capture failures and includes a separate `light-check` program and profile generator for that work.

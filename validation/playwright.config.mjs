@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
+  globalSetup: './browser-startup.mjs',
   fullyParallel: true,
   retries: 0,
   workers: 3,

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { meterPoint } from '../meter-input.mjs';
 
 test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }) => {
   const errors = [];
@@ -45,7 +46,7 @@ async function drag(page, dx, dy) {
   // Playwright's WebKit transport supports touch taps, but no touch drags.
   // Exercise native pointer capture here with a mouse; touch-screen covers
   // trusted touch streams, cancellation, and multi-touch in Chromium.
-  const box = await page.getByRole('meter').nth(12).boundingBox();
+  const box = await page.getByRole('meter').nth(120).boundingBox();
   const x = box.x + box.width / 2;
   const y = box.y + 150;
   await page.mouse.move(x, y);
@@ -58,24 +59,26 @@ test('a tapped band shows its color and frequency above the graph for three seco
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('http://127.0.0.1:8101');
-  await expect(page.getByRole('meter')).toHaveCount(24);
+  await expect(page.getByRole('meter')).toHaveCount(240);
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
   const bands = page.getByRole('meter');
   const readout = page.getByRole('tooltip');
-  await bands.first().tap();
+  const firstHit = await meterPoint(page, bands.first());
+  await page.touchscreen.tap(firstHit.x, firstHit.y);
   await expect(readout).toBeVisible();
-  await expect(readout).toHaveText('0–100 Hz');
+  await expect(readout).toHaveText(firstHit.label);
   const swatch = readout.locator('.frequency-swatch');
-  expect(await swatch.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(await bands.first().locator('.meter-fill').evaluate(node => getComputedStyle(node).backgroundColor));
+  expect(await swatch.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(firstHit.color);
   const box = await readout.boundingBox();
   const graph = await page.locator('#dancinglights').boundingBox();
   expect(box.y + box.height).toBeLessThanOrEqual(graph.y);
   await page.waitForTimeout(1500);
   await expect(readout).toBeVisible();
-  await bands.last().tap();
+  const lastHit = await meterPoint(page, bands.last());
+  await page.touchscreen.tap(lastHit.x, lastHit.y);
   const selectedAt = await page.evaluate(() => performance.now());
-  await expect(readout).toHaveText('12000–15500 Hz');
+  await expect(readout).toHaveText(lastHit.label);
   await page.waitForTimeout(2000);
   // The first tap's deadline has passed; it must not hide the second label.
   await expect(readout).toBeVisible();
@@ -86,7 +89,7 @@ test('a tapped band shows its color and frequency above the graph for three seco
   // Sticky touch hover or focus must not bring the expired readout back.
   await page.waitForTimeout(300);
   await expect(readout).toBeHidden();
-  await bands.last().tap();
+  await page.touchscreen.tap(lastHit.x, lastHit.y);
   await expect(readout).toBeVisible();
   await page.getByRole('link', { name: 'About', exact: true }).tap();
   await page.waitForTimeout(3100);
@@ -155,9 +158,10 @@ test('fullscreen frequency labels expire and keyboard users can reveal the exit 
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.locator('.fullscreen-hint')).toBeVisible();
-  await page.getByRole('meter').nth(12).tap();
+  const hit = await meterPoint(page, page.getByRole('meter').nth(120));
+  await page.touchscreen.tap(hit.x, hit.y);
   const readout = page.getByRole('tooltip');
-  await expect(readout).toHaveText('1720–2000 Hz');
+  await expect(readout).toHaveText(hit.label);
   await expect(readout).toBeInViewport({ ratio: 1 });
   const box = await readout.boundingBox();
   expect(box.y).toBeLessThan(40);

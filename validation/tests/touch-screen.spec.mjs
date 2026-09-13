@@ -13,16 +13,17 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function touchInput(page, context) {
-  const box = await page.getByRole('meter').nth(4).boundingBox();
+  const box = await page.getByRole('meter').nth(40).boundingBox();
   const session = await context.newCDPSession(page);
-  const point = { x: box.x + box.width / 2, y: box.y + box.height - 200, id: 1 };
+  const point = { x: Math.round(box.x + box.width / 2), y: box.y + box.height - 200, id: 1 };
   const send = (type, touchPoints) => session.send('Input.dispatchTouchEvent', { type, touchPoints });
   const move = async (dx, dy) => {
     for (let step = 1; step <= 10; step++) {
       await send('touchMove', [{ ...point, x: point.x + dx * step / 10, y: point.y + dy * step / 10 }]);
     }
   };
-  return { point, send, move };
+  const label = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y).closest('[role=meter]').getAttribute('aria-label'), point);
+  return { point, send, move, label };
 }
 
 test('a browser touch swipe across a live bar exits before release without a frequency readout', async ({ page, context }) => {
@@ -42,7 +43,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
   });
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Start listening' }).tap();
-  await expect.poll(() => page.getByRole('meter').nth(4).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
+  await expect.poll(() => page.getByRole('meter').nth(40).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   const { point, send, move } = await touchInput(page, context);
   await page.evaluate(() => { pointerLog.length = 0; });
@@ -75,12 +76,12 @@ test('a browser touch swipe across a live bar exits before release without a fre
 test('only a completed tap shows a frequency; short and sideways drags do not', async ({ page, context }) => {
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
-  const { point, send, move } = await touchInput(page, context);
+  const { point, send, move, label } = await touchInput(page, context);
   const readout = page.getByRole('tooltip');
   await send('touchStart', [point]);
   await expect(readout).toBeHidden();
   await send('touchEnd', []);
-  await expect(readout).toHaveText(await page.getByRole('meter').nth(4).getAttribute('aria-label'));
+  await expect(readout).toHaveText(label);
   for (const [dx, dy] of [[0, 79], [100, 90], [0, -80]]) {
     await send('touchStart', [point]);
     await expect(readout).toBeHidden();

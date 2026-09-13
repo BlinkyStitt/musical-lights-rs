@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 
 test('render the share image with the actual shared rainbow palette', async ({ page }) => {
   await page.goto('http://127.0.0.1:8101');
-  await expect(page.getByRole('meter')).toHaveCount(24);
-  const colors = await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+  await expect(page.getByRole('meter')).toHaveCount(240);
+  const colors = await page.locator('.bark-group > .meter:first-child .meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+  expect(colors).toHaveLength(24);
   await page.setViewportSize({ width: 1200, height: 630 });
   await page.setContent(await readFile(new URL('./card.html', import.meta.url), 'utf8'));
   await page.evaluate(async colors => {

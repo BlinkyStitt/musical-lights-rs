@@ -25,6 +25,11 @@ impl Default for VisualGain {
 impl VisualGain {
     /// One gain for the canonical 24-band spectrum, regardless of panel layout.
     pub fn map(&mut self, frame: &LoudnessFrame) -> VisualLevels {
+        self.map_with_gain(frame).0
+    }
+
+    /// Advance once and return the same gain for every output of this frame.
+    pub(super) fn map_with_gain(&mut self, frame: &LoudnessFrame) -> (VisualLevels, f32) {
         let bands = frame.bands();
         let maximum = bands.iter().copied().fold(0.0_f32, f32::max) as f64;
         if frame.sones >= 0.1 && maximum > 0.0 {
@@ -34,14 +39,8 @@ impl VisualGain {
             self.log_gain += alpha * (target - self.log_gain);
         }
         let gain = Float::exp(self.log_gain) as f32;
-        let compress = |value: f32| {
-            let x = gain * value;
-            BandLevel {
-                activity: x / (1.0 + x),
-                sones: value,
-            }
-        };
-        VisualLevels {
+        let compress = |value| compress(gain, value);
+        let levels = VisualLevels {
             bands: bands.map(compress),
             panel_rows: core::array::from_fn(|row| {
                 compress(if row == 0 {
@@ -50,7 +49,17 @@ impl VisualGain {
                     bands[row + BASS_BANDS - 1]
                 })
             }),
-        }
+        };
+        (levels, gain)
+    }
+}
+
+/// Apply a frame's shared gain without changing the measured value.
+pub(super) fn compress(gain: f32, value: f32) -> BandLevel {
+    let x = gain * value;
+    BandLevel {
+        activity: x / (1.0 + x),
+        sones: value,
     }
 }
 

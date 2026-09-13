@@ -66,6 +66,15 @@ impl<const N: usize> Gradient<N> {
     /// Red through orange, yellow, green, and blue to purple, in linear sRGB.
     /// Saturation and perceptual lightness use HSLuv's 0–100 scale.
     pub fn new_rainbow(saturation: f32, luminance: f32) -> Self {
+        Self::new(
+            Self::rainbow_hues()
+                .into_iter()
+                .map(|hue| convert_color(Hsluv::new(hue, saturation, luminance))),
+        )
+    }
+
+    /// The same fixed hue anchors for each output's rainbow palette.
+    pub fn rainbow_hues() -> [f32; N] {
         // HSLuv hue is in degrees, not the LED HSV byte range of 0–255.
         let lin = Linear::builder()
             .elements([12.0, 38.0, 85.0, 127.0, 192.0, 258.0, 285.0])
@@ -81,11 +90,11 @@ impl<const N: usize> Gradient<N> {
             .build()
             .unwrap();
 
-        let color_iter = lin
-            .take(N)
-            .map(|x| convert_color(Hsluv::new(x, saturation, luminance)));
-
-        Self::new(color_iter)
+        let mut hues = [0.0; N];
+        for (hue, value) in hues.iter_mut().zip(lin.take(N)) {
+            *hue = value;
+        }
+        hues
     }
 
     // /// TODO: i don't think this is right. need to read more examples and write some tests
