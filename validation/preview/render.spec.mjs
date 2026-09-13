@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 test('render the share image with the actual shared rainbow palette', async ({ page }) => {
   await page.goto('http://127.0.0.1:8101');
-  await expect(page.getByRole('meter')).toHaveCount(240);
+  await expect(page.getByRole('meter')).toHaveCount(24);
   const colors = await page.locator('.bark-group > .meter:first-child .meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
   expect(colors).toHaveLength(24);
   await page.setViewportSize({ width: 1200, height: 630 });

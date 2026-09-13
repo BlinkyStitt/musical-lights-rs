@@ -46,7 +46,7 @@ async function drag(page, dx, dy) {
   // Playwright's WebKit transport supports touch taps, but no touch drags.
   // Exercise native pointer capture here with a mouse; touch-screen covers
   // trusted touch streams, cancellation, and multi-touch in Chromium.
-  const box = await page.getByRole('meter').nth(120).boundingBox();
+  const box = await page.getByRole('meter').nth(12).boundingBox();
   const x = box.x + box.width / 2;
   const y = box.y + 150;
   await page.mouse.move(x, y);
@@ -59,7 +59,7 @@ test('a tapped band shows its color and frequency above the graph for three seco
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('http://127.0.0.1:8101');
-  await expect(page.getByRole('meter')).toHaveCount(240);
+  await expect(page.getByRole('meter')).toHaveCount(24);
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
   const bands = page.getByRole('meter');
@@ -158,7 +158,7 @@ test('fullscreen frequency labels expire and keyboard users can reveal the exit 
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.locator('.fullscreen-hint')).toBeVisible();
-  const hit = await meterPoint(page, page.getByRole('meter').nth(120));
+  const hit = await meterPoint(page, page.getByRole('meter').nth(12));
   await page.touchscreen.tap(hit.x, hit.y);
   const readout = page.getByRole('tooltip');
   await expect(readout).toHaveText(hit.label);

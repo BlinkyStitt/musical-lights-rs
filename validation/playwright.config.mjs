@@ -9,7 +9,7 @@ export default defineConfig({
   use: { headless: true, screenshot: 'only-on-failure' },
   projects: [
     { name: 'chromium', testIgnore: '**/mobile-screen.spec.mjs', use: { browserName: 'chromium' } },
-    { name: 'webkit-spectrum', testMatch: '**/spectrum-keyboard.spec.mjs', use: { browserName: 'webkit' } },
+    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs'], use: { browserName: 'webkit' } },
     { name: 'iphone-webkit', testMatch: '**/mobile-screen.spec.mjs', use: { ...devices['iPhone 13'], browserName: 'webkit' } },
   ],
   webServer: {

@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function touchInput(page, context) {
-  const box = await page.getByRole('meter').nth(40).boundingBox();
+  const box = await page.getByRole('meter').nth(4).boundingBox();
   const session = await context.newCDPSession(page);
   const point = { x: Math.round(box.x + box.width / 2), y: box.y + box.height - 200, id: 1 };
   const send = (type, touchPoints) => session.send('Input.dispatchTouchEvent', { type, touchPoints });
@@ -43,7 +43,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
   });
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Start listening' }).tap();
-  await expect.poll(() => page.getByRole('meter').nth(40).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
+  await expect.poll(() => page.getByRole('meter').nth(4).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   const { point, send, move } = await touchInput(page, context);
   await page.evaluate(() => { pointerLog.length = 0; });

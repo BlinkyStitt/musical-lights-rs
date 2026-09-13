@@ -8,7 +8,9 @@ use musical_lights_core::{
     lights::{Gradient, screen_color},
 };
 
-pub const BALLOON_COUNT: usize = 12;
+pub const BALLOON_COUNT: usize = 24;
+/// Circular top corners use one quarter of the bar width in CSS and physics.
+pub const BAR_CORNER_RATIO: f64 = 0.25;
 const MAX_DT: f64 = 1.0 / 30.0;
 // Graph heights per second squared. Gravity always uses page coordinates;
 // device orientation supplies only the much smaller wind contribution.
@@ -90,6 +92,7 @@ struct Geometry {
     bars: [Bar; DISPLAY_BANDS],
     bar_height: f64,
     aspect: f64,
+    baseline: f64,
 }
 
 impl Geometry {
@@ -118,12 +121,17 @@ pub struct BalloonWorld {
 impl BalloonWorld {
     pub fn new(palette: Gradient<DISPLAY_BANDS>) -> Self {
         let palette = palette.colors.map(|c| [c.red, c.green, c.blue]);
-        let widths = [0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5];
+        let widths = [
+            0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5, 0.65, 1.0, 1.2, 0.8, 1.4,
+            0.55, 0.7, 1.1, 1.6, 0.9, 1.3, 0.6,
+        ];
         Self {
             balloons: std::array::from_fn(|i| {
+                let row = i / 6;
                 let position = Vector {
-                    x: 0.08 + (i % 6) as f64 * 0.16 + (i / 6) as f64 * 0.01,
-                    y: 0.52 + (i / 6) as f64 * 0.2 + (i % 3) as f64 * 0.025,
+                    x: [0.08, 0.09, 0.14, 0.155][row]
+                        + (i % 6) as f64 * [0.16, 0.16, 0.145, 0.145][row],
+                    y: [0.52, 0.72, 0.14, 0.29][row] + (i % 3) as f64 * 0.025,
                 };
                 Balloon {
                     width_in_bars: widths[i],
@@ -189,8 +197,8 @@ impl BalloonWorld {
         if dt == 0.0 {
             return;
         }
-        // Limit travel relative to the smallest sphere so fast bodies cannot
-        // pass through each other between collision checks.
+        // Limit relative travel, including rising bars, to half the smallest
+        // radius. A fast attack must not cross a rounded cap between checks.
         let minimum_radius = self
             .balloons
             .iter()
@@ -207,13 +215,17 @@ impl BalloonWorld {
                     .hypot(balloon.velocity.y + self.shake.y)
             })
             .fold(0.0, f64::max);
-        let steps = ((speed + (GRAVITY + 2.0) * dt) * dt / (minimum_radius * 0.5))
-            .ceil()
-            .clamp(1.0, 64.0) as usize;
         let levels = frame
             .levels
             .map(|level| finite(level as f64).clamp(0.0, 1.0) * geometry.bar_height);
         let previous = self.previous_levels;
+        let rise = levels
+            .iter()
+            .zip(previous)
+            .map(|(level, previous)| (level - previous).max(0.0))
+            .fold(0.0, f64::max);
+        let travel = (speed + (GRAVITY + 2.0) * dt) * dt + rise;
+        let steps = (travel / (minimum_radius * 0.5)).ceil().max(1.0) as usize;
         for step in 1..=steps {
             let progress = step as f64 / steps as f64;
             let levels = std::array::from_fn(|band| {
@@ -292,65 +304,48 @@ impl BalloonWorld {
             // and blend in ascending bar order, even for a wide balloon.
             for (band, bar) in geometry.bars.iter().enumerate() {
                 let top = levels[band];
-                let crossed_side = before.y - radius.y < top
-                    && (before.x + radius.x <= bar.left && candidate.x - radius.x >= bar.right
-                        || before.x - radius.x >= bar.right && candidate.x + radius.x <= bar.left);
                 let slop = if balloon.contacts[band] {
                     CONTACT_SLOP
                 } else {
                     0.0
                 };
-                let overlaps = candidate.x + radius.x >= bar.left - slop
-                    && candidate.x - radius.x <= bar.right + slop
-                    && candidate.y - radius.y <= top + slop;
-                if top <= 0.0 || (!overlaps && !crossed_side) {
-                    continue;
-                }
-                contacts[band] = true;
                 let from_above = before.y - radius.y >= self.previous_levels[band] - CONTACT_SLOP;
-                let left = candidate.x + radius.x - bar.left;
-                let right = bar.right - (candidate.x - radius.x);
-                let up = top - (candidate.y - radius.y);
-                let sideways =
-                    !from_above && (crossed_side || left.min(right) * geometry.aspect < up);
-                let normal = if sideways {
-                    Vector {
-                        x: if before.x < (bar.left + bar.right) * 0.5 {
-                            -1.0
-                        } else {
-                            1.0
-                        },
-                        y: 0.0,
-                    }
-                } else {
-                    Vector { x: 0.0, y: 1.0 }
+                let Some(hit) =
+                    bar_contact(candidate, radius.y, *bar, top, geometry, from_above, slop)
+                else {
+                    continue;
                 };
-                if sideways {
-                    balloon.position.x = if normal.x < 0.0 {
-                        bar.left - radius.x
-                    } else {
-                        bar.right + radius.x
-                    };
-                    if balloon.velocity.x * normal.x < 0.0 {
-                        balloon.velocity.x = 0.0;
-                    }
-                } else {
-                    balloon.position.y = balloon.position.y.max(top + radius.y);
-                    balloon.velocity.y = balloon.velocity.y.max(0.0);
+                contacts[band] = true;
+                let normal = hit.normal;
+                // Resolve from the current position so simultaneous surfaces do
+                // not apply the same penetration correction more than once.
+                if let Some(correction) = bar_contact(
+                    balloon.position,
+                    radius.y,
+                    *bar,
+                    top,
+                    geometry,
+                    from_above,
+                    0.0,
+                ) {
+                    resolve_bar(balloon, correction, geometry.aspect);
                 }
                 let rise = top - self.previous_levels[band];
-                let approach = (-(incoming.x * normal.x + incoming.y * normal.y)).max(0.0);
+                let approach =
+                    (-(incoming.x * geometry.aspect * normal.x + incoming.y * normal.y)).max(0.0);
                 if !balloon.contacts[band] && (rise > 1e-6 || approach > REST_SPEED) {
                     let rebound = if approach > REST_SPEED {
                         approach * restitution
                     } else {
                         0.0
                     };
-                    let outgoing =
-                        ((rise / dt * 0.1).clamp(0.0, 0.7) * motion_scale + rebound).min(MAX_SPEED);
-                    let current = balloon.velocity.x * normal.x + balloon.velocity.y * normal.y;
+                    let outgoing = ((rise / dt * normal.y * 0.1).clamp(0.0, 0.7) * motion_scale
+                        + rebound)
+                        .min(MAX_SPEED);
+                    let current = balloon.velocity.x * geometry.aspect * normal.x
+                        + balloon.velocity.y * normal.y;
                     let change = (outgoing - current).max(0.0);
-                    balloon.velocity.x += normal.x * change;
+                    balloon.velocity.x += normal.x * change / geometry.aspect;
                     balloon.velocity.y += normal.y * change;
                     // A resting contact has no impact. A falling sphere can
                     // bounce off a stationary bar without gaining energy.
@@ -364,7 +359,7 @@ impl BalloonWorld {
         }
         // Revisit contacts in a stable order to resolve piles against bars and
         // walls. Position corrections add neither velocity nor color.
-        for _ in 0..32 {
+        for _ in 0..64 {
             let mut overlap: f64 = 0.0;
             for i in 0..BALLOON_COUNT {
                 let (left, right) = self.balloons.split_at_mut(i + 1);
@@ -382,6 +377,79 @@ impl BalloonWorld {
         }
         self.shake = Vector::default();
         self.previous_levels = levels;
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BarContact {
+    /// Unit normal in graph-height coordinates, where circles stay circular.
+    normal: Vector,
+    depth: f64,
+}
+
+/// A bar is a rectangle with circular top corners. Offset its inner rectangle
+/// by the corner radius plus the ball radius to get the exact contact surface.
+fn bar_contact(
+    position: Vector,
+    radius: f64,
+    bar: Bar,
+    top: f64,
+    geometry: Geometry,
+    from_above: bool,
+    slop: f64,
+) -> Option<BarContact> {
+    if top <= 0.0 {
+        return None;
+    }
+    let left = bar.left * geometry.aspect;
+    let right = bar.right * geometry.aspect;
+    let corner = ((right - left) * BAR_CORNER_RATIO).min(top + geometry.baseline);
+    let x = position.x * geometry.aspect;
+    let delta = Vector {
+        x: x - x.clamp(left + corner, right - corner),
+        y: position.y - position.y.min(top - corner),
+    };
+    let distance = delta.x.hypot(delta.y);
+    if distance > 1e-12 {
+        let depth = corner + radius - distance;
+        return (depth >= -slop).then_some(BarContact {
+            normal: Vector {
+                x: delta.x / distance,
+                y: delta.y / distance,
+            },
+            depth: depth.max(0.0),
+        });
+    }
+    // A rising bar can enclose a center. Keep a ball that was above the bar
+    // on its top; otherwise select the nearest side or top to leave the solid.
+    let up = top + radius - position.y;
+    let to_left = x - left + radius;
+    let to_right = right - x + radius;
+    Some(if from_above || up <= to_left.min(to_right) {
+        BarContact {
+            normal: Vector { x: 0.0, y: 1.0 },
+            depth: up,
+        }
+    } else if to_left <= to_right {
+        BarContact {
+            normal: Vector { x: -1.0, y: 0.0 },
+            depth: to_left,
+        }
+    } else {
+        BarContact {
+            normal: Vector { x: 1.0, y: 0.0 },
+            depth: to_right,
+        }
+    })
+}
+
+fn resolve_bar(balloon: &mut Balloon, hit: BarContact, aspect: f64) {
+    balloon.position.x += hit.normal.x * hit.depth / aspect;
+    balloon.position.y += hit.normal.y * hit.depth;
+    let inward = balloon.velocity.x * aspect * hit.normal.x + balloon.velocity.y * hit.normal.y;
+    if inward < 0.0 {
+        balloon.velocity.x -= hit.normal.x * inward / aspect;
+        balloon.velocity.y -= hit.normal.y * inward;
     }
 }
 
@@ -449,15 +517,25 @@ fn constrain(
     // A collision correction can place a body over another surface. Restore
     // support without counting the correction as another bar impact.
     for (band, bar) in geometry.bars.iter().enumerate() {
-        if levels[band] > 0.0
-            && balloon.position.x + radius.x > bar.left
-            && balloon.position.x - radius.x < bar.right
-            && balloon.position.y - radius.y < levels[band]
-        {
-            balloon.position.y = levels[band] + radius.y;
-            balloon.velocity.y = balloon.velocity.y.max(0.0);
+        if let Some(hit) = bar_contact(
+            balloon.position,
+            radius.y,
+            *bar,
+            levels[band],
+            geometry,
+            true,
+            0.0,
+        ) {
+            resolve_bar(balloon, hit, geometry.aspect);
         }
     }
+    // A curved corner can push sideways during surface correction.
+    clamp_axis(
+        &mut balloon.position.x,
+        &mut balloon.velocity.x,
+        radius.x,
+        restitution,
+    );
     clamp_axis(
         &mut balloon.position.y,
         &mut balloon.velocity.y,

@@ -1,17 +1,12 @@
 use crate::{
-    balloons::{BalloonAnimation, BalloonWorld},
+    balloons::{BAR_CORNER_RATIO, BalloonAnimation, BalloonWorld},
     display::DisplayAnimation,
     screen::ScreenSession,
     wasm_audio::{AudioSession, AudioUpdate},
 };
 use leptos::prelude::*;
 use musical_lights_core::{
-    audio::{
-        browser_visual::{
-            BROWSER_SLICES, BrowserFrame, SLICES_PER_GROUP, slice_colors, slice_frequency_edges,
-        },
-        visual::{BARK_EDGES, DISPLAY_BANDS},
-    },
+    audio::visual::{BARK_EDGES, DISPLAY_BANDS, DisplayFrame},
     lights::{Gradient, screen_color},
 };
 use std::{
@@ -45,11 +40,11 @@ impl SessionOwner {
 #[component]
 pub fn DancingLights() -> impl IntoView {
     let palette = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0);
-    let colors = slice_colors(90.0, 58.0);
-    let frequency_edges = slice_frequency_edges();
+    let colors = palette.colors;
+    let frequency_edges = BARK_EDGES;
     let idle_balloons = BalloonWorld::new(palette);
     let (active_sample, set_active_sample) = signal(0usize);
-    let sample_nodes = StoredValue::new(std::array::from_fn::<_, BROWSER_SLICES, _>(|_| {
+    let sample_nodes = StoredValue::new(std::array::from_fn::<_, DISPLAY_BANDS, _>(|_| {
         NodeRef::<leptos::html::Div>::new()
     }));
     let navigate_sample = move |event: web_sys::KeyboardEvent| {
@@ -59,9 +54,9 @@ pub fn DancingLights() -> impl IntoView {
         let index = active_sample.get_untracked();
         let next = match event.key().as_str() {
             "ArrowLeft" => index.saturating_sub(1),
-            "ArrowRight" => (index + 1).min(BROWSER_SLICES - 1),
+            "ArrowRight" => (index + 1).min(DISPLAY_BANDS - 1),
             "Home" => 0,
-            "End" => BROWSER_SLICES - 1,
+            "End" => DISPLAY_BANDS - 1,
             _ => return,
         };
         event.prevent_default();
@@ -106,7 +101,7 @@ pub fn DancingLights() -> impl IntoView {
             set_selected_band.set(None);
         }
     };
-    let (audio, set_audio) = signal(BrowserFrame::default());
+    let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
     let (listening, set_listening) = signal(false);
     let (capture_status, set_capture_status) =
         signal(String::from("Uncalibrated · relative light activity"));
@@ -193,7 +188,7 @@ pub fn DancingLights() -> impl IntoView {
                 return;
             }
             if let Some(balloons) = balloons.borrow().as_ref() {
-                balloons.push(values.bands);
+                balloons.push(values);
             }
             if audio.get_untracked() != values {
                 set_audio.set(values);
@@ -238,7 +233,7 @@ pub fn DancingLights() -> impl IntoView {
                                 set_calibrating.set(false);
                                 set_listening.set(false);
                                 set_starting.set(false);
-                                set_audio.set(BrowserFrame::default());
+                                set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
                                 set_frame_rate.set(None);
                                 let owner = failure_owner.clone();
                                 // Release the message closure after it returns.
@@ -281,7 +276,7 @@ pub fn DancingLights() -> impl IntoView {
                             set_listening.set(false);
                             set_frame_rate.set(None);
                             set_error.set(None);
-                            set_audio.set(BrowserFrame::default());
+                            set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
@@ -314,37 +309,36 @@ pub fn DancingLights() -> impl IntoView {
                     <span class="frequency-swatch" aria-hidden="true"></span>
                     <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[index], frequency_edges[index + 1]))}</span>
                 </div>
-                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble" on:keydown=navigate_sample>
+                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble" on:keydown=navigate_sample
+                    style=format!("--bar-corner-ratio: {BAR_CORNER_RATIO};")>
                     {BARK_EDGES.windows(2).enumerate().map(|(group, edges)| {
                         let color = screen_color(palette.colors[group]);
                         let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
                         view! {
                             <div class="bark-group" role="group"
                                 aria-label=format!("{}–{} Bark, {}–{} Hz", group, group + 1, edges[0], edges[1]) style=style>
-                                {(0..SLICES_PER_GROUP).map(|local| {
-                                    let i = group * SLICES_PER_GROUP + local;
-                                    let label = format!("≈ {}–{} Hz", frequency_edges[i], frequency_edges[i + 1]);
-                                    view! {
-                                        <div class="meter" role="meter" aria-label=label
-                                            node_ref=sample_nodes.with_value(|nodes| nodes[i])
-                                            tabindex=move || if active_sample.get() == i { "0" } else { "-1" }
-                                            aria-describedby=move || (selected_band.get() == Some(i)).then_some("frequency-readout")
-                                            on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(i, false); } }
-                                            on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(i); } }
-                                            on:focus=move |event| {
-                                                set_active_sample.set(i);
-                                                if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(i, false); }
-                                            }
-                                            on:blur=move |_| hide_band(i)
-                                            aria-valuemin="0" aria-valuemax="100"
-                                            aria-valuenow=move || audio.with(|frame| (frame.slices[i] * 100.0).round() as u32)>
-                                            <div class="meter-fill" style:transform=move || audio.with(|frame| format!("scaleY({})", frame.slices[i]))></div>
-                                        </div>
+                                <div class="meter" role="meter"
+                                    aria-label=format!("≈ {}–{} Hz", edges[0], edges[1])
+                                    node_ref=sample_nodes.with_value(|nodes| nodes[group])
+                                    tabindex=move || if active_sample.get() == group { "0" } else { "-1" }
+                                    aria-describedby=move || (selected_band.get() == Some(group)).then_some("frequency-readout")
+                                    on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(group, false); } }
+                                    on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(group); } }
+                                    on:focus=move |event| {
+                                        set_active_sample.set(group);
+                                        if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(group, false); }
                                     }
-                                }).collect_view()}
-                                <div class="meter-edge" aria-hidden="true"
-                                    style:height=move || audio.with(|frame| format!("calc((100% - 3px - var(--balloon-headroom)) * {})", frame.group_heights[group]))
-                                    style:opacity=move || audio.with(|frame| frame.bands.edges[group].to_string())></div>
+                                    on:blur=move |_| hide_band(group)
+                                    aria-valuemin="0" aria-valuemax="100"
+                                    aria-valuenow=move || audio.with(|frame| (frame.levels[group] * 100.0).round() as u32)>
+                                    <div class="meter-track">
+                                        <div class="meter-fill"
+                                            style:height=move || audio.with(|frame| format!("calc({}% + 3px)", frame.levels[group] * 100.0))>
+                                            <div class="meter-glow" aria-hidden="true"
+                                                style:opacity=move || audio.with(|frame| frame.edges[group].to_string())></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         }
                     }).collect_view()}

@@ -26,7 +26,7 @@ function tone(length, frequency = 50, gain = 0.5) {
   return Float32Array.from({ length }, (_, i) => Math.sin(i * 2 * Math.PI * frequency / 48000) * gain);
 }
 
-test('a steady quiet tone adapts its bars without holding white edges on', () => {
+test('a steady quiet tone adapts its bars without holding the white glow on', () => {
   const p = processor();
   // One exact second repeats without phase jumps, including across callbacks.
   const samples = tone(48000, 1000, .02);
@@ -39,21 +39,14 @@ test('a steady quiet tone adapts its bars without holding white edges on', () =>
       const state = p.snapshot();
       const heights = Array.from({ length: 24 }, (_, band) => state[2 + 6 * band]);
       const strongest = heights.indexOf(Math.max(...heights));
-      expect(state[5 + 6 * strongest], `white edge at ${second}s`).toBe(0);
+      expect(state[5 + 6 * strongest], `white glow at ${second}s`).toBe(0);
       expect(p.value.wasm.processor_sones(p.value.processor)).toBeCloseTo(4.957, 3);
       if (second === 10) early = heights[strongest];
       if (second === 100) {
         expect(heights[strongest]).toBeGreaterThan(early + .05);
-        expect(state.slice(0, 2)).toEqual(state.slice(146, 148));
-        const fine = Array.from({ length: 240 }, (_, i) => state[148 + 6 * i]);
-        // Finite-time gain approaches its target; the displayed meter rounds
-        // to 100 while the unchanged aggregate still targets 80.
-        expect(Math.round(Math.max(...fine) * 100)).toBe(100);
-        expect(new Set(fine).size).toBeGreaterThan(24);
-        for (let group = 0; group < 24; group++) {
-          const sum = Array.from({ length: 10 }, (_, i) => state[153 + 6 * (group * 10 + i)]).reduce((a, b) => a + b, 0);
-          expect(sum).toBeCloseTo(state[7 + 6 * group], 5);
-        }
+        expect(state).toHaveLength(146);
+        expect(Math.max(...heights)).toBeGreaterThan(.75);
+        expect(Math.max(...heights)).toBeLessThan(.8);
       }
     }
   }
@@ -82,7 +75,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages).toHaveLength(1);
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
-    expect(p.messages[0].data.state.length).toBe(1588);
+    expect(p.messages[0].data.state.length).toBe(146);
     expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sones', 'state', 'type']);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));

@@ -1,5 +1,5 @@
 use js_sys::{Float64Array, Reflect};
-use musical_lights_core::audio::browser_visual::BrowserSnapshot;
+use musical_lights_core::audio::visual::{DISPLAY_BANDS, DisplaySnapshot};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 use wasm_bindgen_futures::JsFuture;
@@ -31,7 +31,7 @@ extern "C" {
 #[allow(clippy::large_enum_variant)]
 pub enum AudioUpdate {
     Frame {
-        snapshot: BrowserSnapshot,
+        snapshot: DisplaySnapshot<DISPLAY_BANDS>,
         clipped: u64,
     },
     Status(String),
@@ -155,7 +155,7 @@ impl AudioSession {
                     let parsed = Reflect::get(&data, &"state".into())
                         .ok()
                         .and_then(|v| v.dyn_into::<Float64Array>().ok())
-                        .and_then(|v| BrowserSnapshot::from_transport(&v.to_vec()));
+                        .and_then(|v| DisplaySnapshot::from_transport(&v.to_vec()));
                     if let Some(snapshot) = parsed {
                         let clipped = Reflect::get(&data, &"clipped".into())
                             .ok()
