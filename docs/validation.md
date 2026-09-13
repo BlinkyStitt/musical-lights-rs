@@ -173,6 +173,12 @@ measurements. The [desktop](rounded-bars-results/desktop.png) and
 their FPS labels include the deliberate stall after the measurement window.
 The share-image renderer also passed.
 
+Linux CI exposed a test-fixture failure in the added WebKit audio checks:
+garbage collection can discard an override on the native `MediaDevices`
+instance. An explicit browser collection reproduced both startup failures
+locally. Those fixtures now override `MediaDevices.prototype`, as the existing
+iPhone checks do, and collect garbage before capture to preserve the regression.
+
 These results describe local validation. CI and deployment have separate status.
 
 ## Measurement evidence

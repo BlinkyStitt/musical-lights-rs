@@ -18,12 +18,15 @@ for (const colorScheme of ['light', 'dark']) {
         window.AudioWorkletNode = class extends NativeNode {
           constructor(...args) { super(...args); window.testPort = this.port; }
         };
-        navigator.mediaDevices.getUserMedia = async () => window.testContext.createMediaStreamDestination().stream;
+        MediaDevices.prototype.getUserMedia = async () => window.testContext.createMediaStreamDestination().stream;
       });
       await page.goto('http://127.0.0.1:8101');
       await expect(page.locator('.meter-glow')).toHaveCount(24);
       const palette = await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
       expect(await page.locator('.meter-glow').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).opacity === '0'))).toBe(true);
+      // WebKit can collect and recreate the native MediaDevices wrapper.
+      // The prototype override must still supply the test stream afterward.
+      await page.requestGC();
       await page.getByRole('button', { name: 'Start listening' }).click();
       await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
       await page.evaluate(async () => {

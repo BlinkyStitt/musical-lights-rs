@@ -63,9 +63,11 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
     window.AudioWorkletNode = class extends Node {
       constructor(...args) { super(...args); window.transportPort = this.port; }
     };
-    navigator.mediaDevices.getUserMedia = async () => window.transportContext.createMediaStreamDestination().stream;
+    MediaDevices.prototype.getUserMedia = async () => window.transportContext.createMediaStreamDestination().stream;
   });
   await page.goto('http://127.0.0.1:8101');
+  // Keep the fake capture source after WebKit recreates its native wrapper.
+  await page.requestGC();
   await page.getByRole('button', { name: 'Start listening' }).click();
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   await page.evaluate(async () => {
