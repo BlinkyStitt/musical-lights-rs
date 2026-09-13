@@ -229,14 +229,23 @@ impl Resources {
             baseline: (self.meters[0].get_bounding_client_rect().bottom() - bounds.bottom())
                 / size.1,
         };
+        // A compact or resized layer can overlap the initial round bodies.
+        // Resolve the same contacts before drawing its first frame.
+        self.world
+            .resolve_contacts(self.geometry, self.world.previous_levels, 0.0);
     }
 
     fn render(&self) {
         for (node, balloon) in self.nodes.iter().zip(&self.world.balloons) {
             let style = node.style();
-            let _ = style.set_property("left", &format!("{}%", balloon.position.x * 100.0));
-            let _ = style.set_property("top", &format!("{}%", (1.0 - balloon.position.y) * 100.0));
+            let _ = style.set_property("--balloon-x", &format!("{}%", balloon.position.x * 100.0));
+            let _ = style.set_property(
+                "--balloon-y",
+                &format!("{}%", (1.0 - balloon.position.y) * 100.0),
+            );
             let _ = style.set_property("--balloon-color", &balloon.css_color());
+            let _ = style.set_property("--balloon-scale-x", &balloon.deformation.x.to_string());
+            let _ = style.set_property("--balloon-scale-y", &balloon.deformation.y.to_string());
         }
     }
 

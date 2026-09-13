@@ -26,16 +26,16 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
   const balloon = page.locator('.balloon').nth(4);
-  const before = await balloon.evaluate(node => Number.parseFloat(node.style.left));
+  const before = await balloon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--balloon-x')));
   const box = await balloon.boundingBox();
   await page.mouse.move(box.x + box.width * .25, box.y + box.height * .5);
-  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.left))).toBeGreaterThan(before + .2);
+  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--balloon-x')))).toBeGreaterThan(before + .2);
   await page.getByRole('button', { name: 'Stop listening' }).tap();
   await page.mouse.move(0, 0);
   const stopped = await balloon.evaluate(node => ({
-    top: Number.parseFloat(node.style.top), color: node.style.getPropertyValue('--balloon-color'),
+    top: Number.parseFloat(node.style.getPropertyValue('--balloon-y')), color: node.style.getPropertyValue('--balloon-color'),
   }));
-  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.top))).toBeGreaterThan(stopped.top + .1);
+  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--balloon-y')))).toBeGreaterThan(stopped.top + .1);
   expect(await balloon.evaluate(node => node.style.getPropertyValue('--balloon-color'))).toBe(stopped.color);
   await expect(page.getByRole('alert')).toBeEmpty();
   await page.evaluate(() => window.balloonSourceContext.close());

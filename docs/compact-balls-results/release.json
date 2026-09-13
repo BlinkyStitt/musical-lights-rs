@@ -1,0 +1,156 @@
+{
+  "label": "compact-squishy-spectrum",
+  "at": "2026-09-13T18:18:55.754Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "release": "25.2.0",
+    "cpu": "Apple M4 Max"
+  },
+  "workletSha256": "d0b31940ec02c5c62eaaa46967fa5b7115f48c0e23922d938cf21305b525a784",
+  "indexSha256": "0ec0d4967d346177866b503d3cbaed091dcdb46a8f73f73675331d02c96f6f01",
+  "hostWorklet": {
+    "audioSeconds": 30,
+    "elapsedMs": 288.1697909999998,
+    "percentOfOneHostCore": 0.9605659699999993,
+    "memoryBytes": 1179648,
+    "snapshotBytes": 1168,
+    "boundary": "Mac Node WASM process + snapshot + transferable structuredClone; synchronous ACK after every quantum"
+  },
+  "profiles": [
+    {
+      "name": "desktop-chromium",
+      "browser": "154.0.8037.0",
+      "measuredSeconds": 29.982135,
+      "meters": 24,
+      "fps": 60.00239809473208,
+      "frameIntervalMs": {
+        "count": 1799,
+        "mean": 16.66600055586437,
+        "p50": 16.665000000000873,
+        "p95": 16.67000000000189,
+        "max": 16.67000000000553
+      },
+      "appRafCallbackMs": {
+        "count": 3600,
+        "mean": 0.6699638975991143,
+        "p50": 0.7749996185302734,
+        "p95": 2.0249996185302734,
+        "max": 4.454999923706055
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3600,
+        "mean": 0.7104388957553439,
+        "p50": 0.7799997329711914,
+        "p95": 2.0299997329711914,
+        "max": 4.454999923706055
+      },
+      "messageDecodeAndAckMs": {
+        "count": 5626,
+        "mean": 0.03279949929677758,
+        "p50": 0.03000020980834961,
+        "p95": 0.05500030517578125,
+        "max": 0.19999980926513672
+      },
+      "messages": 5626,
+      "acknowledgements": 5626,
+      "messagesPerSecond": 187.6450759760771,
+      "payloadBytesPerSecond": 219169.44874005805,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 5626,
+        "mean": 2.5122644863135273,
+        "p50": 2.0000000000024443,
+        "p95": 5.333333333332746,
+        "max": 5.333333333339851
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.152,
+          35.456,
+          35.462,
+          35.468,
+          35.472
+        ],
+        "blockedAt": 35.152
+      },
+      "heights": {
+        "max": 73,
+        "min": 2,
+        "distinct": 20
+      },
+      "errors": []
+    },
+    {
+      "name": "iphone-profile-webkit-on-mac",
+      "browser": "26.6",
+      "measuredSeconds": 29.983880000000003,
+      "meters": 24,
+      "fps": 59.99890607886637,
+      "frameIntervalMs": {
+        "count": 1799,
+        "mean": 16.666970539188437,
+        "p50": 16.660000000001673,
+        "p95": 17.4800000000032,
+        "max": 20.100000000000364
+      },
+      "appRafCallbackMs": {
+        "count": 3600,
+        "mean": 0.8820166666666908,
+        "p50": 0.5799999999981083,
+        "p95": 3.100000000002183,
+        "max": 12.960000000000036
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3600,
+        "mean": 0.9200944444444811,
+        "p50": 0.5799999999981083,
+        "p95": 3.119999999999891,
+        "max": 12.960000000000036
+      },
+      "messageDecodeAndAckMs": {
+        "count": 5594,
+        "mean": 0.02849481587402432,
+        "p50": 0.020000000000436557,
+        "p95": 0.040000000000873115,
+        "max": 0.10000000000218279
+      },
+      "messages": 5594,
+      "acknowledgements": 5594,
+      "messagesPerSecond": 186.56691528914868,
+      "payloadBytesPerSecond": 217910.15705772568,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 5594,
+        "mean": 2.196162555118521,
+        "p50": 1.9999999999997797,
+        "p95": 4.000000000001336,
+        "max": 13.333333333335418
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.158,
+          35.464,
+          35.47,
+          35.476,
+          35.48
+        ],
+        "blockedAt": 35.157333333333334
+      },
+      "heights": {
+        "max": 71,
+        "min": 2,
+        "distinct": 19
+      },
+      "errors": []
+    }
+  ]
+}
