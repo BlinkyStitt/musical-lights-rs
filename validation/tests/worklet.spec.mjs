@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const bytes = await readFile('../musical-lights-worklet/pkg/loudness.wasm');
+const bytes = await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url));
 const module = new WebAssembly.Module(bytes);
-const source = await readFile('../musical-lights-worklet/processor.js', 'utf8');
+const source = await readFile(new URL('../../musical-lights-worklet/processor.js', import.meta.url), 'utf8');
 function processor(channel = 0) {
   const messages = [];
   const scope = { currentFrame: 0, sampleRate: 48000, WebAssembly, Float32Array, Float64Array,
