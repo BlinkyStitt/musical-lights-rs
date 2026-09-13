@@ -279,10 +279,81 @@ Clippy, and the release build. The full local browser/worklet suite passed all
 119 checks. The measurement tool now records startup callback costs before
 its steady-state window. The [new release measurement](ball-stepping-results/release.json)
 recorded 60.00 FPS in Chromium and 59.89 FPS in the WebKit iPhone profile on Mac.
+Those timings cover the normal page view. That version of the tool took
+fullscreen screenshots but did not time fullscreen animation.
 Startup callback maxima were 29.07 ms and 18.94 ms; steady callback p95 was
 1.84 ms and 1.98 ms. Both recovered from the 300 ms page stall with one old
 packet followed by current state. CI and deployment remain separate from these
 local results.
+
+### Fullscreen physics performance
+
+An iPhone 16e report prompted measurements of actual fullscreen animation on
+2026-09-13. The earlier tool measured the normal page and only photographed
+fullscreen. The extended tool times normal, portrait fullscreen, and landscape
+fullscreen views. It also measures repeated beats and fourfold CPU throttling.
+
+The baseline CPU profile put most animation time in collision distances.
+The release WASM used software floating-point helpers for general-purpose
+`hypot` calls. Collision coordinates are bounded, so squared-distance rejection
+and square roots replace those calls. Bar checks first reject separated bounds.
+Velocity limiting normalizes before squaring to retain finite results for very
+large sensor inputs. The same contact solver still compresses, pushes, and
+recovers all 24 balls within the existing 5% headroom.
+
+The renderer caches each ball's style handle and last color. It encodes and
+writes a color only after it changes. A browser regression counted 1,440
+unnecessary color writes over 60 idle frames before this change, and zero
+afterward. Existing impact tests still require color changes on bar impacts.
+In the steady profiles, total CSS writes fell from about 139 to 116 per frame.
+
+The Rust and WASM release optimizers now use level 3 instead of size level `z`.
+See [Cargo's optimization settings](https://doc.rust-lang.org/cargo/reference/profiles.html#opt-level).
+The main WASM grows from 497,051 to 823,628 bytes, or from 196,299 to 257,354
+bytes with gzip. This trades about 61 KB of compressed download for less work
+during animation. The separate audio worklet is unchanged.
+
+The [measurement files and reproduction steps](ios-performance-results/README.md)
+record the baseline, intermediate, and final builds. Each profile warms for five
+seconds and measures thirty seconds of actual AudioWorklet transfer and ACK
+traffic. The beat input supplies two pulses per second. A separate 300 ms page
+stall checks that the next ACK releases current state without a backlog.
+
+The final release produced these fullscreen results. Frame work is the 95th
+percentile of the combined application animation callbacks for each frame:
+
+| Profile and input | Baseline FPS | Final FPS | Baseline frame work | Final frame work |
+| --- | ---: | ---: | ---: | ---: |
+| WebKit portrait, steady | 60.1 | 60.2 | 5.08 ms | 0.72 ms |
+| WebKit portrait, beats | 47.5 | 60.1 | 50.86 ms | 3.78 ms |
+| Chromium fourfold throttle, steady | 27.3 | 60.0 | 86.41 ms | 4.74 ms |
+| Chromium fourfold throttle, beats | 18.8 | 57.1 | 194.12 ms | 22.73 ms |
+
+Desktop, normal phone, and landscape WebKit profiles also held about 60 FPS.
+The throttled beat case still misses some frames. All profiles retained 24
+meters, matched each worklet message with an ACK, recovered from the page stall,
+and reported no page errors. See [final results](ios-performance-results/final.json),
+[steady baseline](ios-performance-results/baseline.json), and
+[beat baseline](ios-performance-results/baseline-beats.json).
+
+These tests run on an Apple M4 Max Mac. WebKit uses the iPhone browser profile;
+Chromium's CPU throttle supplies a slower comparison. Neither measures a
+physical iPhone 16e. FPS counts delivered animation callbacks, and callback
+timings exclude GPU presentation. Physical phone performance remains a device
+check.
+
+A game-engine migration is unnecessary for these measured gains. The costly
+code was collision math. [PixiJS](https://pixijs.com/8.x/guides/concepts/performance-tips)
+focuses on rendering, and [Rapier rigid bodies](https://rapier.rs/docs/user_guides/rust/rigid_bodies/)
+do not deform. Either migration would still need work to retain the current
+compression behavior. No new dependency or reduced ball count is used here.
+
+Pinned Leptos validation passed 36 native tests, formatting, host and WASM
+Clippy, and the release build. All 127 local browser/worklet checks passed in
+Chromium and WebKit. They cover the thin white border, rounded contacts,
+compression and recovery, keyboard focus, mouse and touch input, fullscreen
+exit, and route cleanup. No new browser crash reports appeared. CI and Pages
+deployment have separate status from these local results.
 
 ## Measurement evidence
 

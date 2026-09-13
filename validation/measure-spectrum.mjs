@@ -1,5 +1,5 @@
 // Measure served release artifacts through real AudioWorklet transfer/ACK and DOM paths.
-// Usage: node measure-spectrum.mjs ROOT LABEL OUTPUT.json
+// Usage: node measure-spectrum.mjs ROOT LABEL OUTPUT.json [PROFILE_FILTER]
 import { chromium, webkit, devices } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
@@ -8,8 +8,9 @@ import { createHash } from 'node:crypto';
 import { cpus, platform, arch, release } from 'node:os';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import checkBrowserStartup from './browser-startup.mjs';
 
-const [rootArgument, label, outputArgument] = process.argv.slice(2);
+const [rootArgument, label, outputArgument, profileFilter] = process.argv.slice(2);
 if (!rootArgument || !label || !outputArgument) throw new Error('Expected ROOT LABEL OUTPUT.json');
 const root = resolve(rootArgument), output = resolve(outputArgument);
 const dist = resolve(root, 'musical-leptos/dist');
@@ -68,28 +69,60 @@ const result = { label, at: new Date().toISOString(), host: { platform: platform
   hostWorklet: hostWorkletCost(), profiles: [] };
 await mkdir(dirname(output), { recursive: true });
 try {
-  for (const [name, engine, profile] of [
+  await checkBrowserStartup({ filteredProjects: ['chromium', 'webkit'].map(name => ({ name, use: { browserName: name } })) });
+  const profiles = [
     ['desktop-chromium', chromium, { viewport: { width: 1440, height: 1000 } }],
     ['iphone-profile-webkit-on-mac', webkit, devices['iPhone 13']],
-  ]) {
+    ['iphone-fullscreen-webkit-on-mac', webkit, devices['iPhone 13'], true],
+    ['iphone-landscape-fullscreen-webkit-on-mac', webkit, { ...devices['iPhone 13'], viewport: { width: 844, height: 390 } }, true],
+    ['phone-chromium-cpu4', chromium, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 }, false, 4],
+    ['phone-fullscreen-chromium-cpu4', chromium, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 }, true, 4],
+    ['iphone-fullscreen-beats-webkit-on-mac', webkit, devices['iPhone 13'], true, 1, true],
+    ['phone-fullscreen-beats-chromium-cpu4', chromium, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 }, true, 4, true],
+  ].filter(([name]) => !profileFilter || name.includes(profileFilter));
+  assert(profiles.length, `No profiles match ${profileFilter}`);
+  for (const [name, engine, profile, expanded = false, cpuRate = 1, percussion = false] of profiles) {
     console.log(`${label}: ${name}, 5 s warmup + 30 s release-page measurement`);
     const browser = await engine.launch();
     try {
       const context = await browser.newContext({ ...profile, colorScheme: 'dark' });
       const page = await context.newPage();
+      const cdp = engine === chromium ? await context.newCDPSession(page) : null;
+      if (cdp) {
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
+        await cdp.send('Performance.enable');
+        await cdp.send('Profiler.enable');
+        await cdp.send('Profiler.setSamplingInterval', { interval: 1000 });
+      }
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
-      await page.addInitScript(() => {
-        const makeStats = () => ({ frames: [], frameCosts: [], flushCosts: [], messages: [], decodeCosts: [], acks: 0 });
+      await page.addInitScript(({ percussion }) => {
+        const makeStats = () => ({ frames: [], frameCosts: [], frameTotals: [], flushCosts: [], messages: [], decodeCosts: [], acks: 0, layoutReads: 0, layoutReadMs: 0, styleWrites: 0 });
         window.measureStats = makeStats();
         window.resetMeasureStats = () => { window.measureStats = makeStats(); };
+        const bounds = Element.prototype.getBoundingClientRect;
+        Element.prototype.getBoundingClientRect = function(...args) {
+          const start = performance.now();
+          const result = bounds.apply(this, args);
+          window.measureStats.layoutReads++;
+          window.measureStats.layoutReadMs += performance.now() - start;
+          return result;
+        };
+        const setProperty = CSSStyleDeclaration.prototype.setProperty;
+        CSSStyleDeclaration.prototype.setProperty = function(...args) {
+          window.measureStats.styleWrites++;
+          return setProperty.apply(this, args);
+        };
         const request = window.requestAnimationFrame.bind(window);
         window.requestAnimationFrame = callback => request(now => {
           const stats = window.measureStats;
-          if (stats.frames.at(-1) !== now) stats.frames.push(now);
+          if (stats.frames.at(-1) !== now) { stats.frames.push(now); stats.frameTotals.push(0); }
+          const frameIndex = stats.frameTotals.length - 1;
           const start = performance.now();
           callback(now);
-          stats.frameCosts.push(performance.now() - start);
+          const cost = performance.now() - start;
+          stats.frameCosts.push(cost);
+          stats.frameTotals[frameIndex] += cost;
           // Leptos queues its effects during the callback. This boundary includes
           // that microtask work, but does not claim GPU presentation or paint time.
           queueMicrotask(() => stats.flushCosts.push(performance.now() - start));
@@ -129,8 +162,12 @@ try {
           for (let i = 0; i < samples.length; i++) {
             seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
             const t = i / 48000;
-            samples[i] = (.02 + .015 * Math.sin(t * Math.PI / 2)) *
-              (Math.sin(2 * Math.PI * 220 * t) + .6 * Math.sin(2 * Math.PI * 1800 * t)) + .005 * (seed / 2 ** 32 - .5);
+            const noise = seed / 2 ** 32 - .5;
+            const beat = t % .5;
+            samples[i] = percussion
+              ? (.003 + .18 * Math.exp(-beat * 35)) * noise + .04 * Math.exp(-beat * 12) * Math.sin(2 * Math.PI * 80 * t)
+              : (.02 + .015 * Math.sin(t * Math.PI / 2)) *
+                (Math.sin(2 * Math.PI * 220 * t) + .6 * Math.sin(2 * Math.PI * 1800 * t)) + .005 * noise;
           }
           const source = context.createBufferSource(); source.buffer = buffer; source.loop = true;
           const gain = context.createGain(); source.connect(gain); gain.connect(destination);
@@ -138,18 +175,30 @@ try {
           window.measureInput = { context, gain };
           return destination.stream;
         };
-      });
+      }, { percussion });
+      if (cdp) await cdp.send('Profiler.start');
       await page.goto(url);
       await page.getByRole('button', { name: 'Start listening' }).click();
       await page.getByRole('button', { name: 'Stop listening' }).waitFor();
+      if (expanded) await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
       await page.waitForTimeout(5000);
+      assert.equal(await page.locator('.audio-card').getAttribute('data-expanded') !== null, expanded);
       const startup = await page.evaluate(() => {
         const stats = window.measureStats;
         window.resetMeasureStats();
         return stats;
       });
+      const metricsBefore = cdp ? await cdp.send('Performance.getMetrics') : null;
       await page.waitForTimeout(30000);
       const stats = await page.evaluate(() => window.measureStats);
+      let browserCpu = null;
+      if (cdp) {
+        const metricsAfter = await cdp.send('Performance.getMetrics');
+        browserCpu = Object.fromEntries(['TaskDuration', 'ScriptDuration', 'LayoutDuration', 'RecalcStyleDuration', 'LayoutCount', 'RecalcStyleCount'].map(key =>
+          [key, metricsAfter.metrics.find(m => m.name === key).value - metricsBefore.metrics.find(m => m.name === key).value]));
+        const { profile: cpuProfile } = await cdp.send('Profiler.stop');
+        await writeFile(output.replace(/\.json$/, `-${name}.cpuprofile`), JSON.stringify(cpuProfile));
+      }
       assert(stats.messages.length > 100, 'Measure the actual worklet, not idle RAF');
       assert.equal(stats.messages.length, stats.acks);
       assert(stats.decodeCosts.length === stats.messages.length);
@@ -172,6 +221,7 @@ try {
       const meters = await page.getByRole('meter').count();
       const heights = await page.getByRole('meter').evaluateAll(nodes => nodes.map(n => Number(n.getAttribute('aria-valuenow'))));
       await page.screenshot({ path: output.replace(/\.json$/, `-${name}.png`), fullPage: true });
+      if (expanded) await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
       await page.screenshot({ path: output.replace(/\.json$/, `-${name}-fullscreen.png`) });
       await page.keyboard.press('Escape');
@@ -186,9 +236,12 @@ try {
       await page.getByRole('button', { name: 'Stop listening' }).click();
       await page.evaluate(() => window.measureInput.context.close());
       assert.deepEqual(errors, []);
-      result.profiles.push({ name, browser: browser.version(), measuredSeconds: seconds, meters,
+      result.profiles.push({ name, browser: browser.version(), expanded, cpuRate, percussion, measuredSeconds: seconds, meters,
+        viewport: profile.viewport, deviceScaleFactor: profile.deviceScaleFactor ?? 1,
         startupAppRafCallbackMs: summary(startup.frameCosts),
         fps: (stats.frames.length - 1) / seconds, frameIntervalMs: summary(intervals),
+        totalAppRafMsPerFrame: summary(stats.frameTotals), browserCpu,
+        layoutReads: stats.layoutReads, layoutReadMs: stats.layoutReadMs, styleWrites: stats.styleWrites,
         appRafCallbackMs: summary(stats.frameCosts), appRafThroughMicrotaskMs: summary(stats.flushCosts),
         messageDecodeAndAckMs: summary(stats.decodeCosts), messages: stats.messages.length, acknowledgements: stats.acks,
         messagesPerSecond: stats.messages.length / seconds,
@@ -196,6 +249,8 @@ try {
         snapshotBytes: [...new Set(stats.messages.map(m => m.bytes))], snapshotAgeMs: summary(stats.messages.map(m => m.ageMs)),
         stall: { blockedMs: 300, oldPackets: stale, firstAudioTimes: recovery.slice(0, 5).map(m => m.audio), blockedAt },
         heights: { max: Math.max(...heights), min: Math.min(...heights), distinct: new Set(heights).size }, errors });
+      await writeFile(output, JSON.stringify(result, null, 2) + '\n');
+      console.log(`${name}: ${result.profiles.at(-1).fps.toFixed(1)} FPS; total RAF p95 ${summary(stats.frameTotals).p95.toFixed(2)} ms`);
     } finally { await browser.close(); }
   }
   await writeFile(output, JSON.stringify(result, null, 2) + '\n');

@@ -34,8 +34,15 @@ struct Vector {
 
 impl Vector {
     fn bounded(self, limit: f64) -> Self {
-        let length = self.x.hypot(self.y);
-        let scale = if length > limit { limit / length } else { 1.0 };
+        // Normalize before squaring so even extreme finite sensor input cannot
+        // overflow. Wasm's fully rounded hypot uses costly software FMA here.
+        let largest = self.x.abs().max(self.y.abs());
+        if largest == 0.0 {
+            return self;
+        }
+        let x = self.x / largest;
+        let y = self.y / largest;
+        let scale = ((limit / largest) / (x * x + y * y).sqrt()).min(1.0);
         Self {
             x: self.x * scale,
             y: self.y * scale,
@@ -281,7 +288,7 @@ impl BalloonWorld {
             if let Some(pointer) = self.pointer {
                 let dx = (balloon.position.x - pointer.x) * geometry.aspect;
                 let dy = balloon.position.y - pointer.y;
-                let distance = dx.hypot(dy);
+                let distance = (dx * dx + dy * dy).sqrt();
                 let reach = 0.2 + radius.y;
                 if distance < reach {
                     let strength = (1.0 - distance / reach).powi(2) * 1.8;
@@ -459,7 +466,13 @@ fn bar_contact(
     from_above: bool,
     slop: f64,
 ) -> Option<BarContact> {
-    if top <= 0.0 {
+    // Most balls are far from most bars. Test their bounds before constructing
+    // the rounded contact surface. Slop uses graph-height coordinates.
+    if top <= 0.0
+        || position.x + radius.x < bar.left - slop / geometry.aspect
+        || position.x - radius.x > bar.right + slop / geometry.aspect
+        || position.y - radius.y > top + slop
+    {
         return None;
     }
     let left = bar.left * geometry.aspect;
@@ -471,7 +484,14 @@ fn bar_contact(
         x: x - x.clamp(left + corner - segment.x, right - corner + segment.x),
         y: position.y - position.y.min(top - corner + segment.y),
     };
-    let distance = delta.x.hypot(delta.y);
+    // These are bounded graph coordinates, so squared distances cannot
+    // overflow. Avoid the general-purpose hypot software path in this loop.
+    let distance_squared = delta.x * delta.x + delta.y * delta.y;
+    let reach = corner + round + slop;
+    if distance_squared > reach * reach {
+        return None;
+    }
+    let distance = distance_squared.sqrt();
     if distance > 1e-12 {
         let depth = corner + round - distance;
         return (depth >= -slop).then_some(BarContact {
@@ -587,7 +607,11 @@ fn capsule_contact(delta: Vector, core: Vector, round: f64) -> Option<BarContact
         x: delta.x - delta.x.clamp(-core.x, core.x),
         y: delta.y - delta.y.clamp(-core.y, core.y),
     };
-    let distance = offset.x.hypot(offset.y);
+    let distance_squared = offset.x * offset.x + offset.y * offset.y;
+    if distance_squared > round * round {
+        return None;
+    }
+    let distance = distance_squared.sqrt();
     if distance > 1e-12 {
         return (distance <= round).then_some(BarContact {
             normal: Vector {
@@ -704,7 +728,7 @@ fn swept_body_contact(
                 y: start.y + travel.y * time - center.y,
             };
             if point.x * sign >= 0.0 && point.y * other_sign >= 0.0 {
-                let length = point.x.hypot(point.y);
+                let length = (point.x * point.x + point.y * point.y).sqrt();
                 if length > 0.0 {
                     consider(
                         time,

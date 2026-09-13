@@ -1,0 +1,563 @@
+{
+  "label": "ios-baseline",
+  "at": "2026-09-13T20:15:12.214Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "release": "25.2.0",
+    "cpu": "Apple M4 Max"
+  },
+  "workletSha256": "d0b31940ec02c5c62eaaa46967fa5b7115f48c0e23922d938cf21305b525a784",
+  "indexSha256": "1e62a951cb0121dded36da012a9ccaa8eaf5a0adbb08729ada096afa18d44980",
+  "hostWorklet": {
+    "audioSeconds": 30,
+    "elapsedMs": 288.091291,
+    "percentOfOneHostCore": 0.9603043033333334,
+    "memoryBytes": 1179648,
+    "snapshotBytes": 1168,
+    "boundary": "Mac Node WASM process + snapshot + transferable structuredClone; synchronous ACK after every quantum"
+  },
+  "profiles": [
+    {
+      "name": "desktop-chromium",
+      "browser": "154.0.8037.0",
+      "expanded": false,
+      "cpuRate": 1,
+      "measuredSeconds": 30.01547,
+      "meters": 24,
+      "startupAppRafCallbackMs": {
+        "count": 612,
+        "mean": 0.8183905018700494,
+        "p50": 0.24499988555908203,
+        "p95": 2,
+        "max": 41.605000019073486
+      },
+      "fps": 60.002392099807196,
+      "frameIntervalMs": {
+        "count": 1801,
+        "mean": 16.66600222098834,
+        "p50": 16.665000000000873,
+        "p95": 16.67000000000189,
+        "max": 16.67000000000553
+      },
+      "totalAppRafMsPerFrame": {
+        "count": 1802,
+        "mean": 1.2092480572161743,
+        "p50": 1.0900001525878906,
+        "p95": 1.9800000190734863,
+        "max": 3.984999656677246
+      },
+      "browserCpu": {
+        "TaskDuration": 4.402159999999999,
+        "ScriptDuration": 2.4690459999999996,
+        "LayoutDuration": 0.141742,
+        "RecalcStyleDuration": 0.762783,
+        "LayoutCount": 1807,
+        "RecalcStyleCount": 1807
+      },
+      "layoutReads": 1802,
+      "layoutReadMs": 6.2049970626831055,
+      "styleWrites": 250627,
+      "appRafCallbackMs": {
+        "count": 3604,
+        "mean": 0.6046240286080872,
+        "p50": 0.880000114440918,
+        "p95": 1.799999713897705,
+        "max": 3.9699997901916504
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3604,
+        "mean": 0.6409378460588784,
+        "p50": 0.880000114440918,
+        "p95": 1.8000001907348633,
+        "max": 3.9749999046325684
+      },
+      "messageDecodeAndAckMs": {
+        "count": 5632,
+        "mean": 0.01930930558592081,
+        "p50": 0.015000343322753906,
+        "p95": 0.039999961853027344,
+        "max": 0.2049999237060547
+      },
+      "messages": 5632,
+      "acknowledgements": 5632,
+      "messagesPerSecond": 187.636575405949,
+      "payloadBytesPerSecond": 219159.52007414843,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 5632,
+        "mean": 2.527817234848466,
+        "p50": 2.0000000000024443,
+        "p95": 5.333333333332746,
+        "max": 9.333333333334082
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.196,
+          35.494,
+          35.5,
+          35.51,
+          35.516
+        ],
+        "blockedAt": 35.19466666666667
+      },
+      "heights": {
+        "max": 73,
+        "min": 2,
+        "distinct": 19
+      },
+      "errors": []
+    },
+    {
+      "name": "iphone-profile-webkit-on-mac",
+      "browser": "26.6",
+      "expanded": false,
+      "cpuRate": 1,
+      "measuredSeconds": 30.01628,
+      "meters": 24,
+      "startupAppRafCallbackMs": {
+        "count": 617,
+        "mean": 0.6933873581847689,
+        "p50": 0.23999999999998067,
+        "p95": 1.9400000000005093,
+        "max": 19.30000000000001
+      },
+      "fps": 60.134033930920154,
+      "frameIntervalMs": {
+        "count": 1805,
+        "mean": 16.629518005540167,
+        "p50": 16.659999999999854,
+        "p95": 17.25999999999931,
+        "max": 17.700000000000728
+      },
+      "totalAppRafMsPerFrame": {
+        "count": 1806,
+        "mean": 1.2668217054262387,
+        "p50": 1.0600000000013097,
+        "p95": 2.399999999997817,
+        "max": 5.399999999999636
+      },
+      "browserCpu": null,
+      "layoutReads": 1806,
+      "layoutReadMs": 19.220000000087566,
+      "styleWrites": 251143,
+      "appRafCallbackMs": {
+        "count": 3612,
+        "mean": 0.6334108527131194,
+        "p50": 0.5599999999976717,
+        "p95": 1.8999999999996362,
+        "max": 5.3799999999992
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3612,
+        "mean": 0.6680232558139226,
+        "p50": 0.5599999999976717,
+        "p95": 1.9000000000005457,
+        "max": 5.3799999999992
+      },
+      "messageDecodeAndAckMs": {
+        "count": 5630,
+        "mean": 0.018632326820449407,
+        "p50": 0.020000000000436557,
+        "p95": 0.040000000000873115,
+        "max": 0.07999999999992724
+      },
+      "messages": 5630,
+      "acknowledgements": 5630,
+      "messagesPerSecond": 187.56488145766232,
+      "payloadBytesPerSecond": 219075.78154254958,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 5630,
+        "mean": 2.063706335109507,
+        "p50": 1.9999999999997797,
+        "p95": 2.6666666666699257,
+        "max": 7.33333333333519
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.192,
+          35.496,
+          35.502,
+          35.508,
+          35.512
+        ],
+        "blockedAt": 35.192
+      },
+      "heights": {
+        "max": 72,
+        "min": 2,
+        "distinct": 21
+      },
+      "errors": []
+    },
+    {
+      "name": "iphone-fullscreen-webkit-on-mac",
+      "browser": "26.6",
+      "expanded": true,
+      "cpuRate": 1,
+      "measuredSeconds": 30.004260000000002,
+      "meters": 24,
+      "startupAppRafCallbackMs": {
+        "count": 619,
+        "mean": 0.8057835218093667,
+        "p50": 0.2400000000000091,
+        "p95": 2.4400000000000546,
+        "max": 32
+      },
+      "fps": 60.12479561235637,
+      "frameIntervalMs": {
+        "count": 1804,
+        "mean": 16.632073170731708,
+        "p50": 16.659999999999854,
+        "p95": 17.340000000000146,
+        "max": 21.5
+      },
+      "totalAppRafMsPerFrame": {
+        "count": 1805,
+        "mean": 2.3335955678669724,
+        "p50": 2.0200000000004366,
+        "p95": 5.080000000001746,
+        "max": 13.55999999999949
+      },
+      "browserCpu": null,
+      "layoutReads": 1805,
+      "layoutReadMs": 18.160000000111722,
+      "styleWrites": 251107,
+      "appRafCallbackMs": {
+        "count": 3610,
+        "mean": 1.1667977839334862,
+        "p50": 0.6199999999953434,
+        "p95": 4.079999999998108,
+        "max": 13.539999999999054
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3610,
+        "mean": 1.2025152354570185,
+        "p50": 0.6199999999998909,
+        "p95": 4.079999999998108,
+        "max": 13.539999999999054
+      },
+      "messageDecodeAndAckMs": {
+        "count": 5576,
+        "mean": 0.020007173601183894,
+        "p50": 0.020000000000436557,
+        "p95": 0.040000000000873115,
+        "max": 0.06000000000130967
+      },
+      "messages": 5576,
+      "acknowledgements": 5576,
+      "messagesPerSecond": 185.84027734728335,
+      "payloadBytesPerSecond": 217061.44394162693,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 5576,
+        "mean": 2.316714490674267,
+        "p50": 2.000000000000668,
+        "p95": 4.666666666667041,
+        "max": 15.33333333333431
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.172,
+          35.476,
+          35.48,
+          35.486,
+          35.492
+        ],
+        "blockedAt": 35.168
+      },
+      "heights": {
+        "max": 71,
+        "min": 2,
+        "distinct": 21
+      },
+      "errors": []
+    },
+    {
+      "name": "iphone-landscape-fullscreen-webkit-on-mac",
+      "browser": "26.6",
+      "expanded": true,
+      "cpuRate": 1,
+      "measuredSeconds": 30.00406,
+      "meters": 24,
+      "startupAppRafCallbackMs": {
+        "count": 623,
+        "mean": 0.587447833065807,
+        "p50": 0.2599999999999909,
+        "p95": 1.5799999999999272,
+        "max": 16.80000000000001
+      },
+      "fps": 60.158525212921184,
+      "frameIntervalMs": {
+        "count": 1805,
+        "mean": 16.62274792243767,
+        "p50": 16.659999999999854,
+        "p95": 17.340000000000146,
+        "max": 17.659999999999854
+      },
+      "totalAppRafMsPerFrame": {
+        "count": 1806,
+        "mean": 1.0902325581397787,
+        "p50": 0.9400000000005093,
+        "p95": 1.7600000000020373,
+        "max": 3.2600000000020373
+      },
+      "browserCpu": null,
+      "layoutReads": 1806,
+      "layoutReadMs": 19.50000000008822,
+      "styleWrites": 251166,
+      "appRafCallbackMs": {
+        "count": 3612,
+        "mean": 0.5451162790698894,
+        "p50": 0.7000000000007276,
+        "p95": 1.6199999999953434,
+        "max": 3.2600000000020373
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3612,
+        "mean": 0.5801495016612044,
+        "p50": 0.7000000000007276,
+        "p95": 1.6199999999989814,
+        "max": 3.2600000000020373
+      },
+      "messageDecodeAndAckMs": {
+        "count": 5629,
+        "mean": 0.02034464380895279,
+        "p50": 0.020000000000436557,
+        "p95": 0.040000000000873115,
+        "max": 0.07999999999810825
+      },
+      "messages": 5629,
+      "acknowledgements": 5629,
+      "messagesPerSecond": 187.60794372494922,
+      "payloadBytesPerSecond": 219126.0782707407,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 5629,
+        "mean": 2.049268668206272,
+        "p50": 1.9999999999997797,
+        "p95": 2.6666666666699257,
+        "max": 5.333333333336299
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.182,
+          35.488,
+          35.494,
+          35.5,
+          35.504
+        ],
+        "blockedAt": 35.184
+      },
+      "heights": {
+        "max": 72,
+        "min": 2,
+        "distinct": 20
+      },
+      "errors": []
+    },
+    {
+      "name": "phone-chromium-cpu4",
+      "browser": "154.0.8037.0",
+      "expanded": false,
+      "cpuRate": 4,
+      "measuredSeconds": 30.015464999999995,
+      "meters": 24,
+      "startupAppRafCallbackMs": {
+        "count": 580,
+        "mean": 3.3319396561589736,
+        "p50": 0.9099998474121094,
+        "p95": 8.680000305175781,
+        "max": 173.2849998474121
+      },
+      "fps": 60.00240209505334,
+      "frameIntervalMs": {
+        "count": 1801,
+        "mean": 16.665999444752913,
+        "p50": 16.665000000000873,
+        "p95": 16.67000000000189,
+        "max": 16.67000000000553
+      },
+      "totalAppRafMsPerFrame": {
+        "count": 1802,
+        "mean": 5.52693118821503,
+        "p50": 5.389999866485596,
+        "p95": 10.769999980926514,
+        "max": 21.87000036239624
+      },
+      "browserCpu": {
+        "TaskDuration": 18.394139000000003,
+        "ScriptDuration": 10.944431,
+        "LayoutDuration": 0.609868,
+        "RecalcStyleDuration": 3.29339,
+        "LayoutCount": 1804,
+        "RecalcStyleCount": 1804
+      },
+      "layoutReads": 1802,
+      "layoutReadMs": 16.385001182556152,
+      "styleWrites": 250872,
+      "appRafCallbackMs": {
+        "count": 3604,
+        "mean": 2.763465594107515,
+        "p50": 2.489999771118164,
+        "p95": 8.869999885559082,
+        "max": 21.850000381469727
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 3604,
+        "mean": 2.9199347915448306,
+        "p50": 2.489999771118164,
+        "p95": 8.875,
+        "max": 21.855000019073486
+      },
+      "messageDecodeAndAckMs": {
+        "count": 3964,
+        "mean": 0.07823788734786326,
+        "p50": 0.02500009536743164,
+        "p95": 0.5399999618530273,
+        "max": 1.1200003623962402
+      },
+      "messages": 3964,
+      "acknowledgements": 3964,
+      "messagesPerSecond": 132.06525369505354,
+      "payloadBytesPerSecond": 154252.21631582256,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 3964,
+        "mean": 6.439623276151925,
+        "p50": 5.333333333332746,
+        "p95": 14.666666666666828,
+        "max": 26.666666666667282
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.238,
+          35.558,
+          35.584,
+          35.606,
+          35.644
+        ],
+        "blockedAt": 35.23733333333333
+      },
+      "heights": {
+        "max": 75,
+        "min": 3,
+        "distinct": 22
+      },
+      "errors": []
+    },
+    {
+      "name": "phone-fullscreen-chromium-cpu4",
+      "browser": "154.0.8037.0",
+      "expanded": true,
+      "cpuRate": 4,
+      "measuredSeconds": 29.998794999999998,
+      "meters": 24,
+      "startupAppRafCallbackMs": {
+        "count": 504,
+        "mean": 7.308501971146417,
+        "p50": 0.9650001525878906,
+        "p95": 29.65999984741211,
+        "max": 165.6050000190735
+      },
+      "fps": 27.334431266322532,
+      "frameIntervalMs": {
+        "count": 820,
+        "mean": 36.583896341463415,
+        "p50": 33.32999999999811,
+        "p95": 99.98999999999978,
+        "max": 149.99499999999898
+      },
+      "totalAppRafMsPerFrame": {
+        "count": 821,
+        "mean": 30.04554202234266,
+        "p50": 21.699999809265137,
+        "p95": 86.41000032424927,
+        "max": 149.11999988555908
+      },
+      "browserCpu": {
+        "TaskDuration": 29.015808,
+        "ScriptDuration": 25.271761,
+        "LayoutDuration": 0.309077,
+        "RecalcStyleDuration": 1.676698,
+        "LayoutCount": 821,
+        "RecalcStyleCount": 821
+      },
+      "layoutReads": 821,
+      "layoutReadMs": 17.00999402999878,
+      "styleWrites": 117839,
+      "appRafCallbackMs": {
+        "count": 1642,
+        "mean": 15.02277101117133,
+        "p50": 1.804999828338623,
+        "p95": 69.05000019073486,
+        "max": 149.09999990463257
+      },
+      "appRafThroughMicrotaskMs": {
+        "count": 1642,
+        "mean": 15.218498782902484,
+        "p50": 2.5450000762939453,
+        "p95": 69.2350001335144,
+        "max": 149.1050000190735
+      },
+      "messageDecodeAndAckMs": {
+        "count": 1039,
+        "mean": 0.1534456187882483,
+        "p50": 0.04500007629394531,
+        "p95": 0.7950000762939453,
+        "max": 1.190000057220459
+      },
+      "messages": 1039,
+      "acknowledgements": 1039,
+      "messagesPerSecond": 34.63472449476721,
+      "payloadBytesPerSecond": 40453.3582098881,
+      "snapshotBytes": [
+        1168
+      ],
+      "snapshotAgeMs": {
+        "count": 1039,
+        "mean": 28.08148861084382,
+        "p50": 19.999999999999574,
+        "p95": 85.3333333333346,
+        "max": 154.6666666666674
+      },
+      "stall": {
+        "blockedMs": 300,
+        "oldPackets": 1,
+        "firstAudioTimes": [
+          35.756,
+          36.15,
+          36.236
+        ],
+        "blockedAt": 35.754666666666665
+      },
+      "heights": {
+        "max": 82,
+        "min": 5,
+        "distinct": 20
+      },
+      "errors": []
+    }
+  ]
+}

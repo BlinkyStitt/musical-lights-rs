@@ -19,6 +19,33 @@ fn geometry() -> Geometry {
 }
 
 #[test]
+fn bounded_vectors_preserve_direction_and_handle_extreme_finite_inputs() {
+    for vector in [
+        Vector::default(),
+        Vector { x: 0.1, y: -0.2 },
+        Vector { x: 3.0, y: 4.0 },
+        Vector {
+            x: -1e308,
+            y: 1e308,
+        },
+        Vector {
+            x: 1e-310,
+            y: -1e-310,
+        },
+    ] {
+        let bounded = vector.bounded(MAX_SPEED);
+        assert!(bounded.x.is_finite() && bounded.y.is_finite());
+        assert!(bounded.x.hypot(bounded.y) <= MAX_SPEED + 1e-14);
+        if vector.x.hypot(vector.y) <= MAX_SPEED {
+            assert_eq!(bounded, vector);
+        } else {
+            assert!((bounded.x.hypot(bounded.y) - MAX_SPEED).abs() < 1e-14);
+            assert!((bounded.x / bounded.y - vector.x / vector.y).abs() < 1e-14);
+        }
+    }
+}
+
+#[test]
 fn free_space_gravity_covers_visible_distance_in_half_a_second() {
     for (reduced, minimum) in [(false, 0.5), (true, 0.1)] {
         let mut world = world();

@@ -2,7 +2,7 @@ use super::{BALLOON_COUNT, BalloonWorld, Bar, Geometry, Vector};
 use musical_lights_core::audio::visual::{DISPLAY_BANDS, DisplayFrame};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
-use web_sys::{HtmlElement, MediaQueryList, Window};
+use web_sys::{CssStyleDeclaration, HtmlElement, MediaQueryList, Window};
 
 #[wasm_bindgen(module = "/src/balloons/input.js")]
 extern "C" {
@@ -41,10 +41,15 @@ impl Drop for InputResources {
 /// only optional sensor input and bar updates; gravity also runs with audio off.
 pub struct BalloonAnimation(Rc<RefCell<Resources>>);
 
+struct BalloonNode {
+    style: CssStyleDeclaration,
+    color: [f32; 3],
+}
+
 struct Resources {
     window: Window,
     layer: HtmlElement,
-    nodes: Vec<HtmlElement>,
+    nodes: Vec<BalloonNode>,
     meters: Vec<HtmlElement>,
     track: HtmlElement,
     world: BalloonWorld,
@@ -75,6 +80,14 @@ impl BalloonAnimation {
         if nodes.len() != BALLOON_COUNT || meters.len() != DISPLAY_BANDS {
             return Err(JsValue::from_str("Incomplete balloon or meter layer"));
         }
+        let nodes = nodes
+            .into_iter()
+            .zip(&world.balloons)
+            .map(|(node, balloon)| BalloonNode {
+                style: node.style(),
+                color: balloon.color,
+            })
+            .collect();
         let track = meters[0]
             .query_selector(".meter-track")?
             .ok_or_else(|| JsValue::from_str("No meter drawing area"))?
@@ -235,15 +248,20 @@ impl Resources {
             .resolve_contacts(self.geometry, self.world.previous_levels, 0.0);
     }
 
-    fn render(&self) {
-        for (node, balloon) in self.nodes.iter().zip(&self.world.balloons) {
-            let style = node.style();
+    fn render(&mut self) {
+        for (node, balloon) in self.nodes.iter_mut().zip(&self.world.balloons) {
+            let style = &node.style;
             let _ = style.set_property("--balloon-x", &format!("{}%", balloon.position.x * 100.0));
             let _ = style.set_property(
                 "--balloon-y",
                 &format!("{}%", (1.0 - balloon.position.y) * 100.0),
             );
-            let _ = style.set_property("--balloon-color", &balloon.css_color());
+            // Color changes only on impacts. Avoid encoding, allocating, and
+            // parsing the same color on every frame between those impacts.
+            if node.color != balloon.color {
+                let _ = style.set_property("--balloon-color", &balloon.css_color());
+                node.color = balloon.color;
+            }
             let _ = style.set_property("--balloon-scale-x", &balloon.deformation.x.to_string());
             let _ = style.set_property("--balloon-scale-y", &balloon.deformation.y.to_string());
         }
