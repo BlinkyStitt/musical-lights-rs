@@ -100,6 +100,13 @@ pub fn DancingLights() -> impl IntoView {
             set_selected_band.set(None);
         }
     };
+    let keyboard_sample_focused = move || {
+        sample_nodes.with_value(|nodes| {
+            nodes[active_sample.get_untracked()]
+                .get_untracked()
+                .is_some_and(|sample| sample.matches(":focus-visible").unwrap_or(false))
+        })
+    };
     let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
     let (listening, set_listening) = signal(false);
     let (capture_status, set_capture_status) =
@@ -327,8 +334,8 @@ pub fn DancingLights() -> impl IntoView {
                                     node_ref=sample_nodes.with_value(|nodes| nodes[group])
                                     tabindex=move || if active_sample.get() == group { "0" } else { "-1" }
                                     aria-describedby=move || (selected_band.get() == Some(group)).then_some("frequency-readout")
-                                    on:pointerenter=move |event| { if event.pointer_type() == "mouse" { show_band(group, false); } }
-                                    on:pointerleave=move |event| { if event.pointer_type() == "mouse" { hide_band(group); } }
+                                    on:pointerenter=move |event| { if event.pointer_type() == "mouse" && !keyboard_sample_focused() { show_band(group, false); } }
+                                    on:pointerleave=move |event| { if event.pointer_type() == "mouse" && !keyboard_sample_focused() { hide_band(group); } }
                                     on:focus=move |event| {
                                         set_active_sample.set(group);
                                         if event_target::<web_sys::Element>(&event).matches(":focus-visible").unwrap_or(false) { show_band(group, false); }
