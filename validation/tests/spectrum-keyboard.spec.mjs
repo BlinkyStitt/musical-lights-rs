@@ -211,3 +211,20 @@ test('keyboard can exit fullscreen from the last sample and route re-entry start
   await expectSample(page, 0);
   expect(errors).toEqual([]);
 });
+
+test('pointer crossings preserve the readout for the keyboard-focused sample', async ({ page }) => {
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('End');
+  await expectSample(page, 23);
+  const other = await meterPoint(page, page.getByRole('meter').first());
+  await page.mouse.move(other.x, other.y);
+  await expectSample(page, 23);
+  const focused = await meterPoint(page, page.getByRole('meter').last());
+  await page.mouse.move(focused.x, focused.y);
+  await page.mouse.move(0, 0);
+  await expectSample(page, 23);
+  await page.keyboard.press('Tab');
+  await page.mouse.move(other.x, other.y);
+  await expect(page.getByRole('tooltip')).toHaveText(other.label);
+});

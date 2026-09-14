@@ -32,10 +32,16 @@ export class VisualizerScreen {
         this.acquireLock();
       }
     };
-    this.onFullscreen = () => this.setExpanded(this.document.fullscreenElement === this.element);
+    this.onFullscreen = () => {
+      // Native events can arrive after their promise and during the next
+      // transition. Only idle events represent an external browser change.
+      if (!this.changingFullscreen) this.setExpanded(this.document.fullscreenElement === this.element);
+    };
     this.onViewportChange = () => this.clearGesture();
     this.onKey = event => {
-      if (event.key === 'Escape' && this.expanded) {
+      // The restored controls can queue an entry before a native exit finishes.
+      // Escape cancels that request even while the page is already visible.
+      if (event.key === 'Escape' && (this.expanded || this.pendingFullscreenState === true)) {
         event.preventDefault();
         this.toggleFullscreen(false, false);
       }

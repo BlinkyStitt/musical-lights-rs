@@ -14,29 +14,39 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
         return Promise.resolve('denied');
       } });
     }
-    MediaDevices.prototype.getUserMedia = async () => {
-      const context = new AudioContext();
-      window.balloonSourceContext = context;
-      return context.createMediaStreamDestination().stream;
-    };
   });
-  await page.goto('http://127.0.0.1:8101');
+  // Use the real generated-audio pipeline to raise the bars. Silent input can
+  // leave every ball at rest before a slower browser reaches the Stop button.
+  await page.goto('http://127.0.0.1:8101/phone/');
+  await physicsReady(page);
+  await expect(page.locator('.generated-audio')).toBeChecked();
   await page.getByRole('button', { name: 'Start listening' }).tap();
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
-  await physicsReady(page);
+  await expect.poll(async () => (await physicsState(page)).bars.filter(y => y > .1).length).toBeGreaterThan(12);
   const box = await page.locator('canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
-  await page.getByRole('button', { name: 'Stop listening' }).tap();
   await page.mouse.move(0, 0);
-  const stopped = await physicsState(page);
+  const stop = page.getByRole('button', { name: 'Stop listening' });
+  await stop.evaluate(button => button.addEventListener('click', () => {
+    // Capture at the actual Stop event so protocol latency cannot consume the
+    // fall before its starting height is measured.
+    const { current, layout } = document.querySelector('#dancinglights').physics;
+    window.physicsAtStop = { tick: current[2], balls: Array.from({ length: layout[0] }, (_, i) => {
+      const offset = 3 + i * layout[8];
+      return { y: current[offset + 1], radius: current[offset + 7] };
+    }) };
+  }, { once: true }));
+  await stop.tap();
+  const stopped = await page.evaluate(() => window.physicsAtStop);
+  expect(stopped.balls.some(ball => ball.y > ball.radius + .1)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
-  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => Math.abs(ball.position[1] - stopped.balls[i].position[1]) > .005)).toBe(true);
+  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Start listening' })).toBeVisible();
   await expect(page.getByRole('alert')).toBeEmpty();
-  await page.evaluate(() => window.balloonSourceContext.close());
   expect(errors).toEqual([]);
 });
 

@@ -152,6 +152,66 @@ test('fullscreen follows external exits, keeps expansion after rejection, and cl
   expect(env.changes).toHaveLength(count);
 });
 
+test('Escape cancels a queued fullscreen entry while the native exit is pending', async () => {
+  const env = environment();
+  await env.screen.toggleFullscreen();
+  let finishExit;
+  env.document.exitFullscreen = () => new Promise(resolve => {
+    finishExit = () => {
+      env.document.fullscreenElement = null;
+      env.document.dispatchEvent(new Event('fullscreenchange'));
+      resolve();
+    };
+  });
+  const exit = env.screen.toggleFullscreen();
+  // Controls return before the native transition completes. A second entry
+  // followed by Escape must keep the page open after that transition finishes.
+  expect(env.attributes.has('data-expanded')).toBe(false);
+  await env.screen.toggleFullscreen();
+  const escape = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' });
+  env.document.dispatchEvent(escape);
+  finishExit();
+  await exit;
+  try {
+    expect(env.attributes.has('data-expanded')).toBe(false);
+    expect(env.document.fullscreenElement).toBe(null);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(env.changes.at(-1).full).toBe(false);
+  } finally {
+    env.screen.close();
+  }
+});
+
+test('a late native exit event cannot hide an entry from Escape', async () => {
+  const env = environment();
+  await env.screen.toggleFullscreen();
+  await env.screen.toggleFullscreen();
+  let finishEntry;
+  env.element.requestFullscreen = () => new Promise(resolve => {
+    finishEntry = () => {
+      env.document.fullscreenElement = env.element;
+      resolve();
+    };
+  });
+  const entry = env.screen.toggleFullscreen();
+  // Chromium can deliver the previous exit event after starting the next entry.
+  env.document.dispatchEvent(new Event('fullscreenchange'));
+  const visibleDuringEntry = env.attributes.has('data-expanded');
+  const escape = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' });
+  env.document.dispatchEvent(escape);
+  finishEntry();
+  await entry;
+  env.document.dispatchEvent(new Event('fullscreenchange'));
+  try {
+    expect(visibleDuringEntry).toBe(true);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(env.document.fullscreenElement).toBe(null);
+    expect(env.attributes.has('data-expanded')).toBe(false);
+  } finally {
+    env.screen.close();
+  }
+});
+
 test('unsupported native screen APIs still allow the lights-only view', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'wakeLock', { value: undefined });
