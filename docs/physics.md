@@ -17,7 +17,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Sphere diameter | Original 24 size ratios × 48 mm |
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
-| Restitution / friction | 0.85 / 0.20 |
+| Restitution / friction | 0.55 / 0.20 |
 | Maximum bar rise / fall speed | 1.0 / 1.25 m/s |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Visual headroom | 5% |
@@ -25,6 +25,11 @@ These defaults are adjustable prototype assumptions, not measured materials.
 Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
 compress, and the application does not add launch impulses.
+
+The default restitution is 0.55, reduced from the initial 0.85 prototype.
+For a stationary surface, the ideal rebound height is about 30% of the drop
+height, compared with 72% at 0.85. Moving bars still transfer their motion
+through physical contacts.
 
 Bars use position-based kinematic bodies. Each tick sets the next position
 through a speed limit; Rapier derives contact velocity. Ball loads cannot slow
@@ -59,15 +64,21 @@ Rapier 0.34 skips swept checks when relative travel is less than the combined
 collider thickness. Thick enclosure walls allowed deep discrete overlap during
 moderate impacts. The 2 mm wall design passes impacts from 1 to 20 m/s and the
 24-ball stress test. Contact prediction is 2 mm; allowed resting error is
-0.2 mm. Other contact softness settings retain Rapier's defaults.
+0.2 mm. Contact natural frequency is 60 Hz to limit resting overlap in dense
+stacks; contact damping retains Rapier's default. The physics rate remains
+120 Hz with eight solver iterations.
 
-The final native 20-second stress run recorded up to 15.3 mm of transient wall
-overlap (the largest relative overlap was 44.7% of a sphere radius). No ball
-center crossed an enclosure boundary. All 24 balls settled within 1 mm of
+The native 20-second stress run with the calmer default recorded up to 15.5 mm
+of transient wall overlap (the largest relative overlap was 57.1% of a sphere
+radius). No ball center crossed an enclosure boundary. All 24 balls settled within 1 mm of
 non-overlap after the bars lowered. This is a numerical rigid-body model with
 transient contact error. The accepted 120 Hz rule requires no escape, collapse,
 or persistent overlap; it does not impose an extra transient-overlap distance.
 The phone review must also assess visible contacts.
+
+Settled spheres can rest on other spheres. The stress test requires an active
+contact path down to the floor or lowered bars for each sphere, as well as
+the existing velocity and overlap limits.
 
 ## Clocks, buffers, and cleanup
 
@@ -106,6 +117,15 @@ loading cannot recreate resources after cleanup.
 
 Use the feature preview's `/phone` page in Safari. A Mac browser or an emulated
 iPhone does not establish the phone result.
+
+The FPS display counts actual animation-frame intervals. The app has no 30 FPS
+limit. WebKit intentionally limits animation to 30 FPS in Low Power Mode; see
+the [WebKit explanation](https://bugs.webkit.org/show_bug.cgi?id=215745).
+If the phone stays near 30 FPS, first check that Low Power Mode is off and Safari
+is in the foreground. If it remains slow, compare normal and fullscreen views
+and export timing data. A 30-second run ended early can help diagnose frame
+intervals, render cost, and physics delay; it is not a five-minute acceptance
+result. Do not infer a phone performance improvement from a Mac measurement.
 
 1. Turn Low Power Mode off. Enter the actual iOS version in the panel.
 2. Keep generated audio selected and press **Start listening**. It sends PCM

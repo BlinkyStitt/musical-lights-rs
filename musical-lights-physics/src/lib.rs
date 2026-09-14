@@ -42,7 +42,7 @@ impl Default for SimulationConfig {
             height: 0.6,
             gravity: 9.81,
             density: 1100.0,
-            restitution: 0.85,
+            restitution: 0.55,
             friction: 0.20,
             depth: 0.24,
             rise_speed: 1.0,
@@ -152,6 +152,12 @@ impl Simulation {
                 dt: DT,
                 num_solver_iterations: 8,
                 max_ccd_substeps: 1,
+                // Lower restitution leaves denser resting stacks. Stiffer contacts
+                // keep the smallest spheres from sinking under heavier neighbors.
+                contact_softness: SpringCoefficients {
+                    natural_frequency: 60.0,
+                    ..SpringCoefficients::contact_defaults()
+                },
                 // Default metre-scale tolerances are larger than our smallest sphere.
                 normalized_allowed_linear_error: 0.0002,
                 normalized_prediction_distance: 0.002,

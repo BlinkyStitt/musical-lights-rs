@@ -61,7 +61,7 @@ fn density_sets_sphere_mass_and_rotational_inertia() {
 }
 #[test]
 fn rebound_height_matches_restitution_squared() {
-    for restitution in [0.4, 0.85] {
+    for restitution in [0.4, SimulationConfig::default().restitution, 0.85] {
         let mut sim = world(SimulationConfig {
             restitution,
             ..SimulationConfig::default()
@@ -399,6 +399,27 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
     for _ in 0..HZ * 15 {
         sim.step();
     }
+    // Resting stacks are valid. Require a contact path down to the floor or
+    // lowered bar tops instead of requiring every sphere to touch the floor.
+    let mut supported: [bool; COUNT] =
+        std::array::from_fn(|i| position(&sim, i).y <= radius(i) + BASELINE + 0.001);
+    for _ in 0..COUNT {
+        let previous = supported;
+        for (i, supported) in supported.iter_mut().enumerate() {
+            *supported |= (0..COUNT).any(|j| {
+                previous[j]
+                    && position(&sim, j).y < position(&sim, i).y
+                    && sim
+                        .world
+                        .narrow_phase
+                        .contact_pair(sim.balls[i].1, sim.balls[j].1)
+                        .is_some_and(|pair| pair.has_any_active_contact())
+            });
+        }
+        if previous == supported {
+            break;
+        }
+    }
     for (i, impulse) in impulses.iter().enumerate() {
         assert!(*impulse > 0.0, "ball {i} never contacted the enclosure");
         let p = position(&sim, i);
@@ -411,8 +432,8 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
             "ball {i} remains in a wall: {p:?}"
         );
         assert!(
-            p.y <= radius(i) + BASELINE + 0.01,
-            "ball {i} remains trapped above the lowered bars"
+            supported[i],
+            "ball {i} remains above the lowered bars without a contact path to support: {p:?}"
         );
         assert!(velocity(&sim, i).length() < 0.2, "ball {i} did not settle");
         for j in 0..i {
