@@ -1,6 +1,6 @@
 // Optional sensor permission must begin in the Start listening click stack.
 // Closing also invalidates pending permission promises before Rust drops callbacks.
-export class BalloonInput {
+class PhysicsInput {
   constructor(layer, onPointer, onTilt, onShake) {
     this.window = layer.ownerDocument.defaultView;
     this.closed = false;
@@ -10,7 +10,8 @@ export class BalloonInput {
     const clearPointer = () => onPointer(0, 0, false);
     this.listen('pointermove', event => {
       if (event.pointerType !== 'mouse') return;
-      const box = layer.getBoundingClientRect();
+      const box = this.bounds;
+      if (!box) return;
       const x = (event.clientX - box.left) / box.width;
       const y = 1 - (event.clientY - box.top) / box.height;
       onPointer(x, y, x >= 0 && x <= 1 && y >= 0 && y <= 1);
@@ -39,7 +40,7 @@ export class BalloonInput {
       if (!Interface) return Promise.resolve(false);
       try {
         return typeof Interface.requestPermission === 'function'
-          ? Promise.resolve(Interface.requestPermission()).then(value => value === 'granted')
+          ? Promise.resolve(Interface.requestPermission()).then(value => value === 'granted').catch(() => false)
           : Promise.resolve(true);
       } catch { return Promise.resolve(false); }
     };
@@ -48,9 +49,9 @@ export class BalloonInput {
       permission(this.window.DeviceOrientationEvent),
       permission(this.window.DeviceMotionEvent),
     ]).then(([tilt, shake]) => {
-      if (this.motion !== session || !tilt || !shake) return;
-      this.listen('deviceorientation', this.orientation, session);
-      this.listen('devicemotion', this.acceleration, session);
+      if (this.motion !== session) return;
+      if (tilt) this.listen('deviceorientation', this.orientation, session);
+      if (shake) this.listen('devicemotion', this.acceleration, session);
     }).catch(() => { /* Sensors are optional. */ });
   }
 
@@ -70,4 +71,26 @@ export class BalloonInput {
     for (const [type, listener] of this.listeners) this.window.removeEventListener(type, listener);
     this.listeners = [];
   }
+}
+
+// Async module ownership also covers route changes during download or WASM compilation.
+export class Scene {
+  constructor(layer, palette, onFrame) {
+    palette = new Float32Array(palette);
+    this.closed = false;
+    this.input = new PhysicsInput(layer,
+      (...args) => this.view?.pointer(...args),
+      (...args) => this.view?.orientation(...args),
+      (...args) => this.view?.deviceAcceleration(...args));
+    import(new URL('physics/view.js', document.baseURI)).then(({ PhysicsView }) => {
+      if (this.closed) return;
+      this.view = new PhysicsView(layer, palette, onFrame, this.input);
+    }).catch(error => {
+      if (!this.closed) layer.closest('.audio-card').querySelector('.physics-status').textContent = `Cannot start 3D physics: ${error}`;
+    });
+  }
+  push(levels, edges) { this.view?.push(levels, edges); }
+  startMotion() { this.input.startMotion(); }
+  stopMotion() { this.input.stopMotion(); this.view?.stopMotion(); }
+  close() { this.closed = true; this.input.close(); this.view?.close(); this.view = null; }
 }

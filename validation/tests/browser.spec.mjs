@@ -116,7 +116,7 @@ for (const rate of [44100, 48000]) {
     }, { rate });
     await page.goto(leptos);
     await expect(page.getByRole('meter')).toHaveCount(24);
-    const bandColors = await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+    const bandColors = await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()));
     await page.getByRole('button', { name: 'Start listening' }).click();
     await expect(page.getByText(`Sample rate: 48000 Hz`)).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.inputClipped)).toBeGreaterThan(0);
@@ -129,7 +129,7 @@ for (const rate of [44100, 48000]) {
     await page.evaluate(() => { window.testInputGain.gain.value = 0; });
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     expect(await page.evaluate(() => window.originalMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
-    expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor))).toEqual(bandColors);
+    expect(await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()))).toEqual(bandColors);
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
@@ -255,9 +255,9 @@ for (const colorScheme of ['light', 'dark']) {
         });
         const surfaces = [document.documentElement, document.querySelector('.audio-card'), document.querySelector('.spectrum-panel')]
           .map(node => luminance(getComputedStyle(node).backgroundColor));
-        const meters = [...document.querySelectorAll('.meter-fill')].map(node => {
-          const color = getComputedStyle(node).backgroundColor;
-          return { color, ratio: contrast(luminance(color), surfaces[2]), bottomInset: getComputedStyle(node).bottom };
+        const meters = [...document.querySelectorAll('.bark-group')].map(node => {
+          const color = getComputedStyle(node).getPropertyValue('--band-color').trim();
+          return { color, ratio: contrast(luminance(color), surfaces[2]) };
         });
         return { text, surfaces, meters };
       });
@@ -266,9 +266,8 @@ for (const colorScheme of ['light', 'dark']) {
         else expect(surface).toBeGreaterThan(.8);
       }
       expect(new Set(colors.meters.map(meter => meter.color)).size).toBe(24);
-      for (const { color, ratio, bottomInset } of colors.meters) {
+      for (const { color, ratio } of colors.meters) {
         expect(ratio, color).toBeGreaterThanOrEqual(3);
-        expect(bottomInset).toBe('-3px');
       }
       for (const { selector, ratio } of colors.text) expect(ratio, selector).toBeGreaterThanOrEqual(4.5);
       await page.screenshot({ path: `test-results/leptos-layout-${width}-${colorScheme}.png`, fullPage: true });
@@ -288,7 +287,7 @@ for (const colorScheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: colorScheme === 'dark' ? 'light' : 'dark' });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).not.toBe(background);
       expect(await page.evaluate(() => window.themeMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
-      expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)))
+      expect(await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim())))
         .toEqual(colors.meters.map(meter => meter.color));
       await page.emulateMedia({ colorScheme });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(background);

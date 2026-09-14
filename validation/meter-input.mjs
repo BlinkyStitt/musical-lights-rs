@@ -7,7 +7,7 @@ export async function meterPoint(page, meter) {
   const hit = await page.evaluate(({ x, y }) => {
     const node = document.elementFromPoint(x, y)?.closest('[role=meter]');
     if (!node) throw new Error('Input point must hit a spectrum meter');
-    return { label: node.getAttribute('aria-label'), color: getComputedStyle(node.querySelector('.meter-fill')).backgroundColor };
+    return { label: node.getAttribute('aria-label'), color: getComputedStyle(node).getPropertyValue('--band-color').trim() };
   }, point);
   return { ...point, ...hit };
 }

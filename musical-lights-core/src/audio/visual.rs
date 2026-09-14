@@ -135,7 +135,7 @@ impl<const N: usize> DisplaySnapshot<N> {
 
     fn advance(&mut self, at: f64) {
         let at = at.max(self.at);
-        let rate = if self.reduced_motion { 3.0 } else { 6.0 };
+        let rate = if self.reduced_motion { 3.75 } else { 7.5 };
         let edge_rate = if self.reduced_motion { 20.0 } else { 30.0 };
         for band in &mut self.bands {
             if at > band.hold_until {
@@ -274,7 +274,7 @@ mod tests {
             let mut state = DisplaySnapshot::<1>::new(0.0);
             state.push(0.0, [level(1.0)], reduced);
             state.push(0.010, [level(0.0)], reduced);
-            let rate = if reduced { 3.0 } else { 6.0 };
+            let rate = if reduced { 3.75 } else { 7.5 };
             let expected = (1.0 + rate) * Float::exp(-rate);
             for hz in [30, 60, 120, 144, 240] {
                 let mut previous = 1.0;
@@ -452,8 +452,19 @@ mod tests {
     }
 
     #[test]
+    fn bars_pass_half_height_within_a_quarter_second_after_the_peak_hold() {
+        for (reduced, range) in [(false, 0.43..0.45), (true, 0.75..0.77)] {
+            let mut state = DisplaySnapshot::<1>::new(0.0);
+            state.push(0.0, [level(1.0)], reduced);
+            state.push(0.002, [level(0.0)], reduced);
+            assert_eq!(state.frame(0.350).levels, [1.0]);
+            assert!(range.contains(&state.frame(0.600).levels[0]));
+        }
+    }
+
+    #[test]
     fn white_edge_has_a_short_damped_tail_without_changing_the_bar_fall() {
-        for (reduced, edge_rate, bar_rate) in [(false, 30.0, 6.0), (true, 20.0, 3.0)] {
+        for (reduced, edge_rate, bar_rate) in [(false, 30.0, 7.5), (true, 20.0, 3.75)] {
             let mut state = DisplaySnapshot::<1>::new(0.0);
             state.push(0.0, [level(1.0)], reduced);
             state.push(0.002, [level(0.0)], reduced);

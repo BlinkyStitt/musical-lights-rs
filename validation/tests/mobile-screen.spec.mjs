@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { physicsReady, physicsState } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
 test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }) => {
@@ -25,18 +26,15 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
-  const balloon = page.locator('.balloon').nth(4);
-  const before = await balloon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--balloon-x')));
-  const box = await balloon.boundingBox();
-  await page.mouse.move(box.x + box.width * .25, box.y + box.height * .5);
-  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--balloon-x')))).toBeGreaterThan(before + .2);
+  await physicsReady(page);
+  const box = await page.locator('canvas').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
   await page.getByRole('button', { name: 'Stop listening' }).tap();
   await page.mouse.move(0, 0);
-  const stopped = await balloon.evaluate(node => ({
-    top: Number.parseFloat(node.style.getPropertyValue('--balloon-y')), color: node.style.getPropertyValue('--balloon-color'),
-  }));
-  await expect.poll(() => balloon.evaluate(node => Number.parseFloat(node.style.getPropertyValue('--balloon-y')))).toBeGreaterThan(stopped.top + .1);
-  expect(await balloon.evaluate(node => node.style.getPropertyValue('--balloon-color'))).toBe(stopped.color);
+  const stopped = await physicsState(page);
+  await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
+  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => Math.abs(ball.position[1] - stopped.balls[i].position[1]) > .005)).toBe(true);
   await expect(page.getByRole('alert')).toBeEmpty();
   await page.evaluate(() => window.balloonSourceContext.close());
   expect(errors).toEqual([]);
@@ -69,7 +67,8 @@ test('a tapped band shows its color and frequency above the graph for three seco
   await expect(readout).toBeVisible();
   await expect(readout).toHaveText(firstHit.label);
   const swatch = readout.locator('.frequency-swatch');
-  expect(await swatch.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(firstHit.color);
+  const renderedColor = (await swatch.evaluate(node => getComputedStyle(node).backgroundColor)).match(/[\d.]+/g).map(Number);
+  firstHit.color.match(/[\d.]+/g).map(Number).forEach((channel, i) => expect(renderedColor[i]).toBeCloseTo(channel, 5));
   const box = await readout.boundingBox();
   const graph = await page.locator('#dancinglights').boundingBox();
   expect(box.y + box.height).toBeLessThanOrEqual(graph.y);

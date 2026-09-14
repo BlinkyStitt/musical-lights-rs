@@ -1,6 +1,6 @@
 use crate::{
-    balloons::{BAR_CORNER_RATIO, BalloonAnimation, BalloonWorld},
     display::DisplayAnimation,
+    physics::PhysicsAnimation,
     screen::ScreenSession,
     wasm_audio::{AudioSession, AudioUpdate},
 };
@@ -20,7 +20,7 @@ struct SessionOwner {
     alive: Rc<Cell<bool>>,
     session: Rc<RefCell<Option<AudioSession>>>,
     animation: Rc<RefCell<Option<DisplayAnimation>>>,
-    balloons: Rc<RefCell<Option<BalloonAnimation>>>,
+    physics: Rc<RefCell<Option<PhysicsAnimation>>>,
 }
 
 impl SessionOwner {
@@ -31,8 +31,8 @@ impl SessionOwner {
         if let Some(animation) = self.animation.borrow_mut().take() {
             animation.stop();
         }
-        if let Some(balloons) = self.balloons.borrow().as_ref() {
-            balloons.stop_listening();
+        if let Some(physics) = self.physics.borrow().as_ref() {
+            physics.stop_listening();
         }
     }
 }
@@ -42,7 +42,6 @@ pub fn DancingLights() -> impl IntoView {
     let palette = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0);
     let colors = palette.colors;
     let frequency_edges = BARK_EDGES;
-    let idle_balloons = BalloonWorld::new(palette);
     let (active_sample, set_active_sample) = signal(0usize);
     let sample_nodes = StoredValue::new(std::array::from_fn::<_, DISPLAY_BANDS, _>(|_| {
         NodeRef::<leptos::html::Div>::new()
@@ -145,20 +144,27 @@ pub fn DancingLights() -> impl IntoView {
         alive: Rc::new(Cell::new(true)),
         session: Rc::new(RefCell::new(None)),
         animation: Rc::new(RefCell::new(None)),
-        balloons: Rc::new(RefCell::new(None)),
+        physics: Rc::new(RefCell::new(None)),
     });
-    let balloon_layer = NodeRef::<leptos::html::Span>::new();
-    balloon_layer.on_load(move |element| {
-        match BalloonAnimation::new(&element, BalloonWorld::new(palette)) {
-            Ok(balloons) => owner.with_value(|owner| *owner.balloons.borrow_mut() = Some(balloons)),
-            Err(error) => log::warn!("Could not prepare balloons: {error:?}"),
-        }
+    let canvas_layer = NodeRef::<leptos::html::Span>::new();
+    canvas_layer.on_load(move |element| {
+        let frame_owner = owner.get_value();
+        let physics = PhysicsAnimation::new(&element, palette, move |now, reset_clock| {
+            if let Some(animation) = frame_owner.animation.borrow().as_ref() {
+                if reset_clock {
+                    animation.reset_clock();
+                } else {
+                    animation.tick(now);
+                }
+            }
+        });
+        owner.with_value(|owner| *owner.physics.borrow_mut() = Some(physics));
     });
     on_cleanup(move || {
         owner.with_value(|owner| {
             owner.alive.set(false);
             owner.stop();
-            owner.balloons.borrow_mut().take();
+            owner.physics.borrow_mut().take();
         })
     });
     let start = move |_| {
@@ -178,17 +184,17 @@ pub fn DancingLights() -> impl IntoView {
         };
         let rate = session.sample_rate();
         let owner = owner.get_value();
-        if let Some(balloons) = owner.balloons.borrow().as_ref() {
-            balloons.start_listening();
+        if let Some(physics) = owner.physics.borrow().as_ref() {
+            physics.start_listening();
         }
         let alive = owner.alive.clone();
-        let balloons = owner.balloons.clone();
+        let physics = owner.physics.clone();
         let animation = match DisplayAnimation::new(session.clone(), move |values, fps| {
             if !alive.get() {
                 return;
             }
-            if let Some(balloons) = balloons.borrow().as_ref() {
-                balloons.push(values);
+            if let Some(physics) = physics.borrow().as_ref() {
+                physics.push(values);
             }
             if audio.get_untracked() != values {
                 set_audio.set(values);
@@ -309,8 +315,7 @@ pub fn DancingLights() -> impl IntoView {
                     <span class="frequency-swatch" aria-hidden="true"></span>
                     <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[index], frequency_edges[index + 1]))}</span>
                 </div>
-                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble" on:keydown=navigate_sample
-                    style=format!("--bar-corner-ratio: {BAR_CORNER_RATIO};")>
+                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble" on:keydown=navigate_sample>
                     {BARK_EDGES.windows(2).enumerate().map(|(group, edges)| {
                         let color = screen_color(palette.colors[group]);
                         let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
@@ -331,23 +336,13 @@ pub fn DancingLights() -> impl IntoView {
                                     on:blur=move |_| hide_band(group)
                                     aria-valuemin="0" aria-valuemax="100"
                                     aria-valuenow=move || audio.with(|frame| (frame.levels[group] * 100.0).round() as u32)>
-                                    <div class="meter-track">
-                                        <div class="meter-fill"
-                                            style:height=move || audio.with(|frame| format!("calc({}% + 3px)", frame.levels[group] * 100.0))>
-                                            <div class="meter-glow" aria-hidden="true"
-                                                style:opacity=move || audio.with(|frame| frame.edges[group].to_string())></div>
-                                        </div>
-                                    </div>
+                                    <div class="meter-track"></div>
                                 </div>
                             </div>
                         }
                     }).collect_view()}
                     <span class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></span>
-                    <span class="balloon-layer" aria-hidden="true" node_ref=balloon_layer>
-                        {idle_balloons.balloons.iter().map(|balloon| view! {
-                            <span class="balloon" style=balloon.style()></span>
-                        }).collect_view()}
-                    </span>
+                    <span class="balloon-layer" aria-hidden="true" node_ref=canvas_layer></span>
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
@@ -380,6 +375,8 @@ pub fn DancingLights() -> impl IntoView {
                 }>"Measure reference"</button>
                 <p>{move || if clipped.get() > 0 { format!("Input reached full scale {} times. Check input gain.", clipped.get()) } else { String::new() }}</p>
             </details>
+            <p class="physics-status" role="status"></p>
+            <details class="physics-controls"></details>
             <p class="audio-error" role="alert">{move || error.get()}</p>
             <p class="screen-error" role="status">{move || screen_error.get()}</p>
         </section>

@@ -10,5 +10,6 @@ exclude = [
     "musical-terminal",
     "musical-wasm",
     "musical-lights-worklet",
+    "musical-lights-physics",
 ]
 resolver = "2"

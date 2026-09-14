@@ -1,10 +1,10 @@
 use leptos::prelude::*;
 use leptos_router::{components::*, path};
 
-mod balloons;
 mod components;
 mod display;
 mod pages;
+mod physics;
 mod screen;
 mod wasm_audio;
 
@@ -31,6 +31,7 @@ pub fn App() -> impl IntoView {
                     <Routes fallback=NotFound>
                         <Route path=path!("/") view=Home />
                         <Route path=path!("/about") view=About />
+                        <Route path=path!("/phone") view=Home />
                     </Routes>
                 </main>
                 <footer><a href="https://github.com/BlinkyStitt/musical-lights-rs">"View the source ↗"</a></footer>

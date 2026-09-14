@@ -54,19 +54,22 @@ p { line-height: 1.65; }
 h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .mic-status { font-size: .74rem; color: var(--muted); background: var(--paper); border: 1px solid var(--line); border-radius: 50px; padding: .4rem .8rem; margin: 0; text-align: center; }
 .spectrum-panel { container-type: inline-size; position: relative; padding: 2.2rem 1.5rem 1rem 3.3rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
-#dancinglights { --bar-gap: clamp(1px, .2cqw, 3px); --bar-cap-radius: calc((100cqw - 23 * var(--bar-gap)) / 24 * var(--bar-corner-ratio)); --balloon-headroom: 5%; position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: var(--bar-gap); height: clamp(210px, 28vw, 320px); }
-#dancinglights::before { content: ""; position: absolute; inset: var(--balloon-headroom) 0 3px; background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); pointer-events: none; }
-/* Bodies compress under contact pressure within the same bounds as the bars.
-   The absolute span preserves the 24 group containers and meter hit targets. */
-.balloon-layer { --bar-width: calc((100cqw - 23 * var(--bar-gap)) / 24); position: absolute; inset: 0 0 3px; z-index: 1; overflow: hidden; pointer-events: none; }
-.balloon { --body-width: calc(var(--bar-width) * var(--balloon-bars) * var(--balloon-scale-x)); --body-height: calc(var(--bar-width) * var(--balloon-bars) * var(--balloon-scale-y)); position: absolute; display: block; left: calc(var(--balloon-x) - var(--body-width) / 2); top: calc(var(--balloon-y) - var(--body-height) / 2); width: var(--body-width); height: var(--body-height); border-radius: 999px; background: radial-gradient(circle at 30% 25%, #ffffff85, transparent 60%), var(--balloon-color); box-shadow: inset -3px -5px 8px #00000030, 0 2px 5px #0000001a; pointer-events: none; }
+#dancinglights { --balloon-headroom: 5%; position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); height: clamp(210px, 28vw, 320px); }
+#dancinglights::before { content: ""; position: absolute; inset: var(--balloon-headroom) 0 0; background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); pointer-events: none; }
+.balloon-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; contain: layout paint; pointer-events: none; }
+.balloon-layer canvas { display: block; width: 100%; height: 100%; }
 .bark-group { position: relative; min-width: 0; }
 .meter { position: relative; height: 100%; min-width: 0; }
 .meter:focus-visible { z-index: 2; }
-.meter-track { position: absolute; inset: var(--balloon-headroom) 0 3px; }
-.meter-fill { position: absolute; bottom: -3px; left: 0; right: 0; height: 3px; background: var(--band-color); border-radius: var(--bar-cap-radius) var(--bar-cap-radius) 0 0; overflow: hidden; }
-.meter-glow { position: absolute; inset: 0; border: 1px solid white; border-radius: inherit; background: transparent; opacity: 0; pointer-events: none; }
-/* Heights come from the animation envelope; CSS must not delay an attack. */
+.meter-track { position: absolute; inset: var(--balloon-headroom) 0 0; pointer-events: none; }
+.physics-controls { font-size: .8rem; margin-top: 1rem; }
+.physics-controls summary { cursor: pointer; }
+.physics-controls label { display: block; margin: .5rem 0; }
+.physics-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .5rem; }
+.physics-fields input { width: 6rem; margin-left: .5rem; }
+.physics-status { margin: 0; font-size: .8rem; }
+.audio-card[data-expanded] .physics-controls { display: none; }
+.audio-card[data-expanded] .physics-status:not(:empty) { position: absolute; bottom: 1rem; z-index: 2; background: var(--surface); }
 .meter-guide { position: absolute; top: var(--balloon-headroom); bottom: 3px; left: -2.6rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .meter-guide > :first-child { transform: translateY(-50%); }
 .meter-guide > :last-child { transform: translateY(50%); }

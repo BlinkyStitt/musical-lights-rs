@@ -68,3 +68,44 @@ export function saveCalibration(node, pascalsPerUnit) {
 export function canCalibrate(node) { return profiles.get(node)?.raw ?? false; }
 
 export function releaseProcessor(node) { profiles.get(node)?.release(); profiles.delete(node); }
+
+const generatedSources = new WeakMap();
+export async function acquireInput(context) {
+    const generated = document.querySelector('.generated-audio')?.checked === true;
+    document.querySelector('.audio-card').dataset.audioSource = generated ? 'generated' : 'microphone';
+    if (!generated) return navigator.mediaDevices.getUserMedia({ audio: {
+        autoGainControl: false, echoCancellation: false, noiseSuppression: false,
+    }});
+    const destination = context.createMediaStreamDestination();
+    const sources = [];
+    const envelopes = [];
+    // Broad spectral peaks and changing tone levels exercise the real PCM analysis pipeline.
+    const frequencies = [50,150,250,350,450,570,700,840,1000,1170,1370,1600,1850,2150,2500,2900,3400,4050,4800,5800,7000,8600,10700,13700];
+    for (let i = 0; i < frequencies.length; i++) {
+        const oscillator = context.createOscillator(), gain = context.createGain();
+        oscillator.frequency.value = frequencies[i]; oscillator.connect(gain); gain.connect(destination);
+        const curve = new Float32Array(96);
+        for (let j = 0; j < curve.length; j++) curve[j] = j < 20 ? .025 : (j + i * 3) % 23 < 6 ? .02 : .0002;
+        envelopes.push({ gain: gain.gain, curve });
+        oscillator.start(); sources.push(oscillator, gain);
+    }
+    // Keep a bounded lookahead for repeated phone tests without an audio cutoff.
+    let next = context.currentTime;
+    const schedule = () => {
+        next = Math.max(next, context.currentTime);
+        while (next < context.currentTime + 12) {
+            for (const { gain, curve } of envelopes) gain.setValueCurveAtTime(curve, next, 6);
+            next += 6;
+        }
+    };
+    schedule();
+    const timer = setInterval(schedule, 2500);
+    const stream = destination.stream;
+    generatedSources.set(stream, () => {
+        clearInterval(timer);
+        for (const source of sources) { if (source instanceof OscillatorNode) source.stop(); source.disconnect(); }
+        destination.disconnect();
+    });
+    return stream;
+}
+export function releaseInput(stream) { generatedSources.get(stream)?.(); generatedSources.delete(stream); }

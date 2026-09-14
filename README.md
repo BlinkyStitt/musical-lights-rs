@@ -50,6 +50,7 @@ Run these commands from the named package directory.
 | --- | --- |
 | musical-lights-core | `cargo test --locked --features log` |
 | musical-lights-worklet | `python3 build.py` |
+| musical-lights-physics | `cargo test --locked` / `python3 build.py` |
 | musical-terminal | `cargo run --release --locked` |
 | musical-leptos | `trunk serve` |
 | musical-dioxus | `dx serve --web` |
@@ -58,6 +59,9 @@ Run these commands from the named package directory.
 | musical-stm32 | `cargo build --release --bins --locked` |
 | musical-adafruit-sparkle-embassy | `cargo build --release --bins --locked` |
 | musical-adafruit-sparkle-idf | `cargo build --release --bins --locked` |
+
+The Leptos build includes the shared Rust rigid-body simulation and locally
+bundled Three.js renderer. See [physics and phone acceptance](docs/physics.md).
 
 On macOS, install SDL2 for terminal examples and set its library search path:
 

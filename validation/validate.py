@@ -12,6 +12,7 @@ ESP = "esp-1.98.1.0"
 PACKAGES = {
     "core": "musical-lights-core",
     "worklet": "musical-lights-worklet",
+    "physics": "musical-lights-physics",
     "terminal": "musical-terminal",
     "leptos": "musical-leptos",
     "dioxus": "musical-dioxus",
@@ -49,6 +50,7 @@ def validate(name):
             "validation/loudness/validate.py",
             "validation/lights",
             "musical-lights-worklet/build.py",
+            "musical-lights-physics/build.py",
             "musical-leptos/publish_routes.py",
         ]
         run([str(environment / "ruff"), "check"] + paths, ROOT)
@@ -164,6 +166,26 @@ def validate(name):
             ],
             directory,
         )
+    elif name == "physics":
+        run(cargo + ["test", "--locked"], directory)
+        run(
+            cargo + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
+            directory,
+        )
+        run(
+            cargo
+            + [
+                "clippy",
+                "--locked",
+                "--target",
+                "wasm32-unknown-unknown",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            directory,
+        )
+        run(["python3", "build.py"], directory)
     elif name == "worklet":
         run(
             cargo
