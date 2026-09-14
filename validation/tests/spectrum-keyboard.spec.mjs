@@ -8,13 +8,16 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function expectSample(page, index) {
-  const meter = page.getByRole('meter').nth(index);
-  await expect(meter).toBeFocused();
-  await expect(page.locator('.meter[tabindex="0"]')).toHaveCount(1);
-  await expect(meter).toHaveAttribute('tabindex', '0');
-  await expect(page.locator('.meter[tabindex="-1"]')).toHaveCount(23);
-  await expect(page.getByRole('tooltip')).toHaveText(await meter.getAttribute('aria-label'));
-  await expect(meter).toHaveAttribute('aria-describedby', 'frequency-readout');
+  // Read one coherent browser state instead of seven protocol round trips per key.
+  await expect.poll(() => page.evaluate(index => {
+    const meters = [...document.querySelectorAll('.meter')], meter = meters[index];
+    return { focused: meters.indexOf(document.activeElement),
+      tabStops: meters.flatMap((node, i) => node.getAttribute('tabindex') === '0' ? [i] : []),
+      negativeTabStops: meters.filter(node => node.getAttribute('tabindex') === '-1').length,
+      labelMatches: document.querySelector('#frequency-readout').textContent.trim() === meter.getAttribute('aria-label'),
+      describedBy: meter.getAttribute('aria-describedby') };
+  }, index)).toEqual({ focused: index, tabStops: [index], negativeTabStops: 23,
+    labelMatches: true, describedBy: 'frequency-readout' });
 }
 
 test('spectrum has one Tab stop, direct exits, and remembers the last focused sample', async ({ page }) => {

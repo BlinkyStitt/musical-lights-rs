@@ -61,19 +61,21 @@ export class PhysicsView {
       for (let i = 0; i < 3; i++) this.input[24 + i] = Math.max(-100, Math.min(100,
         this.tilt[i] + (now - this.accelerationAt < 150 ? this.acceleration[i] : 0)));
       if (this.ready && !this.inflight) {
-        const buffer = this.spare?.buffer ?? this.buffers.pop();
-        this.spare = null;
+        const buffer = this.buffers.pop();
+        if (!buffer) { this.fail('Snapshot buffer ownership was lost'); return; }
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
-          sequence: ++this.sequence, input: this.input, buffer }, buffer ? [buffer] : []);
+          sequence: ++this.sequence, input: this.input, buffer }, [buffer]);
         this.inflight = true;
       }
       if (this.current) this.draw(now);
+      this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
       this.metrics.frames++; this.metrics.renderMs += cost;
       this.report?.frame(now, cost);
       if (!this.lastStatus || now - this.lastStatus > 1000) {
         this.status.textContent = this.report?.active ? this.report.query('.phone-progress').textContent
           : this.report?.result ? this.report.query('.phone-progress').textContent + (this.card.hasAttribute('data-expanded') ? ' Exit fullscreen to review and export the report.' : '')
+          : this.metrics.snapshotAgeMs > 100 ? `Physics snapshot delay: ${this.metrics.snapshotAgeMs.toFixed(1)} ms`
           : this.metrics.debt > 2 * 1000 / (this.layout?.[1] ?? 120) ? `Physics delay: ${this.metrics.debt.toFixed(1)} ms` : '';
         this.lastStatus = now;
       }
@@ -121,7 +123,7 @@ export class PhysicsView {
       this.makeMeshes(); this.ready = true;
       this.report = new PhoneReport(this);
     } else if (data.type === 'snapshot') {
-      this.spare = this.previous;
+      if (this.previous) this.buffers.push(this.previous.buffer);
       this.previous = this.current;
       this.current = new Float32Array(data.buffer);
       this.received = performance.now(); this.inflight = false;
@@ -129,8 +131,8 @@ export class PhysicsView {
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
-      if (this.previous) this.spare = this.previous;
-      this.previous = null; this.makeMeshes();
+      for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
+      this.previous = this.current = null; this.makeMeshes();
       this.report?.receive(data);
     } else this.report?.receive(data);
   }
@@ -138,7 +140,9 @@ export class PhysicsView {
     this.disposeMeshes();
     const [count, , , pitch, gap, radius, postHeight] = this.layout;
     this.balls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 }), count);
-    const geometry = new RoundedBoxGeometry(pitch - gap, postHeight, this.config[5], 3, radius);
+    // Two chords per quarter-circle keep the narrow caps smooth at screen size.
+    // Avoid dense subdivisions across all six faces of each long bar.
+    const geometry = new RoundedBoxGeometry(pitch - gap, postHeight, this.config[5], 1, radius);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.edges, 1));
     const material = new THREE.ShaderMaterial({
       uniforms: { halfWidth: { value: (pitch - gap) / 2 }, radius: { value: radius }, postHeight: { value: postHeight } },
@@ -210,6 +214,6 @@ export class PhysicsView {
     this.canvas.removeEventListener('webglcontextlost', this.contextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.contextRestored);
     this.disposeMeshes(); this.renderer.dispose(); this.renderer.forceContextLoss(); this.canvas.remove();
-    delete this.graph.physics; this.current = this.previous = this.spare = null;
+    delete this.graph.physics; this.current = this.previous = null; this.buffers = [];
   }
 }

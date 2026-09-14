@@ -79,6 +79,7 @@ export class PhoneReport {
     const config = this.readConfig(); if (!config) return;
     this.active = true; this.invalid = []; this.result = null; this.count = 0; this.costCount = 0; this.progress = [];
     this.previous = null; this.startMs = null; this.lastProgress = 0;
+    this.maxSnapshotAgeMs = 0;
     this.metadata = { build, userAgent: navigator.userAgent, ios: this.query('.ios-version').value.trim(),
       device: 'iPhone 16e (user test)', lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
@@ -97,6 +98,7 @@ export class PhoneReport {
     if (!this.active || this.startMs == null) return;
     const elapsed = now - this.startMs;
     if (elapsed < 15000) { this.previous = null; this.metadata.viewport = [innerWidth, innerHeight]; return; }
+    this.maxSnapshotAgeMs = Math.max(this.maxSnapshotAgeMs, this.view.metrics.snapshotAgeMs);
     if (this.costCount < this.renderCosts.length) this.renderCosts[this.costCount++] = cost;
     else this.invalidate('Render report capacity exceeded');
     if (this.previous != null) {
@@ -110,7 +112,7 @@ export class PhoneReport {
       || innerHeight !== this.metadata.viewport[1]) this.invalidate('View changed during test');
     if (now - this.lastProgress > 1000) {
       this.query('.phone-progress').textContent = `Recording: ${Math.floor((elapsed - 15000) / 1000)} / 300 seconds. Physics delay ${this.view.metrics.debt.toFixed(1)} ms.`;
-      this.progress.push({ elapsedMs: elapsed - 15000, tick: this.view.metrics.physicsSteps, debtMs: this.view.metrics.debt });
+      this.progress.push({ elapsedMs: elapsed - 15000, tick: this.view.metrics.physicsSteps, debtMs: this.view.metrics.debt, snapshotAgeMs: this.view.metrics.snapshotAgeMs });
       this.lastProgress = now;
     }
     if (elapsed >= 315000) this.finish(false);
@@ -118,9 +120,6 @@ export class PhoneReport {
   receive(data) {
     if (data.type === 'recording') {
       this.startMs = data.timestamp - performance.timeOrigin;
-      // Reset snapshots across the simulation epoch. Keep the transfer pool intact.
-      if (this.view.previous) this.view.spare = this.view.previous;
-      this.view.previous = null;
     }
     if (data.type === 'report') {
       const intervals = Array.from(this.intervals.subarray(0, this.count));
@@ -134,13 +133,18 @@ export class PhoneReport {
       const debtGrowthMs = firstDebt && lastDebt ? lastDebt.mean - firstDebt.mean : null;
       const stepMs = 1000 / this.view.layout[1];
       const simulationLagMs = data.elapsedMs - (data.finalTick - data.initialTick) * stepMs;
+      const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
+      const snapshotProgressDriftMs = firstProgress && lastProgress
+        ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
       this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v1',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,
+        maxSnapshotAgeMs: this.maxSnapshotAgeMs, snapshotProgressDriftMs,
         numericPass: Boolean(frames && intervals.reduce((a, b) => a + b, 0) >= 299000
           && fps >= 59 && frames.p95 <= 18.5 && over25 < .01 && data.debt < 2 * stepMs
           && data.discardedSimulationMs === 0 && simulationLagMs >= -stepMs && simulationLagMs < 3 * stepMs
+          && snapshotProgressDriftMs !== null && Math.abs(snapshotProgressDriftMs) < 3 * stepMs && this.maxSnapshotAgeMs < 100
           && debtGrowthMs !== null && debtGrowthMs <= stepMs && data.maxDebt < 100 && !data.recordingOverflow && !this.invalid.length),
       };
       this.query('.phone-export').disabled = false; this.host.open = true; this.showResult();

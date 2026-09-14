@@ -97,6 +97,7 @@ test('physical controls require reset while camera rotation preserves the runnin
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick);
   expect((await physicsState(page)).balls[0].mass).toBe(before.balls[0].mass);
   await page.getByRole('button', { name: 'Apply settings and reset' }).click();
+  await physicsReady(page);
   await expect.poll(async () => (await physicsState(page)).balls[0].mass).toBeCloseTo(before.balls[0].mass * 2, 6);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(20);
 });
@@ -143,13 +144,14 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
+  await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.physics-controls > summary').click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'End test early' }).click();
   await expect(page.getByRole('button', { name: 'Export test report' })).toBeEnabled();
   const report = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.result);
   expect(report.accepted).toBe(false); expect(report.invalidReasons).toContain('Test ended before five minutes');
-  expect(report.inputs.length).toBeGreaterThan(0); expect(report.finalTick).toBeGreaterThan(10);
+  expect(report.inputs.length).toBeGreaterThan(20); expect(report.finalTick).toBeGreaterThan(40);
   expect(report.discardedSimulationMs).toBe(0);
   expect(report.config[5]).toBeCloseTo(0.36, 5);
   expect((await replayReport(report)).every(result => result.matches)).toBe(true);
@@ -167,4 +169,26 @@ test('a delayed worker reports debt and catches up without discarding simulation
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 30);
   await expect.poll(async () => (await physicsState(page)).metrics.debt).toBeLessThan(17);
   expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
+});
+
+test('phone acceptance rejects frozen snapshots despite 60 FPS and a current worker', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  const results = await page.evaluate(() => {
+    // Synthetic reports test the acceptance rule; they are not device measurements.
+    const report = document.querySelector('#dancinglights').physics.report;
+    report.intervals.fill(1000 / 60); report.count = 18000;
+    report.invalid = []; report.maxSnapshotAgeMs = 10;
+    report.progress = Array.from({ length: 300 }, (_, i) => ({ elapsedMs: i * 1000, tick: 1800 + i * 120, debtMs: 0 }));
+    const data = { type: 'report', physicsCosts: Array(37800).fill(.25),
+      elapsedMs: 315000, initialTick: 0, finalTick: 37800, debt: 0, maxDebt: 0,
+      discardedSimulationMs: 0, recordingOverflow: false };
+    report.receive(data); const moving = report.result.numericPass;
+    for (const sample of report.progress) sample.tick = 1800;
+    report.receive(data); const frozen = report.result.numericPass;
+    report.progress.forEach((sample, i) => { sample.tick = 1800 + i * 120; });
+    report.maxSnapshotAgeMs = 350;
+    report.receive(data); const stale = report.result.numericPass;
+    return { moving, frozen, stale };
+  });
+  expect(results).toEqual({ moving: true, frozen: false, stale: false });
 });

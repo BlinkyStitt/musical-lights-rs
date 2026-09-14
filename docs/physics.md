@@ -65,7 +65,9 @@ The final native 20-second stress run recorded up to 15.3 mm of transient wall
 overlap (the largest relative overlap was 44.7% of a sphere radius). No ball
 center crossed an enclosure boundary. All 24 balls settled within 1 mm of
 non-overlap after the bars lowered. This is a numerical rigid-body model with
-transient contact error. The phone review must also assess visible contacts.
+transient contact error. The accepted 120 Hz rule requires no escape, collapse,
+or persistent overlap; it does not impose an extra transient-overlap distance.
+The phone review must also assess visible contacts.
 
 ## Clocks, buffers, and cleanup
 
@@ -83,10 +85,15 @@ queued inputs to 256. Input recording preserves the source timestamp and the
 tick when the simulation applied it. Exported reports replay exactly with the
 same WASM build at 30, 60, and 120 render FPS.
 
+The renderer owns the complete transfer pool and returns both snapshots on
+reset. Phone acceptance also checks snapshot age and displayed tick progress;
+a running worker with a frozen renderer cannot pass on frame rate alone.
+
 One animation loop interpolates snapshots and updates the accessible audio
 meters. ResizeObserver caches layout measurements. The renderer caps pixel
 ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
-bloom. Bar shaders retain rainbow fills, full-height glow, and a one-CSS-pixel
+bloom. Rounded bar caps use two chords per quarter-circle. Bar shaders retain
+rainbow fills, full-height glow, and a one-CSS-pixel
 white inner edge. Only distinct bar impacts blend sphere colors.
 
 Hidden pages and lost WebGL contexts pause both clocks. Return resets the
@@ -143,6 +150,11 @@ python3 validation/validate.py browser
 
 On macOS, use host access for browser checks and keep the serial startup guard.
 The final local run passed 16 native physics tests, native/WASM Clippy, pinned
-Leptos validation, and 103 browser checks plus three startup harness checks.
+Leptos validation, and 105 browser checks plus three startup harness checks.
 Core and AudioWorklet validation also passed. These results do not establish
 CI, physical-phone acceptance, or production deployment.
+
+Seven Chromium layout and keyboard checks also passed in a Linux container
+limited to one CPU and 3 GB RAM, with three test workers. Each layout case
+allows 60 seconds for its 24 hover checks, audio checks, screenshots, and theme
+changes; individual state assertions retain their five-second deadline.
