@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { physicsReady, physicsState } from '../physics-state.mjs';
 
 const edges = [0,100,200,300,400,510,630,770,920,1080,1270,1480,1720,2000,2320,2700,3150,3700,4400,5300,6400,7700,9500,12000,15500];
 for (const width of [320, 375, 1440]) {
@@ -10,6 +11,7 @@ for (const width of [320, 375, 1440]) {
     await expect(page.getByRole('tooltip')).toBeHidden();
     expect(await page.getByRole('meter').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))))
       .toEqual(edges.slice(0, -1).map((edge, i) => `≈ ${edge}–${edges[i + 1]} Hz`));
+    await physicsReady(page);
     const geometry = await page.evaluate(() => {
       const groups = [...document.querySelectorAll('.bark-group')];
       const meters = [...document.querySelectorAll('.meter')];
@@ -19,31 +21,21 @@ for (const width of [320, 375, 1440]) {
       return {
         guideDifference: Math.abs(guide.y + guide.height / 2 - track.top),
         headroom: (track.top - graph.top) / graph.height,
-        groups: groups.map(node => ({ count: node.querySelectorAll('[role=meter]').length,
-          color: getComputedStyle(node.querySelector('.meter-fill')).backgroundColor })),
-        gaps: meters.slice(1).map((node, i) => node.getBoundingClientRect().left - meters[i].getBoundingClientRect().right),
-        styles: meters.map(node => {
-          const fill = node.querySelector('.meter-fill');
-          const style = getComputedStyle(fill);
-          return { width: fill.getBoundingClientRect().width, radius: Number.parseFloat(style.borderTopLeftRadius),
-            rightRadius: style.borderTopRightRadius, leftRadius: style.borderTopLeftRadius,
-            bottomRadii: [style.borderBottomLeftRadius, style.borderBottomRightRadius],
-            outline: getComputedStyle(node).outlineStyle, overflow: style.overflow };
-        }),
+        colors: groups.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()),
+        counts: groups.map(node => node.querySelectorAll('[role=meter]').length),
+        layout: document.querySelector('#dancinglights').physics.layout,
+        canvas: document.querySelector('canvas').getBoundingClientRect().toJSON(),
+        graph: graph.toJSON(),
       };
     });
     expect(geometry.guideDifference).toBeLessThan(1);
     expect(geometry.headroom).toBeCloseTo(.05, 3);
-    expect(geometry.groups.map(group => group.count)).toEqual(Array(24).fill(1));
-    expect(new Set(geometry.groups.map(group => group.color)).size).toBe(24);
-    for (const gap of geometry.gaps) expect(gap).toBeGreaterThanOrEqual(.98);
-    for (const style of geometry.styles) {
-      expect(style.radius).toBeCloseTo(style.width * .25, 1);
-      expect(style.leftRadius).toBe(style.rightRadius);
-      expect(style.bottomRadii).toEqual(['0px', '0px']);
-      expect(style.outline).toBe('none');
-      expect(style.overflow).toBe('hidden');
-    }
+    expect(geometry.counts).toEqual(Array(24).fill(1));
+    expect(new Set(geometry.colors).size).toBe(24);
+    expect(geometry.layout[4]).toBeCloseTo(.002, 6);
+    expect(geometry.layout[5]).toBeCloseTo(.012, 6);
+    expect(geometry.canvas.width).toBe(geometry.graph.width);
+    expect(geometry.canvas.height).toBe(geometry.graph.height);
     await page.getByRole('meter').nth(13).focus();
     await expect(page.getByRole('tooltip')).toHaveText('≈ 2000–2320 Hz');
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -83,8 +75,9 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await expect(page.getByRole('alert')).toContainText('Invalid audio display state');
   await expect.poll(() => page.evaluate(() => window.transportContext.state)).toBe('closed');
   await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '0');
-  const sphere = page.locator('.balloon').nth(6);
-  const top = await sphere.evaluate(node => node.style.getPropertyValue('--balloon-y'));
-  await expect.poll(() => sphere.evaluate(node => node.style.getPropertyValue('--balloon-y'))).not.toBe(top);
+  await physicsReady(page);
+  const before = await physicsState(page);
+  await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 10);
+  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => Math.abs(ball.position[1] - before.balls[i].position[1]) > .005)).toBe(true);
   expect(errors).toEqual([]);
 });

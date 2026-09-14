@@ -116,7 +116,7 @@ for (const rate of [44100, 48000]) {
     }, { rate });
     await page.goto(leptos);
     await expect(page.getByRole('meter')).toHaveCount(24);
-    const bandColors = await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+    const bandColors = await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()));
     await page.getByRole('button', { name: 'Start listening' }).click();
     await expect(page.getByText(`Sample rate: 48000 Hz`)).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.inputClipped)).toBeGreaterThan(0);
@@ -129,7 +129,7 @@ for (const rate of [44100, 48000]) {
     await page.evaluate(() => { window.testInputGain.gain.value = 0; });
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     expect(await page.evaluate(() => window.originalMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
-    expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor))).toEqual(bandColors);
+    expect(await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()))).toEqual(bandColors);
     await page.getByRole('button', { name: 'Stop listening' }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
@@ -174,15 +174,19 @@ test('leaving the view while permission is pending releases the late stream', as
 for (const colorScheme of ['light', 'dark']) {
   for (const width of [375, 768, 1440]) {
     test(`spectrum is centered and readable at ${width}px in ${colorScheme} mode`, async ({ page }) => {
+      // This case checks 24 hovers, live audio, contrast, screenshots, and theme
+      // changes. Allow the full sequence on software GPUs; each state assertion
+      // still has its normal five-second deadline. Phone FPS has a separate gate.
+      test.setTimeout(60_000);
       await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
       if (width === 375) {
-        // Slow scheduling exposed a compressed-body animation stall in CI.
+        // Keep layout and input checks under slow scheduling as well.
         const cpu = await page.context().newCDPSession(page);
         await cpu.send('Emulation.setCPUThrottlingRate', { rate: 4 });
       }
       await page.emulateMedia({ colorScheme });
       await page.addInitScript(() => {
-        navigator.mediaDevices.getUserMedia = async () => {
+        MediaDevices.prototype.getUserMedia = async () => {
           const context = new AudioContext();
           const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
           const samples = buffer.getChannelData(0);
@@ -216,12 +220,14 @@ for (const colorScheme of ['light', 'dark']) {
       for (const meter of meters) {
         const { x, y, label } = await meterPoint(page, meter);
         await page.mouse.move(x, y);
-        const tooltip = page.getByRole('tooltip');
-        await expect(tooltip).toBeVisible();
-        await expect(tooltip).toHaveText(label);
-        const box = await tooltip.boundingBox();
-        expect(box.x).toBeGreaterThanOrEqual(0);
-        expect(box.x + box.width).toBeLessThanOrEqual(width);
+        // Check visibility, text, and bounds together without waiting through
+        // several software-rendered frames for separate protocol calls.
+        await expect.poll(() => page.locator('#frequency-readout').evaluate(node => {
+          const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+          return { text: node.textContent.trim(), visible: box.width > 0 && box.height > 0
+            && style.visibility !== 'hidden' && style.display !== 'none',
+            inside: box.x >= 0 && box.right <= innerWidth };
+        })).toEqual({ text: label, visible: true, inside: true });
       }
       await page.mouse.move(0, 0);
       await page.getByRole('button', { name: 'Start listening' }).focus();
@@ -255,9 +261,9 @@ for (const colorScheme of ['light', 'dark']) {
         });
         const surfaces = [document.documentElement, document.querySelector('.audio-card'), document.querySelector('.spectrum-panel')]
           .map(node => luminance(getComputedStyle(node).backgroundColor));
-        const meters = [...document.querySelectorAll('.meter-fill')].map(node => {
-          const color = getComputedStyle(node).backgroundColor;
-          return { color, ratio: contrast(luminance(color), surfaces[2]), bottomInset: getComputedStyle(node).bottom };
+        const meters = [...document.querySelectorAll('.bark-group')].map(node => {
+          const color = getComputedStyle(node).getPropertyValue('--band-color').trim();
+          return { color, ratio: contrast(luminance(color), surfaces[2]) };
         });
         return { text, surfaces, meters };
       });
@@ -266,9 +272,8 @@ for (const colorScheme of ['light', 'dark']) {
         else expect(surface).toBeGreaterThan(.8);
       }
       expect(new Set(colors.meters.map(meter => meter.color)).size).toBe(24);
-      for (const { color, ratio, bottomInset } of colors.meters) {
+      for (const { color, ratio } of colors.meters) {
         expect(ratio, color).toBeGreaterThanOrEqual(3);
-        expect(bottomInset).toBe('-3px');
       }
       for (const { selector, ratio } of colors.text) expect(ratio, selector).toBeGreaterThanOrEqual(4.5);
       await page.screenshot({ path: `test-results/leptos-layout-${width}-${colorScheme}.png`, fullPage: true });
@@ -288,7 +293,7 @@ for (const colorScheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: colorScheme === 'dark' ? 'light' : 'dark' });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).not.toBe(background);
       expect(await page.evaluate(() => window.themeMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
-      expect(await page.locator('.meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)))
+      expect(await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim())))
         .toEqual(colors.meters.map(meter => meter.color));
       await page.emulateMedia({ colorScheme });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(background);

@@ -1,0 +1,5 @@
+{
+  "name": "musical-lights-physics-worker",
+  "private": true,
+  "type": "module"
+}

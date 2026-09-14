@@ -5,11 +5,15 @@ use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     AudioContext, AudioContextOptions, AudioWorkletNode, MediaStream, MediaStreamAudioSourceNode,
-    MediaStreamConstraints, MediaStreamTrack, MediaTrackConstraints, MessageEvent,
+    MediaStreamTrack, MessageEvent,
 };
 
 #[wasm_bindgen(module = "/src/audio_setup.js")]
 extern "C" {
+    #[wasm_bindgen(catch, js_name = acquireInput)]
+    async fn acquire_input(context: &AudioContext) -> Result<MediaStream, JsValue>;
+    #[wasm_bindgen(js_name = releaseInput)]
+    fn release_input(stream: &MediaStream);
     #[wasm_bindgen(catch, js_name = prepareProcessor)]
     async fn prepare_processor(
         context: &AudioContext,
@@ -101,22 +105,7 @@ impl AudioSession {
         if self.resources.borrow().is_none() {
             return Err(closed_session());
         }
-        let audio = MediaTrackConstraints::new();
-        audio.set_auto_gain_control(&JsValue::FALSE);
-        audio.set_echo_cancellation(&JsValue::FALSE);
-        audio.set_noise_suppression(&JsValue::FALSE);
-        let constraints = MediaStreamConstraints::new();
-        constraints.set_audio(&audio);
-        let window =
-            web_sys::window().ok_or_else(|| JsValue::from_str("Browser window is unavailable"))?;
-        let stream = JsFuture::from(
-            window
-                .navigator()
-                .media_devices()?
-                .get_user_media_with_constraints(&constraints)?,
-        )
-        .await?
-        .dyn_into::<MediaStream>()?;
+        let stream = acquire_input(&context).await?;
         {
             let mut guard = self.resources.borrow_mut();
             let Some(resources) = guard.as_mut() else {
@@ -270,6 +259,7 @@ fn closed_session() -> JsValue {
     JsValue::from_str("Audio session has closed")
 }
 fn stop_tracks(stream: &MediaStream) {
+    release_input(stream);
     for track in stream.get_tracks().iter() {
         if let Ok(track) = track.dyn_into::<MediaStreamTrack>() {
             track.stop();

@@ -14,7 +14,7 @@ export class VisualizerScreen {
     this.lockRelease = null;
     this.requestingLock = false;
     this.changingFullscreen = false;
-    this.pendingFullscreenToggle = false;
+    this.pendingFullscreenState = null;
     this.expanded = false;
     this.pageScrollY = 0;
     this.swipe = null;
@@ -37,7 +37,7 @@ export class VisualizerScreen {
     this.onKey = event => {
       if (event.key === 'Escape' && this.expanded) {
         event.preventDefault();
-        this.toggleFullscreen();
+        this.toggleFullscreen(false, false);
       }
     };
     this.onPointerDown = event => {
@@ -143,7 +143,6 @@ export class VisualizerScreen {
   }
 
   setExpanded(expanded) {
-    const wasExpanded = this.expanded;
     this.expanded = expanded;
     this.clearGesture();
     this.element.toggleAttribute('data-expanded', expanded);
@@ -210,16 +209,16 @@ export class VisualizerScreen {
     if (lock) lock.release().catch(() => {});
   }
 
-  async toggleFullscreen(deferExit = false) {
+  async toggleFullscreen(deferExit = false, expanded = !this.expanded) {
     if (this.closed) return;
     if (this.changingFullscreen) {
-      this.pendingFullscreenToggle = true;
+      this.pendingFullscreenState = expanded;
       return;
     }
     this.changingFullscreen = true;
     this.error = '';
     try {
-      if (this.expanded) {
+      if (!expanded) {
         // Let iOS finish the button activation while this element still owns
         // the touch. Otherwise Safari can dispatch the same tap to revealed
         // content after the fullscreen DOM changes.
@@ -233,7 +232,6 @@ export class VisualizerScreen {
         // promise. This keeps the restored controls usable immediately.
         this.setExpanded(false);
         this.window.scrollTo?.(0, this.pageScrollY);
-        this.changingFullscreen = false;
         if (nativeExit) await nativeExit;
       } else {
         // The lights-only view is the action on every browser. Native
@@ -253,9 +251,12 @@ export class VisualizerScreen {
     } finally {
       this.changingFullscreen = false;
       this.emit();
-      if (!this.closed && this.pendingFullscreenToggle) {
-        this.pendingFullscreenToggle = false;
-        this.toggleFullscreen();
+      if (!this.closed && this.pendingFullscreenState !== null) {
+        const requested = this.pendingFullscreenState;
+        this.pendingFullscreenState = null;
+        if (requested !== this.expanded || (!requested && this.document.fullscreenElement === this.element)) {
+          this.toggleFullscreen(false, requested);
+        }
       }
     }
   }

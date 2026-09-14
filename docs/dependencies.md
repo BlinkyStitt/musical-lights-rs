@@ -69,6 +69,7 @@ The user requested current releases and pre-releases. These major upgrades requi
 | serde | `=1.0.229` | core, stm32, terminal |
 | sonic-rs | `=0.5.8` | terminal calibration profiles |
 | resampler | `=0.5.1` | terminal non-48-kHz input |
+| rapier3d | `=0.34.0` | physics (Apache-2.0) |
 | smart-leds | `=0.4.0` | core, stm32, esp-embassy, esp-idf |
 | smart-leds-matrix | `=0.2.0` | terminal |
 | smart-leds-trait | `=0.3.2` | stm32, esp-idf |
@@ -77,7 +78,7 @@ The user requested current releases and pre-releases. These major upgrades requi
 | terrors | `=0.3.3` | leptos |
 | test-log | `=0.2.21` | core (dev) |
 | thiserror | `=2.0.20` | core |
-| wasm-bindgen | `=0.2.128` | leptos, dioxus, wasm |
+| wasm-bindgen | `=0.2.128` | leptos, dioxus, wasm, physics |
 | wasm-bindgen-futures | `=0.4.78` | leptos, dioxus, wasm |
 | wasm-bindgen-test | `=0.3.78` | leptos (dev), dioxus (dev) |
 | web-sys | `=0.3.105` | leptos, dioxus, wasm |
@@ -115,3 +116,10 @@ Unused ESP networking dependencies bleps, embassy-net, esp-wifi, and smoltcp wer
 | Playwright test | 1.64.0-alpha-2026-09-10 |
 
 The browser test runner uses its matching Chromium build. `validation/package-lock.json` pins its graph. [Registry release-check data](dependency-release-check.json) records the original dependency review, including dependencies later removed.
+
+The rigid-body prototype adds Three.js `0.186.0` (MIT), pinned in
+`musical-leptos/package-lock.json`. It bundles the official module, core, and
+RoundedBoxGeometry locally. Rapier started at `0.35.3`; its bullet CCD excludes
+other bullets, and the two-fast-sphere regression reproduced tunneling.
+The single active simulation now uses `0.34.0`, which passes that regression.
+See [the physics settings and validation limits](physics.md).

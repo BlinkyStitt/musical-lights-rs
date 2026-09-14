@@ -1,7 +1,7 @@
 use crate::wasm_audio::AudioSession;
 use musical_lights_core::audio::visual::{DISPLAY_BANDS, DisplayFrame, DisplaySnapshot};
 use std::{cell::RefCell, rc::Rc};
-use wasm_bindgen::{JsCast, JsValue, closure::Closure};
+use wasm_bindgen::JsValue;
 
 /// Count actual animation intervals, including delayed frames, over at least
 /// one second. Audio callbacks and unchanged bar heights do not affect the rate.
@@ -29,107 +29,62 @@ impl FrameRate {
     }
 }
 
-/// One reusable animation callback, owned by the microphone view. Its weak
-/// reference avoids a callback/resource cycle; dropping the owner cancels RAF.
+/// Audio envelope sampled by the canvas render loop. This owns no animation clock.
 #[derive(Clone)]
 pub struct DisplayAnimation(Rc<RefCell<Option<AnimationResources>>>);
-
 struct AnimationResources {
-    window: web_sys::Window,
     reduced_motion: Option<web_sys::MediaQueryList>,
     display: DisplaySnapshot<DISPLAY_BANDS>,
     session: AudioSession,
     motion: bool,
     frame_rate: FrameRate,
-    request: Option<i32>,
-    callback: Option<Closure<dyn FnMut(f64)>>,
+    on_frame: Box<dyn FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>)>,
 }
-
 impl DisplayAnimation {
     pub fn new(
         session: AudioSession,
-        mut on_frame: impl FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>) + 'static,
+        on_frame: impl FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>) + 'static,
     ) -> Result<Self, JsValue> {
         let window =
             web_sys::window().ok_or_else(|| JsValue::from_str("Browser window is unavailable"))?;
         let reduced_motion = window.match_media("(prefers-reduced-motion: reduce)")?;
         let motion = reduced_motion.as_ref().is_some_and(|query| query.matches());
         session.set_reduced_motion(motion);
-        let resources = Rc::new(RefCell::new(Some(AnimationResources {
-            window,
+        Ok(Self(Rc::new(RefCell::new(Some(AnimationResources {
             reduced_motion,
             display: DisplaySnapshot::new(session.time()),
             session,
             motion,
             frame_rate: FrameRate::default(),
-            request: None,
-            callback: None,
-        })));
-        let weak = Rc::downgrade(&resources);
-        let callback = Closure::new(move |now_ms: f64| {
-            let Some(resources) = weak.upgrade() else {
-                return;
-            };
-            let mut guard = resources.borrow_mut();
-            let Some(resources) = guard.as_mut() else {
-                return;
-            };
-            resources.request = None;
-            let reduced_motion = resources
+            on_frame: Box::new(on_frame),
+        })))))
+    }
+    pub fn tick(&self, now_ms: f64) {
+        if let Some(r) = self.0.borrow_mut().as_mut() {
+            let motion = r
                 .reduced_motion
                 .as_ref()
                 .is_some_and(|query| query.matches());
-            if resources.motion != reduced_motion {
-                resources.session.set_reduced_motion(reduced_motion);
-                resources.motion = reduced_motion;
+            if r.motion != motion {
+                r.session.set_reduced_motion(motion);
+                r.motion = motion;
             }
-            on_frame(
-                resources.display.frame(resources.session.time()),
-                resources.frame_rate.tick(now_ms),
-            );
-            resources.request = resources
-                .window
-                .request_animation_frame(
-                    resources
-                        .callback
-                        .as_ref()
-                        .unwrap()
-                        .as_ref()
-                        .unchecked_ref(),
-                )
-                .ok();
-        });
-        {
-            let mut guard = resources.borrow_mut();
-            let resources = guard.as_mut().unwrap();
-            resources.request = Some(
-                resources
-                    .window
-                    .request_animation_frame(callback.as_ref().unchecked_ref())?,
-            );
-            resources.callback = Some(callback);
+            (r.on_frame)(r.display.frame(r.session.time()), r.frame_rate.tick(now_ms));
         }
-        Ok(Self(resources))
     }
-
-    /// Cancel drawing now, even if asynchronous audio setup owns another handle.
+    pub fn reset_clock(&self) {
+        if let Some(r) = self.0.borrow_mut().as_mut() {
+            r.frame_rate = FrameRate::default();
+        }
+    }
     pub fn stop(&self) {
         self.0.borrow_mut().take();
     }
-
     pub fn push(&self, snapshot: DisplaySnapshot<DISPLAY_BANDS>) {
-        if let Some(resources) = self.0.borrow_mut().as_mut()
-            && snapshot.timestamp() >= resources.display.timestamp()
+        if let Some(r) = self.0.borrow_mut().as_mut()
+            && snapshot.timestamp() >= r.display.timestamp()
         {
-            resources.display = snapshot;
-        }
-    }
-}
-
-impl Drop for AnimationResources {
-    fn drop(&mut self) {
-        if let Some(request) = self.request {
-            let _ = self.window.cancel_animation_frame(request);
+            r.display = snapshot;
         }
     }
 }

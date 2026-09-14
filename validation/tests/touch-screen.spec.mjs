@@ -55,7 +55,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
   await send('touchEnd', []);
   await expect(page.getByRole('tooltip')).toBeHidden();
   const events = await page.evaluate(() => pointerLog);
-  expect(events[0].target).toBe('meter-fill');
+  expect(events[0].target).toBe('meter');
   expect(events.every(event => event.trusted)).toBe(true);
   expect(events.some(event => event.type === 'gotpointercapture')).toBe(true);
   expect(events.some(event => event.type === 'lostpointercapture')).toBe(true);

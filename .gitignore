@@ -10,3 +10,5 @@
 **/__pycache__/
 /.cache/
 **/.venv/
+
+/musical-leptos/node_modules/

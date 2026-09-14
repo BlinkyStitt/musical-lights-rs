@@ -1,0 +1,7 @@
+{
+  "name": "musical-lights-renderer",
+  "private": true,
+  "type": "module",
+  "dependencies": { "three": "0.186.0" },
+  "scripts": { "check": "node --check src/physics/view.js && node --check ../musical-lights-physics/worker.js" }
+}
