@@ -81,7 +81,8 @@ button.primary { background: var(--primary); color: white; }
 button.fullscreen-button { background: var(--surface); color: var(--ink); border-color: var(--line); }
 button:disabled { cursor: default; color: var(--muted); background: var(--disabled); border-color: var(--line); }
 button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
-.control-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; display: flex; justify-content: space-between; gap: 1rem; }
+.display-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; display: flex; justify-content: space-between; gap: 1rem; }
+.control-note, .display-status { margin: 0; }
 .frame-rate { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7ch; text-align: right; }
 .display-status { display: flex; justify-content: space-between; gap: 1rem; }
 .wake-status { white-space: nowrap; }
@@ -94,7 +95,9 @@ html:has(.audio-card[data-expanded]), body:has(.audio-card[data-expanded]) { ove
 .audio-card[data-expanded] #dancinglights { height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
 .audio-card[data-expanded] .audio-controls { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: 0; }
 .audio-card[data-expanded] .fullscreen-button { position: fixed; top: max(.75rem, env(safe-area-inset-top)); left: max(.75rem, env(safe-area-inset-left)); z-index: 101; width: auto; height: auto; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid var(--line); overflow: visible; clip-path: none; white-space: nowrap; pointer-events: auto; }
-.audio-card[data-expanded] :is(.mic-status, .primary, .meter-guide, .spectrum-labels, .control-note, .calibration-status, .calibration-controls) { display: none; }
+.audio-card[data-expanded] :is(.mic-status, .primary, .meter-guide, .spectrum-labels, .control-note, .wake-status, .calibration-status, .calibration-controls) { display: none; }
+.audio-card[data-expanded] .display-note { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; margin: 0; pointer-events: none; }
+.audio-card[data-expanded] .frame-rate { padding: .2rem .35rem; border-radius: 4px; color: var(--ink); background: var(--surface); }
 .audio-card[data-expanded] :is(.audio-error, .screen-error):not(:empty) { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: .75rem; background: var(--surface); border-radius: 9px; }
 .audio-card::backdrop { background: var(--paper); }
 .audio-error { color: var(--ink); font-size: .82rem; margin: 0; overflow-wrap: anywhere; }
@@ -125,7 +128,7 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   .audio-controls { flex-wrap: wrap; gap: .5rem; }
   .button-row { gap: .5rem; }
   button { font-size: .75rem; padding: .65rem .7rem; }
-  .control-note { flex-direction: column; gap: .15rem; }
+  .display-note { flex-direction: column; gap: .15rem; }
   .spectrum-panel { padding-right: .65rem; padding-left: 3rem; }
   .meter-guide { left: -2.55rem; }
   .how-it-works { grid-template-columns: 1fr; gap: 1rem; }

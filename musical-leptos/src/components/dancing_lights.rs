@@ -353,16 +353,17 @@ pub fn DancingLights() -> impl IntoView {
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
-            <p class="control-note">{move || if listening.get() {
-                format!("Sample rate: {} Hz", sample_rate.get())
-            } else { "Allow microphone access to begin. No recording.".into() }}
-                <span class="display-status">
-                <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>
-                <span class="frame-rate" aria-label="Frame rate" title="Frames per second">
-                    {move || frame_rate.get().map_or_else(|| "— FPS".into(), |fps| format!("{fps:.0} FPS"))}
-                </span>
-                </span>
-            </p>
+            <div class="display-note">
+                <p class="control-note">{move || if listening.get() {
+                    format!("Sample rate: {} Hz", sample_rate.get())
+                } else { "Allow microphone access to begin. No recording.".into() }}</p>
+                <p class="display-status">
+                    <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>
+                    <span class="frame-rate" aria-label="Frame rate" title="Frames per second">
+                        {move || frame_rate.get().map_or_else(|| "— FPS".into(), |fps| format!("{fps:.0} FPS"))}
+                    </span>
+                </p>
+            </div>
             <p class="calibration-status">{move || capture_status.get()}</p>
             <details class="calibration-controls">
                 <summary>"Input calibration"</summary>
