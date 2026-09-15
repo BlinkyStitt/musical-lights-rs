@@ -303,6 +303,10 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     expect((await page.locator('#dancinglights').boundingBox()).height).toBeGreaterThan(before.height + 100);
     await expect(page.getByRole('button', { name: 'Stop listening' })).toBeHidden();
     await expect(page.locator('.control-note')).toBeHidden();
+    await expect(page.locator('.wake-status')).toBeHidden();
+    await expect(page.locator('.frame-rate')).toBeVisible();
+    await expect(page.locator('.frame-rate')).toHaveText(/^[1-9][0-9]* FPS$/);
+    await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
     await expect(page.locator('.site-header')).toBeHidden();
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });

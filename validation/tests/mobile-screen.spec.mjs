@@ -134,6 +134,11 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(page.locator('.site-header')).toBeHidden();
   await expect(page.locator('.calibration-controls')).toBeHidden();
   await expect(page.locator('.control-note')).toBeHidden();
+  await expect(page.locator('.wake-status')).toBeHidden();
+  const fps = page.locator('.frame-rate');
+  await expect(fps).toHaveCount(1);
+  await expect(fps).toBeVisible();
+  await expect(fps).toHaveText(/^[1-9][0-9]* FPS$/);
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeHidden();
   await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
   for (const viewport of [{ width: 390, height: 664 }, { width: 844, height: 390 }, { width: 390, height: 664 }]) {
@@ -141,6 +146,11 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     await expect.poll(async () => (await page.locator('.audio-card').boundingBox()).height).toBe(viewport.height);
     const graph = await page.locator('#dancinglights').boundingBox();
     expect(graph.height).toBeGreaterThan(viewport.height * .9);
+    await expect(fps).toBeInViewport({ ratio: 1 });
+    const counter = await fps.boundingBox();
+    const exitBox = await exit.boundingBox();
+    expect(counter.x).toBeGreaterThan(exitBox.x + exitBox.width);
+    expect(counter.height).toBeLessThan(30);
   }
   await page.screenshot({ path: 'test-results/iphone-lights-only.png' });
   expect(await page.evaluate(() => inputRequests)).toBe(1);
