@@ -48,6 +48,7 @@ def validate(name):
         paths = [
             "validation/validate.py",
             "validation/loudness/validate.py",
+            "validation/loudness/tones.py",
             "validation/lights",
             "musical-lights-worklet/build.py",
             "musical-lights-physics/build.py",

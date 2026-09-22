@@ -388,3 +388,13 @@ An Apple M4 Max host processed warmed two-tone PCM through the loudness model, v
 `LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 33.82 ms (0.846% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. That earlier browser snapshot contained 146 `f64` values (1,168 bytes), including the acoustic input used by peak detection. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
 
 These are host measurements. They do not show ESP32 execution time or hardware accuracy. No board was flashed. Microphone calibration, I2S format, DMA stress, processing headroom, LED channel order, response curves, current draw and observed flicker remain bench checks. The LED thread explicitly reserves 16,000 stack bytes because its 4,800-byte linear palette exceeds the SDK default 3,072-byte thread stack. Actual stack high-water marks still require a board. The firmware exposes capture failures and includes a separate `light-check` program and profile generator for that work.
+
+## Proportional targets and 80 ms strokes
+
+See the [controlled-tone and motion report](gain-stroke-results/README.md) for
+before/after evidence, the 124 passing browser checks, reference comparisons,
+Mac layout timing, and the outstanding reversal-timing decision and physical
+iPhone measurements. The 80 ms rest-to-rest controller reaches within 1% in
+75 ms; its prescribed acceleration cannot also guarantee every reversal within
+100 ms from receipt. This boundary is reported explicitly rather than counted
+as a passing universal latency guarantee.

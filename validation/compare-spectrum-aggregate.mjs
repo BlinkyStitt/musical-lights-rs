@@ -15,8 +15,9 @@ const processors = await Promise.all(paths.map(async path => {
     sha256: createHash('sha256').update(bytes).digest('hex') };
 }));
 const [baseline, current] = processors;
-assert(baseline.wasm.processor_snapshot_length(baseline.handle) >= 146);
-assert.equal(current.wasm.processor_snapshot_length(current.handle), 146);
+const transportLength = current.wasm.processor_snapshot_length(current.handle);
+assert.equal(baseline.wasm.processor_snapshot_length(baseline.handle), transportLength,
+  'Display transport changed; use tone-comparison and compare-tone-results for measurement equivalence');
 const samples = 48000 * 100;
 let seed = 1, compared = 0;
 try {
@@ -33,7 +34,7 @@ try {
       wasm.processor_motion(handle, Math.floor(first / 480000) % 2);
       assert.equal(wasm.processor_process(handle, 128, BigInt(first)), 1);
       const pointer = wasm.processor_snapshot(handle);
-      return Buffer.from(wasm.memory.buffer, pointer, 146 * 8);
+      return Buffer.from(wasm.memory.buffer, pointer, transportLength * 8);
     });
     assert(snapshots[0].equals(snapshots[1]), `Aggregate state changed at sample ${first}`);
     assert.equal(baseline.wasm.processor_sones(baseline.handle), current.wasm.processor_sones(current.handle));
@@ -41,7 +42,7 @@ try {
   }
   console.log(JSON.stringify({ baselineSha256: baseline.sha256, currentSha256: current.sha256,
     samples, audioSeconds: 100, quantum: 128, comparedSnapshots: compared,
-    aggregateValues: 146, bitIdentical: true,
+    aggregateValues: transportLength, bitIdentical: true,
     workload: 'Deterministic tones and noise; silence and four amplitudes; Reduced Motion toggles every 10 seconds' }, null, 2));
 } finally {
   for (const { wasm, handle } of processors) wasm.processor_destroy(handle);

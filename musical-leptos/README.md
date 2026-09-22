@@ -118,23 +118,17 @@ calibration and Shift+Tab returns to Fullscreen.
 
 The model still calculates 240 specific-loudness values internally. It integrates
 each set of ten values into one Bark band, then applies one shared adaptive gain
-and the existing 24-band motion model. Browser bars, sphere collisions, terminal,
+and proportional common-headroom scaling. Browser bars, sphere collisions, terminal,
 and LEDs use that same band activity. The grid and LOUD label cover the fill
 area; the 5% headroom sits above that scale.
 
-One transferable snapshot contains 146 f64 values (1,168 payload bytes): audio
-time, Reduced Motion, and six motion values for each of 24 bands. The decoder
+One transferable snapshot contains 122 f64 values (976 payload bytes): audio
+time, Reduced Motion, and five target and edge values for each of 24 bands. The decoder
 rejects malformed data and closes that audio session. One snapshot can wait for
 acknowledgement; analysis continues while the UI is delayed, and the next
 acknowledgement releases current state without a backlog.
 
-Meters reach new peaks on the next screen frame. They retain short taps between
-frames and hold each new peak for 350 ms. A critically damped fall then starts
-gently and slows as it approaches the current live band level. It covers 90% of
-a fixed downward distance in about 0.65 seconds after the hold. Reduced Motion
-halves the release speed instead of dropping in one step. Each bar stays above
-its live level, including when that level changes between frames. A remainder
-below 0.0001 of full height (under 0.04 pixels) settles to the exact level.
+Each loudness frame supplies the current gain-scaled target, without a height hold or decorative release. White edges retain independent acoustic attack timing. Physical bars use 80 ms acceleration-limited strokes (320 ms with Reduced Motion); rendering follows the collider snapshots. See [the display contract](../docs/loudness.md) and [physics timing](../docs/physics.md).
 
 Audio analysis runs at the full input rate. One reusable animation callback draws
 the existing nodes and is cancelled when listening stops or the view closes,
@@ -153,13 +147,7 @@ movement. It shows “— FPS” when drawing stops. The browser controls
 the page does not assume or force 120 FPS. The counter measures callback delivery,
 not physical monitor refresh or GPU presentation.
 
-The visibility hold uses the [WCAG 2.2 flashing criterion](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes.html)
-as its design limit: a newly lit height stays lit long enough to prevent more
-than three repeated flash cycles in any second. The white glow shares that
-hold and only brightens with a new bar peak, so it has no independent flash
-clock. The inner border fades with its acoustic attack envelope.
-These checks do not provide a medical safety guarantee. The rainbow
-colors and page background stay fixed while the glow fades.
+White-edge timing does not limit height changes. The previous combined bar/edge flash-rate guarantee depended on a height hold that is now removed. The `/phone` page provides stationary tones, all-band steps, sweeps, two tones, volume changes, bursts, and silence for visual review, with optional audible playback and bounded diagnostic traces.
 
 Floating-point PCM can exceed its nominal [-1, 1] range, as specified by the
 [Web Audio standard](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor

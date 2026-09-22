@@ -1,5 +1,5 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
-use rapier3d::prelude::*;
+use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
 
 pub const COUNT: usize = 24;
@@ -10,8 +10,7 @@ pub const PITCH: f32 = WIDTH / COUNT as f32;
 pub const GAP: f32 = 0.002;
 pub const CORNER: f32 = 0.012;
 pub const POST_HEIGHT: f32 = 20.0;
-const WALL_HEIGHT: f32 = 100.0;
-const WALL_HALF_THICKNESS: f32 = 0.001;
+pub const MAX_SUBSTEPS: usize = 128;
 pub const HEADROOM: f32 = 0.05;
 pub const BASELINE: f32 = 0.003;
 pub const SIZE_RATIOS: [f32; COUNT] = [
@@ -22,7 +21,9 @@ pub const BODY_STRIDE: usize = 18;
 pub const BAR_OFFSET: usize = 3 + COUNT * BODY_STRIDE;
 pub const IMPULSE_OFFSET: usize = BAR_OFFSET + COUNT;
 pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + COUNT * COUNT;
-pub const SNAPSHOT_LEN: usize = CONTACT_OFFSET + COUNT;
+pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + COUNT;
+pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
+pub const SNAPSHOT_LEN: usize = COST_OFFSET + 4;
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,8 +34,8 @@ pub struct SimulationConfig {
     pub restitution: f32,
     pub friction: f32,
     pub depth: f32,
-    pub rise_speed: f32,
-    pub fall_speed: f32,
+    pub stroke_seconds: f32,
+    pub reduced_stroke_seconds: f32,
 }
 impl Default for SimulationConfig {
     fn default() -> Self {
@@ -45,12 +46,21 @@ impl Default for SimulationConfig {
             restitution: 0.55,
             friction: 0.20,
             depth: 0.24,
-            rise_speed: 1.0,
-            fall_speed: 1.25,
+            stroke_seconds: 0.080,
+            reduced_stroke_seconds: 0.320,
         }
     }
 }
 impl SimulationConfig {
+    pub fn motion_limits(self, reduced: bool) -> (f64, f64) {
+        let height = f64::from(self.height * (1.0 - HEADROOM) - BASELINE);
+        let time = f64::from(if reduced {
+            self.reduced_stroke_seconds
+        } else {
+            self.stroke_seconds
+        });
+        (2.0 * height / time, 4.0 * height / (time * time))
+    }
     pub fn values(self) -> [f32; 8] {
         [
             self.height,
@@ -59,8 +69,8 @@ impl SimulationConfig {
             self.restitution,
             self.friction,
             self.depth,
-            self.rise_speed,
-            self.fall_speed,
+            self.stroke_seconds,
+            self.reduced_stroke_seconds,
         ]
     }
     pub fn from_values(v: &[f32]) -> Result<Self, &'static str> {
@@ -74,8 +84,8 @@ impl SimulationConfig {
             restitution: v[3],
             friction: v[4],
             depth: v[5],
-            rise_speed: v[6],
-            fall_speed: v[7],
+            stroke_seconds: v[6],
+            reduced_stroke_seconds: v[7],
         };
         if !(0.05..=20.0).contains(&c.height)
             || !(0.0..=30.0).contains(&c.gravity)
@@ -83,8 +93,8 @@ impl SimulationConfig {
             || !(0.0..=1.0).contains(&c.restitution)
             || !(0.0..=2.0).contains(&c.friction)
             || !(0.2..=2.0).contains(&c.depth)
-            || !(0.01..=5.0).contains(&c.rise_speed)
-            || !(0.01..=5.0).contains(&c.fall_speed)
+            || !(0.08..=2.0).contains(&c.stroke_seconds)
+            || !(0.32..=4.0).contains(&c.reduced_stroke_seconds)
         {
             return Err("Physics settings are outside the prototype limits");
         }
@@ -130,6 +140,8 @@ pub struct Simulation {
     world: PhysicsWorld,
     balls: [(RigidBodyHandle, ColliderHandle); COUNT],
     bars: [(RigidBodyHandle, ColliderHandle); COUNT],
+    bar_positions: [f64; COUNT],
+    bar_velocities: [f64; COUNT],
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; COUNT],
     touching: [[bool; COUNT]; COUNT],
@@ -166,54 +178,17 @@ impl Simulation {
             },
             ..PhysicsWorld::default()
         };
-        // 2 mm enclosure panels. Rapier 0.34 sweeps only when relative travel exceeds
-        // the combined collider thickness; thick walls permit deep discrete overlap.
-        // These walls extend above every supported camera view. There is no ceiling.
-        for (half, position) in [
-            (
-                Vector::new(
-                    WIDTH / 2.0 + 0.1,
-                    WALL_HALF_THICKNESS,
-                    config.depth / 2.0 + 0.1,
-                ),
-                Vector::new(WIDTH / 2.0, -WALL_HALF_THICKNESS, 0.0),
-            ),
-            (
-                Vector::new(
-                    WALL_HALF_THICKNESS,
-                    WALL_HEIGHT / 2.0,
-                    config.depth / 2.0 + 0.1,
-                ),
-                Vector::new(-WALL_HALF_THICKNESS, WALL_HEIGHT / 2.0, 0.0),
-            ),
-            (
-                Vector::new(
-                    WALL_HALF_THICKNESS,
-                    WALL_HEIGHT / 2.0,
-                    config.depth / 2.0 + 0.1,
-                ),
-                Vector::new(WIDTH + WALL_HALF_THICKNESS, WALL_HEIGHT / 2.0, 0.0),
-            ),
-            (
-                Vector::new(WIDTH / 2.0 + 0.1, WALL_HEIGHT / 2.0, WALL_HALF_THICKNESS),
-                Vector::new(
-                    WIDTH / 2.0,
-                    WALL_HEIGHT / 2.0,
-                    -config.depth / 2.0 - WALL_HALF_THICKNESS,
-                ),
-            ),
-            (
-                Vector::new(WIDTH / 2.0 + 0.1, WALL_HEIGHT / 2.0, WALL_HALF_THICKNESS),
-                Vector::new(
-                    WIDTH / 2.0,
-                    WALL_HEIGHT / 2.0,
-                    config.depth / 2.0 + WALL_HALF_THICKNESS,
-                ),
-            ),
+        // Infinite side planes contain even launches above the camera. No ceiling.
+        for (normal, position) in [
+            (Vector::Y, Vector::ZERO),
+            (Vector::X, Vector::ZERO),
+            (-Vector::X, Vector::new(WIDTH, 0.0, 0.0)),
+            (Vector::Z, Vector::new(0.0, 0.0, -config.depth / 2.0)),
+            (-Vector::Z, Vector::new(0.0, 0.0, config.depth / 2.0)),
         ] {
             world.insert(
                 RigidBodyBuilder::fixed().translation(position),
-                ColliderBuilder::cuboid(half.x, half.y, half.z)
+                ColliderBuilder::halfspace(Unit::new_unchecked(normal))
                     .friction(config.friction)
                     .restitution(config.restitution),
             );
@@ -259,6 +234,8 @@ impl Simulation {
             bars,
             palette,
             colors: palette,
+            bar_positions: [f64::from(BASELINE); COUNT],
+            bar_velocities: [0.0; COUNT],
             touching: [[false; COUNT]; COUNT],
             input: SimulationInput {
                 height: config.height,
@@ -295,66 +272,110 @@ impl Simulation {
         Ok(())
     }
     pub fn step(&mut self) {
-        for (i, &(handle, _)) in self.bars.iter().enumerate() {
-            let body = &mut self.world.bodies[handle];
-            let position = body.translation();
-            let target = BASELINE
-                + self.input.levels[i] * (self.config.height * (1.0 - HEADROOM) - BASELINE);
-            let distance = target - (position.y + POST_HEIGHT / 2.0);
-            let motion = if self.input.reduced_motion { 0.25 } else { 1.0 };
-            let step = distance.clamp(
-                -self.config.fall_speed * DT * motion,
-                self.config.rise_speed * DT * motion,
-            );
-            body.set_next_kinematic_translation(position + Vector::Y * step);
-        }
-        for &(handle, _) in &self.balls {
-            let body = &mut self.world.bodies[handle];
-            let mut acceleration = Vector::from_array(self.input.acceleration);
-            if let Some(pointer) = self.input.pointer {
-                let delta = body.translation() - Vector::from_array(pointer);
-                let distance = delta.length();
-                if distance > 0.001 && distance < 0.22 {
-                    acceleration += delta / distance * (1.0 - distance / 0.22) * 15.0;
+        let (max_speed, acceleration) = self.config.motion_limits(self.input.reduced_motion);
+        let targets: [f64; COUNT] = std::array::from_fn(|i| {
+            f64::from(BASELINE)
+                + f64::from(self.input.levels[i])
+                    * f64::from(self.config.height * (1.0 - HEADROOM) - BASELINE)
+        });
+        let bar_speed = (0..COUNT)
+            .map(|i| {
+                let speed = self.bar_velocities[i].abs();
+                if (targets[i] - self.bar_positions[i]).abs() > 1e-9 {
+                    speed.max((speed + acceleration * f64::from(DT)).min(max_speed))
+                } else {
+                    speed
+                }
+            })
+            .fold(0.0_f64, f64::max);
+        let ball_speed = self
+            .balls
+            .iter()
+            .filter_map(|&(h, _)| {
+                let b = &self.world.bodies[h];
+                b.is_enabled().then_some(f64::from(b.linvel().length()))
+            })
+            .fold(0.0_f64, f64::max);
+        let min_radius =
+            SIZE_RATIOS.iter().copied().fold(f32::INFINITY, f32::min) * (PITCH - GAP) / 2.0;
+        // Bound relative travel, including equal opposing balls and bar contacts.
+        // Recompute deterministically each outer tick, never from wall-clock cost.
+        let required = (((2.0 * ball_speed + bar_speed + 1.0) * f64::from(DT)
+            / f64::from(min_radius * 0.5))
+        .ceil() as usize)
+            .max(1);
+        let substeps = required.min(MAX_SUBSTEPS);
+        let dt = DT / substeps as f32;
+        self.world.integration_parameters.dt = dt;
+        self.snapshot.values[IMPULSE_OFFSET..VELOCITY_OFFSET].fill(0.0);
+        self.snapshot.values[COST_OFFSET] = substeps as f32;
+        self.snapshot.values[COST_OFFSET + 1] = required.saturating_sub(MAX_SUBSTEPS) as f32;
+        self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
+        self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
+        for _ in 0..substeps {
+            for (i, &(handle, _)) in self.bars.iter().enumerate() {
+                stroke(
+                    &mut self.bar_positions[i],
+                    &mut self.bar_velocities[i],
+                    targets[i],
+                    f64::from(dt),
+                    max_speed,
+                    acceleration,
+                );
+                let body = &mut self.world.bodies[handle];
+                let mut position = body.translation();
+                position.y = (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32;
+                body.set_next_kinematic_translation(position);
+            }
+            for &(handle, _) in &self.balls {
+                let body = &mut self.world.bodies[handle];
+                let mut acceleration = Vector::from_array(self.input.acceleration);
+                if let Some(pointer) = self.input.pointer {
+                    let delta = body.translation() - Vector::from_array(pointer);
+                    let distance = delta.length();
+                    if distance > 0.001 && distance < 0.22 {
+                        acceleration += delta / distance * (1.0 - distance / 0.22) * 15.0;
+                    }
+                }
+                if self.input.reduced_motion {
+                    acceleration *= 0.1;
+                }
+                body.reset_forces(false);
+                if acceleration.length_squared() > 0.0 {
+                    body.add_force(acceleration * body.mass(), true);
                 }
             }
-            if self.input.reduced_motion {
-                acceleration *= 0.1;
-            }
-            body.reset_forces(false);
-            if acceleration.length_squared() > 0.0 {
-                body.add_force(acceleration * body.mass(), true);
-            }
-        }
-        self.world.step();
-        self.tick += 1;
-        self.snapshot.values[IMPULSE_OFFSET..].fill(0.0);
-        for (i, &(_, collider)) in self.balls.iter().enumerate() {
-            let mut touching = [false; COUNT];
-            for pair in self.world.narrow_phase.contact_pairs_with(collider) {
-                let impulse = pair.total_impulse_magnitude();
-                self.snapshot.values[CONTACT_OFFSET + i] += impulse;
-                let other = if pair.collider1 == collider {
-                    pair.collider2
-                } else {
-                    pair.collider1
-                };
-                if let Some(j) = self.bars.iter().position(|&(_, bar)| bar == other) {
-                    touching[j] =
-                        pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
-                    self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] = impulse;
-                    if touching[j] && !self.touching[i][j] && impulse > 0.0 {
-                        // Blend only on contact onset. Resting load cannot keep changing color.
-                        let mass = self.world.bodies[self.balls[i].0].mass();
-                        let blend = (impulse / mass * 0.15).clamp(0.0, 0.5);
-                        for c in 0..3 {
-                            self.colors[i][c] += (self.palette[j][c] - self.colors[i][c]) * blend;
+            self.world.step();
+
+            for (i, &(_, collider)) in self.balls.iter().enumerate() {
+                let mut touching = [false; COUNT];
+                for pair in self.world.narrow_phase.contact_pairs_with(collider) {
+                    let impulse = pair.total_impulse_magnitude();
+                    self.snapshot.values[CONTACT_OFFSET + i] += impulse;
+                    let other = if pair.collider1 == collider {
+                        pair.collider2
+                    } else {
+                        pair.collider1
+                    };
+                    if let Some(j) = self.bars.iter().position(|&(_, bar)| bar == other) {
+                        touching[j] =
+                            pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
+                        self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
+                        if touching[j] && !self.touching[i][j] && impulse > 0.0 {
+                            // Blend only on contact onset. Resting load cannot keep changing color.
+                            let mass = self.world.bodies[self.balls[i].0].mass();
+                            let blend = (impulse / mass * 0.15).clamp(0.0, 0.5);
+                            for c in 0..3 {
+                                self.colors[i][c] +=
+                                    (self.palette[j][c] - self.colors[i][c]) * blend;
+                            }
                         }
                     }
                 }
+                self.touching[i] = touching;
             }
-            self.touching[i] = touching;
         }
+        self.tick += 1;
         self.write_transforms();
     }
     fn write_transforms(&mut self) {
@@ -374,11 +395,63 @@ impl Simulation {
             out[15..18].copy_from_slice(&self.colors[i]);
         }
         for (i, &(handle, _)) in self.bars.iter().enumerate() {
+            values[VELOCITY_OFFSET + i] = self.bar_velocities[i] as f32;
             values[BAR_OFFSET + i] = self.world.bodies[handle].translation().y + POST_HEIGHT / 2.0;
         }
     }
     pub fn snapshot(&self) -> &SimulationSnapshot {
         &self.snapshot
+    }
+}
+
+/// Exact constant-acceleration segments of the shortest rest-to-rest stroke.
+/// Retargeting preserves velocity, including the braking segment before reversal.
+fn stroke(
+    position: &mut f64,
+    velocity: &mut f64,
+    target: f64,
+    mut dt: f64,
+    max_speed: f64,
+    acceleration: f64,
+) {
+    for _ in 0..8 {
+        if dt <= 1e-12 {
+            break;
+        }
+        let delta = target - *position;
+        if delta.abs() < 1e-10 && velocity.abs() < 1e-8 {
+            *position = target;
+            *velocity = 0.0;
+            break;
+        }
+        let direction = if delta >= 0.0 { 1.0 } else { -1.0 };
+        let speed = *velocity * direction;
+        let distance = delta.abs();
+        let stopping = speed * speed / (2.0 * acceleration);
+        let (a, duration) = if speed < -1e-9 || stopping >= distance - 1e-10 && speed > 1e-9 {
+            (
+                -velocity.signum() * acceleration,
+                velocity.abs() / acceleration,
+            )
+        } else {
+            let peak = (acceleration * distance + speed * speed / 2.0)
+                .sqrt()
+                .min(max_speed);
+            if speed < peak - 1e-9 {
+                (direction * acceleration, (peak - speed) / acceleration)
+            } else if speed > max_speed + 1e-9 {
+                (
+                    -direction * acceleration,
+                    (speed - max_speed) / acceleration,
+                )
+            } else {
+                (0.0, ((distance - stopping) / speed).max(1e-12))
+            }
+        };
+        let elapsed = dt.min(duration);
+        *position += *velocity * elapsed + 0.5 * a * elapsed * elapsed;
+        *velocity += a * elapsed;
+        dt -= elapsed;
     }
 }
 
@@ -418,6 +491,9 @@ impl PhysicsSimulation {
             CONTACT_OFFSET as f32,
             SNAPSHOT_LEN as f32,
             BASELINE,
+            VELOCITY_OFFSET as f32,
+            COST_OFFSET as f32,
+            MAX_SUBSTEPS as f32,
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {

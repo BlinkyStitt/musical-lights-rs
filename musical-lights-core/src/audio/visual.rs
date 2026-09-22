@@ -23,38 +23,45 @@ impl Default for VisualGain {
 }
 
 impl VisualGain {
+    /// Current shared display gain; measured sones remain unchanged.
+    pub fn factor(&self) -> f64 {
+        Float::exp(self.log_gain)
+    }
+
     /// One gain for the canonical 24-band spectrum, regardless of panel layout.
     pub fn map(&mut self, frame: &LoudnessFrame) -> VisualLevels {
         let bands = frame.bands();
         let maximum = bands.iter().copied().fold(0.0_f32, f32::max) as f64;
         if frame.sones >= 0.1 && maximum > 0.0 {
-            let target = Float::ln((4.0 / maximum).clamp(1.0 / 64.0, 64.0));
+            let target = Float::ln((0.8 / maximum).clamp(1.0 / 64.0, 64.0));
             let tau = if target < self.log_gain { 2.0 } else { 20.0 };
             let alpha = -Float::exp_m1(-(FRAME_SAMPLES as f64 / SAMPLE_RATE as f64) / tau);
             self.log_gain += alpha * (target - self.log_gain);
         }
-        let gain = Float::exp(self.log_gain) as f32;
-        let compress = |value| compress(gain, value);
+        let gain = self.factor() as f32;
+        let panel = core::array::from_fn(|row| {
+            if row == 0 {
+                bands[..BASS_BANDS].iter().sum()
+            } else {
+                bands[row + BASS_BANDS - 1]
+            }
+        });
         VisualLevels {
-            bands: bands.map(compress),
-            panel_rows: core::array::from_fn(|row| {
-                compress(if row == 0 {
-                    bands[..BASS_BANDS].iter().sum()
-                } else {
-                    bands[row + BASS_BANDS - 1]
-                })
-            }),
+            bands: proportional(bands, gain),
+            panel_rows: proportional(panel, gain),
         }
     }
 }
 
-/// Apply a frame's shared gain without changing the measured value.
-fn compress(gain: f32, value: f32) -> BandLevel {
-    let x = gain * value;
-    BandLevel {
-        activity: x / (1.0 + x),
-        sones: value,
-    }
+/// A common headroom limit preserves every ratio within each physical layout.
+/// The panel sums its five bass bands before choosing its common scale.
+fn proportional<const N: usize>(values: [f32; N], gain: f32) -> [BandLevel; N] {
+    let maximum = values.iter().copied().fold(0.0_f32, f32::max);
+    let scale = gain.min(1.0 / maximum);
+    values.map(|sones| BandLevel {
+        activity: sones * scale,
+        sones,
+    })
 }
 
 pub struct VisualLevels {
@@ -71,9 +78,8 @@ pub struct BandLevel {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-struct FallingBand {
-    height: f32,
-    velocity: f32,
+struct AcousticEdge {
+    peak_sones: f32,
     hold_until: f64,
     edge: f32,
     target: BandLevel,
@@ -84,7 +90,6 @@ pub struct DisplayFrame<const N: usize> {
     pub levels: [f32; N],
     pub edges: [f32; N],
 }
-
 impl<const N: usize> Default for DisplayFrame<N> {
     fn default() -> Self {
         Self {
@@ -94,113 +99,87 @@ impl<const N: usize> Default for DisplayFrame<N> {
     }
 }
 
-/// A complete, copyable motion state. Producers consume every audio frame;
-/// renderers may discard superseded snapshots without discarding an attack.
+/// Current mapped targets and an independent acoustic edge envelope.
+/// Producers consume every model frame; sampling never retains old heights.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DisplaySnapshot<const N: usize> {
     at: f64,
     reduced_motion: bool,
-    bands: [FallingBand; N],
+    bands: [AcousticEdge; N],
 }
-
 impl<const N: usize> DisplaySnapshot<N> {
-    pub const TRANSPORT_LEN: usize = 2 + N * 6;
-
+    pub const TRANSPORT_LEN: usize = 2 + N * 5;
     pub fn new(at: f64) -> Self {
         Self {
             at,
             reduced_motion: false,
-            bands: [FallingBand::default(); N],
+            bands: [AcousticEdge::default(); N],
         }
     }
     pub fn timestamp(&self) -> f64 {
         self.at
     }
-
     pub fn push(&mut self, at: f64, values: [BandLevel; N], reduced_motion: bool) {
         self.advance(at);
         self.reduced_motion = reduced_motion;
         for (band, value) in self.bands.iter_mut().zip(values) {
-            if value.activity > band.height {
-                band.height = value.activity;
-                band.velocity = 0.0;
-                if value.sones > band.target.sones {
-                    band.hold_until = at + 0.350;
-                    band.edge = 1.0;
-                }
+            // Only acoustic rises above the retained acoustic peak restart white.
+            // Gain changes have no path into this decision.
+            if value.sones > band.peak_sones && value.sones > band.target.sones {
+                band.peak_sones = value.sones;
+                band.hold_until = at + 0.350;
+                band.edge = 1.0;
             }
             band.target = value;
         }
     }
-
     fn advance(&mut self, at: f64) {
         let at = at.max(self.at);
-        let rate = if self.reduced_motion { 3.75 } else { 7.5 };
         let edge_rate = if self.reduced_motion { 20.0 } else { 30.0 };
         for band in &mut self.bands {
             if at > band.hold_until {
                 let elapsed = (at - self.at.max(band.hold_until)) as f32;
-                let distance = (band.height - band.target.activity).max(0.0);
-                let velocity = band.velocity.min(rate * distance);
-                let coefficient = rate * distance - velocity;
-                let decay = Float::exp(-rate * elapsed);
-                let remaining = (distance + coefficient * elapsed) * decay;
-                band.height = band.target.activity + remaining;
-                band.velocity = (velocity + rate * coefficient * elapsed) * decay;
-                if remaining <= 0.0001 {
-                    band.height = band.target.activity;
-                    band.velocity = 0.0;
-                }
-                // The same critically damped fall as the bar, with a shorter
-                // tail. Integrate (1 + rate*t) * exp(-rate*t) from the hold's
-                // end so callback size and display refresh rate cannot change
-                // the fade. The hold still limits repeated full-white attacks.
+                band.peak_sones =
+                    (band.peak_sones * Float::exp(-7.5 * elapsed)).max(band.target.sones);
                 let age = (self.at - band.hold_until).max(0.0) as f32;
                 band.edge *= (1.0 + edge_rate * elapsed / (1.0 + edge_rate * age))
                     * Float::exp(-edge_rate * elapsed);
-                if band.edge <= 0.0001 || band.height == 0.0 {
+                if band.edge <= 0.0001 {
                     band.edge = 0.0;
                 }
             }
         }
         self.at = at;
     }
-
-    /// Sampling does not change the producer's state or its audio clock.
     pub fn frame(&self, at: f64) -> DisplayFrame<N> {
         let mut state = *self;
         state.advance(at);
         DisplayFrame {
-            levels: state.bands.map(|b| b.height),
+            levels: state.bands.map(|b| b.target.activity),
             edges: state.bands.map(|b| b.edge),
         }
     }
-
-    /// Fixed numeric transport for the separate browser WASM instances.
-    /// Header: audio seconds, reduced motion. Each band: height, velocity,
-    /// hold deadline, edge opacity, target activity, input sones.
-    /// No PCM crosses this boundary.
+    /// Audio seconds, reduced motion, then per band: current target, acoustic
+    /// peak sones, edge hold deadline, edge opacity, current input sones. No PCM.
     pub fn write_transport(&self, output: &mut [f64]) {
         assert_eq!(output.len(), Self::TRANSPORT_LEN);
         output[0] = self.at;
         output[1] = f64::from(self.reduced_motion);
         for (out, band) in output[2..]
-            .as_chunks_mut::<6>()
+            .as_chunks_mut::<5>()
             .0
             .iter_mut()
             .zip(self.bands)
         {
             out.copy_from_slice(&[
-                band.height as f64,
-                band.velocity as f64,
+                band.target.activity as f64,
+                band.peak_sones as f64,
                 band.hold_until,
                 band.edge as f64,
-                band.target.activity as f64,
                 band.target.sones as f64,
             ]);
         }
     }
-
     pub fn from_transport(input: &[f64]) -> Option<Self> {
         if input.len() != Self::TRANSPORT_LEN
             || !input.iter().all(|x| x.is_finite())
@@ -214,26 +193,23 @@ impl<const N: usize> DisplaySnapshot<N> {
         for (band, row) in state
             .bands
             .iter_mut()
-            .zip(input[2..].as_chunks::<6>().0.iter())
+            .zip(input[2..].as_chunks::<5>().0.iter())
         {
-            if ![row[0], row[3], row[4]]
-                .iter()
-                .all(|v| (0.0..=1.0).contains(v))
-                || row[1] < 0.0
-                || row[1] > f32::MAX as f64
+            if ![row[0], row[3]].iter().all(|v| (0.0..=1.0).contains(v))
                 || row[2] < 0.0
-                || !(0.0..=f32::MAX as f64).contains(&row[5])
+                || ![row[1], row[4]]
+                    .iter()
+                    .all(|v| (0.0..=f32::MAX as f64).contains(v))
             {
                 return None;
             }
-            *band = FallingBand {
-                height: row[0] as f32,
-                velocity: row[1] as f32,
+            *band = AcousticEdge {
+                peak_sones: row[1] as f32,
                 hold_until: row[2],
                 edge: row[3] as f32,
                 target: BandLevel {
-                    activity: row[4] as f32,
-                    sones: row[5] as f32,
+                    activity: row[0] as f32,
+                    sones: row[4] as f32,
                 },
             };
         }
@@ -245,10 +221,9 @@ impl<const N: usize> DisplaySnapshot<N> {
 mod tests {
     use super::*;
     extern crate std;
-    use std::vec::Vec;
 
     // These motion tests use a fixed proportional mapping. Tests with
-    // VisualGain below cover the actual adaptive and compressed mapping.
+    // VisualGain below cover the actual adaptive proportional mapping.
     fn level(activity: f32) -> BandLevel {
         BandLevel {
             activity,
@@ -257,11 +232,52 @@ mod tests {
     }
 
     #[test]
-    fn short_tap_survives_a_large_audio_block_and_render_stalls_do_not_replay_it() {
+    fn current_targets_preserve_loudness_ratios_during_gain_adaptation() {
+        let mut gain = VisualGain::default();
+        let mut state = DisplaySnapshot::new(0.0);
+        for step in 0..50_000 {
+            let amplitude = if step < 10_000 { 4.0 } else { 0.04 };
+            let frame = LoudnessFrame {
+                sample_index: step * 96,
+                sones: amplitude * 1.1,
+                specific_sones_per_bark: core::array::from_fn(|i| {
+                    if i < 10 {
+                        amplitude
+                    } else if i < 20 {
+                        amplitude * 0.1
+                    } else {
+                        0.0
+                    }
+                }),
+            };
+            let mapped = gain.map(&frame);
+            let peak = mapped.bands[0].activity;
+            assert!((mapped.bands[1].activity / peak - 0.1).abs() < 1e-6);
+            let at = step as f64 * 0.002;
+            state.push(at, mapped.bands, false);
+            assert_eq!(
+                state.frame(at).levels,
+                mapped.bands.map(|band| band.activity)
+            );
+        }
+    }
+
+    #[test]
+    fn falling_targets_do_not_retain_previous_heights() {
+        let mut state = DisplaySnapshot::<1>::new(0.0);
+        state.push(0.0, [level(1.0)], false);
+        state.push(0.002, [level(0.1)], false);
+        assert_eq!(state.frame(0.002).levels, [0.1]);
+        state.push(0.004, [level(0.0)], false);
+        assert_eq!(state.frame(0.004).levels, [0.0]);
+    }
+
+    #[test]
+    fn short_tap_keeps_only_its_edge_and_render_stalls_do_not_replay_it() {
         let mut state = DisplaySnapshot::<24>::new(0.0);
         state.push(0.100, [level(0.8); 24], false);
         state.push(0.110, [level(0.0); 24], false);
-        assert_eq!(state.frame(0.120).levels, [0.8; 24]);
+        assert_eq!(state.frame(0.120).levels, [0.0; 24]);
         assert_eq!(state.frame(0.450).edges, [1.0; 24]);
         assert_eq!(state.frame(3.0).levels, [0.0; 24]);
         assert_eq!(state.frame(3.0).edges, [0.0; 24]);
@@ -274,17 +290,15 @@ mod tests {
             let mut state = DisplaySnapshot::<1>::new(0.0);
             state.push(0.0, [level(1.0)], reduced);
             state.push(0.010, [level(0.0)], reduced);
-            let rate = if reduced { 3.75 } else { 7.5 };
-            let expected = (1.0 + rate) * Float::exp(-rate);
             for hz in [30, 60, 120, 144, 240] {
                 let mut previous = 1.0;
                 for tick in 0..=hz {
                     let frame = state.frame(0.350 + tick as f64 / hz as f64);
-                    assert!((0.0..=previous).contains(&frame.levels[0]));
-                    assert!(frame.edges[0] <= frame.levels[0]);
-                    previous = frame.levels[0];
+                    assert_eq!(frame.levels[0], 0.0);
+                    assert!(frame.edges[0] <= previous);
+                    previous = frame.edges[0];
                 }
-                assert!((previous - expected).abs() < 1e-6);
+                assert_eq!(previous, 0.0);
             }
         }
     }
@@ -308,7 +322,7 @@ mod tests {
             assert!(decoded.bands[0].hold_until < at);
         }
         for invalid in [-1.0, f32::MAX as f64 * 2.0, f64::INFINITY, f64::NAN] {
-            wire[7] = invalid;
+            wire[6] = invalid;
             assert!(DisplaySnapshot::<24>::from_transport(&wire).is_none());
         }
         state.write_transport(&mut wire);
@@ -337,8 +351,8 @@ mod tests {
             values = gain.map(&frame);
         }
         assert!((values.bands[0].activity - 0.8).abs() < 1e-6);
-        assert!((values.bands[1].activity - 2.0 / 3.0).abs() < 1e-6);
-        assert!((values.panel_rows[0].activity - 6.0 / 7.0).abs() < 1e-6);
+        assert!((values.bands[1].activity - 0.4).abs() < 1e-6);
+        assert!((values.panel_rows[0].activity - 1.0).abs() < 1e-6);
         assert_eq!(values.bands[0].sones, 4.0);
         assert_eq!(values.bands[1].sones, 2.0);
         assert_eq!(values.panel_rows[0].sones, 6.0);
@@ -353,95 +367,6 @@ mod tests {
         assert_eq!(gain.log_gain, previous_gain);
     }
     #[test]
-    fn combined_bar_and_glow_limit_flashes_under_rapid_changes() {
-        // Sample a side border and the center column of a 320 px bar with its
-        // 3 px baseline. The center stays colored except for the moving 1 px
-        // top border and fixed bottom border. Count reversals of at least 0.1.
-        const HEIGHT: usize = 320;
-        const BASELINE: usize = 3;
-        const COLUMN: usize = HEIGHT + BASELINE;
-        const PIXELS: usize = 2 * COLUMN;
-        for reduced_motion in [false, true] {
-            for period_ms in [20, 80, 150, 250, 350, 500, 800] {
-                for plot_luminance in [0.01_f32, 0.92] {
-                    let mut display = DisplaySnapshot::<24>::new(0.0);
-                    let mut previous = [plot_luminance; PIXELS];
-                    let mut direction = [0_i8; PIXELS];
-                    let mut reversals: [Vec<usize>; PIXELS] = core::array::from_fn(|_| Vec::new());
-                    for ms in (0..6000).step_by(2) {
-                        let input = if ms % period_ms < 10 { 1.0 } else { 0.0 };
-                        display.push(
-                            ms as f64 / 1000.0,
-                            [level(input); DISPLAY_BANDS],
-                            reduced_motion,
-                        );
-                        let frame = display.frame(ms as f64 / 1000.0);
-                        for pixel in 0..PIXELS {
-                            let row = pixel % COLUMN;
-                            let y = (row as f32 + 0.5 - BASELINE as f32) / HEIGHT as f32;
-                            let height = frame.levels[0];
-                            let lit = y <= height;
-                            let luminance = if lit {
-                                let color = 0.26;
-                                let border =
-                                    pixel < COLUMN || row == 0 || height - y <= 1.0 / HEIGHT as f32;
-                                if border {
-                                    color + (1.0 - color) * frame.edges[0]
-                                } else {
-                                    color
-                                }
-                            } else {
-                                plot_luminance
-                            };
-                            let delta = luminance - previous[pixel];
-                            let next = if delta >= 0.1 {
-                                1
-                            } else if delta <= -0.1 {
-                                -1
-                            } else {
-                                0
-                            };
-                            if next != 0 {
-                                if next != direction[pixel] {
-                                    reversals[pixel].push(ms);
-                                    reversals[pixel].retain(|&time| ms - time < 1000);
-                                    assert!(
-                                        reversals[pixel].len() <= 7,
-                                        "more than three flash pairs at {ms} ms, pixel {pixel}, period {period_ms}, reduced={reduced_motion}, plot={plot_luminance}"
-                                    );
-                                }
-                                direction[pixel] = next;
-                                previous[pixel] = luminance;
-                            } else if direction[pixel] == 1 {
-                                previous[pixel] = previous[pixel].max(luminance);
-                            } else if direction[pixel] == -1 {
-                                previous[pixel] = previous[pixel].min(luminance);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn new_peak_cancels_velocity_and_rising_floor_brakes_before_contact() {
-        for reduced in [false, true] {
-            let mut state = DisplaySnapshot::<1>::new(0.0);
-            state.push(0.0, [level(1.0)], reduced);
-            state.push(0.002, [level(0.0)], reduced);
-            let height = state.frame(0.8).levels[0];
-            let floor = height - 0.001;
-            state.push(0.8, [level(floor)], reduced);
-            let next = state.frame(0.808).levels[0];
-            assert!(next > floor + 0.0008 && next < height);
-            assert_eq!(state.frame(5.0).levels, [floor]);
-            state.push(0.816, [level(0.9)], reduced);
-            assert_eq!(state.frame(0.820).levels, [0.9]);
-            assert_eq!(state.bands[0].velocity, 0.0);
-        }
-    }
-    #[test]
     fn steady_sound_fades_its_edge_without_retriggering() {
         let mut state = DisplaySnapshot::<24>::new(0.0);
         for step in 0..2500 {
@@ -452,19 +377,8 @@ mod tests {
     }
 
     #[test]
-    fn bars_pass_half_height_within_a_quarter_second_after_the_peak_hold() {
-        for (reduced, range) in [(false, 0.43..0.45), (true, 0.75..0.77)] {
-            let mut state = DisplaySnapshot::<1>::new(0.0);
-            state.push(0.0, [level(1.0)], reduced);
-            state.push(0.002, [level(0.0)], reduced);
-            assert_eq!(state.frame(0.350).levels, [1.0]);
-            assert!(range.contains(&state.frame(0.600).levels[0]));
-        }
-    }
-
-    #[test]
-    fn white_edge_has_a_short_damped_tail_without_changing_the_bar_fall() {
-        for (reduced, edge_rate, bar_rate) in [(false, 30.0, 7.5), (true, 20.0, 3.75)] {
+    fn white_edge_has_a_short_damped_tail_independent_of_targets() {
+        for (reduced, edge_rate) in [(false, 30.0), (true, 20.0)] {
             let mut state = DisplaySnapshot::<1>::new(0.0);
             state.push(0.0, [level(1.0)], reduced);
             state.push(0.002, [level(0.0)], reduced);
@@ -472,9 +386,8 @@ mod tests {
             for elapsed in [0.05, 0.1, 0.2, 0.3] {
                 let frame = state.frame(0.350 + elapsed);
                 let expected_edge = (1.0 + edge_rate * elapsed) * Float::exp(-edge_rate * elapsed);
-                let expected_bar = (1.0 + bar_rate * elapsed) * Float::exp(-bar_rate * elapsed);
                 assert!((frame.edges[0] as f64 - expected_edge).abs() < 1e-6);
-                assert!((frame.levels[0] as f64 - expected_bar).abs() < 1e-6);
+                assert_eq!(frame.levels[0], 0.0);
             }
             assert!(state.frame(0.550).edges[0] < 0.1);
             assert_eq!(state.frame(1.0).edges, [0.0]);

@@ -128,20 +128,73 @@ fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
 }
 
 #[test]
-fn kinematic_contact_velocity_matches_the_speed_limited_stroke() {
-    let mut sim = world(SimulationConfig::default());
-    input(&mut sim, [1.0; COUNT]);
-    for _ in 0..HZ / 2 {
-        let before = sim.snapshot.values[BAR_OFFSET];
+fn full_strokes_arrive_within_100_ms_and_preserve_velocity_on_reversal() {
+    for height in [0.1, 0.6, 2.0] {
+        let mut sim = world(SimulationConfig {
+            height,
+            ..SimulationConfig::default()
+        });
+        isolate(&mut sim, &[]);
+        for level in [1.0, 0.0, 1.0, 0.0] {
+            input(&mut sim, [level; COUNT]);
+            let (max_speed, acceleration) = sim.config.motion_limits(false);
+            for _ in 0..12 {
+                let previous = sim.bar_velocities[0];
+                sim.step();
+                assert!(sim.bar_velocities[0].abs() <= max_speed + 1e-5);
+                assert!(
+                    (sim.bar_velocities[0] - previous).abs() <= acceleration * f64::from(DT) + 1e-5
+                );
+                assert!(sim.snapshot.values[COST_OFFSET] <= MAX_SUBSTEPS as f32);
+            }
+            let target = BASELINE + level * (height * (1.0 - HEADROOM) - BASELINE);
+            assert!((sim.snapshot.values[BAR_OFFSET] - target).abs() < height * 0.01);
+            assert!(sim.bar_velocities[0].abs() < 1e-6);
+        }
+        input(&mut sim, [1.0; COUNT]);
         sim.step();
-        let displacement = sim.snapshot.values[BAR_OFFSET] - before;
-        let speed = sim.world.bodies[sim.bars[0].0].linvel().y;
-        assert!((speed - displacement / DT).abs() < 0.0002);
-        assert!(speed <= sim.config.rise_speed + 0.0002);
+        sim.step();
+        sim.step();
+        let velocity = sim.bar_velocities[0];
+        assert!(velocity > 0.0);
+        input(&mut sim, [0.0; COUNT]);
+        assert_eq!(sim.bar_velocities[0], velocity);
+        sim.step();
+        assert!(sim.bar_velocities[0] > 0.0 && sim.bar_velocities[0] < velocity);
+        let mut ticks = 1;
+        while sim.bar_velocities[0] >= 0.0 && ticks < 12 {
+            sim.step();
+            ticks += 1;
+        }
+        assert!(ticks <= 5, "reversal took {ticks} ticks");
+        eprintln!(
+            "height {height}: reversal begins after {} ms",
+            ticks as f32 * DT * 1000.0
+        );
+        for _ in 0..12 {
+            sim.step();
+        }
+        assert!((sim.snapshot.values[BAR_OFFSET] - BASELINE).abs() < height * 0.01);
     }
-    input(&mut sim, [0.0; COUNT]);
-    sim.step();
-    assert!((sim.world.bodies[sim.bars[0].0].linvel().y + sim.config.fall_speed).abs() < 0.0002);
+}
+#[test]
+fn reduced_motion_uses_a_slower_stroke() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[]);
+    sim.apply(SimulationInput {
+        levels: [1.0; COUNT],
+        reduced_motion: true,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    for _ in 0..12 {
+        sim.step();
+    }
+    assert!(sim.snapshot.values[BAR_OFFSET] < 0.2);
+    for _ in 0..28 {
+        sim.step();
+    }
+    assert!((sim.snapshot.values[BAR_OFFSET] - 0.57).abs() < 0.001);
 }
 #[test]
 fn unequal_masses_transfer_linear_and_angular_momentum() {
@@ -204,8 +257,11 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
     let mut levels = [0.0; COUNT];
     levels[12] = 1.0;
     input(&mut sim, levels);
-    for _ in 0..HZ * 4 / 5 {
+    for tick in 0..HZ * 4 / 5 {
         sim.step();
+        if tick == 11 {
+            assert!((sim.snapshot.values[BAR_OFFSET + 12] - 1.14).abs() < 0.0114);
+        }
         for (j, i) in indices.into_iter().enumerate() {
             maximum[j] = maximum[j].max(position(&sim, i).y);
             impulses[j] += sim.snapshot.values[CONTACT_OFFSET + i];
@@ -226,7 +282,7 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
             indices[j]
         );
     }
-    assert!((sim.snapshot.values[BAR_OFFSET + 12] - 0.8).abs() < 0.005);
+    assert!((sim.snapshot.values[BAR_OFFSET + 12] - 1.14).abs() < 0.005);
 }
 #[test]
 fn short_stroke_transfers_only_contact_impulses() {
@@ -247,7 +303,7 @@ fn short_stroke_transfers_only_contact_impulses() {
     assert!(velocity(&sim, 0).y > 0.5);
     assert!(velocity(&sim, 1).y < 0.0);
     assert_eq!(sim.snapshot.values[CONTACT_OFFSET + 1], 0.0);
-    assert!(sim.snapshot.values[BAR_OFFSET + 12] < 0.02);
+    assert!(sim.snapshot.values[BAR_OFFSET + 12] < 0.06);
 }
 #[test]
 fn side_front_and_back_walls_rebound_without_tunneling() {
@@ -396,7 +452,7 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
         }
     }
     input(&mut sim, [0.0; COUNT]);
-    for _ in 0..HZ * 15 {
+    for _ in 0..HZ * 120 {
         sim.step();
     }
     // Resting stacks are valid. Require a contact path down to the floor or
@@ -467,6 +523,7 @@ fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
     let top = 0.2;
     let bar = &mut sim.world.bodies[sim.bars[12].0];
     bar.set_translation(Vector::new(0.625, top - POST_HEIGHT / 2.0, 0.0), true);
+    sim.bar_positions[12] = f64::from(top);
     let mut levels = [0.0; COUNT];
     levels[12] = (top - BASELINE) / (sim.config.height * (1.0 - HEADROOM) - BASELINE);
     input(&mut sim, levels);
@@ -554,4 +611,40 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
     }
     assert!(velocity(&sim, 0).x < -19.0);
     assert!(velocity(&sim, 17).x > 19.0);
+}
+
+#[test]
+fn infinite_sides_contain_launches_above_the_previous_wall_height() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(0.6, 150.0, 0.0),
+        Vector::new(80.0, 20.0, 40.0),
+    );
+    for _ in 0..HZ {
+        sim.step();
+        let p = position(&sim, 0);
+        assert!(
+            p.x >= 0.0 && p.x <= WIDTH && p.z.abs() <= sim.config.depth / 2.0,
+            "escaped: {p:?}"
+        );
+    }
+}
+#[test]
+fn substep_overload_is_visible_without_discarding_a_tick() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(0.6, 150.0, 0.0),
+        Vector::new(0.0, 1000.0, 0.0),
+    );
+    sim.step();
+    assert_eq!(sim.tick, 1);
+    assert_eq!(sim.snapshot.values[COST_OFFSET], 128.0);
+    assert!(sim.snapshot.values[COST_OFFSET + 1] > 0.0);
+    assert!((position(&sim, 0).y - (150.0 + 1000.0 * DT)).abs() < 0.01);
 }

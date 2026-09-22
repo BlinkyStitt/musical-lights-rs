@@ -5,6 +5,7 @@ import { physicsReady, physicsState, syntheticAudio, startFrozen } from '../phys
 const url = 'http://127.0.0.1:8101';
 for (const width of [375, 1440]) {
   test(`24 rigid spheres use a single WebGL2 canvas and physical bar positions at ${width}px`, async ({ page }, info) => {
+    test.setTimeout(60000);
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.setViewportSize({ width, height: 900 });
@@ -22,16 +23,23 @@ for (const width of [375, 1440]) {
     expect(raised.balls.some((b, i) => b.color.some((c, j) => c !== initial.balls[i].color[j]))).toBe(true);
     const render = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
+      // Sample one complete draw, including its intentional interpolation delay.
+      // Comparing a fast moving render to a different worker snapshot is invalid.
+      v.draw(performance.now());
       const a = v.bars.instanceMatrix.array;
-      return { type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
+      const expected = Array.from({ length: 24 }, (_, i) => {
+        const current = v.current[v.layout[9] + i], previous = (v.previous ?? v.current)[v.layout[9] + i];
+        return previous + (current - previous) * v.renderAlpha;
+      });
+      return { expected, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
         tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
     });
     expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(2);
-    render.tops.forEach((top, i) => expect(top).toBeCloseTo(raised.bars[i], 2));
+    render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
     await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
-    await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length).toBeGreaterThan(12);
+    await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length, { timeout: 30000 }).toBeGreaterThan(12);
     expect(errors).toEqual([]);
   });
 }

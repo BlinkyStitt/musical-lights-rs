@@ -61,6 +61,7 @@ def main() -> None:
     shutil.copyfile(root / "worker.js", output / "worker.js")
     for name in ("view.js", "report.js"):
         shutil.copyfile(web / "src/physics" / name, output / name)
+    shutil.copyfile(web / "src/tones.js", output / "tones.js")
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()

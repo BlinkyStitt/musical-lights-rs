@@ -37,23 +37,23 @@ test('a steady quiet tone adapts its bars without holding the white glow on', ()
     }
     if (second >= 10) {
       const state = p.snapshot();
-      const heights = Array.from({ length: 24 }, (_, band) => state[2 + 6 * band]);
+      const heights = Array.from({ length: 24 }, (_, band) => state[2 + 5 * band]);
       const strongest = heights.indexOf(Math.max(...heights));
-      expect(state[5 + 6 * strongest], `white glow at ${second}s`).toBe(0);
+      expect(state[5 + 5 * strongest], `white glow at ${second}s`).toBe(0);
       expect(p.value.wasm.processor_sones(p.value.processor)).toBeCloseTo(4.957, 3);
       if (second === 10) early = heights[strongest];
       if (second === 100) {
-        expect(heights[strongest]).toBeGreaterThan(early + .05);
-        expect(state).toHaveLength(146);
+        expect(heights[strongest]).toBeLessThan(early - .002);
+        expect(state).toHaveLength(122);
         expect(Math.max(...heights)).toBeGreaterThan(.75);
-        expect(Math.max(...heights)).toBeLessThan(.8);
+        expect(Math.max(...heights)).toBeCloseTo(.8, 6);
       }
     }
   }
   const louder = tone(4800, 1000, .04);
   expect(p.push(louder)).toBe(true);
   const attacked = p.snapshot();
-  expect(Array.from({ length: 24 }, (_, band) => attacked[5 + 6 * band])).toContain(1);
+  expect(Array.from({ length: 24 }, (_, band) => attacked[5 + 5 * band])).toContain(1);
 });
 
 test('audio WASM has no imports and callback boundaries cannot change analysis or attacks', () => {
@@ -75,7 +75,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages).toHaveLength(1);
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
-    expect(p.messages[0].data.state.length).toBe(146);
+    expect(p.messages[0].data.state.length).toBe(122);
     expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sones', 'state', 'type']);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));
@@ -132,4 +132,39 @@ test('worklet keeps warmed audio processing below its host real-time budget', ()
   console.log(`WASM processor: 4 s audio / ${elapsed.toFixed(2)} ms host CPU; ${(elapsed / 40).toFixed(3)}% of real time; ${p.value.wasm.memory.buffer.byteLength} memory bytes`);
   expect(p.value.failed).toBe(false);
   expect(elapsed).toBeLessThan(4000);
+});
+
+test('diagnostic frames preserve all 240 measurements and bound a stalled receiver', () => {
+  const pcm = tone(24000, 1000, .002);
+  let reference;
+  for (const size of [128, 800, 4096]) {
+    const p = processor();
+    const w = p.value.wasm, h = p.value.processor;
+    w.processor_trace_enable(h, 1);
+    const rows = [];
+    for (let i = 0; i < pcm.length; i += size) {
+      expect(p.push(pcm.subarray(i, i + size))).toBe(true);
+      const stride = w.processor_trace_stride(h);
+      const data = new Float64Array(w.memory.buffer, w.processor_trace_ptr(h), w.processor_trace_count(h) * stride);
+      for (let j = 0; j < data.length; j += stride) rows.push(Array.from(data.subarray(j, j + stride)));
+      w.processor_trace_clear(h);
+    }
+    expect(w.processor_trace_dropped(h)).toBe(0);
+    expect(rows.length).toBe(250);
+    if (reference) expect(rows).toEqual(reference);
+    else reference = rows;
+    for (const row of rows) {
+      const bands = row.slice(242, 266), peak = Math.max(...bands);
+      const targets = bands.map((_, i) => row[269 + 5 * i]), top = Math.max(...targets);
+      for (let i = 0; i < 24; i++) {
+        const integrated = row.slice(2 + 10 * i, 12 + 10 * i).reduce((a, b) => a + b, 0) * .1;
+        expect(bands[i]).toBeCloseTo(integrated, 6);
+        if (peak) expect(targets[i] / top).toBeCloseTo(bands[i] / peak, 6);
+      }
+    }
+    expect(p.push(pcm)).toBe(true);
+    expect(w.processor_trace_count(h)).toBe(64);
+    expect(w.processor_trace_dropped(h)).toBeGreaterThan(0);
+    expect(p.messages).toHaveLength(1);
+  }
 });

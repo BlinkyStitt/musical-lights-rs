@@ -12,7 +12,7 @@ A 20 ms RMS window is not sufficient for every frequency. It covers one cycle at
 - Twenty-eight third-octave channels use f64 filter states and power. Their three power low-pass stages use `tau = 2 / (3 * min(center_hz, 1000))`. Core loudness, nonlinear decay, upward masking slopes, and final temporal weighting follow the reference method.
 - Every frame has an input sample index. The frame grid starts at the supplied first sample and advances by 96 samples. Two interpolation stages require 48 samples of lookahead. `finish()` emits any final frame on the input grid; it does not append an artificial silence tail.
 - Callback size never defines a measurement window. Empty or non-finite blocks fail before model updates. Missing samples require an explicit reset. Out-of-domain levels stop analysis instead of returning plausible looking numbers. The reference algorithm limits its low-frequency correction to 120 dB SPL.
-- Every ten adjacent specific-loudness bins form one 1-Bark display band. The panel sums the first five band integrals before display compression, then retains the other nineteen bands. Specific loudness is the model's spectral output; the time-weighted total is not recomputed from the visual bars.
+- Every ten adjacent specific-loudness bins form one 1-Bark display band. The panel sums the first five band integrals before display scaling, then retains the other nineteen bands. Specific loudness is the model's spectral output; the time-weighted total is not recomputed from the visual bars.
 
 ## Input and calibration
 
@@ -36,7 +36,7 @@ The ESP32 uses 48 kHz, Philips mono left-channel, signed 16-bit input on BCLK 26
 
 ## Display contract
 
-One slow gain follows the strongest of the 24 bands. Its target maps that band to 80% activity. Gain stays between 1/64 and 64, changes downward with a 2 s time constant and upward with a 20 s time constant, and freezes below 0.1 total sone. Each aggregate display value is `x / (1 + x)`. These values are **artistic activity**, not loudness units. A steady tone remains visible; the gain does not learn it as noise.
+One slow gain follows the strongest of the 24 bands. Its target maps that band to 80% activity. Gain stays between 1/64 and 64, changes downward with a 2 s time constant and upward with a 20 s time constant, and freezes below 0.1 total sone. Band targets are proportional: `band_sones * min(gain, 1 / peak_band_sones)`. Headroom limits the common scale for all bands; no band clips independently. The shared gain seeks `0.8 / peak_band_sones`. The panel applies the same rule after bass aggregation, with one common scale across its rows. These values are **artistic activity**, not loudness units. A steady tone remains visible; the gain does not learn it as noise.
 
 The browser displays 24 Bark bands with the same aggregate activity that drives
 the spheres, terminal, and LEDs. Each bar keeps one fixed HSLuv color and has
@@ -50,9 +50,15 @@ rounded capsules under contact pressure, push neighboring bodies, and recover
 their resting shape as space opens. Rendering and collision checks share the
 same dimensions. The compact layout adds no separate area for large balls.
 
-The producer consumes every loudness frame and updates a complete motion snapshot. A new visual peak restarts its 350 ms hold and white glow only when the band's input sones also rise. Gain changes can raise the current bar floor immediately but cannot restart the peak effect. The bar then follows a critically damped fall at 6/s, or 3/s with Reduced Motion. The glow uses the same damped-motion curve with a shorter tail: `(1 + r*t) * exp(-r*t)`, where `t` starts at the end of the hold and `r` is 30/s, or 20/s with Reduced Motion. The glow loses 90% of its opacity in about 130 ms after the hold, or 195 ms with Reduced Motion. The hold still limits rapid repeated white attacks. A value within 0.0001 of its target settles exactly. The renderer samples that snapshot using audio time. Tests cover 30, 60, 120, 144, and 240 Hz, delayed drawing, steady levels through adaptive gain, short taps, the shorter glow tail across callback sizes, and combined bar/edge luminance reversals. These tests do not establish universal photosensitivity safety for all content and devices.
+The producer consumes every loudness frame and replaces the current mapped targets immediately. Heights have no hold or decorative release. Falling sound retains only the ISO model's prescribed response. No per-band normalization, noise suppression, or additional smoothing is applied.
 
-The browser runs analysis in its own AudioWorklet WASM instance. It preallocates its input and state buffers and imports no browser functions into WASM. The browser snapshot has 146 f64 values: an audio-time and Reduced Motion header followed by six motion values for each of 24 bands. At most one display message waits for acknowledgement; audio processing continues while the page stalls. Native and ESP capture process audio before the latest visual-state handoff. Neither live path queues raw audio for a slower renderer.
+White edges have their own acoustic peak state, independent of display gain. A new acoustic rise above that peak starts a 350 ms edge hold, followed by `(1 + r*t) * exp(-r*t)` with `r = 30/s`, or `20/s` with Reduced Motion. This timing never holds a height. Removing the height hold removes the former combined bar/edge flash-rate guarantee; the fast bar response must be assessed visually with the tone page. Reduced Motion uses slower physical strokes.
+
+The browser runs analysis in its own AudioWorklet WASM instance. It preallocates its input and state buffers and imports no browser functions into WASM. The current snapshot has 122 f64 values (976 bytes): audio seconds and Reduced Motion, then current target, acoustic peak sones, edge hold deadline, edge opacity, and current input sones for each of 24 bands. At most one display message waits for acknowledgement; analysis continues through page stalls.
+
+Optional diagnostics attach at most 64 model frames to that same acknowledged message. Each row contains the sample index, total sones, all 240 specific values, 24 band integrals, gain, and complete display snapshot. Lost rows are counted. Phone recording caps stored rows at 50,000 and exposes overflow. It must be disabled for phone performance acceptance. See [controlled-tone comparison](gain-stroke-results/README.md).
+
+[Physical bars](physics.md) follow the targets with an 80 ms rest-to-rest stroke. The 100 ms acceptance starts at physics input receipt; acoustic filters, the model's 1 ms lookahead, worklet transport, render scheduling, and snapshot interpolation have separate delays.
 
 ## Color and physical output
 

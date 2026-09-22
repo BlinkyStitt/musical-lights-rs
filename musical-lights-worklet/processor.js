@@ -1,10 +1,12 @@
 class LoudnessProcessor extends AudioWorkletProcessor {
     constructor({ processorOptions }) {
         super();
-        const { module, pascalsPerUnit, channel, reducedMotion } = processorOptions;
+        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics } = processorOptions;
         this.wasm = new WebAssembly.Instance(module).exports;
         this.processor = this.wasm.processor_create(pascalsPerUnit === undefined ? 0 : 1, pascalsPerUnit ?? 2, Number(reducedMotion));
         if (!this.processor) throw new Error('Invalid microphone calibration');
+        this.diagnostics = Boolean(diagnostics);
+        this.wasm.processor_trace_enable(this.processor, Number(this.diagnostics));
         this.channel = channel;
         this.input = new Float32Array(this.wasm.memory.buffer, this.wasm.processor_input(this.processor), this.wasm.processor_capacity(this.processor));
         this.snapshot = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_snapshot(this.processor), this.wasm.processor_snapshot_length(this.processor));
@@ -45,7 +47,17 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         if (!this.pending && currentFrame - this.lastSent >= sampleRate / 240) {
             this.wasm.processor_snapshot(this.processor);
             const state = this.snapshot.slice();
-            this.port.postMessage({ type: 'frame', state, sones: this.wasm.processor_sones(this.processor), clipped: this.wasm.processor_clipped(this.processor), calibration: this.wasm.processor_calibration_result(this.processor) }, [state.buffer]);
+            const extra = {}, transfer = [state.buffer];
+            if (this.diagnostics) {
+                const stride = this.wasm.processor_trace_stride(this.processor);
+                const trace = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_trace_ptr(this.processor), this.wasm.processor_trace_count(this.processor) * stride).slice();
+                extra.trace = trace; extra.traceStride = stride;
+                extra.traceDropped = this.wasm.processor_trace_dropped(this.processor);
+                extra.audioTime = currentFrame / sampleRate;
+                this.wasm.processor_trace_clear(this.processor);
+                transfer.push(trace.buffer);
+            }
+            this.port.postMessage({ type: 'frame', ...extra, state, sones: this.wasm.processor_sones(this.processor), clipped: this.wasm.processor_clipped(this.processor), calibration: this.wasm.processor_calibration_result(this.processor) }, transfer);
             this.pending = true;
             this.lastSent = currentFrame;
         }

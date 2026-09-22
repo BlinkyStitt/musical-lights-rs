@@ -6,6 +6,9 @@ use musical_lights_core::audio::{
 };
 
 const INPUT_CAPACITY: usize = 4096;
+const TRACE_CAPACITY: usize = 64;
+const TRACE_STRIDE: usize = 267 + SNAPSHOT_SIZE;
+
 const SNAPSHOT_SIZE: usize = DisplaySnapshot::<DISPLAY_BANDS>::TRANSPORT_LEN;
 
 struct AudioProcessor {
@@ -24,6 +27,10 @@ struct AudioProcessor {
     calibration_result: f32,
     latest_sones: f64,
     clipped: u64,
+    trace_enabled: bool,
+    trace: [f64; TRACE_CAPACITY * TRACE_STRIDE],
+    trace_count: usize,
+    trace_dropped: u32,
 }
 
 impl AudioProcessor {
@@ -44,6 +51,10 @@ impl AudioProcessor {
             calibration_result: 0.0,
             latest_sones: 0.0,
             clipped: 0,
+            trace_enabled: false,
+            trace: [0.0; TRACE_CAPACITY * TRACE_STRIDE],
+            trace_count: 0,
+            trace_dropped: 0,
         }
     }
 
@@ -79,6 +90,10 @@ impl AudioProcessor {
             let display = &mut self.display;
             let sones = &mut self.latest_sones;
             let reduced = self.reduced;
+            let trace_enabled = self.trace_enabled;
+            let trace = &mut self.trace;
+            let trace_count = &mut self.trace_count;
+            let trace_dropped = &mut self.trace_dropped;
             if let Err(error) = self.meter.push_pcm(
                 &self.input[offset..offset + count],
                 first_sample + offset as u64,
@@ -89,6 +104,23 @@ impl AudioProcessor {
                         gain.map(&frame).bands,
                         reduced,
                     );
+                    if trace_enabled {
+                        if *trace_count < TRACE_CAPACITY {
+                            let row = &mut trace
+                                [*trace_count * TRACE_STRIDE..(*trace_count + 1) * TRACE_STRIDE];
+                            row[0] = frame.sample_index as f64;
+                            row[1] = frame.sones;
+                            row[2..242].copy_from_slice(&frame.specific_sones_per_bark);
+                            for (out, value) in row[242..266].iter_mut().zip(frame.bands()) {
+                                *out = value as f64;
+                            }
+                            row[266] = gain.factor();
+                            display.write_transport(&mut row[267..]);
+                            *trace_count += 1;
+                        } else {
+                            *trace_dropped = trace_dropped.saturating_add(1);
+                        }
+                    }
                 },
             ) {
                 (self.error_code, self.error_detail) = match error {
@@ -171,6 +203,13 @@ macro_rules! export {
         }
     };
 }
+// Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
+export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace_enabled = enabled != 0; p.trace_count = 0; p.trace_dropped = 0; });
+export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ptr());
+export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
+export!(processor_trace_count(handle) -> usize, p => p.trace_count);
+export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);
+export!(processor_trace_clear(handle) -> (), p => { p.trace_count = 0; });
 export!(processor_input(handle) -> *const f32, p => p.input.as_ptr());
 export!(processor_capacity(handle) -> usize, _p => INPUT_CAPACITY);
 export!(processor_snapshot(handle) -> *const f64, p => { p.display.write_transport(&mut p.snapshot); p.snapshot.as_ptr() });

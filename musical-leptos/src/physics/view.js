@@ -75,6 +75,7 @@ export class PhysicsView {
       if (!this.lastStatus || now - this.lastStatus > 1000) {
         this.status.textContent = this.report?.active ? this.report.query('.phone-progress').textContent
           : this.report?.result ? this.report.query('.phone-progress').textContent + (this.card.hasAttribute('data-expanded') ? ' Exit fullscreen to review and export the report.' : '')
+          : this.metrics.overloadTicks > 0 ? `Physics contact substep limit reached on ${this.metrics.overloadTicks} ticks; simulation time retained`
           : this.metrics.snapshotAgeMs > 100 ? `Physics snapshot delay: ${this.metrics.snapshotAgeMs.toFixed(1)} ms`
           : this.metrics.debt > 2 * 1000 / (this.layout?.[1] ?? 120) ? `Physics delay: ${this.metrics.debt.toFixed(1)} ms` : '';
         this.lastStatus = now;
@@ -128,6 +129,7 @@ export class PhysicsView {
       this.current = new Float32Array(data.buffer);
       this.received = performance.now(); this.inflight = false;
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
+      this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
@@ -192,6 +194,8 @@ export class PhysicsView {
     }
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
+    this.renderedAt = performance.timeOrigin + now;
+    this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);
   }
   push(levels, edges) { this.input.set(levels, 0); this.edges.set(edges); }

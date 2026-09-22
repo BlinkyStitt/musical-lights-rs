@@ -18,7 +18,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
 | Restitution / friction | 0.55 / 0.20 |
-| Maximum bar rise / fall speed | 1.0 / 1.25 m/s |
+| Full-height rest-to-rest stroke | 80 ms in either direction; 320 ms Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Visual headroom | 5% |
 
@@ -31,23 +31,15 @@ For a stationary surface, the ideal rebound height is about 30% of the drop
 height, compared with 72% at 0.85. Moving bars still transfer their motion
 through physical contacts.
 
-Bars use position-based kinematic bodies. Each tick sets the next position
-through a speed limit; Rapier derives contact velocity. Ball loads cannot slow
-the bars. No motor force or power model is present. The audio envelope falls
-25% faster than before, independently of ball gravity. Hold and edge timing
-remain unchanged. The idle bar top is 3 mm above the enclosure floor.
+Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives `v = 2H/T` and `a = 4H/T²`. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
 
-The enclosure has a floor and four 2 mm walls. Walls reach 100 m above the
-floor; there is no ceiling. The invisible portion of each bar extends 20 m
-below its top. The camera height follows the measured screen aspect ratio.
-Resize preserves sphere size, position, and velocity. Bars move toward their
-new targets through the same controller.
+The enclosure uses a floor and four vertical half-spaces; the top is open. Side containment works above the camera and above the former 100 m walls. Each rounded bar extends 20 m below its top. Resize preserves ball state and retargets bars through the same controller.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
 m/s²; screen rotation maps its axes. Tilt adds an acceleration field of up to
 2 m/s² per axis. The simulation applies force as mass × acceleration each tick.
-Reduced motion scales external acceleration to 10% and bar speed to 25%.
+Reduced Motion scales external acceleration to 10% and uses the configured slower stroke time.
 
 ## Engine selection and limits
 
@@ -56,25 +48,11 @@ bodies. A native regression with two equal spheres at opposing 20 m/s speeds
 reproduced tunneling. The single active dependency is therefore pinned to
 Rapier 0.34.0 with enhanced determinism and CCD on every sphere.
 
-CCD uses one substep. Multiple CCD substeps can give position-based kinematic
-targets a shorter inferred travel time. A regression checks bar contact
-velocity against actual displacement divided by the fixed timestep.
+Sphere CCD uses one internal CCD step. Each 120 Hz outer tick adds deterministic contact substeps based on sphere and bar travel, bounded at 128. Every contact substep retains eight solver iterations and its own kinematic target. Contact impulses accumulate over the whole outer tick. The controller uses no wall-clock feedback, so replay is independent of render rate.
 
-Rapier 0.34 skips swept checks when relative travel is less than the combined
-collider thickness. Thick enclosure walls allowed deep discrete overlap during
-moderate impacts. The 2 mm wall design passes impacts from 1 to 20 m/s and the
-24-ball stress test. Contact prediction is 2 mm; allowed resting error is
-0.2 mm. Contact natural frequency is 60 Hz to limit resting overlap in dense
-stacks; contact damping retains Rapier's default. The physics rate remains
-120 Hz with eight solver iterations.
+Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and contact natural frequency 60 Hz.
 
-The native 20-second stress run with the calmer default recorded up to 15.5 mm
-of transient wall overlap (the largest relative overlap was 57.1% of a sphere
-radius). No ball center crossed an enclosure boundary. All 24 balls settled within 1 mm of
-non-overlap after the bars lowered. This is a numerical rigid-body model with
-transient contact error. The accepted 120 Hz rule requires no escape, collapse,
-or persistent overlap; it does not impose an extra transient-overlap distance.
-The phone review must also assess visible contacts.
+The [fast-stroke report](gain-stroke-results/README.md) records the current stress and timing results. Strong launches can leave the open camera view and take much longer to return than with the previous speed limits. Tests allow ballistic return time before assessing persistent overlap.
 
 Settled spheres can rest on other spheres. The stress test requires an active
 contact path down to the floor or lowered bars for each sphere, as well as

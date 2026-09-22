@@ -67,7 +67,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   await page.evaluate(async () => {
     await window.transportContext.suspend();
-    const state = new Float64Array(146);
+    const state = new Float64Array(122);
     state[0] = window.transportContext.currentTime;
     state[2] = NaN;
     window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', state } }));
