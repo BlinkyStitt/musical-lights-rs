@@ -33,6 +33,8 @@ through physical contacts.
 
 Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives `v = 2H/T` and `a = 4H/T²`. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
 
+The accepted timing contract preserves these limits: strokes from rest must arrive within 1% of a stable target within 100 ms of physics receiving it. Reversal latency includes braking and is reported separately. The measured strokes from rest arrive within 1% in 75 ms; an opposite endpoint requested near peak speed takes 116.67 ms, with direction reversal at 41.67 ms. See the [stroke traces](gain-stroke-results/strokes.json).
+
 The enclosure uses a floor and four vertical half-spaces; the top is open. Side containment works above the camera and above the former 100 m walls. Each rounded bar extends 20 m below its top. Resize preserves ball state and retargets bars through the same controller.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a

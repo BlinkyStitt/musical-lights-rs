@@ -2,8 +2,8 @@
 
 Baseline: `2e6672e0199fcf908202418a00bc7f56aaf3005f` (PR #17).
 Measurements below were collected on macOS on 2026-09-21/22. Physical iPhone
-measurements are still pending. No microphone calibration or loudness-model
-calculation changed.
+measurements are still pending because the device is unavailable. No microphone
+calibration or loudness-model calculation changed.
 
 ## Controlled tones
 
@@ -60,13 +60,15 @@ arrives within 1% at **75 ms**, and rests by the tenth 120 Hz tick (83.33 ms).
 The controller's continuous full-stroke duration is 80 ms. Reduced Motion uses
 320 ms. Speed and acceleration limits remain derived from usable height.
 
-**Timing conflict requiring a decision:** an opposite endpoint requested near
+**Accepted timing contract:** preserve the specified motion limits and report
+reversal latency separately. The 100 ms arrival requirement applies to strokes
+from rest, not arbitrary reversals. An opposite endpoint requested near
 peak velocity arrives within 1% at **116.67 ms** from receipt; downward velocity
 begins at 41.67 ms. The plan's acceleration/velocity limits and preserved velocity
 cannot also guarantee arbitrary reversals within 100 ms. At exactly peak speed,
 braking needs 40 ms and leaves an 80 ms full stroke in the opposite direction.
-The current implementation preserves the specified limits and reports this
-separately; it does not claim that reversals pass 100 ms.
+The implementation preserves these limits and velocity through retargeting;
+reversal timing includes braking and is reported separately from strokes from rest.
 
 Native tests cover single-ball contact, six stacked balls, 24-ball repeated
 full-height motion, rapid reversals, equal opposing fast spheres, high side
