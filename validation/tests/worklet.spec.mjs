@@ -76,7 +76,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
     expect(p.messages[0].data.state.length).toBe(122);
-    expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sones', 'state', 'type']);
+    expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sessionId', 'sones', 'state', 'type']);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));
     expect(p.messages).toHaveLength(2);
@@ -118,7 +118,7 @@ test('reference calibration uses exactly three seconds across callback partition
     const state = p.snapshot();
     if (!reference) reference = state;
     expect(state).toEqual(reference);
-    expect(state[0]).toBe(3.998);
+    expect(state[0]).toBe(4.0); // End-exclusive causal partial-loudness window.
   }
 });
 
@@ -154,11 +154,11 @@ test('diagnostic frames preserve all 240 measurements and bound a stalled receiv
     if (reference) expect(rows).toEqual(reference);
     else reference = rows;
     for (const row of rows) {
-      const bands = row.slice(242, 266), peak = Math.max(...bands);
-      const targets = bands.map((_, i) => row[269 + 5 * i]), top = Math.max(...targets);
+      const bands = row.slice(291, 315), peak = Math.max(...bands);
+      const targets = bands.map((_, i) => row[318 + 5 * i]), top = Math.max(...targets);
       for (let i = 0; i < 24; i++) {
         const integrated = row.slice(2 + 10 * i, 12 + 10 * i).reduce((a, b) => a + b, 0) * .1;
-        expect(bands[i]).toBeCloseTo(integrated, 6);
+        expect(row[242 + i]).toBeCloseTo(integrated, 6);
         if (peak) expect(targets[i] / top).toBeCloseTo(bands[i] / peak, 6);
       }
     }

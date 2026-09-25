@@ -1,18 +1,22 @@
 //! A DOM-free numeric WASM interface, owned by one AudioWorklet instance.
 //! All allocation occurs when creating the processor. No browser API imports.
 use musical_lights_core::audio::{
-    loudness::{Calibration, LoudnessError, LoudnessMeter, SAMPLE_RATE, SoundField},
+    loudness::{Calibration, LoudnessError, LoudnessFrame, LoudnessMeter, SAMPLE_RATE, SoundField},
+    partial::{HOP, PartialLoudnessMeter},
     visual::{DISPLAY_BANDS, DisplaySnapshot, VisualGain},
 };
 
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
-const TRACE_STRIDE: usize = 267 + SNAPSHOT_SIZE;
+const TRACE_STRIDE: usize = 316 + SNAPSHOT_SIZE;
 
 const SNAPSHOT_SIZE: usize = DisplaySnapshot::<DISPLAY_BANDS>::TRANSPORT_LEN;
 
 struct AudioProcessor {
     meter: LoudnessMeter,
+    partial: PartialLoudnessMeter,
+    partial_hop: usize,
+    iso_frame: LoudnessFrame,
     gain: VisualGain,
     display: DisplaySnapshot<DISPLAY_BANDS>,
     input: [f32; INPUT_CAPACITY],
@@ -37,6 +41,13 @@ impl AudioProcessor {
     fn new(calibration: Calibration, reduced: bool) -> Self {
         Self {
             meter: LoudnessMeter::new(calibration, SoundField::Free),
+            partial: PartialLoudnessMeter::new(calibration),
+            partial_hop: 0,
+            iso_frame: LoudnessFrame {
+                sample_index: 0,
+                sones: 0.0,
+                specific_sones_per_bark: [0.0; 240],
+            },
             gain: VisualGain::default(),
             display: DisplaySnapshot::new(0.0),
             input: [0.0; INPUT_CAPACITY],
@@ -68,6 +79,7 @@ impl AudioProcessor {
         }
         if !self.started {
             self.meter.reset(first_sample);
+            self.partial.reset(first_sample);
             self.display = DisplaySnapshot::new(first_sample as f64 / SAMPLE_RATE as f64);
             self.started = true;
         }
@@ -85,42 +97,14 @@ impl AudioProcessor {
                 .map_or(len - offset, |_| {
                     (SAMPLE_RATE * 3 - self.rms_count) as usize
                 })
-                .min(len - offset);
-            let gain = &mut self.gain;
-            let display = &mut self.display;
-            let sones = &mut self.latest_sones;
-            let reduced = self.reduced;
-            let trace_enabled = self.trace_enabled;
-            let trace = &mut self.trace;
-            let trace_count = &mut self.trace_count;
-            let trace_dropped = &mut self.trace_dropped;
+                .min(len - offset)
+                .min(HOP - self.partial_hop);
+            let iso_frame = &mut self.iso_frame;
             if let Err(error) = self.meter.push_pcm(
                 &self.input[offset..offset + count],
                 first_sample + offset as u64,
                 |frame| {
-                    *sones = frame.sones;
-                    display.push(
-                        frame.sample_index as f64 / SAMPLE_RATE as f64,
-                        gain.map(&frame).bands,
-                        reduced,
-                    );
-                    if trace_enabled {
-                        if *trace_count < TRACE_CAPACITY {
-                            let row = &mut trace
-                                [*trace_count * TRACE_STRIDE..(*trace_count + 1) * TRACE_STRIDE];
-                            row[0] = frame.sample_index as f64;
-                            row[1] = frame.sones;
-                            row[2..242].copy_from_slice(&frame.specific_sones_per_bark);
-                            for (out, value) in row[242..266].iter_mut().zip(frame.bands()) {
-                                *out = value as f64;
-                            }
-                            row[266] = gain.factor();
-                            display.write_transport(&mut row[267..]);
-                            *trace_count += 1;
-                        } else {
-                            *trace_dropped = trace_dropped.saturating_add(1);
-                        }
-                    }
+                    *iso_frame = frame;
                 },
             ) {
                 (self.error_code, self.error_detail) = match error {
@@ -134,6 +118,55 @@ impl AudioProcessor {
                 };
                 return false;
             }
+            self.latest_sones = self.iso_frame.sones;
+            let gain = &mut self.gain;
+            let display = &mut self.display;
+            let iso = &self.iso_frame;
+            let reduced = self.reduced;
+            let trace_enabled = self.trace_enabled;
+            let trace = &mut self.trace;
+            let trace_count = &mut self.trace_count;
+            let trace_dropped = &mut self.trace_dropped;
+            if self
+                .partial
+                .push_pcm(
+                    &self.input[offset..offset + count],
+                    first_sample + offset as u64,
+                    |frame| {
+                        display.push(
+                            frame.sample_index as f64 / SAMPLE_RATE as f64,
+                            gain.map_bands(frame.short_term_sones.map(|s| s as f32), iso.sones)
+                                .bands,
+                            reduced,
+                        );
+                        if trace_enabled {
+                            if *trace_count < TRACE_CAPACITY {
+                                let row = &mut trace[*trace_count * TRACE_STRIDE
+                                    ..(*trace_count + 1) * TRACE_STRIDE];
+                                row[0] = iso.sample_index as f64;
+                                row[1] = iso.sones;
+                                row[2..242].copy_from_slice(&iso.specific_sones_per_bark);
+                                for (out, value) in row[242..266].iter_mut().zip(iso.bands()) {
+                                    *out = value as f64;
+                                }
+                                row[266] = frame.sample_index as f64;
+                                row[267..291].copy_from_slice(&frame.instantaneous_sones);
+                                row[291..315].copy_from_slice(&frame.short_term_sones);
+                                row[315] = gain.factor();
+                                display.write_transport(&mut row[316..]);
+                                *trace_count += 1;
+                            } else {
+                                *trace_dropped = trace_dropped.saturating_add(1);
+                            }
+                        }
+                    },
+                )
+                .is_err()
+            {
+                self.error_code = 5;
+                return false;
+            }
+            self.partial_hop = (self.partial_hop + count) % HOP;
             if let Some(level) = self.reference_level {
                 for &sample in &self.input[offset..offset + count] {
                     if sample.abs() >= 1.0 {
@@ -158,6 +191,14 @@ impl AudioProcessor {
                     self.reference_level = None;
                     self.meter = LoudnessMeter::new(calibration, SoundField::Free);
                     self.meter.reset(first_sample + (offset + count) as u64);
+                    self.partial = PartialLoudnessMeter::new(calibration);
+                    self.partial.reset(first_sample + (offset + count) as u64);
+                    self.partial_hop = 0;
+                    self.iso_frame = LoudnessFrame {
+                        sample_index: first_sample + (offset + count) as u64,
+                        sones: 0.0,
+                        specific_sones_per_bark: [0.0; 240],
+                    };
                     self.gain = VisualGain::default();
                     self.latest_sones = 0.0;
                     self.display = DisplaySnapshot::new(
@@ -206,6 +247,7 @@ macro_rules! export {
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
 export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace_enabled = enabled != 0; p.trace_count = 0; p.trace_dropped = 0; });
 export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ptr());
+export!(processor_trace_version(handle) -> u32, _p => 2);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);
 export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);

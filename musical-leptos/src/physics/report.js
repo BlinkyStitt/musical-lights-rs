@@ -17,7 +17,7 @@ export class PhoneReport {
     const fields = [
       ['Gravity (m/s²)', 1, 0, 30, .01], ['Density (kg/m³)', 2, 1, 20000, 1],
       ['Restitution (ratio)', 3, 0, 1, .01], ['Friction (ratio)', 4, 0, 2, .01],
-      ['Enclosure depth (m)', 5, .2, 2, .01], ['Full stroke time (s)', 6, .08, 2, .01],
+      ['Enclosure depth (m)', 5, .2, 2, .01], ['Full stroke time (s)', 6, .04, 2, .01],
       ['Reduced motion stroke (s)', 7, .32, 4, .01],
     ];
     this.host.innerHTML = `<summary>Physics prototype and phone test</summary>
@@ -56,9 +56,10 @@ export class PhoneReport {
     });
     this.toneChunks = []; this.toneRows = 0; this.toneDropped = 0; this.tonePhysics = [];
     const trace = ({ detail }) => {
+      if (detail.sessionId !== this.toneMetadata?.sessionId || this.audioState?.state === 'stopped') return;
       const count = detail.trace.length / detail.traceStride;
       if (this.toneRows + count <= 50000) {
-        this.toneChunks.push({ receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime,
+        this.toneChunks.push({ sessionId: detail.sessionId, receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime,
           workletAudioTime: detail.audioTime, stride: detail.traceStride, values: detail.trace });
         this.toneRows += count;
       } else this.toneDropped += count;
@@ -75,19 +76,25 @@ export class PhoneReport {
       this.query('.tone-trace-status').textContent = `${this.toneRows} model frames recorded; ${this.toneDropped + this.toneWorkletDropped} dropped. Diagnostics add recording cost; turn off for phone FPS acceptance.`;
     };
     const session = ({ detail }) => {
-      this.toneMetadata = detail; this.toneChunks = []; this.toneRows = 0; this.toneDropped = 0; this.toneWorkletDropped = 0; this.tonePhysics = [];
-      this.query('.tone-export').disabled = true;
-      this.query('.tone-trace-status').textContent = '';
+      if (detail.sessionId < (this.audioState?.sessionId ?? 0)) return;
+      if (detail.sessionId !== this.audioState?.sessionId) {
+        this.toneChunks = []; this.toneRows = 0; this.toneDropped = 0; this.toneWorkletDropped = 0; this.tonePhysics = [];
+        this.query('.tone-export').disabled = true;
+        this.query('.tone-trace-status').textContent = '';
+      }
+      this.toneMetadata = detail; this.audioState = detail;
+      if (this.active && (!this.acceptanceWorkload() || detail.sessionId !== this.metadata.sessionId))
+        this.invalidate(`Audio workload changed: ${detail.reason ?? detail.state}`);
     };
-    view.card.addEventListener('tone-session', session);
-    this.removers.push(() => view.card.removeEventListener('tone-session', session));
+    view.card.addEventListener('audio-session', session);
+    this.removers.push(() => view.card.removeEventListener('audio-session', session));
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v1', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v2', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
-        rowLayout: 'sample index, total sones, 240 specific values, 24 band integrals, shared gain, display transport',
-        measurementTiming: '2 ms frame grid; 1 ms algorithm lookahead; filter and temporal response are signal dependent',
+        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, display transport',
+        measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead. Partial: causal 2048-sample Hann at 48 kHz, 96-sample hop; window center 21.33 ms before end; GM2002 short-term attack/release. Transport, physics and render timestamps are separate.',
         tone: this.toneMetadata };
       const parts = [JSON.stringify(header).slice(0, -1), ',"chunks":['];
       this.toneChunks.forEach((chunk, i) => parts.push((i ? ',' : '') + JSON.stringify({ ...chunk, values: Array.from(chunk.values) })));
@@ -111,6 +118,11 @@ export class PhoneReport {
     }
     return config;
   }
+  acceptanceWorkload() {
+    const audio = this.audioState;
+    return audio?.source === 'generated' && audio.kind === 'exercise'
+      && audio.state === 'playing' && audio.repeat && !audio.diagnostics;
+  }
   start() {
     if (this.active) return;
     const progress = this.query('.phone-progress');
@@ -120,8 +132,8 @@ export class PhoneReport {
     if (!this.query('.ios-version').value.trim() || !this.query('.low-power-off').checked) {
       progress.textContent = 'Enter the iOS version and confirm that Low Power Mode is off.'; return;
     }
-    if (!this.view.card.querySelector('.stop-listening') || this.view.card.dataset.audioSource !== 'generated') {
-      progress.textContent = 'Select generated audio, then press Start listening before the test.'; return;
+    if (!this.acceptanceWorkload()) {
+      progress.textContent = 'Start the repeating 24-tone exercise with diagnostics off before the test.'; return;
     }
     if ((mode === 'normal' && expanded)
       || (mode === 'portrait-fullscreen' && innerWidth > innerHeight)
@@ -133,7 +145,7 @@ export class PhoneReport {
     this.active = true; this.invalid = []; this.result = null; this.count = 0; this.costCount = 0; this.progress = [];
     this.previous = null; this.startMs = null; this.lastProgress = 0;
     this.maxSnapshotAgeMs = 0;
-    this.metadata = { build, userAgent: navigator.userAgent, ios: this.query('.ios-version').value.trim(),
+    this.metadata = { build, sessionId: this.audioState.sessionId, workload: { ...this.audioState }, userAgent: navigator.userAgent, ios: this.query('.ios-version').value.trim(),
       device: 'iPhone 16e (user test)', lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
       cameraDegrees: this.view.rotation, warmupSeconds: 15, measurementSeconds: 300,
@@ -148,7 +160,10 @@ export class PhoneReport {
     if (mode === 'normal') this.view.card.scrollIntoView({ block: 'start' });
   }
   frame(now, cost) {
-    if (!this.active || this.startMs == null) return;
+    if (!this.active) return;
+    if (!this.acceptanceWorkload() || this.audioState.sessionId !== this.metadata.sessionId)
+      this.invalidate('Audio workload changed during test');
+    if (this.startMs == null) return;
     const elapsed = now - this.startMs;
     if (elapsed < 15000) { this.previous = null; this.metadata.viewport = [innerWidth, innerHeight]; return; }
     this.maxSnapshotAgeMs = Math.max(this.maxSnapshotAgeMs, this.view.metrics.snapshotAgeMs);

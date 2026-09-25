@@ -27,5 +27,12 @@ export function tonePCM(kind, frequency = 1000, amplitude = .02, rate = 48000) {
       phases[j] = (phases[j] + 2 * Math.PI * state.frequencies[j] / rate) % (2 * Math.PI);
     }
   }
+  if (kind === 'exercise') {
+    // Normalize the deterministic changing mixture before applying the user's
+    // peak level. One scale for the entire loop preserves its tone pattern.
+    let peak = 0;
+    for (const sample of pcm) peak = Math.max(peak, Math.abs(sample));
+    for (let i = 0; i < pcm.length; i++) pcm[i] = Math.fround(pcm[i] / peak) * amplitude;
+  }
   return pcm;
 }

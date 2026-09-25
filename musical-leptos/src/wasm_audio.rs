@@ -29,6 +29,8 @@ extern "C" {
     fn release_processor(node: &AudioWorkletNode);
     #[wasm_bindgen(js_name = canCalibrate)]
     fn can_calibrate(node: &AudioWorkletNode) -> bool;
+    #[wasm_bindgen(js_name = isCurrentProcessorMessage)]
+    fn is_current_processor_message(node: &AudioWorkletNode, data: &JsValue) -> bool;
 }
 
 // Keep the frequent numeric frame inline; avoid one extra allocation per refresh.
@@ -136,6 +138,10 @@ impl AudioSession {
                 return;
             }
             let data = event.data();
+            if !is_current_processor_message(&callback_node, &data) {
+                let _ = callback_port.post_message(&ack);
+                return;
+            }
             let kind = Reflect::get(&data, &"type".into())
                 .ok()
                 .and_then(|v| v.as_string());

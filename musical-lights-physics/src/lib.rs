@@ -46,7 +46,7 @@ impl Default for SimulationConfig {
             restitution: 0.55,
             friction: 0.20,
             depth: 0.24,
-            stroke_seconds: 0.080,
+            stroke_seconds: 0.040,
             reduced_stroke_seconds: 0.320,
         }
     }
@@ -93,7 +93,7 @@ impl SimulationConfig {
             || !(0.0..=1.0).contains(&c.restitution)
             || !(0.0..=2.0).contains(&c.friction)
             || !(0.2..=2.0).contains(&c.depth)
-            || !(0.08..=2.0).contains(&c.stroke_seconds)
+            || !(0.04..=2.0).contains(&c.stroke_seconds)
             || !(0.32..=4.0).contains(&c.reduced_stroke_seconds)
         {
             return Err("Physics settings are outside the prototype limits");

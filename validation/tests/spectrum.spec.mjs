@@ -70,7 +70,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
     const state = new Float64Array(122);
     state[0] = window.transportContext.currentTime;
     state[2] = NaN;
-    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', state } }));
+    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
   });
   await expect(page.getByRole('alert')).toContainText('Invalid audio display state');
   await expect.poll(() => page.evaluate(() => window.transportContext.state)).toBe('closed');

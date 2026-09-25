@@ -1,6 +1,6 @@
 # Audio, loudness, and light
 
-The live browser, terminal, and ESP-IDF application use one ISO 532-1:2017 time-varying Zwicker implementation. The measurement stage returns total loudness in sones and 240 specific-loudness values in sones/Bark. A separate display stage turns those values into light activity. Adaptive display gain never changes the measured values.
+The live browser, terminal, and ESP-IDF application use one ISO 532-1:2017 time-varying Zwicker implementation. The measurement stage returns total loudness in sones and 240 specific-loudness values in sones/Bark. Terminal and hardware displays use the ISO specific-loudness integrals. The browser uses a separate source-band partial-loudness measurement for its bars. Adaptive display gain never changes the measured values.
 
 A 20 ms RMS window is not sufficient for every frequency. It covers one cycle at 50 Hz and less than half a cycle at 20 Hz. The model instead uses the specified third-octave filters and frequency-dependent power integration, followed by the specified temporal loudness stages. Its output interval is 2 ms; that interval is not its integration duration.
 
@@ -12,7 +12,7 @@ A 20 ms RMS window is not sufficient for every frequency. It covers one cycle at
 - Twenty-eight third-octave channels use f64 filter states and power. Their three power low-pass stages use `tau = 2 / (3 * min(center_hz, 1000))`. Core loudness, nonlinear decay, upward masking slopes, and final temporal weighting follow the reference method.
 - Every frame has an input sample index. The frame grid starts at the supplied first sample and advances by 96 samples. Two interpolation stages require 48 samples of lookahead. `finish()` emits any final frame on the input grid; it does not append an artificial silence tail.
 - Callback size never defines a measurement window. Empty or non-finite blocks fail before model updates. Missing samples require an explicit reset. Out-of-domain levels stop analysis instead of returning plausible looking numbers. The reference algorithm limits its low-frequency correction to 120 dB SPL.
-- Every ten adjacent specific-loudness bins form one 1-Bark display band. The panel sums the first five band integrals before display scaling, then retains the other nineteen bands. Specific loudness is the model's spectral output; the time-weighted total is not recomputed from the visual bars.
+- For terminal and hardware displays, every ten adjacent specific-loudness bins form one 1-Bark display band. The panel sums the first five band integrals before display scaling, then retains the other nineteen bands. Specific loudness is the model's spectral output; the time-weighted total is not recomputed from the visual bars.
 
 ## Input and calibration
 
@@ -38,27 +38,55 @@ The ESP32 uses 48 kHz, Philips mono left-channel, signed 16-bit input on BCLK 26
 
 One slow gain follows the strongest of the 24 bands. Its target maps that band to 80% activity. Gain stays between 1/64 and 64, changes downward with a 2 s time constant and upward with a 20 s time constant, and freezes below 0.1 total sone. Band targets are proportional: `band_sones * min(gain, 1 / peak_band_sones)`. Headroom limits the common scale for all bands; no band clips independently. The shared gain seeks `0.8 / peak_band_sones`. The panel applies the same rule after bass aggregation, with one common scale across its rows. These values are **artistic activity**, not loudness units. A steady tone remains visible; the gain does not learn it as noise.
 
-The browser displays 24 Bark bands with the same aggregate activity that drives
-the spheres, terminal, and LEDs. Each bar keeps one fixed HSLuv color and has
-slightly rounded top corners. Circular collision normals at those corners
-deflect balls sideways. A 1-pixel white inner border follows all four edges,
-including the rounded top and baseline. The center keeps its fixed color at
-peak glow. The border uses the existing acoustic attack envelope.
+The browser assigns partial loudness to 24 disjoint source frequency ranges.
+A calibrated selected channel feeds a causal 2,048-sample periodic Hann window
+at 48 kHz, advancing 96 samples at a time. Positive FFT-bin power is partitioned
+once, by bin center, using the existing frequency boundaries. Components from
+15.5–20 kHz remain background for all bars. The 42.67 ms window includes zero
+prehistory at session start; its timestamp is the end-exclusive sample clock.
+Its center lies 21.33 ms before that timestamp, separately from temporal response.
 
-The maximum bar level sits 5% below the top of the chart. Balls compress into
-rounded capsules under contact pressure, push neighboring bodies, and recover
-their resting shape as space opens. Rendering and collision checks share the
-same dimensions. The compact layout adds no separate area for large balls.
+The Moore–Glasberg–Baer partial-loudness calculation uses free-field outer/middle
+ear weighting, monaural presentation, and 149 auditory filters spaced by
+0.25 ERB from 1.8 Cam. The entire mixture determines each level-dependent filter
+shape. Each source slice's excitation is compared with all other slices,
+including the high-frequency background, then integrated across auditory filters
+into one value for that source band. The high-level branch uses the original
+MGB1997 square-root equation (the oracle's ANSI-2007 extension is disabled). Glasberg–Moore short-term integration uses
+`tau_attack = -0.001 / ln(0.955)` and `tau_release = -0.001 / ln(0.98)`;
+at the 2 ms hop the coefficients are `1 - 0.955²` and `1 - 0.98²`.
+These 24 partial values **do not sum to ISO total loudness**. Assigning them to
+source bands is this app's representation, not the ISO specific distribution.
 
-The producer consumes every loudness frame and replaces the current mapped targets immediately. Heights have no hold or decorative release. Falling sound retains only the ISO model's prescribed response. No per-band normalization, noise suppression, or additional smoothing is applied.
+One unchanged adaptive gain and common headroom scale map those values to targets.
+The ISO total still controls the existing 0.1-sone gain-adaptation eligibility.
+No thresholds, sharpening, per-band normalization, or decorative height smoothing
+are added. White-edge attacks use measured short-term partial loudness.
+The terminal, LEDs, `LoudnessFrame`, calibration, and all 240 ISO values retain
+their original behavior. The independent reference and selectivity results are
+in [the partial-loudness report](partial-loudness-results/README.md).
+
+Each bar keeps its fixed HSLuv color and rounded collider geometry. Rapier's
+rigid spheres receive contact impulses from the actual moving bars; rendering
+uses the collider transforms. The top remains open and visual headroom is 5%.
 
 White edges have their own acoustic peak state, independent of display gain. A new acoustic rise above that peak starts a 350 ms edge hold, followed by `(1 + r*t) * exp(-r*t)` with `r = 30/s`, or `20/s` with Reduced Motion. This timing never holds a height. Removing the height hold removes the former combined bar/edge flash-rate guarantee; the fast bar response must be assessed visually with the tone page. Reduced Motion uses slower physical strokes.
 
 The browser runs analysis in its own AudioWorklet WASM instance. It preallocates its input and state buffers and imports no browser functions into WASM. The current snapshot has 122 f64 values (976 bytes): audio seconds and Reduced Motion, then current target, acoustic peak sones, edge hold deadline, edge opacity, and current input sones for each of 24 bands. At most one display message waits for acknowledgement; analysis continues through page stalls.
 
-Optional diagnostics attach at most 64 model frames to that same acknowledged message. Each row contains the sample index, total sones, all 240 specific values, 24 band integrals, gain, and complete display snapshot. Lost rows are counted. Phone recording caps stored rows at 50,000 and exposes overflow. It must be disabled for phone performance acceptance. See [controlled-tone comparison](gain-stroke-results/README.md).
+Optional v2 diagnostics attach at most 64 rows of 438 f64 values to the same
+acknowledged packet. Rows distinguish ISO sample index, total sones, all 240
+specific values and 24 integrals; partial window-end sample, 24 instantaneous
+and 24 short-term values; shared gain; and the display snapshot. Each packet
+has its audio-session identifier and trace version. Lost rows are counted.
+Recording caps storage at 50,000 rows and 25,000 physics snapshots. Every input
+start, including microphone restarts, resets buffers and source metadata; stale
+session packets are rejected. Diagnostics must be off for phone FPS acceptance.
 
-[Physical bars](physics.md) follow the targets with an 80 ms rest-to-rest stroke. The 100 ms acceptance starts at physics input receipt; acoustic filters, the model's 1 ms lookahead, worklet transport, render scheduling, and snapshot interpolation have separate delays.
+[Physical bars](physics.md) use a 40 ms rest-to-rest stroke and must arrive within
+1% within 50 ms of physics input receipt. The causal analysis window, perceptual
+integration, ISO lookahead, transport, physics receipt, and rendering are separate
+latency boundaries. Reduced Motion retains its 320 ms stroke.
 
 ## Color and physical output
 
@@ -83,3 +111,5 @@ Sources:
 - [Web Audio specification](https://www.w3.org/TR/webaudio/)
 
 MoSQITo-derived tables and algorithm attribution appear in `THIRD_PARTY_NOTICES.md`.
+
+The reference target also builds the pinned independent [deeuu/loudness oracle](https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117) and compares source-band spectral, excitation, partial-loudness and temporal stages. See `validation/partial`.

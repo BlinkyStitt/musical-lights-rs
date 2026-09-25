@@ -128,7 +128,7 @@ fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
 }
 
 #[test]
-fn full_strokes_arrive_within_100_ms_and_preserve_velocity_on_reversal() {
+fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
     for height in [0.1, 0.6, 2.0] {
         let mut sim = world(SimulationConfig {
             height,
@@ -138,7 +138,7 @@ fn full_strokes_arrive_within_100_ms_and_preserve_velocity_on_reversal() {
         for level in [1.0, 0.0, 1.0, 0.0] {
             input(&mut sim, [level; COUNT]);
             let (max_speed, acceleration) = sim.config.motion_limits(false);
-            for _ in 0..12 {
+            for _ in 0..6 {
                 let previous = sim.bar_velocities[0];
                 sim.step();
                 assert!(sim.bar_velocities[0].abs() <= max_speed + 1e-5);
@@ -303,7 +303,7 @@ fn short_stroke_transfers_only_contact_impulses() {
     assert!(velocity(&sim, 0).y > 0.5);
     assert!(velocity(&sim, 1).y < 0.0);
     assert_eq!(sim.snapshot.values[CONTACT_OFFSET + 1], 0.0);
-    assert!(sim.snapshot.values[BAR_OFFSET + 12] < 0.06);
+    assert!(sim.snapshot.values[BAR_OFFSET + 12] < position(&sim, 1).y - radius(1));
 }
 #[test]
 fn side_front_and_back_walls_rebound_without_tunneling() {

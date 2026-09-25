@@ -1,3 +1,4 @@
+import { traceLayout } from './trace-layout.mjs';
 // Replay the measured targets at 60 Hz into the actual before/after physics WASM.
 // Model rows remain on their original 2 ms grid. Each physical row names its source.
 import { readFile, writeFile } from 'node:fs/promises';
@@ -12,6 +13,7 @@ for (const [label, api, modulePath] of [['before', baseline, '.cache/baseline-ph
   const layout = api.PhysicsSimulation.layout();
   for (const { kind, frames, stride, transport } of cases) {
     const bytes = await readFile(`${directory}/${kind}.f64`), rows = new Float64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 8);
+    const schema = traceLayout(stride);
     const config = api.PhysicsSimulation.defaults();
     const sim = new api.PhysicsSimulation(config, new Float32Array(72).fill(.5));
     const input = new Float32Array(33); input[32] = config[0];
@@ -21,7 +23,7 @@ for (const [label, api, modulePath] of [['before', baseline, '.cache/baseline-ph
     for (let tick = 0; tick < output.length / 54; tick++) {
       if (tick % 2 === 0) {
         source = Math.min(frames - 1, Math.floor(tick / 120 / .002));
-        for (let i = 0; i < 24; i++) input[i] = rows[source * stride + 269 + i * ((transport - 2) / 24)];
+        for (let i = 0; i < 24; i++) input[i] = rows[source * stride + schema.display + 2 + i * schema.step];
         sim.input(input);
       }
       sim.step();
@@ -36,7 +38,7 @@ for (const [label, api, modulePath] of [['before', baseline, '.cache/baseline-ph
         overloadTicks += Number(state[layout[15] + 1] > 0);
       }
       rowIndex += 28;
-      maxDelay = Math.max(maxDelay, at - rows[source * stride] / 48000);
+      maxDelay = Math.max(maxDelay, at - rows[source * stride + schema.sample] / 48000);
       for (let i = 0; i < 24; i++) {
         const j = 3 + i * layout[8], [x, y, z] = state.subarray(j, j + 3);
         assert(x >= 0 && x <= layout[2] && y >= 0 && Math.abs(z) <= config[5] / 2, `${label}/${kind}: ball ${i} escaped at ${at}`);

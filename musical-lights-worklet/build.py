@@ -29,6 +29,17 @@ def main():
         output / "loudness.wasm",
     )
     shutil.copyfile(root / "processor.js", output / "processor.js")
+    shutil.copyfile(
+        root.parent / "licenses/GPL-3.0-loudness.txt", output / "GPL-3.0-loudness.txt"
+    )
+    shutil.copyfile(
+        root.parent / "THIRD_PARTY_NOTICES.md", output / "THIRD_PARTY_NOTICES.md"
+    )
+    (output / "SOURCE.txt").write_text(
+        "Corresponding source: https://github.com/BlinkyStitt/musical-lights-rs\n"
+        "The physics/build.js build identifier records the exact source revision.\n"
+        "Build instructions and pinned tools: README.md and docs/validation.md.\n"
+    )
 
 
 if __name__ == "__main__":

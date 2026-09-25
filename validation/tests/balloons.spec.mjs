@@ -146,7 +146,8 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await page.goto(`${url}/phone`); await physicsReady(page);
   await expect(page.locator('.generated-audio')).toBeChecked();
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.filter(n => Number(n.getAttribute('aria-valuenow')) > 0).length)).toBeGreaterThan(20);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
+  await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
   await page.locator('[data-config="5"]').fill('0.36');
   await page.getByRole('button', { name: 'Start five-minute test' }).click();

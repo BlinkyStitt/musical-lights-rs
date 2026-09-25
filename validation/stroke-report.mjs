@@ -21,11 +21,11 @@ for (const height of [.1, .6, 1.2, 2]) {
       if (arrival == null && Math.abs(top - target) <= (height * .95 - .003) * .01) arrival = tick * 1000 / 120;
       trace.push({ ms: tick * 1000 / 120, top, velocity: s[layout[14]], substeps: s[layout[15]], excess: s[layout[15] + 1] });
     }
-    assert(arrival <= 100); assert(Math.abs(state()[layout[14]]) < 1e-5);
+    assert(arrival <= 50); assert(Math.abs(state()[layout[14]]) < 1e-5);
     strokes.push({ level, arrivalMs: arrival, trace });
   }
   input.fill(1, 0, 24); sim.input(input);
-  for (let tick = 0; tick < 5; tick++) sim.step();
+  for (let tick = 0; tick < 2; tick++) sim.step();
   input.fill(0, 0, 24); sim.input(input);
   let reversalMs, reversalArrivalMs;
   const reversalTrace = [];

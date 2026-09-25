@@ -1,5 +1,13 @@
 # Validation record
 
+The 2026-09-25 source-band update and 40 ms strokes are documented in the
+[current measurement and performance report](partial-loudness-results/README.md).
+It retains the ISO/MoSQiTo checks and adds the pinned MGB1997/GM2002 oracle,
+center/boundary/sweep selectivity before and after mapping, session/acceptance
+regressions, and normalized exercise-PCM checks. The `reference` target builds
+the independent C++ stages with `clang++`; failed model checks stop validation.
+Physical-phone acceptance and the existing production deployment gate remain.
+
 The current measurement contract and its limits are in [Audio, loudness, and light](loudness.md). The former empirical Bark processor and its 20 ms window are removed. Its previous test counts and timing measurements do not validate this implementation.
 
 ## Reproduce

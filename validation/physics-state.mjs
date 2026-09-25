@@ -40,7 +40,7 @@ export async function syntheticAudio(page, permission = 'granted') {
       const at = window.audioNow;
       const state = new Float64Array(122); state[0] = at;
       for (let i = 0; i < 24; i++) state.set([levels[i], 0, at + .35, edge, 0], 2 + i * 5);
-      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', state, clipped: 0 } }));
+      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
     };
   }, { permission });
 }

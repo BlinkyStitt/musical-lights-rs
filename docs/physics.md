@@ -18,7 +18,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
 | Restitution / friction | 0.55 / 0.20 |
-| Full-height rest-to-rest stroke | 80 ms in either direction; 320 ms Reduced Motion |
+| Full-height rest-to-rest stroke | 40 ms in either direction; 320 ms Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Visual headroom | 5% |
 
@@ -33,7 +33,13 @@ through physical contacts.
 
 Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives `v = 2H/T` and `a = 4H/T²`. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
 
-The accepted timing contract preserves these limits: strokes from rest must arrive within 1% of a stable target within 100 ms of physics receiving it. Reversal latency includes braking and is reported separately. The measured strokes from rest arrive within 1% in 75 ms; an opposite endpoint requested near peak speed takes 116.67 ms, with direction reversal at 41.67 ms. See the [stroke traces](gain-stroke-results/strokes.json).
+Strokes from rest must arrive within 1% of a stable target within 50 ms of
+physics receipt. The production WASM arrives in 41.67 ms at the 120 Hz sampling
+grid in all tested world heights and directions. Reversal latency includes
+braking and is reported separately: the near-peak retarget trace arrives in
+50 ms. See [current stroke traces](partial-loudness-results/strokes.json).
+The minimum configurable normal stroke is 0.040 s; Reduced Motion stays 0.320 s.
+
 
 The enclosure uses a floor and four vertical half-spaces; the top is open. Side containment works above the camera and above the former 100 m walls. Each rounded bar extends 20 m below its top. Resize preserves ball state and retargets bars through the same controller.
 
@@ -54,7 +60,7 @@ Sphere CCD uses one internal CCD step. Each 120 Hz outer tick adds deterministic
 
 Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and contact natural frequency 60 Hz.
 
-The [fast-stroke report](gain-stroke-results/README.md) records the current stress and timing results. Strong launches can leave the open camera view and take much longer to return than with the previous speed limits. Tests allow ballistic return time before assessing persistent overlap.
+The [current source-band and stroke report](partial-loudness-results/README.md) records the current stress and timing results. Strong launches can leave the open camera view and take much longer to return than with the previous speed limits. Tests allow ballistic return time before assessing persistent overlap.
 
 Settled spheres can rest on other spheres. The stress test requires an active
 contact path down to the floor or lowered bars for each sphere, as well as
@@ -158,3 +164,5 @@ Seven Chromium layout and keyboard checks also passed in a Linux container
 limited to one CPU and 3 GB RAM, with three test workers. Each layout case
 allows 60 seconds for its 24 hover checks, audio checks, screenshots, and theme
 changes; individual state assertions retain their five-second deadline.
+
+Phone acceptance requires an actively playing, repeating 24-tone exercise with diagnostics off. A session replacement, pause, natural end, interruption, cleanup, or repeat-off invalidates warmup and measurement immediately. Resume does not remove invalid reasons. The generated exercise is normalized to unit peak before applying the selected amplitude; its changing pattern is preserved.

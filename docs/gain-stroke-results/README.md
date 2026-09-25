@@ -1,3 +1,5 @@
+> Historical 80 ms / ISO-band display report. Current behavior and measurements are in [the 40 ms source-band report](../partial-loudness-results/README.md).
+
 # Proportional loudness and fast strokes
 
 Baseline: `2e6672e0199fcf908202418a00bc7f56aaf3005f` (PR #17).

@@ -30,9 +30,14 @@ impl VisualGain {
 
     /// One gain for the canonical 24-band spectrum, regardless of panel layout.
     pub fn map(&mut self, frame: &LoudnessFrame) -> VisualLevels {
-        let bands = frame.bands();
+        self.map_bands(frame.bands(), frame.sones)
+    }
+
+    /// One shared gain for partial source bands. The unchanged ISO total
+    /// controls the existing 0.1-sone adaptation eligibility rule only.
+    pub fn map_bands(&mut self, bands: [f32; DISPLAY_BANDS], total_sones: f64) -> VisualLevels {
         let maximum = bands.iter().copied().fold(0.0_f32, f32::max) as f64;
-        if frame.sones >= 0.1 && maximum > 0.0 {
+        if total_sones >= 0.1 && maximum > 0.0 {
             let target = Float::ln((0.8 / maximum).clamp(1.0 / 64.0, 64.0));
             let tau = if target < self.log_gain { 2.0 } else { 20.0 };
             let alpha = -Float::exp_m1(-(FRAME_SAMPLES as f64 / SAMPLE_RATE as f64) / tau);

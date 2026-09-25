@@ -1,0 +1,251 @@
+{
+  "cases": [
+    {
+      "kind": "stationary",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumRatioError": 6.423684739687019e-8,
+      "audioMs": 4000,
+      "beforeCpuMs": 35.743875,
+      "afterCpuMs": 617.672583
+    },
+    {
+      "kind": "two",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumRatioError": 8.014383101606626e-8,
+      "audioMs": 4000,
+      "beforeCpuMs": 40.134665999999925,
+      "afterCpuMs": 671.0432919999998
+    },
+    {
+      "kind": "bursts",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumRatioError": 9.468201656037678e-8,
+      "audioMs": 4000,
+      "beforeCpuMs": 28.550500000000284,
+      "afterCpuMs": 306.35308299999997
+    },
+    {
+      "kind": "silence",
+      "frames": 1500,
+      "isoBitIdentical": true,
+      "maximumRatioError": 0,
+      "audioMs": 3000,
+      "beforeCpuMs": 20.88870799999995,
+      "afterCpuMs": 192.93695900000012
+    },
+    {
+      "kind": "exercise",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumRatioError": 1.5454668900183322e-7,
+      "audioMs": 4000,
+      "beforeCpuMs": 46.821375000000444,
+      "afterCpuMs": 878.7952909999995
+    }
+  ],
+  "centers": [
+    {
+      "hz": 50,
+      "mappedFraction": 0.999995067061598
+    },
+    {
+      "hz": 150,
+      "mappedFraction": 0.9999955229593759
+    },
+    {
+      "hz": 250,
+      "mappedFraction": 0.9999986384474995
+    },
+    {
+      "hz": 350,
+      "mappedFraction": 0.999999998332997
+    },
+    {
+      "hz": 450,
+      "mappedFraction": 0.9999996988272722
+    },
+    {
+      "hz": 570,
+      "mappedFraction": 0.9999997135657644
+    },
+    {
+      "hz": 700,
+      "mappedFraction": 0.9999999970577018
+    },
+    {
+      "hz": 840,
+      "mappedFraction": 0.9999999971123599
+    },
+    {
+      "hz": 1000,
+      "mappedFraction": 0.9999999840485603
+    },
+    {
+      "hz": 1170,
+      "mappedFraction": 0.999999998898188
+    },
+    {
+      "hz": 1370,
+      "mappedFraction": 0.9999999971669193
+    },
+    {
+      "hz": 1600,
+      "mappedFraction": 0.9999999989943114
+    },
+    {
+      "hz": 1850,
+      "mappedFraction": 0.9999999991981294
+    },
+    {
+      "hz": 2150,
+      "mappedFraction": 0.999999999366237
+    },
+    {
+      "hz": 2500,
+      "mappedFraction": 0.9999999995067335
+    },
+    {
+      "hz": 2900,
+      "mappedFraction": 0.9999999995925037
+    },
+    {
+      "hz": 3400,
+      "mappedFraction": 0.9999999996179527
+    },
+    {
+      "hz": 4050,
+      "mappedFraction": 0.9999999995793274
+    },
+    {
+      "hz": 4800,
+      "mappedFraction": 0.9999999994614059
+    },
+    {
+      "hz": 5800,
+      "mappedFraction": 0.9999999991808316
+    },
+    {
+      "hz": 7000,
+      "mappedFraction": 0.9999999988018544
+    },
+    {
+      "hz": 8600,
+      "mappedFraction": 0.9999999986387806
+    },
+    {
+      "hz": 10700,
+      "mappedFraction": 0.9999999989690611
+    },
+    {
+      "hz": 13700,
+      "mappedFraction": 0.9999999989110345
+    }
+  ],
+  "boundaries": [
+    {
+      "hz": 100,
+      "mappedMaxNonadjacentOverPeak": 0.00001769108749493935
+    },
+    {
+      "hz": 200,
+      "mappedMaxNonadjacentOverPeak": 7.832118464213177e-7
+    },
+    {
+      "hz": 300,
+      "mappedMaxNonadjacentOverPeak": 1.0101922620085009e-7
+    },
+    {
+      "hz": 400,
+      "mappedMaxNonadjacentOverPeak": 9.445099958832454e-10
+    },
+    {
+      "hz": 510,
+      "mappedMaxNonadjacentOverPeak": 2.61850342069382e-7
+    },
+    {
+      "hz": 630,
+      "mappedMaxNonadjacentOverPeak": 2.143809352261883e-9
+    },
+    {
+      "hz": 770,
+      "mappedMaxNonadjacentOverPeak": 1.7092555149034183e-9
+    },
+    {
+      "hz": 920,
+      "mappedMaxNonadjacentOverPeak": 9.095050046425968e-9
+    },
+    {
+      "hz": 1080,
+      "mappedMaxNonadjacentOverPeak": 2.0833360037109117e-10
+    },
+    {
+      "hz": 1270,
+      "mappedMaxNonadjacentOverPeak": 6.206302693989585e-10
+    },
+    {
+      "hz": 1480,
+      "mappedMaxNonadjacentOverPeak": 1.9300340255078573e-10
+    },
+    {
+      "hz": 1720,
+      "mappedMaxNonadjacentOverPeak": 2.6864878647042486e-10
+    },
+    {
+      "hz": 2000,
+      "mappedMaxNonadjacentOverPeak": 1.8077372931912805e-10
+    },
+    {
+      "hz": 2320,
+      "mappedMaxNonadjacentOverPeak": 8.082343609847074e-11
+    },
+    {
+      "hz": 2700,
+      "mappedMaxNonadjacentOverPeak": 1.0196070376888855e-10
+    },
+    {
+      "hz": 3150,
+      "mappedMaxNonadjacentOverPeak": 1.4765176581388317e-10
+    },
+    {
+      "hz": 3700,
+      "mappedMaxNonadjacentOverPeak": 1.2257517223446257e-10
+    },
+    {
+      "hz": 4400,
+      "mappedMaxNonadjacentOverPeak": 1.7183711398249812e-10
+    },
+    {
+      "hz": 5300,
+      "mappedMaxNonadjacentOverPeak": 1.9427204289712563e-10
+    },
+    {
+      "hz": 6400,
+      "mappedMaxNonadjacentOverPeak": 2.730230208580764e-10
+    },
+    {
+      "hz": 7700,
+      "mappedMaxNonadjacentOverPeak": 7.153602521979733e-10
+    },
+    {
+      "hz": 9500,
+      "mappedMaxNonadjacentOverPeak": 4.2445650375329147e-10
+    },
+    {
+      "hz": 12000,
+      "mappedMaxNonadjacentOverPeak": 1.9408035700666184e-10
+    }
+  ],
+  "sweeps": [
+    {
+      "direction": "up",
+      "mappedMaxNonadjacentOverPeak": 0.00006395402534345432
+    },
+    {
+      "direction": "down",
+      "mappedMaxNonadjacentOverPeak": 0.00006540641112985143
+    }
+  ]
+}

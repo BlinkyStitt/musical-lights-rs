@@ -328,7 +328,7 @@ pub fn DancingLights() -> impl IntoView {
                         let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
                         view! {
                             <div class="bark-group" role="group"
-                                aria-label=format!("{}–{} Bark, {}–{} Hz", group, group + 1, edges[0], edges[1]) style=style>
+                                aria-label=format!("Band {}, {}–{} Hz", group + 1, edges[0], edges[1]) style=style>
                                 <div class="meter" role="meter"
                                     aria-label=format!("≈ {}–{} Hz", edges[0], edges[1])
                                     node_ref=sample_nodes.with_value(|nodes| nodes[group])
