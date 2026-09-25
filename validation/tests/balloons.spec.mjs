@@ -155,7 +155,8 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.physics-controls > summary').click();
-  await page.waitForTimeout(500);
+  const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sequence)).toBeGreaterThan(sequence + 24);
   await page.getByRole('button', { name: 'End test early' }).click();
   await expect(page.getByRole('button', { name: 'Export test report' })).toBeEnabled();
   const report = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.result);

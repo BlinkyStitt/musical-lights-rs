@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test';
 import { physicsReady } from '../physics-state.mjs';
 
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) {
+    console.log('Tone failure state:', await page.evaluate(() => ({
+      audio: document.querySelector('#dancinglights')?.physics?.report?.audioState,
+      error: document.querySelector('.audio-error')?.textContent,
+      context: window.exerciseContext?.state,
+      audioTime: window.exerciseContext?.currentTime,
+    })).catch(error => String(error)));
+  }
+});
+
 async function acceptancePage(page, repeat = true) {
   await page.goto('http://127.0.0.1:8101/phone'); await physicsReady(page);
   await page.locator('.ios-version').fill('test');
@@ -30,7 +41,12 @@ for (const stage of ['warmup', 'measurement']) {
       if (action === 'end') {
         // Turn looping off in the source, without the UI's change event, so
         // this exercises the natural AudioBufferSourceNode ended callback.
-        await page.evaluate(() => { window.exerciseSource.loop = false; });
+        await page.evaluate(() => {
+          window.exerciseSource.loop = false;
+          // Reach the actual buffer end promptly even when realtime audio
+          // advances slowly on a contended host; do not synthesize onended.
+          window.exerciseSource.playbackRate.value = 64;
+        });
       }
       await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid.length), { timeout: 10000 }).toBeGreaterThan(0);
       if (action === 'pause') await page.locator('.tone-pause').click();
@@ -116,6 +132,7 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
     await expect(page.locator('.tone-status')).toContainText('paused');
     await page.getByRole('button', { name: 'Resume tone', exact: true }).click();
     await expect(page.locator('.tone-status')).not.toContainText('paused');
+    await expect(page.getByRole('alert')).toBeEmpty();
     await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Pause tone', exact: true })).toBeDisabled();
     const download = page.waitForEvent('download');

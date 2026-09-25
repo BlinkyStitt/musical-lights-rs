@@ -2,9 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   globalSetup: './browser-startup.mjs',
-  fullyParallel: true,
+  // Real AudioContexts must not compete with each other and offline WASM
+  // stress tests. Callback gaps correctly stop capture; they are not retries.
+  fullyParallel: false,
   retries: 0,
-  workers: 3,
+  workers: 1,
   reporter: 'list',
   use: { headless: true, screenshot: 'only-on-failure' },
   projects: [

@@ -8,6 +8,13 @@ regressions, and normalized exercise-PCM checks. The `reference` target builds
 the independent C++ stages with `clang++`; failed model checks stop validation.
 Physical-phone acceptance and the existing production deployment gate remain.
 
+The functional browser suite now uses one worker. Real-time AudioContexts and
+offline WASM stress tests must not compete for the same CPU budget: callback
+gaps correctly stop capture, as confirmed during the follow-up to the initial
+parallel Linux failure. This preserves every assertion, the serial startup guard, and zero
+retries. Dedicated diagnostics-off FPS/debt runs and the warmed worklet CPU
+budget remain separate performance checks with unchanged thresholds.
+
 The current measurement contract and its limits are in [Audio, loudness, and light](loudness.md). The former empirical Bark processor and its 20 ms window are removed. Its previous test counts and timing measurements do not validate this implementation.
 
 ## Reproduce

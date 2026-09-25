@@ -27,7 +27,12 @@ export async function syntheticAudio(page, permission = 'granted') {
     };
     const Node = window.AudioWorkletNode;
     window.AudioWorkletNode = class extends Node {
-      constructor(...args) { super(...args); window.testNode = this; }
+      constructor(...args) {
+        super(...args); window.testNode = this;
+        this.port.addEventListener('message', ({ data }) => {
+          if (data.type === 'frame') window.lastAnalysisTime = data.state[0];
+        });
+      }
     };
     window.resolveMotion = [];
     for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
@@ -37,7 +42,9 @@ export async function syntheticAudio(page, permission = 'granted') {
     }
     MediaDevices.prototype.getUserMedia = async () => window.testContext.createMediaStreamDestination().stream;
     window.sendBars = (levels, edge = 0) => {
-      const at = window.audioNow;
+      // Partial frames use an end-exclusive clock, potentially one quantum
+      // ahead of currentTime. Always supersede the last real/fake packet.
+      const at = window.audioNow = Math.max(window.audioNow, window.lastAnalysisTime ?? 0) + .01;
       const state = new Float64Array(122); state[0] = at;
       for (let i = 0; i < 24; i++) state.set([levels[i], 0, at + .35, edge, 0], 2 + i * 5);
       window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));

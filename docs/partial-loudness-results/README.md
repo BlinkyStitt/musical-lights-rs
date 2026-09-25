@@ -1,5 +1,10 @@
 # Source-band loudness and 40 ms strokes
 
+The complete Mac Chromium/WebKit suite passes **152 checks** after the fixture
+repairs described below. All four focused calibration checks also pass. See
+[PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18) for current CI
+and preview status. The PR remains draft pending physical-phone acceptance.
+
 This supersedes the [80 ms / ISO-band report](../gain-stroke-results/README.md).
 Physical iPhone acceptance remains pending; Mac WebKit does not satisfy that gate.
 
@@ -144,6 +149,23 @@ pass. The full browser suite passes **152 checks**, plus three startup-harness
 regressions and the exercise-PCM regression. A repeat during concurrent offline
 validation hit three Chromium page-load timeouts; the unchanged full suite
 then passed in isolation with the standard three workers and startup guard.
+
+The first Linux CI run subsequently failed six functional browser checks. Its
+fixtures assumed that a frozen browser audio clock was newer than an
+end-exclusive partial frame, that 500 ms always yielded more than 20 recorded
+inputs, and that a six-second buffer always finished within ten wall-clock
+seconds. Those fixtures now use monotonic packet clocks, observed input pulses,
+and accelerated playback to reach the browser's actual buffer-end callback.
+Calibration uses the capture context's clock rather than bridging two
+independent realtime contexts, and verifies that application cleanup closes it.
+The fixture leaves that context suspended until the application connects the
+complete worklet graph; resuming it inside fake microphone acquisition caused
+the two remaining startup failures. All four focused calibration checks pass
+with the corrected ordering.
+A local repeat also recorded a 256-sample callback gap: capture correctly
+stopped. Functional browser tests now run with one worker so concurrent live
+audio and offline stress tests do not contend. The startup guard, zero retries,
+model tolerances, motion limits, and dedicated performance gates are unchanged.
 
 ## Analysis cost and end-to-end onset
 
