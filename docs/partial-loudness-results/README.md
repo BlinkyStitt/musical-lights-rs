@@ -1,6 +1,6 @@
 # Source-band loudness and 40 ms strokes
 
-The complete Mac Chromium/WebKit suite passes **152 checks** after the fixture
+The complete Mac Chromium/WebKit suite passes **156 checks** after the session and fixture
 repairs described below. All four focused calibration checks also pass. See
 [PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18) for current CI
 and preview status. The PR remains draft pending physical-phone acceptance.
@@ -145,7 +145,7 @@ argument to reproduce the in-process timing origin.
 
 Pinned core (41 tests × four feature configurations and the Clippy matrix),
 worklet, physics (19 tests), Leptos, ISO/MoSQiTo, and partial-reference validation
-pass. The full browser suite passes **152 checks**, plus three startup-harness
+pass. The full browser suite passes **156 checks**, plus three startup-harness
 regressions and the exercise-PCM regression. A repeat during concurrent offline
 validation hit three Chromium page-load timeouts; the unchanged full suite
 then passed in isolation with the standard three workers and startup guard.
@@ -166,6 +166,16 @@ A local repeat also recorded a 256-sample callback gap: capture correctly
 stopped. Functional browser tests now run with one worker so concurrent live
 audio and offline stress tests do not contend. The startup guard, zero retries,
 model tolerances, motion limits, and dedicated performance gates are unchanged.
+
+A second Linux run passed 151 of 152 checks but stopped capture with a
+128-sample clock gap after tone pause/resume. Pausing now keeps the source
+connected: zero playback rate holds its position, and a shared playback gain
+mutes the held sample for both analysis and audible monitoring. Resume restores
+the same source. Natural completion is disconnected only on restart or cleanup;
+a generation token rejects ended callbacks from earlier playback states.
+The clock-gap check remains unchanged. Regressions measure silence and restored
+loudness across six pause/resume cycles and cover restart after natural end.
+The repaired Leptos build and all 156 Mac Chromium/WebKit checks pass.
 
 ## Analysis cost and end-to-end onset
 

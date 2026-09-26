@@ -146,21 +146,27 @@ export async function acquireInput(context) {
         const buffer = context.createBuffer(1, pcm.length, context.sampleRate);
         buffer.copyToChannel(pcm, 0);
         const destination = context.createMediaStreamDestination();
+        const playback = context.createGain(); playback.connect(destination);
         const monitor = context.createGain(); monitor.gain.value = query('.tone-audible')?.checked ? 1 : 0;
-        monitor.connect(context.destination);
+        monitor.connect(context.destination); playback.connect(monitor);
         Object.assign(session, { kind, frequency, dbfs: db, peakAmplitude: 10 ** (db / 20),
             audioStart: context.currentTime, repeat: query('.tone-repeat')?.checked ?? true });
-        let source, startedAt = context.currentTime, offset = 0, paused = false, ended = false;
-        const start = () => {
-            const current = context.createBufferSource(); source = current;
-            current.buffer = buffer; current.loop = session.repeat;
-            current.connect(destination); current.connect(monitor);
+        let source, startedAt = context.currentTime, offset = 0, paused = false, ended = false, generation = 0;
+        const watchEnd = current => {
+            const token = ++generation;
             current.onended = () => {
-                if (session.closed || source !== current || paused) return;
+                if (session.closed || source !== current || token !== generation) return;
                 ended = true; offset = buffer.duration;
-                current.disconnect(); session.publish('ended', 'natural end');
+                session.publish('ended', 'natural end');
                 query('.tone-pause').textContent = 'Restart tone';
             };
+        };
+        const start = () => {
+            if (source) { source.onended = null; source.disconnect(); }
+            const current = context.createBufferSource(); source = current;
+            current.buffer = buffer; current.loop = session.repeat;
+            current.connect(playback);
+            watchEnd(current);
             startedAt = context.currentTime; current.start(0, offset);
             session.publish(context.state === 'running' ? 'playing' : 'starting', 'source start');
         };
@@ -170,12 +176,22 @@ export async function acquireInput(context) {
             node.addEventListener(type, callback); listeners.push(() => node.removeEventListener(type, callback));
         };
         listen('.tone-pause', 'click', () => {
-            if (paused || ended) {
-                if (ended) offset = 0;
-                paused = false; ended = false; start();
+            if (ended) {
+                offset = 0; paused = false; ended = false;
+                playback.gain.value = 1; start();
+            } else if (paused) {
+                paused = false; startedAt = context.currentTime;
+                watchEnd(source);
+                source.playbackRate.value = 1; playback.gain.value = 1;
+                session.publish(context.state === 'running' ? 'playing' : 'interrupted', 'resume');
             } else {
                 offset = session.repeat ? (offset + context.currentTime - startedAt) % buffer.duration : Math.min(buffer.duration, offset + context.currentTime - startedAt);
-                paused = true; source.onended = null; source.stop(); source.disconnect(); session.publish('paused', 'pause');
+                paused = true; watchEnd(source);
+                // Keep the render graph connected and its sample clock running.
+                // A zero playback rate holds position; mute the held sample so
+                // analysis receives silence rather than a DC signal.
+                source.playbackRate.value = 0; playback.gain.value = 0;
+                session.publish('paused', 'pause');
             }
             query('.tone-pause').textContent = paused ? 'Resume tone' : 'Pause tone';
         });
@@ -197,8 +213,8 @@ export async function acquireInput(context) {
         sessions.set(stream, session);
         generatedSources.set(stream, () => {
             clearInterval(timer); for (const remove of listeners) remove();
-            source.onended = null; if (!paused && !ended) source.stop();
-            source.disconnect(); monitor.disconnect(); destination.disconnect();
+            source.onended = null; if (!ended) source.stop();
+            source.disconnect(); playback.disconnect(); monitor.disconnect(); destination.disconnect();
             if (card.dataset.audioSession === String(session.sessionId) && query('.tone-pause')) {
                 query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause tone';
             }
