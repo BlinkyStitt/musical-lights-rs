@@ -22,3 +22,29 @@ Three.js 0.186.0 uses the MIT license. The browser distribution includes its
 upstream notice and license at `physics/THREE-LICENSE.txt`.
 The build resolves the official RoundedBoxGeometry module's import to the
 bundled Three.js copy. See <https://github.com/mrdoob/three.js>.
+
+# Source-band partial loudness
+
+`musical-lights-core/src/audio/partial` adapts the MGB1997 equations, numerical
+coefficients, ear-response interpolation data, and roex lookup convention from
+Dominic Ward's loudness, copyright 2014 Dominic Ward, under GPL-3.0-or-later:
+https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117.
+The applicable license is reproduced in `licenses/GPL-3.0-loudness.txt`.
+Browser builds containing this model must retain this notice, the GPL license,
+and access to corresponding source. The unchanged upstream implementation is
+fetched separately for the offline validation harness in `validation/partial`.
+The existing ISO model's separate Apache-2.0 notice above still applies.
+
+# Browser presentation algorithms
+
+The browser-only motion filter implements the equations of Casiez, Roussel,
+and Vogel, "1€ Filter: A Simple Speed-based Low-pass Filter for Noisy Input in
+Interactive Systems", CHI 2012, DOI 10.1145/2207676.2208639. Its shared-band
+coefficient is an application adaptation. Reference: https://gery.casiez.net/1euro/.
+
+The spectral novelty calculation implements Böck and Widmer, "Maximum Filter
+Vibrato Suppression for Onset Detection", DAFx 2013:
+https://phenicx.upf.edu/system/files/publications/Boeck_DAFx-13.pdf.
+Source-band attribution, loudness eligibility, bounded pending candidates,
+rearming, and white pulses are application-specific presentation choices.
+No upstream implementation source is bundled for these two algorithms.

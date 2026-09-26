@@ -1,0 +1,15 @@
+{
+  "baselineCommit": "51f805d97235ce5d8154594f6259f05666f4b431",
+  "fixture": "tiny_bar_corrections_do_not_launch_resting_balls_high",
+  "worldHeightMetres": 0.6,
+  "targetRiseFraction": 0.01,
+  "restitution": 0.15,
+  "beforeBallClearanceMetres": 0.32608503,
+  "afterBallClearanceMetres": 0.0011001704,
+  "maximumAllowedBallClearanceMetres": 0.015,
+  "repeatedFluctuationHz": 8,
+  "repeatedFluctuationAmplitude": 0.005,
+  "afterRepeatedFluctuationPeakBarSpeedMetresPerSecond": 0.2230345308981829,
+  "fullStrokeArrivalMs": 41.666666666666664,
+  "nearPeakReversalArrivalMs": 58.333333333333336
+}

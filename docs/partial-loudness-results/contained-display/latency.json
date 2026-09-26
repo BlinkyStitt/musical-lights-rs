@@ -1,0 +1,154 @@
+[
+  {
+    "browserName": "chromium",
+    "physicalPhone": false,
+    "instrumented": true,
+    "cycles": [
+      {
+        "second": 1,
+        "measurement10PercentOfBurstPeakMs": 36.00000000000003,
+        "receipt10PercentOfBurstPeakMs": 37.33333333333344,
+        "collider1PercentHeightObservedMs": 98.66666666666669,
+        "render1PercentHeightMs": 98.66666666666669
+      },
+      {
+        "second": 2,
+        "measurement10PercentOfBurstPeakMs": 33.99999999999981,
+        "receipt10PercentOfBurstPeakMs": 34.66666666666684,
+        "collider1PercentHeightObservedMs": 96.00000000000009,
+        "render1PercentHeightMs": 96.00000000000009
+      },
+      {
+        "second": 3,
+        "measurement10PercentOfBurstPeakMs": 36.00000000000003,
+        "receipt10PercentOfBurstPeakMs": 37.333333333333215,
+        "collider1PercentHeightObservedMs": 98.66666666666646,
+        "render1PercentHeightMs": 98.66666666666646
+      },
+      {
+        "second": 4,
+        "measurement10PercentOfBurstPeakMs": 33.99999999999981,
+        "receipt10PercentOfBurstPeakMs": 34.6666666666664,
+        "collider1PercentHeightObservedMs": 96.00000000000009,
+        "render1PercentHeightMs": 96.00000000000009
+      },
+      {
+        "second": 5,
+        "measurement10PercentOfBurstPeakMs": 35.99999999999959,
+        "receipt10PercentOfBurstPeakMs": 37.33333333333366,
+        "collider1PercentHeightObservedMs": 93.33333333333371,
+        "render1PercentHeightMs": 93.33333333333371
+      }
+    ],
+    "transportAgeMs": {
+      "min": -2.666666666666817,
+      "p95": 4.0000000000000036,
+      "max": 9.333333333333638
+    },
+    "height": 0.9278030628124685,
+    "barMax": 0.6818029880523682,
+    "workload": {
+      "sessionId": 1,
+      "source": "generated",
+      "sampleRate": 48000,
+      "diagnostics": false,
+      "state": "playing",
+      "repeat": true,
+      "kind": "bursts",
+      "frequency": 1000,
+      "dbfs": -34,
+      "peakAmplitude": 0.0199526231496888,
+      "audioStart": 0,
+      "channel": 0,
+      "pascalsPerUnit": 2,
+      "calibrated": false,
+      "reason": "context running"
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.15000000596046448,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.03999999910593033,
+      0.3199999928474426
+    ]
+  },
+  {
+    "browserName": "webkit",
+    "physicalPhone": false,
+    "instrumented": true,
+    "cycles": [
+      {
+        "second": 1,
+        "measurement10PercentOfBurstPeakMs": 64.00000000000006,
+        "receipt10PercentOfBurstPeakMs": 64.00000000000006,
+        "collider1PercentHeightObservedMs": 117.33333333333329,
+        "render1PercentHeightMs": 117.33333333333329
+      },
+      {
+        "second": 2,
+        "measurement10PercentOfBurstPeakMs": 65.99999999999983,
+        "receipt10PercentOfBurstPeakMs": 66.66666666666687,
+        "collider1PercentHeightObservedMs": 117.33333333333329,
+        "render1PercentHeightMs": 117.33333333333329
+      },
+      {
+        "second": 3,
+        "measurement10PercentOfBurstPeakMs": 64.00000000000006,
+        "receipt10PercentOfBurstPeakMs": 64.00000000000006,
+        "collider1PercentHeightObservedMs": 112.0000000000001,
+        "render1PercentHeightMs": 112.0000000000001
+      },
+      {
+        "second": 4,
+        "measurement10PercentOfBurstPeakMs": 65.99999999999983,
+        "receipt10PercentOfBurstPeakMs": 66.66666666666643,
+        "collider1PercentHeightObservedMs": 130.6666666666665,
+        "render1PercentHeightMs": 130.6666666666665
+      },
+      {
+        "second": 5,
+        "measurement10PercentOfBurstPeakMs": 64.00000000000006,
+        "receipt10PercentOfBurstPeakMs": 64.00000000000006,
+        "collider1PercentHeightObservedMs": 112.0000000000001,
+        "render1PercentHeightMs": 112.0000000000001
+      }
+    ],
+    "transportAgeMs": {
+      "min": 0,
+      "p95": 1.3333333333336306,
+      "max": 3.3333333333332993
+    },
+    "height": 0.9278030628124685,
+    "barMax": 0.6818029880523682,
+    "workload": {
+      "sessionId": 1,
+      "source": "generated",
+      "sampleRate": 48000,
+      "diagnostics": false,
+      "state": "playing",
+      "repeat": true,
+      "kind": "bursts",
+      "frequency": 1000,
+      "dbfs": -34,
+      "peakAmplitude": 0.0199526231496888,
+      "audioStart": 0,
+      "channel": 0,
+      "pascalsPerUnit": 2,
+      "calibrated": false,
+      "reason": "context running"
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.15000000596046448,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.03999999910593033,
+      0.3199999928474426
+    ]
+  }
+]

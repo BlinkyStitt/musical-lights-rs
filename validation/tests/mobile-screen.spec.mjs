@@ -19,13 +19,16 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   // leave every ball at rest before a slower browser reaches the Stop button.
   await page.goto('http://127.0.0.1:8101/phone/');
   await physicsReady(page);
-  await expect(page.locator('.generated-audio')).toBeChecked();
+  await expect(page.locator('.generated-audio')).not.toBeChecked();
+  await page.locator('.generated-audio').check();
   await page.getByRole('button', { name: 'Start listening' }).tap();
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
-  await expect.poll(async () => (await physicsState(page)).bars.filter(y => y > .1).length).toBeGreaterThan(12);
+  // This test needs an airborne ball at Stop. The narrow, masking-aware
+  // display intentionally does not raise half the bars for six active tones.
+  await expect.poll(async () => (await physicsState(page)).balls.some(ball => ball.position[1] > ball.radius + .1)).toBe(true);
   const box = await page.locator('canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);

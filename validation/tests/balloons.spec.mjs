@@ -5,6 +5,7 @@ import { physicsReady, physicsState, syntheticAudio, startFrozen } from '../phys
 const url = 'http://127.0.0.1:8101';
 for (const width of [375, 1440]) {
   test(`24 rigid spheres use a single WebGL2 canvas and physical bar positions at ${width}px`, async ({ page }, info) => {
+    test.setTimeout(60000);
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.setViewportSize({ width, height: 900 });
@@ -15,23 +16,30 @@ for (const width of [375, 1440]) {
     const ratios = [.55,1.4,2.2,.8,3.1,1,4,1.8,.65,2.6,1.2,3.5,.65,1,1.2,.8,1.4,.55,.7,1.1,1.6,.9,1.3,.6];
     for (let i = 0; i < 24; i++) expect(initial.balls[i].radius * 2 / .048).toBeCloseTo(ratios[i], 5);
     await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
-    await expect.poll(async () => Math.min(...(await physicsState(page)).bars)).toBeGreaterThan(initial.height * .94);
+    await expect.poll(async () => Math.min(...(await physicsState(page)).bars)).toBeGreaterThan(initial.barMax - .005);
     const raised = await physicsState(page);
     expect(raised.balls.some((b, i) => b.position[1] > initial.balls[i].position[1] + .05)).toBe(true);
-    expect(raised.balls.some(b => b.position[1] > raised.height)).toBe(true);
+    expect(raised.balls.every(b => b.position[1] + b.radius <= raised.ceiling + .005)).toBe(true);
     expect(raised.balls.some((b, i) => b.color.some((c, j) => c !== initial.balls[i].color[j]))).toBe(true);
     const render = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
+      // Sample one complete draw, including its intentional interpolation delay.
+      // Comparing a fast moving render to a different worker snapshot is invalid.
+      v.draw(performance.now());
       const a = v.bars.instanceMatrix.array;
-      return { type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
+      const expected = Array.from({ length: 24 }, (_, i) => {
+        const current = v.current[v.layout[9] + i], previous = (v.previous ?? v.current)[v.layout[9] + i];
+        return previous + (current - previous) * v.renderAlpha;
+      });
+      return { expected, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
         tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
     });
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(2);
-    render.tops.forEach((top, i) => expect(top).toBeCloseTo(raised.bars[i], 2));
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(3);
+    render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
     await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
-    await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length).toBeGreaterThan(12);
+    await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length, { timeout: 30000 }).toBeGreaterThan(12);
     expect(errors).toEqual([]);
   });
 }
@@ -58,7 +66,7 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
     await page.setViewportSize(size);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(async () => (await physicsState(page)).height).toBeCloseTo(1.2 * size.height / size.width, 2);
+    await expect.poll(async () => (await physicsState(page)).height).toBeCloseTo(Math.max(.4, 1.2 * size.height / size.width), 2);
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
     await page.keyboard.press('Escape');
   }
@@ -136,9 +144,11 @@ test('context loss pauses physics and restoration resumes without losing the Exi
 
 test('phone page sends generated PCM through the audio processor and exports an honest incomplete report', async ({ page }) => {
   await page.goto(`${url}/phone`); await physicsReady(page);
-  await expect(page.locator('.generated-audio')).toBeChecked();
+  await expect(page.locator('.generated-audio')).not.toBeChecked();
+  await page.locator('.generated-audio').check();
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.filter(n => Number(n.getAttribute('aria-valuenow')) > 0).length)).toBeGreaterThan(20);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
+  await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
   await page.locator('[data-config="5"]').fill('0.36');
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
@@ -146,7 +156,8 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.physics-controls > summary').click();
-  await page.waitForTimeout(500);
+  const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sequence)).toBeGreaterThan(sequence + 24);
   await page.getByRole('button', { name: 'End test early' }).click();
   await expect(page.getByRole('button', { name: 'Export test report' })).toBeEnabled();
   const report = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.result);

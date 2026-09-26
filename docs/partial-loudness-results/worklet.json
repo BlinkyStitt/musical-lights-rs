@@ -1,0 +1,301 @@
+{
+  "mapping": "proportional-shared-one-euro",
+  "cases": [
+    {
+      "kind": "stationary",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumMeasuredRatioError": 6.423684739687019e-8,
+      "audioMs": 4000,
+      "beforeCpuMs": 35.83174999999994,
+      "afterCpuMs": 649.062208
+    },
+    {
+      "kind": "two",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumMeasuredRatioError": 8.014383101606626e-8,
+      "audioMs": 4000,
+      "beforeCpuMs": 40.01370799999995,
+      "afterCpuMs": 654.9527080000003
+    },
+    {
+      "kind": "bursts",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumMeasuredRatioError": 9.468201656037678e-8,
+      "audioMs": 4000,
+      "beforeCpuMs": 28.076833999999963,
+      "afterCpuMs": 310.0787919999998
+    },
+    {
+      "kind": "silence",
+      "frames": 1500,
+      "isoBitIdentical": true,
+      "maximumMeasuredRatioError": 0,
+      "audioMs": 3000,
+      "beforeCpuMs": 21.16558299999997,
+      "afterCpuMs": 203.96862499999997
+    },
+    {
+      "kind": "exercise",
+      "frames": 2000,
+      "isoBitIdentical": true,
+      "maximumMeasuredRatioError": 1.5454668900183322e-7,
+      "audioMs": 4000,
+      "beforeCpuMs": 46.908542000000125,
+      "afterCpuMs": 911.8080420000006
+    }
+  ],
+  "centers": [
+    {
+      "hz": 50,
+      "mappedFraction": 0.999995067061598,
+      "filteredFraction": 0.9999920794877779
+    },
+    {
+      "hz": 150,
+      "mappedFraction": 0.9999955229593759,
+      "filteredFraction": 0.999995460589603
+    },
+    {
+      "hz": 250,
+      "mappedFraction": 0.9999986384474995,
+      "filteredFraction": 0.9999973646481612
+    },
+    {
+      "hz": 350,
+      "mappedFraction": 0.999999998332997,
+      "filteredFraction": 0.9999987630131577
+    },
+    {
+      "hz": 450,
+      "mappedFraction": 0.9999996988272722,
+      "filteredFraction": 0.999998368157751
+    },
+    {
+      "hz": 570,
+      "mappedFraction": 0.9999997135657644,
+      "filteredFraction": 0.9999983971487395
+    },
+    {
+      "hz": 700,
+      "mappedFraction": 0.9999999970577018,
+      "filteredFraction": 0.9999986995495914
+    },
+    {
+      "hz": 840,
+      "mappedFraction": 0.9999999971123599,
+      "filteredFraction": 0.9999986635197617
+    },
+    {
+      "hz": 1000,
+      "mappedFraction": 0.9999999840485603,
+      "filteredFraction": 0.9999985420357673
+    },
+    {
+      "hz": 1170,
+      "mappedFraction": 0.999999998898188,
+      "filteredFraction": 0.999998393076007
+    },
+    {
+      "hz": 1370,
+      "mappedFraction": 0.9999999971669193,
+      "filteredFraction": 0.9999983588486132
+    },
+    {
+      "hz": 1600,
+      "mappedFraction": 0.9999999989943114,
+      "filteredFraction": 0.9999985416587518
+    },
+    {
+      "hz": 1850,
+      "mappedFraction": 0.9999999991981294,
+      "filteredFraction": 0.9999987607680463
+    },
+    {
+      "hz": 2150,
+      "mappedFraction": 0.999999999366237,
+      "filteredFraction": 0.9999989986044178
+    },
+    {
+      "hz": 2500,
+      "mappedFraction": 0.9999999995067335,
+      "filteredFraction": 0.999999198879051
+    },
+    {
+      "hz": 2900,
+      "mappedFraction": 0.9999999995925037,
+      "filteredFraction": 0.9999993273878817
+    },
+    {
+      "hz": 3400,
+      "mappedFraction": 0.9999999996179527,
+      "filteredFraction": 0.9999993614937539
+    },
+    {
+      "hz": 4050,
+      "mappedFraction": 0.9999999995793274,
+      "filteredFraction": 0.9999992942519209
+    },
+    {
+      "hz": 4800,
+      "mappedFraction": 0.9999999994614059,
+      "filteredFraction": 0.9999991118496064
+    },
+    {
+      "hz": 5800,
+      "mappedFraction": 0.9999999991808316,
+      "filteredFraction": 0.9999987203821368
+    },
+    {
+      "hz": 7000,
+      "mappedFraction": 0.9999999988018544,
+      "filteredFraction": 0.9999982850139679
+    },
+    {
+      "hz": 8600,
+      "mappedFraction": 0.9999999986387806,
+      "filteredFraction": 0.9999982225347662
+    },
+    {
+      "hz": 10700,
+      "mappedFraction": 0.9999999989690611,
+      "filteredFraction": 0.9999986450082287
+    },
+    {
+      "hz": 13700,
+      "mappedFraction": 0.9999999989110345,
+      "filteredFraction": 0.9999986802709072
+    }
+  ],
+  "boundaries": [
+    {
+      "hz": 100,
+      "mappedMaxNonadjacentOverPeak": 0.00001769108749493935,
+      "filteredMaxNonadjacentOverPeak": 0.000019896011982582275
+    },
+    {
+      "hz": 200,
+      "mappedMaxNonadjacentOverPeak": 7.832118464213177e-7,
+      "filteredMaxNonadjacentOverPeak": 0.000001073604288720131
+    },
+    {
+      "hz": 300,
+      "mappedMaxNonadjacentOverPeak": 1.0101922620085009e-7,
+      "filteredMaxNonadjacentOverPeak": 3.8322737755924825e-7
+    },
+    {
+      "hz": 400,
+      "mappedMaxNonadjacentOverPeak": 9.445099958832454e-10,
+      "filteredMaxNonadjacentOverPeak": 2.0931247051849216e-7
+    },
+    {
+      "hz": 510,
+      "mappedMaxNonadjacentOverPeak": 2.61850342069382e-7,
+      "filteredMaxNonadjacentOverPeak": 2.843786660455147e-7
+    },
+    {
+      "hz": 630,
+      "mappedMaxNonadjacentOverPeak": 2.143809352261883e-9,
+      "filteredMaxNonadjacentOverPeak": 3.0635897019237746e-7
+    },
+    {
+      "hz": 770,
+      "mappedMaxNonadjacentOverPeak": 1.7092555149034183e-9,
+      "filteredMaxNonadjacentOverPeak": 2.525386832985532e-7
+    },
+    {
+      "hz": 920,
+      "mappedMaxNonadjacentOverPeak": 9.095050046425968e-9,
+      "filteredMaxNonadjacentOverPeak": 2.71753123115559e-7
+    },
+    {
+      "hz": 1080,
+      "mappedMaxNonadjacentOverPeak": 2.0833360037109117e-10,
+      "filteredMaxNonadjacentOverPeak": 2.5058599817384675e-7
+    },
+    {
+      "hz": 1270,
+      "mappedMaxNonadjacentOverPeak": 6.206302693989585e-10,
+      "filteredMaxNonadjacentOverPeak": 2.95234031000291e-7
+    },
+    {
+      "hz": 1480,
+      "mappedMaxNonadjacentOverPeak": 1.9300340255078573e-10,
+      "filteredMaxNonadjacentOverPeak": 2.404710103378494e-7
+    },
+    {
+      "hz": 1720,
+      "mappedMaxNonadjacentOverPeak": 2.6864878647042486e-10,
+      "filteredMaxNonadjacentOverPeak": 4.167623332895534e-8
+    },
+    {
+      "hz": 2000,
+      "mappedMaxNonadjacentOverPeak": 1.8077372931912805e-10,
+      "filteredMaxNonadjacentOverPeak": 2.251673976161328e-7
+    },
+    {
+      "hz": 2320,
+      "mappedMaxNonadjacentOverPeak": 8.082343609847074e-11,
+      "filteredMaxNonadjacentOverPeak": 1.1670158513484701e-7
+    },
+    {
+      "hz": 2700,
+      "mappedMaxNonadjacentOverPeak": 1.0196070376888855e-10,
+      "filteredMaxNonadjacentOverPeak": 1.4474854026502726e-7
+    },
+    {
+      "hz": 3150,
+      "mappedMaxNonadjacentOverPeak": 1.4765176581388317e-10,
+      "filteredMaxNonadjacentOverPeak": 2.0091717090053862e-7
+    },
+    {
+      "hz": 3700,
+      "mappedMaxNonadjacentOverPeak": 1.2257517223446257e-10,
+      "filteredMaxNonadjacentOverPeak": 1.8179311211952154e-7
+    },
+    {
+      "hz": 4400,
+      "mappedMaxNonadjacentOverPeak": 1.7183711398249812e-10,
+      "filteredMaxNonadjacentOverPeak": 2.4165453282876115e-7
+    },
+    {
+      "hz": 5300,
+      "mappedMaxNonadjacentOverPeak": 1.9427204289712563e-10,
+      "filteredMaxNonadjacentOverPeak": 2.724804915033019e-7
+    },
+    {
+      "hz": 6400,
+      "mappedMaxNonadjacentOverPeak": 2.730230208580764e-10,
+      "filteredMaxNonadjacentOverPeak": 3.4137866578021203e-7
+    },
+    {
+      "hz": 7700,
+      "mappedMaxNonadjacentOverPeak": 7.153602521979733e-10,
+      "filteredMaxNonadjacentOverPeak": 6.570881434478758e-7
+    },
+    {
+      "hz": 9500,
+      "mappedMaxNonadjacentOverPeak": 4.2445650375329147e-10,
+      "filteredMaxNonadjacentOverPeak": 3.699023693988377e-7
+    },
+    {
+      "hz": 12000,
+      "mappedMaxNonadjacentOverPeak": 1.9408035700666184e-10,
+      "filteredMaxNonadjacentOverPeak": 2.469614152803886e-7
+    }
+  ],
+  "sweeps": [
+    {
+      "direction": "up",
+      "mappedMaxNonadjacentOverPeak": 0.00006395402534345432,
+      "filteredMaxNonadjacentOverPeak": 0.00007107292729533043
+    },
+    {
+      "direction": "down",
+      "mappedMaxNonadjacentOverPeak": 0.00006540641112985143,
+      "filteredMaxNonadjacentOverPeak": 0.00006256970384440216
+    }
+  ]
+}

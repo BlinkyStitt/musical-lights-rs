@@ -2,7 +2,7 @@
 
 Rust applications that make lights respond to audio.
 
-The browser, terminal, and ESP32 share a continuous ISO 532-1 time-varying loudness model. It emits calibrated or explicitly uncalibrated sones every 2 ms. A separate visual stage applies shared gain, bouncing motion, and HSLuv color.
+The browser, terminal, and ESP32 share a continuous ISO 532-1 time-varying loudness model. It emits calibrated or explicitly uncalibrated sones every 2 ms. The browser separately estimates masking-aware partial loudness in 24 source-frequency bands, then applies shared proportional gain and 40 ms physical bar strokes. Terminal and hardware display behavior is unchanged.
 
 The website and terminal show 24 bands. The 20×20 LED panel combines the first five into one bass row. Audio callbacks do not set the integration window, and slow displays do not drop audio samples.
 

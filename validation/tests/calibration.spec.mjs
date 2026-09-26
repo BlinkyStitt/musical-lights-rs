@@ -4,15 +4,22 @@ async function input(page) {
   await page.addInitScript(() => {
     const NativeContext = AudioContext;
     const NativeNode = AudioWorkletNode;
+    // Keep the reference generator on the capture clock. Independent realtime
+    // contexts can underrun their MediaStream bridge on a loaded CI machine.
+    window.AudioContext = class extends NativeContext {
+      constructor(...args) { super(...args); window.sourceContext = this; }
+    };
     window.AudioWorkletNode = class extends NativeNode { constructor(...args) { super(...args); window.analysisNode = this; } };
     window.captureSettings = { deviceId: 'calibration-fixture', channelCount: 2, sampleRate: 48000, autoGainControl: false, echoCancellation: false, noiseSuppression: false };
     navigator.mediaDevices.getUserMedia = async constraints => {
       window.requestedConstraints = constraints;
-      const context = new NativeContext({ sampleRate: 48000 });
+      const context = window.sourceContext;
       const oscillator = context.createOscillator(); oscillator.frequency.value = 1000;
       const gain = context.createGain(); gain.gain.value = .1;
       const destination = context.createMediaStreamDestination();
-      oscillator.connect(gain); gain.connect(destination); oscillator.start(); await context.resume();
+      oscillator.connect(gain); gain.connect(destination); oscillator.start();
+      // The application owns resume: it deliberately builds the whole graph
+      // while suspended to avoid gaps in the first render quanta.
       window.sourceContext = context;
       window.inputTrack = destination.stream.getAudioTracks()[0];
       window.inputTrack.getSettings = () => ({ ...window.captureSettings });
@@ -38,7 +45,7 @@ test('calibration is optional, measures a known reference, and binds to actual i
   expect(saved[0].pascalsPerUnit).toBeCloseTo(2e-5 * 10**(94/20) / (.1/Math.sqrt(2)), 1);
   await page.getByRole('button', {name:'Stop listening'}).click();
   await expect.poll(()=>page.evaluate(()=>window.inputTrack.readyState)).toBe('ended');
-  await page.evaluate(()=>window.sourceContext.close());
+  await expect.poll(()=>page.evaluate(()=>window.sourceContext.state)).toBe('closed');
   await page.getByRole('button', {name:'Start listening'}).click();
   await expect(page.locator('.calibration-status')).toHaveText('Calibrated for this input');
   // Changing capture settings invalidates the running session, even with no new user action.
@@ -46,7 +53,7 @@ test('calibration is optional, measures a known reference, and binds to actual i
   await expect(page.getByRole('alert')).toContainText('settings changed');
   await expect(page.getByRole('button', {name:'Start listening'})).toBeEnabled();
   await expect.poll(()=>page.evaluate(()=>window.inputTrack.readyState)).toBe('ended');
-  await page.evaluate(()=>window.sourceContext.close());
+  await expect.poll(()=>page.evaluate(()=>window.sourceContext.state)).toBe('closed');
   await page.getByRole('button', {name:'Start listening'}).click();
   await expect(page.locator('.calibration-status')).toContainText('Uncalibrated');
   expect(errors).toEqual([]);
@@ -97,5 +104,5 @@ test('Reduced Motion survives pending permission and updates the audio producer'
   await page.emulateMedia({reducedMotion:'reduce'});
   await expect.poll(()=>page.evaluate(()=>window.producerMotion)).toBe(1);
   await page.getByRole('button',{name:'Stop listening'}).click();
-  await page.evaluate(()=>window.sourceContext.close());
+  await expect.poll(()=>page.evaluate(()=>window.sourceContext.state)).toBe('closed');
 });

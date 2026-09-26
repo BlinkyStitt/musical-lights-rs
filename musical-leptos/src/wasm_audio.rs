@@ -1,5 +1,5 @@
 use js_sys::{Float64Array, Reflect};
-use musical_lights_core::audio::visual::{DISPLAY_BANDS, DisplaySnapshot};
+use musical_lights_core::audio::browser::BrowserSnapshot;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 use wasm_bindgen_futures::JsFuture;
@@ -12,6 +12,8 @@ use web_sys::{
 extern "C" {
     #[wasm_bindgen(catch, js_name = acquireInput)]
     async fn acquire_input(context: &AudioContext) -> Result<MediaStream, JsValue>;
+    #[wasm_bindgen(js_name = inputIsGenerated)]
+    fn input_is_generated(stream: &MediaStream) -> bool;
     #[wasm_bindgen(js_name = releaseInput)]
     fn release_input(stream: &MediaStream);
     #[wasm_bindgen(catch, js_name = prepareProcessor)]
@@ -29,13 +31,15 @@ extern "C" {
     fn release_processor(node: &AudioWorkletNode);
     #[wasm_bindgen(js_name = canCalibrate)]
     fn can_calibrate(node: &AudioWorkletNode) -> bool;
+    #[wasm_bindgen(js_name = isCurrentProcessorMessage)]
+    fn is_current_processor_message(node: &AudioWorkletNode, data: &JsValue) -> bool;
 }
 
 // Keep the frequent numeric frame inline; avoid one extra allocation per refresh.
 #[allow(clippy::large_enum_variant)]
 pub enum AudioUpdate {
     Frame {
-        snapshot: DisplaySnapshot<DISPLAY_BANDS>,
+        snapshot: BrowserSnapshot,
         clipped: u64,
     },
     Status(String),
@@ -76,6 +80,13 @@ impl AudioSession {
                 reduced_motion: false,
             }))),
         })
+    }
+    pub fn is_generated(&self) -> bool {
+        self.resources
+            .borrow()
+            .as_ref()
+            .and_then(|resources| resources.stream.as_ref())
+            .is_some_and(input_is_generated)
     }
     pub fn sample_rate(&self) -> f32 {
         48_000.0
@@ -136,6 +147,10 @@ impl AudioSession {
                 return;
             }
             let data = event.data();
+            if !is_current_processor_message(&callback_node, &data) {
+                let _ = callback_port.post_message(&ack);
+                return;
+            }
             let kind = Reflect::get(&data, &"type".into())
                 .ok()
                 .and_then(|v| v.as_string());
@@ -144,7 +159,7 @@ impl AudioSession {
                     let parsed = Reflect::get(&data, &"state".into())
                         .ok()
                         .and_then(|v| v.dyn_into::<Float64Array>().ok())
-                        .and_then(|v| DisplaySnapshot::from_transport(&v.to_vec()));
+                        .and_then(|v| BrowserSnapshot::from_transport(&v.to_vec()));
                     if let Some(snapshot) = parsed {
                         let clipped = Reflect::get(&data, &"clipped".into())
                             .ok()

@@ -1,5 +1,31 @@
 # Validation record
 
+The 2026-09-25 source-band update and 40 ms strokes are documented in the
+[current measurement and performance report](partial-loudness-results/README.md).
+It retains the ISO/MoSQiTo checks and adds the pinned MGB1997/GM2002 oracle,
+center/boundary/sweep selectivity before and after mapping, session/acceptance
+regressions, and normalized exercise-PCM checks. The `reference` target builds
+the independent C++ stages with `clang++`; failed model checks stop validation.
+Physical-phone acceptance and the existing production deployment gate remain.
+
+The subsequent calmer-motion and closed-ceiling revision passes 48 core tests
+in each of four feature configurations, all 26 physics tests, the Clippy matrix,
+worklet/Leptos builds, pinned reference comparisons, and all 159 Chromium/WebKit
+checks with one worker and zero retries. New regressions cover symmetric shared
+filtering, modulated sustains without repeat flashes, articulated attacks,
+masked weak targets, small release hops, and full-height stack compression at
+four enclosure heights and four starting conditions. Raw ISO and partial values
+remain bit-identical to `76af307` across five production-WASM fixtures. See the
+[current report](partial-loudness-results/README.md) for separate diagnostics-off
+FPS/debt measurements and instrumented latency boundaries.
+
+The functional browser suite now uses one worker. Real-time AudioContexts and
+offline WASM stress tests must not compete for the same CPU budget: callback
+gaps correctly stop capture, as confirmed during the follow-up to the initial
+parallel Linux failure. This preserves every assertion, the serial startup guard, and zero
+retries. Dedicated diagnostics-off FPS/debt runs and the warmed worklet CPU
+budget remain separate performance checks with unchanged thresholds.
+
 The current measurement contract and its limits are in [Audio, loudness, and light](loudness.md). The former empirical Bark processor and its 20 ms window are removed. Its previous test counts and timing measurements do not validate this implementation.
 
 ## Reproduce
@@ -388,3 +414,13 @@ An Apple M4 Max host processed warmed two-tone PCM through the loudness model, v
 `LoudnessMeter` occupies 4,824 bytes and requires no allocator. The warmed WASM producer processed four seconds of audio in 33.82 ms (0.846% of real time). Its separate WASM memory occupied 1,179,648 bytes and did not grow during the steady-state test. That earlier browser snapshot contained 146 `f64` values (1,168 bytes), including the acoustic input used by peak detection. JavaScript allocates the bounded display messages; the DSP callback does not allocate Rust buffers.
 
 These are host measurements. They do not show ESP32 execution time or hardware accuracy. No board was flashed. Microphone calibration, I2S format, DMA stress, processing headroom, LED channel order, response curves, current draw and observed flicker remain bench checks. The LED thread explicitly reserves 16,000 stack bytes because its 4,800-byte linear palette exceeds the SDK default 3,072-byte thread stack. Actual stack high-water marks still require a board. The firmware exposes capture failures and includes a separate `light-check` program and profile generator for that work.
+
+## Proportional targets and 80 ms strokes
+
+See the [controlled-tone and motion report](gain-stroke-results/README.md) for
+before/after evidence, the 124 passing browser checks, reference comparisons,
+Mac layout timing, and the outstanding reversal-timing decision and physical
+iPhone measurements. The 80 ms rest-to-rest controller reaches within 1% in
+75 ms; its prescribed acceleration cannot also guarantee every reversal within
+100 ms from receipt. This boundary is reported explicitly rather than counted
+as a passing universal latency guarantee.

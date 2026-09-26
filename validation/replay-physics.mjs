@@ -5,6 +5,8 @@ import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.j
 
 export async function replayReport(report) {
   const wasm = await init({ module_or_path: await readFile(new URL('../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
+  if (JSON.stringify(report.layout) !== JSON.stringify(Array.from(PhysicsSimulation.layout())))
+    throw new Error('Physics report needs the matching historical engine; geometry layout differs');
   const results = [];
   for (const fps of [30, 60, 120]) {
     const sim = new PhysicsSimulation(new Float32Array(report.config), new Float32Array(report.palette));

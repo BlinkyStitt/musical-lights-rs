@@ -109,6 +109,7 @@ pub fn DancingLights() -> impl IntoView {
     };
     let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
     let (listening, set_listening) = signal(false);
+    let (generated, set_generated) = signal(false);
     let (capture_status, set_capture_status) =
         signal(String::from("Uncalibrated · relative light activity"));
     let (input_channel, set_input_channel) = signal(1u32);
@@ -266,6 +267,7 @@ pub fn DancingLights() -> impl IntoView {
             set_starting.set(false);
             match result {
                 Ok(()) => {
+                    set_generated.set(session.is_generated());
                     set_capture_status.set(session.status());
                     set_listening.set(true);
                 }
@@ -293,7 +295,7 @@ pub fn DancingLights() -> impl IntoView {
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
-                            {move || if starting.get() { "Starting microphone…" } else { "Start listening" }}
+                            {move || if starting.get() { "Starting audio…" } else { "Start listening" }}
                         </button>
                     </Show>
                     <button class="fullscreen-button" tabindex="0"
@@ -306,8 +308,8 @@ pub fn DancingLights() -> impl IntoView {
                     </button>
                 </div>
                 <p class="mic-status" role="status">
-                    {move || if starting.get() { "Waiting for microphone" } else if listening.get() {
-                        "Listening · Mic on"
+                    {move || if starting.get() { "Starting audio" } else if listening.get() {
+                        if generated.get() { "Test audio · Mic off" } else { "Listening · Mic on" }
                     } else { "Microphone off" }}
                 </p>
             </div>
@@ -328,7 +330,7 @@ pub fn DancingLights() -> impl IntoView {
                         let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
                         view! {
                             <div class="bark-group" role="group"
-                                aria-label=format!("{}–{} Bark, {}–{} Hz", group, group + 1, edges[0], edges[1]) style=style>
+                                aria-label=format!("Band {}, {}–{} Hz", group + 1, edges[0], edges[1]) style=style>
                                 <div class="meter" role="meter"
                                     aria-label=format!("≈ {}–{} Hz", edges[0], edges[1])
                                     node_ref=sample_nodes.with_value(|nodes| nodes[group])

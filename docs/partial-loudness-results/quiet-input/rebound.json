@@ -1,0 +1,16 @@
+{
+  "test": "default_balls_have_a_small_rebound_and_settle_on_quiet_bars",
+  "dropMetres": 0.5,
+  "before": {
+    "restitution": 0.55,
+    "reboundMetres": 0.151001
+  },
+  "after": {
+    "restitution": 0.15,
+    "reboundMetres": 0.011143522,
+    "settledAfterSeconds": 3,
+    "maximumResidualSpeedMetresPerSecond": 0.01,
+    "maximumRestingErrorMetres": 0.001
+  },
+  "strokeSeconds": 0.04
+}

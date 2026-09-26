@@ -18,9 +18,16 @@ for (const width of [320, 375, 1440]) {
       const track = document.querySelector('.meter-track').getBoundingClientRect();
       const graph = document.querySelector('#dancinglights').getBoundingClientRect();
       const guide = document.querySelector('.meter-guide > span').getBoundingClientRect();
+      const view = document.querySelector('#dancinglights').physics;
       return {
         guideDifference: Math.abs(guide.y + guide.height / 2 - track.top),
         headroom: (track.top - graph.top) / graph.height,
+        expectedHeadroom: 1 - view.current[view.layout[17]+1] / view.visibleHeight,
+        hitRegionError: Math.max(...meters.map((node,i) => {
+          const box=node.getBoundingClientRect();
+          const projected=graph.x+graph.width/2+((i+.5)*view.layout[3]-view.width/2)/(view.camera.right-view.camera.left)*graph.width;
+          return Math.abs(box.x+box.width/2-projected);
+        })),
         colors: groups.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()),
         counts: groups.map(node => node.querySelectorAll('[role=meter]').length),
         layout: document.querySelector('#dancinglights').physics.layout,
@@ -29,7 +36,8 @@ for (const width of [320, 375, 1440]) {
       };
     });
     expect(geometry.guideDifference).toBeLessThan(1);
-    expect(geometry.headroom).toBeCloseTo(.05, 3);
+    expect(geometry.headroom).toBeCloseTo(geometry.expectedHeadroom, 3);
+    expect(geometry.hitRegionError).toBeLessThan(1);
     expect(geometry.counts).toEqual(Array(24).fill(1));
     expect(new Set(geometry.colors).size).toBe(24);
     expect(geometry.layout[4]).toBeCloseTo(.002, 6);
@@ -67,10 +75,10 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   await page.evaluate(async () => {
     await window.transportContext.suspend();
-    const state = new Float64Array(146);
+    const state = new Float64Array(99);
     state[0] = window.transportContext.currentTime;
     state[2] = NaN;
-    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', state } }));
+    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
   });
   await expect(page.getByRole('alert')).toContainText('Invalid audio display state');
   await expect.poll(() => page.evaluate(() => window.transportContext.state)).toBe('closed');

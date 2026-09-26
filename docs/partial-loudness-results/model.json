@@ -1,0 +1,387 @@
+{
+  "oracle": "82de790f79c5b358040861e8bdb906a55009b117",
+  "configuration": {
+    "presentation": "monaural",
+    "outerEar": "free field",
+    "middleEar": "ANSI full response without separate HPF",
+    "camStep": 0.25,
+    "ansi2007HighLevelExtension": false,
+    "temporal": "GM2002 short term",
+    "fft": 2048,
+    "hop": 96
+  },
+  "stages": {
+    "earWeight": {
+      "maxAbsoluteError": 0.0,
+      "pass": true
+    },
+    "excitation": {
+      "maxAbsoluteError": 2.2737367544323206e-13,
+      "pass": true
+    },
+    "specificPartial": {
+      "maxAbsoluteError": 1.2889862788245665e-14,
+      "pass": true
+    },
+    "instantaneous": {
+      "maxAbsoluteError": 3.9968028886505635e-15,
+      "pass": true
+    },
+    "shortTerm": {
+      "maxAbsoluteError": 3.552713678800501e-15,
+      "pass": true
+    }
+  },
+  "callbackIndependent": true,
+  "centers": [
+    {
+      "frequency": 50,
+      "intendedBand": 0,
+      "fraction": 0.999995019061714,
+      "pass": true
+    },
+    {
+      "frequency": 150,
+      "intendedBand": 1,
+      "fraction": 0.9999955126934585,
+      "pass": true
+    },
+    {
+      "frequency": 250,
+      "intendedBand": 2,
+      "fraction": 0.9999986262680303,
+      "pass": true
+    },
+    {
+      "frequency": 350,
+      "intendedBand": 3,
+      "fraction": 0.9999999872686679,
+      "pass": true
+    },
+    {
+      "frequency": 450,
+      "intendedBand": 4,
+      "fraction": 0.9999996873051465,
+      "pass": true
+    },
+    {
+      "frequency": 570,
+      "intendedBand": 5,
+      "fraction": 0.9999997035956624,
+      "pass": true
+    },
+    {
+      "frequency": 700,
+      "intendedBand": 6,
+      "fraction": 0.9999999860150797,
+      "pass": true
+    },
+    {
+      "frequency": 840,
+      "intendedBand": 7,
+      "fraction": 0.999999985936215,
+      "pass": true
+    },
+    {
+      "frequency": 1000,
+      "intendedBand": 8,
+      "fraction": 0.99999997190559,
+      "pass": true
+    },
+    {
+      "frequency": 1170,
+      "intendedBand": 9,
+      "fraction": 0.9999999851990399,
+      "pass": true
+    },
+    {
+      "frequency": 1370,
+      "intendedBand": 10,
+      "fraction": 0.9999999832071764,
+      "pass": true
+    },
+    {
+      "frequency": 1600,
+      "intendedBand": 11,
+      "fraction": 0.9999999868465785,
+      "pass": true
+    },
+    {
+      "frequency": 1850,
+      "intendedBand": 12,
+      "fraction": 0.9999999891373292,
+      "pass": true
+    },
+    {
+      "frequency": 2150,
+      "intendedBand": 13,
+      "fraction": 0.9999999914221707,
+      "pass": true
+    },
+    {
+      "frequency": 2500,
+      "intendedBand": 14,
+      "fraction": 0.9999999933217969,
+      "pass": true
+    },
+    {
+      "frequency": 2900,
+      "intendedBand": 15,
+      "fraction": 0.9999999944804857,
+      "pass": true
+    },
+    {
+      "frequency": 3400,
+      "intendedBand": 16,
+      "fraction": 0.9999999948244915,
+      "pass": true
+    },
+    {
+      "frequency": 4050,
+      "intendedBand": 17,
+      "fraction": 0.9999999943012964,
+      "pass": true
+    },
+    {
+      "frequency": 4800,
+      "intendedBand": 18,
+      "fraction": 0.999999992703819,
+      "pass": true
+    },
+    {
+      "frequency": 5800,
+      "intendedBand": 19,
+      "fraction": 0.9999999889030173,
+      "pass": true
+    },
+    {
+      "frequency": 7000,
+      "intendedBand": 20,
+      "fraction": 0.999999983769009,
+      "pass": true
+    },
+    {
+      "frequency": 8600,
+      "intendedBand": 21,
+      "fraction": 0.9999999815598893,
+      "pass": true
+    },
+    {
+      "frequency": 10700,
+      "intendedBand": 22,
+      "fraction": 0.9999999860341157,
+      "pass": true
+    },
+    {
+      "frequency": 13700,
+      "intendedBand": 23,
+      "fraction": 0.9999999852480436,
+      "pass": true
+    }
+  ],
+  "boundaries": [
+    {
+      "frequency": 100,
+      "maxNonadjacentOverPeak": 1.78010290254603e-05,
+      "pass": true
+    },
+    {
+      "frequency": 200,
+      "maxNonadjacentOverPeak": 7.908611700985945e-07,
+      "pass": true
+    },
+    {
+      "frequency": 300,
+      "maxNonadjacentOverPeak": 1.0296694135982647e-07,
+      "pass": true
+    },
+    {
+      "frequency": 400,
+      "maxNonadjacentOverPeak": 3.476724596512032e-09,
+      "pass": true
+    },
+    {
+      "frequency": 510,
+      "maxNonadjacentOverPeak": 2.667216176290738e-07,
+      "pass": true
+    },
+    {
+      "frequency": 630,
+      "maxNonadjacentOverPeak": 5.1301301209267046e-09,
+      "pass": true
+    },
+    {
+      "frequency": 770,
+      "maxNonadjacentOverPeak": 3.6051713939017502e-09,
+      "pass": true
+    },
+    {
+      "frequency": 920,
+      "maxNonadjacentOverPeak": 1.1754036691598673e-08,
+      "pass": true
+    },
+    {
+      "frequency": 1080,
+      "maxNonadjacentOverPeak": 2.6089901349366007e-09,
+      "pass": true
+    },
+    {
+      "frequency": 1270,
+      "maxNonadjacentOverPeak": 3.656354345862464e-09,
+      "pass": true
+    },
+    {
+      "frequency": 1480,
+      "maxNonadjacentOverPeak": 2.589830447056129e-09,
+      "pass": true
+    },
+    {
+      "frequency": 1720,
+      "maxNonadjacentOverPeak": 3.25470904509074e-09,
+      "pass": true
+    },
+    {
+      "frequency": 2000,
+      "maxNonadjacentOverPeak": 2.4488985903137225e-09,
+      "pass": true
+    },
+    {
+      "frequency": 2320,
+      "maxNonadjacentOverPeak": 1.0948958806330821e-09,
+      "pass": true
+    },
+    {
+      "frequency": 2700,
+      "maxNonadjacentOverPeak": 1.3807132047096772e-09,
+      "pass": true
+    },
+    {
+      "frequency": 3150,
+      "maxNonadjacentOverPeak": 1.9965064719203026e-09,
+      "pass": true
+    },
+    {
+      "frequency": 3700,
+      "maxNonadjacentOverPeak": 1.660476077297346e-09,
+      "pass": true
+    },
+    {
+      "frequency": 4400,
+      "maxNonadjacentOverPeak": 2.3276199837475585e-09,
+      "pass": true
+    },
+    {
+      "frequency": 5300,
+      "maxNonadjacentOverPeak": 2.6317557721477827e-09,
+      "pass": true
+    },
+    {
+      "frequency": 6400,
+      "maxNonadjacentOverPeak": 3.6985778229632766e-09,
+      "pass": true
+    },
+    {
+      "frequency": 7700,
+      "maxNonadjacentOverPeak": 9.690814796840874e-09,
+      "pass": true
+    },
+    {
+      "frequency": 9500,
+      "maxNonadjacentOverPeak": 5.7500112228905844e-09,
+      "pass": true
+    },
+    {
+      "frequency": 12000,
+      "maxNonadjacentOverPeak": 2.629160266441935e-09,
+      "pass": true
+    }
+  ],
+  "finite": true,
+  "nonnegative": true,
+  "pcmReference": [
+    {
+      "case": "burst",
+      "maxErrorSones": 1.6452631112010008e-07,
+      "pass": true
+    },
+    {
+      "case": "step",
+      "maxErrorSones": 1.2159368589087505e-07,
+      "pass": true
+    },
+    {
+      "case": "broadband",
+      "maxErrorSones": 4.457937669011258e-08,
+      "pass": true
+    },
+    {
+      "case": "nearMasker",
+      "maxErrorSones": 1.4315153640254152e-07,
+      "pass": true
+    },
+    {
+      "case": "separated",
+      "maxErrorSones": 2.0013720369860266e-07,
+      "pass": true
+    },
+    {
+      "case": "silence",
+      "maxErrorSones": 0.0,
+      "pass": true
+    }
+  ],
+  "stepLatency": {
+    "windowEnergy10PercentMs": 14.0,
+    "windowEnergy50PercentMs": 22.0,
+    "windowEnergy90PercentMs": 30.0,
+    "instantaneous10PercentMs": 4.0,
+    "instantaneous50PercentMs": 10.0,
+    "instantaneous90PercentMs": 18.0,
+    "shortTerm10PercentMs": 10.0,
+    "shortTerm50PercentMs": 26.0,
+    "shortTerm90PercentMs": 48.0
+  },
+  "masking": {
+    "ratio": 0.0051091672913658,
+    "referenceRatio": 0.0051091672913658156,
+    "pass": true
+  },
+  "equalLoudness": [
+    {
+      "frequency": 250,
+      "componentPower": 520621.8554328389,
+      "referenceSones": 0.9999997637809819,
+      "measuredSones": 0.9999997637809813,
+      "pass": true
+    },
+    {
+      "frequency": 1000,
+      "componentPower": 86335.27577467405,
+      "referenceSones": 1.0000095007082979,
+      "measuredSones": 1.0000095007082979,
+      "pass": true
+    },
+    {
+      "frequency": 4050,
+      "componentPower": 15316.713329201335,
+      "referenceSones": 1.0000002133824832,
+      "measuredSones": 1.0000002133824832,
+      "pass": true
+    }
+  ],
+  "sweeps": [
+    {
+      "direction": "up",
+      "seconds": 24,
+      "maxNonadjacentOverPeak": 6.39499858807368e-05,
+      "pass": true
+    },
+    {
+      "direction": "down",
+      "seconds": 24,
+      "maxNonadjacentOverPeak": 6.539027481686816e-05,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

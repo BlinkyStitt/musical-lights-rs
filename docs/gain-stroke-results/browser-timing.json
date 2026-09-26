@@ -1,0 +1,470 @@
+[
+  {
+    "name": "chromium-mac",
+    "mode": "normal",
+    "physicalPhone": false,
+    "before": {
+      "frames": 313,
+      "renderMs": 47.999999046325684,
+      "debt": 3.700195312499611,
+      "maxDebt": 8.30004882812493,
+      "physicsSteps": 657,
+      "physicsMs": 993.699999332428,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 10.699999904632932,
+      "substepTotal": 31807,
+      "maxSubsteps": 85,
+      "overloadTicks": 0
+    },
+    "after": {
+      "frames": 2114,
+      "renderMs": 145.69999837875366,
+      "debt": 5.300048828122479,
+      "maxDebt": 8.30004882812493,
+      "physicsSteps": 4257,
+      "physicsMs": 6824.299998283386,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 10.599999999998545,
+      "substepTotal": 195676,
+      "maxSubsteps": 85,
+      "overloadTicks": 0
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.550000011920929,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.07999999821186066,
+      0.3199999928474426
+    ],
+    "layout": [
+      24,
+      120,
+      1.2000000476837158,
+      0.05000000074505806,
+      0.0020000000949949026,
+      0.012000000104308128,
+      20,
+      0.05000000074505806,
+      18,
+      435,
+      459,
+      1035,
+      1087,
+      0.003000000026077032,
+      1059,
+      1083,
+      128
+    ],
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.8037.0 Safari/537.36",
+    "summary": {
+      "fps": 60.00240009600384,
+      "frameMs": {
+        "mean": 16.666,
+        "p95": 16.700000000004366,
+        "max": 16.80000000000291
+      },
+      "physicsDebtMs": {
+        "mean": 3.2772577608056217,
+        "p95": 5.733479817706362,
+        "max": 8.26676432291525
+      },
+      "over25Fraction": 0,
+      "physicsCpuMsPerTick": 1.6196111108197107,
+      "overloadTicks": 0
+    },
+    "errors": []
+  },
+  {
+    "name": "chromium-mac",
+    "mode": "portrait-fullscreen",
+    "physicalPhone": false,
+    "before": {
+      "frames": 316,
+      "renderMs": 46.59999942779541,
+      "debt": 5.566813151041201,
+      "maxDebt": 8.300048828124941,
+      "physicsSteps": 664,
+      "physicsMs": 2186.099998474121,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 11.099999904632568,
+      "substepTotal": 70118,
+      "maxSubsteps": 128,
+      "overloadTicks": 324
+    },
+    "after": {
+      "frames": 2117,
+      "renderMs": 165.2999882698059,
+      "debt": 6.166666666663765,
+      "maxDebt": 8.300048828124941,
+      "physicsSteps": 4264,
+      "physicsMs": 15307.600001811981,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 9.399999618530273,
+      "substepTotal": 495319,
+      "maxSubsteps": 128,
+      "overloadTicks": 2057
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.550000011920929,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.07999999821186066,
+      0.3199999928474426
+    ],
+    "layout": [
+      24,
+      120,
+      1.2000000476837158,
+      0.05000000074505806,
+      0.0020000000949949026,
+      0.012000000104308128,
+      20,
+      0.05000000074505806,
+      18,
+      435,
+      459,
+      1035,
+      1087,
+      0.003000000026077032,
+      1059,
+      1083,
+      128
+    ],
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.8037.0 Safari/537.36",
+    "summary": {
+      "fps": 60.00240009600384,
+      "frameMs": {
+        "mean": 16.666,
+        "p95": 16.799999999995634,
+        "max": 16.80000000000291
+      },
+      "physicsDebtMs": {
+        "mean": 4.7192812984378545,
+        "p95": 7.933430989582051,
+        "max": 8.300048828123726
+      },
+      "over25Fraction": 0,
+      "physicsCpuMsPerTick": 3.6448611120382943,
+      "overloadTicks": 1733
+    },
+    "errors": []
+  },
+  {
+    "name": "chromium-mac",
+    "mode": "landscape-fullscreen",
+    "physicalPhone": false,
+    "before": {
+      "frames": 321,
+      "renderMs": 47,
+      "debt": 3.733235677082943,
+      "maxDebt": 8.26676432291666,
+      "physicsSteps": 659,
+      "physicsMs": 688.3999948501587,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 10.699999904632932,
+      "substepTotal": 19923,
+      "maxSubsteps": 54,
+      "overloadTicks": 0
+    },
+    "after": {
+      "frames": 2122,
+      "renderMs": 167.10001468658447,
+      "debt": 5.4334309895808115,
+      "maxDebt": 8.300048828124499,
+      "physicsSteps": 4259,
+      "physicsMs": 4401.399981975555,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 9.499999618528818,
+      "substepTotal": 118903,
+      "maxSubsteps": 54,
+      "overloadTicks": 0
+    },
+    "config": [
+      0.4150668978691101,
+      9.8100004196167,
+      1100,
+      0.550000011920929,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.07999999821186066,
+      0.3199999928474426
+    ],
+    "layout": [
+      24,
+      120,
+      1.2000000476837158,
+      0.05000000074505806,
+      0.0020000000949949026,
+      0.012000000104308128,
+      20,
+      0.05000000074505806,
+      18,
+      435,
+      459,
+      1035,
+      1087,
+      0.003000000026077032,
+      1059,
+      1083,
+      128
+    ],
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.8037.0 Safari/537.36",
+    "summary": {
+      "fps": 60.00240009600384,
+      "frameMs": {
+        "mean": 16.666,
+        "p95": 16.700000000004366,
+        "max": 16.80000000000291
+      },
+      "physicsDebtMs": {
+        "mean": 3.3057199125471324,
+        "p95": 6.899902343749437,
+        "max": 8.300048828122744
+      },
+      "over25Fraction": 0,
+      "physicsCpuMsPerTick": 1.0313888853126103,
+      "overloadTicks": 0
+    },
+    "errors": []
+  },
+  {
+    "name": "iphone-profile-webkit-mac",
+    "mode": "normal",
+    "physicalPhone": false,
+    "before": {
+      "frames": 316,
+      "renderMs": 78,
+      "debt": 6.666666666666295,
+      "maxDebt": 7.999999999999989,
+      "physicsSteps": 628,
+      "physicsMs": 1195,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 16,
+      "substepTotal": 33062,
+      "maxSubsteps": 88,
+      "overloadTicks": 0
+    },
+    "after": {
+      "frames": 2117,
+      "renderMs": 275,
+      "debt": 1.3333333333308293,
+      "maxDebt": 7.999999999999989,
+      "physicsSteps": 4229,
+      "physicsMs": 8268,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 16,
+      "substepTotal": 197994,
+      "maxSubsteps": 88,
+      "overloadTicks": 0
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.550000011920929,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.07999999821186066,
+      0.3199999928474426
+    ],
+    "layout": [
+      24,
+      120,
+      1.2000000476837158,
+      0.05000000074505806,
+      0.0020000000949949026,
+      0.012000000104308128,
+      20,
+      0.05000000074505806,
+      18,
+      435,
+      459,
+      1035,
+      1087,
+      0.003000000026077032,
+      1059,
+      1083,
+      128
+    ],
+    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1",
+    "summary": {
+      "fps": 59.998000066664446,
+      "frameMs": {
+        "mean": 16.66722222222222,
+        "p95": 18,
+        "max": 19
+      },
+      "physicsDebtMs": {
+        "mean": 2.830279474364656,
+        "p95": 7.666666666664742,
+        "max": 7.999999999999627
+      },
+      "over25Fraction": 0,
+      "physicsCpuMsPerTick": 1.9641766176062205,
+      "overloadTicks": 0
+    },
+    "errors": []
+  },
+  {
+    "name": "iphone-profile-webkit-mac",
+    "mode": "portrait-fullscreen",
+    "physicalPhone": false,
+    "before": {
+      "frames": 319,
+      "renderMs": 55,
+      "debt": 7.666666666666281,
+      "maxDebt": 7.999999999999956,
+      "physicsSteps": 631,
+      "physicsMs": 2228,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 16,
+      "substepTotal": 72240,
+      "maxSubsteps": 128,
+      "overloadTicks": 380
+    },
+    "after": {
+      "frames": 2120,
+      "renderMs": 167,
+      "debt": 7.666666666664224,
+      "maxDebt": 7.999999999999956,
+      "physicsSteps": 4231,
+      "physicsMs": 16268,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 17,
+      "substepTotal": 508271,
+      "maxSubsteps": 128,
+      "overloadTicks": 2627
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.550000011920929,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.07999999821186066,
+      0.3199999928474426
+    ],
+    "layout": [
+      24,
+      120,
+      1.2000000476837158,
+      0.05000000074505806,
+      0.0020000000949949026,
+      0.012000000104308128,
+      20,
+      0.05000000074505806,
+      18,
+      435,
+      459,
+      1035,
+      1087,
+      0.003000000026077032,
+      1059,
+      1083,
+      128
+    ],
+    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1",
+    "summary": {
+      "fps": 59.99999999999999,
+      "frameMs": {
+        "mean": 16.666666666666668,
+        "p95": 18,
+        "max": 19
+      },
+      "physicsDebtMs": {
+        "mean": 4.480288728482826,
+        "p95": 7.999999999998595,
+        "max": 7.999999999999611
+      },
+      "over25Fraction": 0,
+      "physicsCpuMsPerTick": 3.9,
+      "overloadTicks": 2247
+    },
+    "errors": []
+  },
+  {
+    "name": "iphone-profile-webkit-mac",
+    "mode": "landscape-fullscreen",
+    "physicalPhone": false,
+    "before": {
+      "frames": 321,
+      "renderMs": 58,
+      "debt": 5.999999999999625,
+      "maxDebt": 7.999999999999986,
+      "physicsSteps": 633,
+      "physicsMs": 788,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 17,
+      "substepTotal": 18611,
+      "maxSubsteps": 53,
+      "overloadTicks": 0
+    },
+    "after": {
+      "frames": 2122,
+      "renderMs": 208,
+      "debt": 2.9999999999974936,
+      "maxDebt": 7.999999999999986,
+      "physicsSteps": 4233,
+      "physicsMs": 5739,
+      "discardedSimulationMs": 0,
+      "snapshotAgeMs": 16,
+      "substepTotal": 123130,
+      "maxSubsteps": 58,
+      "overloadTicks": 0
+    },
+    "config": [
+      0.4150668978691101,
+      9.8100004196167,
+      1100,
+      0.550000011920929,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.07999999821186066,
+      0.3199999928474426
+    ],
+    "layout": [
+      24,
+      120,
+      1.2000000476837158,
+      0.05000000074505806,
+      0.0020000000949949026,
+      0.012000000104308128,
+      20,
+      0.05000000074505806,
+      18,
+      435,
+      459,
+      1035,
+      1087,
+      0.003000000026077032,
+      1059,
+      1083,
+      128
+    ],
+    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1",
+    "summary": {
+      "fps": 59.998000066664446,
+      "frameMs": {
+        "mean": 16.66722222222222,
+        "p95": 18,
+        "max": 19
+      },
+      "physicsDebtMs": {
+        "mean": 2.913381454745924,
+        "p95": 5.666666666665952,
+        "max": 7.99999999999951
+      },
+      "over25Fraction": 0,
+      "physicsCpuMsPerTick": 1.3752777777777778,
+      "overloadTicks": 0
+    },
+    "errors": []
+  }
+]
