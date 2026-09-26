@@ -22,6 +22,7 @@ export class PhoneReport {
     ];
     this.host.innerHTML = `<summary>Physics prototype and phone test</summary>
       <p>These values are starting assumptions. Apply physical settings with Reset. Camera changes keep the simulation.</p>
+      <p>Vertical walls have no friction and at least 0.55 restitution. The controls below set the other surfaces and balls.</p>
       <div class="physics-fields">${fields.map(([name, index, min, max, step]) => `<label>${name}<input data-config="${index}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(view.config[index].toPrecision(6))}"></label>`).join('')}</div>
       <label>Camera rotation (degrees)<input class="camera-rotation" type="range" min="-40" max="40" value="0"></label>
       <button type="button" class="physics-reset">Apply settings and reset</button>

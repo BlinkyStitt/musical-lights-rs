@@ -98,6 +98,76 @@ fn rebound_height_matches_restitution_squared() {
 }
 
 #[test]
+fn vertical_walls_rebound_without_grabbing_tangential_motion() {
+    for axis in [0, 2] {
+        for sign in [-1.0, 1.0] {
+            let mut sim = world(SimulationConfig {
+                gravity: 0.0,
+                height: 5.0,
+                ..SimulationConfig::default()
+            });
+            isolate(&mut sim, &[0]);
+            let mut p = Vector::new(0.6, 2.0, 0.0);
+            let boundary = if axis == 0 {
+                if sign < 0.0 { 0.0 } else { WIDTH }
+            } else {
+                sign * sim.config.depth / 2.0
+            };
+            p[axis] = boundary - sign * (radius(0) + 0.03);
+            let mut v = Vector::new(0.0, -1.0, 0.0);
+            v[axis] = sign * 2.0;
+            place(&mut sim, 0, p, v);
+            for _ in 0..12 {
+                sim.step();
+            }
+            let v = velocity(&sim, 0);
+            // Predictive soft contact dissipates some of the ideal 55% rebound.
+            // Require a useful 45–60% return, with no added collision energy.
+            let rebound = -v[axis] * sign / 2.0;
+            assert!(
+                (0.45..=0.60).contains(&rebound),
+                "axis={axis}, sign={sign}: {v:?}"
+            );
+            assert!((v.y + 1.0).abs() < 0.001, "wall slowed the fall: {v:?}");
+        }
+    }
+}
+
+#[test]
+fn pressure_against_a_wall_does_not_hold_a_ball_above_the_bars() {
+    for axis in [0, 2] {
+        let mut sim = world(SimulationConfig {
+            height: 5.0,
+            ..SimulationConfig::default()
+        });
+        isolate(&mut sim, &[0]);
+        let mut p = Vector::new(0.6, 2.0, 0.0);
+        p[axis] = if axis == 0 {
+            radius(0)
+        } else {
+            -sim.config.depth / 2.0 + radius(0)
+        };
+        place(&mut sim, 0, p, Vector::ZERO);
+        let mut acceleration = [0.0; 3];
+        acceleration[axis] = -100.0;
+        sim.apply(SimulationInput {
+            acceleration,
+            height: 5.0,
+            ..SimulationInput::default()
+        })
+        .unwrap();
+        for _ in 0..HZ / 4 {
+            sim.step();
+        }
+        assert!((velocity(&sim, 0).y + sim.config.gravity * 0.25).abs() < 0.005);
+        assert!(
+            (position(&sim, 0).y - (2.0 - 0.5 * sim.config.gravity * 0.25_f32.powi(2))).abs()
+                < 0.012
+        );
+    }
+}
+
+#[test]
 fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
     for speed in [1.0, 2.3, 5.0, 10.0, 20.0] {
         let mut sim = world(SimulationConfig {

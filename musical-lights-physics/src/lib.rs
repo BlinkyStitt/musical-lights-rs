@@ -15,6 +15,7 @@ pub const MIN_HEIGHT: f32 = 0.40;
 pub const RESIZE_TICKS: u32 = HZ * 3 / 10;
 pub const CLEARANCE: f32 = 0.004;
 pub const BASELINE: f32 = 0.003;
+pub const WALL_RESTITUTION: f32 = 0.55;
 pub const SIZE_RATIOS: [f32; COUNT] = [
     0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5, 0.65, 1.0, 1.2, 0.8, 1.4, 0.55,
     0.7, 1.1, 1.6, 0.9, 1.3, 0.6,
@@ -209,11 +210,28 @@ impl Simulation {
             (Vector::Z, Vector::new(0.0, 0.0, -config.depth / 2.0)),
             (-Vector::Z, Vector::new(0.0, 0.0, config.depth / 2.0)),
         ] {
+            // Vertical walls shed tangential load instead of pinning spheres.
+            // Keep the floor, ceiling, balls and bars on the configured material.
+            let vertical = normal.y == 0.0;
             world.insert(
                 RigidBodyBuilder::fixed().translation(position),
                 ColliderBuilder::halfspace(Unit::new_unchecked(normal))
-                    .friction(config.friction)
-                    .restitution(config.restitution),
+                    .friction(if vertical { 0.0 } else { config.friction })
+                    .friction_combine_rule(if vertical {
+                        CoefficientCombineRule::Min
+                    } else {
+                        CoefficientCombineRule::Average
+                    })
+                    .restitution(if vertical {
+                        WALL_RESTITUTION
+                    } else {
+                        config.restitution
+                    })
+                    .restitution_combine_rule(if vertical {
+                        CoefficientCombineRule::Max
+                    } else {
+                        CoefficientCombineRule::Average
+                    }),
             );
         }
         let (ceiling, _) = world.insert(

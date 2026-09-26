@@ -128,7 +128,11 @@ export class PhysicsView {
     this.input[28] = this.pointerPoint.x; this.input[29] = this.pointerPoint.y; this.input[30] = 0;
   }
   orientation(beta, gamma, angle) { this.tilt = this.rotate(Math.sin(gamma * Math.PI / 180) * 2, -Math.sin(beta * Math.PI / 180) * 2, angle); }
-  deviceAcceleration(x, y, angle) { this.acceleration = this.rotate(-x, -y, angle); this.accelerationAt = performance.now(); }
+  deviceAcceleration(x, y, z, angle) {
+    this.acceleration = this.rotate(-x, -y, angle);
+    this.acceleration[2] = -z;
+    this.accelerationAt = performance.now();
+  }
   rotate(x, y, angle) { const a = angle * Math.PI / 180; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), 0]; }
   measurePointer() { this.motion.bounds = this.layer.getBoundingClientRect(); }
   measure() {
