@@ -54,14 +54,14 @@ p { line-height: 1.65; }
 h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .mic-status { font-size: .74rem; color: var(--muted); background: var(--paper); border: 1px solid var(--line); border-radius: 50px; padding: .4rem .8rem; margin: 0; text-align: center; }
 .spectrum-panel { container-type: inline-size; position: relative; padding: 2.2rem 1.5rem 1rem 3.3rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
-#dancinglights { --balloon-headroom: 5%; position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); height: clamp(210px, 28vw, 320px); }
-#dancinglights::before { content: ""; position: absolute; inset: var(--balloon-headroom) 0 0; background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); pointer-events: none; }
+#dancinglights { --balloon-headroom: 40%; --plot-side-inset: 0%; --plot-baseline: 3px; padding-inline: var(--plot-side-inset); position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); height: clamp(210px, 28vw, 320px); }
+#dancinglights::before { content: ""; position: absolute; inset: var(--balloon-headroom) var(--plot-side-inset) var(--plot-baseline); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); pointer-events: none; }
 .balloon-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; contain: layout paint; pointer-events: none; }
 .balloon-layer canvas { display: block; width: 100%; height: 100%; }
 .bark-group { position: relative; min-width: 0; }
 .meter { position: relative; height: 100%; min-width: 0; }
 .meter:focus-visible { z-index: 2; }
-.meter-track { position: absolute; inset: var(--balloon-headroom) 0 0; pointer-events: none; }
+.meter-track { position: absolute; inset: var(--balloon-headroom) 0 var(--plot-baseline); pointer-events: none; }
 .physics-controls { font-size: .8rem; margin-top: 1rem; }
 .physics-controls summary { cursor: pointer; }
 .physics-controls label { display: block; margin: .5rem 0; }
@@ -70,7 +70,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .physics-status { margin: 0; font-size: .8rem; }
 .audio-card[data-expanded] .physics-controls { display: none; }
 .audio-card[data-expanded] .physics-status:not(:empty) { position: absolute; bottom: 1rem; z-index: 2; background: var(--surface); }
-.meter-guide { position: absolute; top: var(--balloon-headroom); bottom: 3px; left: -2.6rem; display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
+.meter-guide { position: absolute; top: var(--balloon-headroom); bottom: var(--plot-baseline); left: calc(var(--plot-side-inset) - 2.6rem); display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .meter-guide > :first-child { transform: translateY(-50%); }
 .meter-guide > :last-child { transform: translateY(50%); }
 .spectrum-labels { display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; padding-top: 1rem; }
@@ -130,7 +130,7 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   button { font-size: .75rem; padding: .65rem .7rem; }
   .display-note { flex-direction: column; gap: .15rem; }
   .spectrum-panel { padding-right: .65rem; padding-left: 3rem; }
-  .meter-guide { left: -2.55rem; }
+  .meter-guide { left: calc(var(--plot-side-inset) - 2.55rem); }
   .how-it-works { grid-template-columns: 1fr; gap: 1rem; }
   footer { flex-direction: column; gap: .5rem; }
 }

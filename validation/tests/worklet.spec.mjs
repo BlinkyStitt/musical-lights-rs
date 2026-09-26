@@ -26,20 +26,20 @@ function tone(length, frequency = 50, gain = 0.5) {
   return Float32Array.from({ length }, (_, i) => Math.sin(i * 2 * Math.PI * frequency / 48000) * gain);
 }
 
-test('treble emphasis reveals a weaker high tone while preserving its measured partial loudness', () => {
+test('browser preserves the measured balance of a weaker high tone', () => {
   const p = processor();
   const samples = tone(48000, 1000, .02);
   const treble = tone(48000, 8000, .01);
   for (let i = 0; i < samples.length; i++) samples[i] += treble[i];
   for (let i = 0; i < samples.length; i += 128) expect(p.push(samples.subarray(i, i + 128))).toBe(true);
   const state = p.snapshot();
-  const measuredRatio = state[6 + 21 * 5] / state[6 + 8 * 5];
-  const heightRatio = state[2 + 21 * 5] / state[2 + 8 * 5];
+  const measuredRatio = state[6 + 21 * 4] / state[6 + 8 * 4];
+  const heightRatio = state[3 + 21 * 4] / state[3 + 8 * 4];
   expect(measuredRatio).toBeGreaterThan(.30);
   expect(measuredRatio).toBeLessThan(.34);
-  expect(heightRatio).toBeCloseTo(2 * measuredRatio, 6);
-  expect(heightRatio).toBeGreaterThan(.6);
-  expect(state[2 + 23 * 5]).toBeLessThan(.00001);
+  expect(heightRatio).toBeCloseTo(measuredRatio, 6);
+  expect(heightRatio).toBeGreaterThan(.30);
+  expect(state[3 + 23 * 4]).toBeLessThan(.00001);
 });
 
 test('a steady quiet tone adapts its bars without holding the white glow on', () => {
@@ -53,23 +53,25 @@ test('a steady quiet tone adapts its bars without holding the white glow on', ()
     }
     if (second >= 10) {
       const state = p.snapshot();
-      const heights = Array.from({ length: 24 }, (_, band) => state[2 + 5 * band]);
+      const heights = Array.from({ length: 24 }, (_, band) => state[4 + 4 * band]);
       const strongest = heights.indexOf(Math.max(...heights));
-      expect(state[5 + 5 * strongest], `white glow at ${second}s`).toBe(0);
+      expect(state[5 + 4 * strongest], `white attack timestamp at ${second}s`).toBeLessThan(state[0] - .1);
       expect(p.value.wasm.processor_sones(p.value.processor)).toBeCloseTo(4.957, 3);
       if (second === 10) early = heights[strongest];
       if (second === 100) {
         expect(heights[strongest]).toBeLessThan(early - .002);
-        expect(state).toHaveLength(122);
+        expect(state).toHaveLength(99);
         expect(Math.max(...heights)).toBeGreaterThan(.75);
         expect(Math.max(...heights)).toBeCloseTo(.8, 6);
       }
     }
   }
+  // A distinct new articulation after a quiet gap, rather than a higher retained peak.
+  expect(p.push(new Float32Array(12000))).toBe(true);
   const louder = tone(4800, 1000, .04);
   expect(p.push(louder)).toBe(true);
   const attacked = p.snapshot();
-  expect(Array.from({ length: 24 }, (_, band) => attacked[5 + 5 * band])).toContain(1);
+  expect(Array.from({ length: 24 }, (_, band) => attacked[5 + 4 * band]).some(at => at > attacked[0] - .1)).toBe(true);
 });
 
 test('audio WASM has no imports and callback boundaries cannot change analysis or attacks', () => {
@@ -91,7 +93,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages).toHaveLength(1);
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
-    expect(p.messages[0].data.state.length).toBe(122);
+    expect(p.messages[0].data.state.length).toBe(99);
     expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sessionId', 'sones', 'state', 'type']);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));
@@ -170,8 +172,8 @@ test('diagnostic frames preserve all 240 measurements and bound a stalled receiv
     if (reference) expect(rows).toEqual(reference);
     else reference = rows;
     for (const row of rows) {
-      const bands = row.slice(316, 340), peak = Math.max(...bands);
-      const targets = bands.map((_, i) => row[342 + 5 * i]), top = Math.max(...targets);
+      const bands = row.slice(291, 315), peak = Math.max(...bands);
+      const targets = bands.map((_, i) => row[367 + 4 * i]), top = Math.max(...targets);
       for (let i = 0; i < 24; i++) {
         const integrated = row.slice(2 + 10 * i, 12 + 10 * i).reduce((a, b) => a + b, 0) * .1;
         expect(row[242 + i]).toBeCloseTo(integrated, 6);

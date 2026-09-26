@@ -1,16 +1,17 @@
 //! A DOM-free numeric WASM interface, owned by one AudioWorklet instance.
 //! All allocation occurs when creating the processor. No browser API imports.
 use musical_lights_core::audio::{
+    browser::{BrowserPresentation, BrowserSnapshot},
     loudness::{Calibration, LoudnessError, LoudnessFrame, LoudnessMeter, SAMPLE_RATE, SoundField},
     partial::{HOP, PartialLoudnessMeter},
-    visual::{DISPLAY_BANDS, DisplaySnapshot, VisualGain},
+    visual::VisualGain,
 };
 
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
-const TRACE_STRIDE: usize = 340 + SNAPSHOT_SIZE;
+const TRACE_STRIDE: usize = 364 + SNAPSHOT_SIZE;
 
-const SNAPSHOT_SIZE: usize = DisplaySnapshot::<DISPLAY_BANDS>::TRANSPORT_LEN;
+const SNAPSHOT_SIZE: usize = BrowserSnapshot::TRANSPORT_LEN;
 
 struct AudioProcessor {
     meter: LoudnessMeter,
@@ -18,7 +19,7 @@ struct AudioProcessor {
     partial_hop: usize,
     iso_frame: LoudnessFrame,
     gain: VisualGain,
-    display: DisplaySnapshot<DISPLAY_BANDS>,
+    display: BrowserPresentation,
     input: [f32; INPUT_CAPACITY],
     snapshot: [f64; SNAPSHOT_SIZE],
     started: bool,
@@ -49,7 +50,7 @@ impl AudioProcessor {
                 specific_sones_per_bark: [0.0; 240],
             },
             gain: VisualGain::default(),
-            display: DisplaySnapshot::new(0.0),
+            display: BrowserPresentation::new(0.0),
             input: [0.0; INPUT_CAPACITY],
             snapshot: [0.0; SNAPSHOT_SIZE],
             started: false,
@@ -80,7 +81,7 @@ impl AudioProcessor {
         if !self.started {
             self.meter.reset(first_sample);
             self.partial.reset(first_sample);
-            self.display = DisplaySnapshot::new(first_sample as f64 / SAMPLE_RATE as f64);
+            self.display = BrowserPresentation::new(first_sample as f64 / SAMPLE_RATE as f64);
             self.started = true;
         }
         // Validate before either calibration or model state changes.
@@ -129,16 +130,17 @@ impl AudioProcessor {
             let trace_dropped = &mut self.trace_dropped;
             if self
                 .partial
-                .push_pcm(
+                .push_pcm_with_spectrum(
                     &self.input[offset..offset + count],
                     first_sample + offset as u64,
-                    |frame| {
+                    |frame, spectrum| {
                         display.push(
                             frame.sample_index as f64 / SAMPLE_RATE as f64,
                             gain.map_browser_partial(
                                 frame.short_term_sones.map(|s| s as f32),
                                 iso.sones,
                             ),
+                            spectrum,
                             reduced,
                         );
                         if trace_enabled {
@@ -155,13 +157,9 @@ impl AudioProcessor {
                                 row[267..291].copy_from_slice(&frame.instantaneous_sones);
                                 row[291..315].copy_from_slice(&frame.short_term_sones);
                                 row[315] = gain.factor();
-                                for (i, value) in row[316..340].iter_mut().enumerate() {
-                                    *value = f64::from(
-                                        frame.short_term_sones[i] as f32
-                                            * VisualGain::browser_treble_weight(i),
-                                    );
-                                }
-                                display.write_transport(&mut row[340..]);
+                                row[316..340].copy_from_slice(&display.novelty);
+                                row[340..364].copy_from_slice(&display.magnitude);
+                                display.snapshot.write_transport(&mut row[364..]);
                                 *trace_count += 1;
                             } else {
                                 *trace_dropped = trace_dropped.saturating_add(1);
@@ -209,7 +207,7 @@ impl AudioProcessor {
                     };
                     self.gain = VisualGain::default();
                     self.latest_sones = 0.0;
-                    self.display = DisplaySnapshot::new(
+                    self.display = BrowserPresentation::new(
                         (first_sample + (offset + count) as u64) as f64 / SAMPLE_RATE as f64,
                     );
                 }
@@ -255,14 +253,14 @@ macro_rules! export {
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
 export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace_enabled = enabled != 0; p.trace_count = 0; p.trace_dropped = 0; });
 export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ptr());
-export!(processor_trace_version(handle) -> u32, _p => 2);
+export!(processor_trace_version(handle) -> u32, _p => 4);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);
 export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);
 export!(processor_trace_clear(handle) -> (), p => { p.trace_count = 0; });
 export!(processor_input(handle) -> *const f32, p => p.input.as_ptr());
 export!(processor_capacity(handle) -> usize, _p => INPUT_CAPACITY);
-export!(processor_snapshot(handle) -> *const f64, p => { p.display.write_transport(&mut p.snapshot); p.snapshot.as_ptr() });
+export!(processor_snapshot(handle) -> *const f64, p => { p.display.snapshot.write_transport(&mut p.snapshot); p.snapshot.as_ptr() });
 export!(processor_snapshot_length(handle) -> usize, _p => SNAPSHOT_SIZE);
 export!(processor_process(handle, len: usize, first: u64) -> u32, p => u32::from(p.process(len, first)));
 export!(processor_motion(handle, reduced: u32) -> (), p => { p.reduced = reduced != 0; });

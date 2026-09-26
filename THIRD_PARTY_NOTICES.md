@@ -34,3 +34,17 @@ Browser builds containing this model must retain this notice, the GPL license,
 and access to corresponding source. The unchanged upstream implementation is
 fetched separately for the offline validation harness in `validation/partial`.
 The existing ISO model's separate Apache-2.0 notice above still applies.
+
+# Browser presentation algorithms
+
+The browser-only motion filter implements the equations of Casiez, Roussel,
+and Vogel, "1€ Filter: A Simple Speed-based Low-pass Filter for Noisy Input in
+Interactive Systems", CHI 2012, DOI 10.1145/2207676.2208639. Its shared-band
+coefficient is an application adaptation. Reference: https://gery.casiez.net/1euro/.
+
+The spectral novelty calculation implements Böck and Widmer, "Maximum Filter
+Vibrato Suppression for Onset Detection", DAFx 2013:
+https://phenicx.upf.edu/system/files/publications/Boeck_DAFx-13.pdf.
+Source-band attribution, loudness eligibility, bounded pending candidates,
+rearming, and white pulses are application-specific presentation choices.
+No upstream implementation source is bundled for these two algorithms.

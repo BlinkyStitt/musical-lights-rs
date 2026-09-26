@@ -8,7 +8,7 @@ export async function physicsState(page) {
   return page.evaluate(() => {
     const view = document.querySelector('#dancinglights').physics;
     const state = view.current, layout = view.layout;
-    return { tick: state[2], height: state[1], metrics: { ...view.metrics }, config: view.config,
+    return { tick: state[2], height: state[1], ceiling: state[layout[17]], barMax: state[layout[17] + 1], metrics: { ...view.metrics }, config: view.config,
       bars: Array.from(state.slice(layout[9], layout[10])), edges: Array.from(view.edges),
       balls: Array.from({ length: layout[0] }, (_, i) => {
         const o = 3 + i * layout[8];
@@ -45,8 +45,8 @@ export async function syntheticAudio(page, permission = 'granted') {
       // Partial frames use an end-exclusive clock, potentially one quantum
       // ahead of currentTime. Always supersede the last real/fake packet.
       const at = window.audioNow = Math.max(window.audioNow, window.lastAnalysisTime ?? 0) + .01;
-      const state = new Float64Array(122); state[0] = at;
-      for (let i = 0; i < 24; i++) state.set([levels[i], 0, at + .35, edge, 0], 2 + i * 5);
+      const state = new Float64Array(99); state[0] = at; state[1] = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0; state[2] = 4;
+      for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], edge ? at : -1, 0], 3 + i * 4);
       window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
     };
   }, { permission });

@@ -1,174 +1,142 @@
-# Source-band loudness and 40 ms strokes
+# Accurate loudness, calmer motion, and contained balls
 
-The complete Mac Chromium/WebKit suite passes **159 checks** after the session,
-small-movement, and treble-display repairs described below. All four focused calibration checks also pass. See
-[PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18) for current CI
-and preview status. The PR remains draft pending physical-phone acceptance.
+This revision of [PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18)
+removes frequency emphasis, stabilizes browser motion, replaces renewable white
+holds with prominent-attack pulses, and closes the physical enclosure.
+Physical iPhone acceptance remains pending. Mac WebKit is not physical-phone proof.
 
-This supersedes the [80 ms / ISO-band report](../gain-stroke-results/README.md).
-Physical iPhone acceptance remains pending; Mac WebKit does not satisfy that gate.
+## Measurement accuracy
 
-## Measurement and mapping
+The MGB1997 partial-loudness equations, GM2002 short-term integration, calibration,
+selected channel, and ISO measurements are unchanged. The browser still uses a
+causal 2048-sample periodic Hann FFT at 48 kHz, advancing every 96 samples, with
+free-field monaural weighting and 0.25-ERB auditory filters. Assigning partial
+loudness to 24 disjoint frequency slices is this application's representation;
+the partial values do not sum to ISO total loudness. The fixed FFT front end is
+an application adaptation, not a claim of complete published-model conformance.
 
-The browser now uses Moore–Glasberg–Baer partial loudness assigned to disjoint
-source-frequency slices, with Glasberg–Moore short-term integration. The model
-uses the selected calibrated channel, one causal periodic Hann window of 2,048
-samples at 48 kHz, a 96-sample hop, free-field monaural weighting, and 0.25-ERB
-filter spacing. The complete mixture sets the filter shapes; the other slices
-and 15.5–20 kHz residual spectrum mask each target. Partial values do not sum to
-ISO total loudness. ISO total, all 240 specific values, and terminal/hardware
-behavior remain unchanged. No display sharpening or suppressive thresholds
-were added. Browser heights now receive the treble emphasis described below,
-then one shared adaptive gain and common headroom scale preserve the emphasized
-ratios. Raw partial measurements and their acoustic edge inputs are unchanged.
+The [independent oracle](model.json) remains pinned to
+[`82de790f79c5b358040861e8bdb906a55009b117`](https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117).
+It checks identical spectral inputs, independent NumPy PCM analysis, masking,
+equal-loudness tones, broadband sound, bursts, silence, and callback partitioning.
+No acceptance thresholds have been relaxed. ISO/MoSQiTo comparisons also pass.
 
-The [model report](model.json) compares the unmodified C++ oracle at
-[`82de790f79c5b358040861e8bdb906a55009b117`](https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117)
-against the Rust implementation on identical spectral inputs. Maximum absolute
-specific-partial error is 1.29e-14 sones/ERB; short-term error is 3.56e-15 sones.
-It also compares independent NumPy FFT/PCM analysis, equal-loudness tones,
-broadband, weak targets beside stronger maskers, separated tones, bursts, and
-silence. The masking example leaves 0.51092% of the target's unmasked loudness,
-matching the oracle. Callback sizes 1/96/128/240/4096 produce identical frames.
+[Production before/after traces](contained-display/presentation.json) confirm
+bit-identical ISO and raw partial measurements against `76af307` for stationary,
+two-tone, burst, exercise, and silence inputs. The former 2x treble shelf is
+removed; bass is not boosted. Shared gain and headroom limiting preserve measured
+ratios to within 2e-7. [Selectivity checks](worklet.json) cover all 24 centers,
+boundaries, and both sweep directions before and after presentation filtering.
+A scalar SPL calibration does not establish the microphone's frequency response.
 
-All 24 settled center tones exceed 90% in the intended source band. Every tested
-boundary has each nonadjacent bar below 10% of the peak. Upward/downward 24-second
-sweeps pass that nonadjacent criterion against the fixed causal window center;
-no delay is fitted. [Production WASM checks](worklet.json) repeat the center,
-boundary, and sweep checks after mapping. Emphasized-input ratio error stays below 2e-7. The
-before/after production traces have bit-identical ISO fields for stationary,
-two-tone, burst, silence, and exercise inputs.
+## Browser presentation
 
-## Small movements and treble visibility
+The [One Euro filter](https://gery.casiez.net/1euro/) uses minimum and derivative
+cutoffs of 1 Hz and beta 0.8. One coefficient, determined by the largest absolute
+filtered derivative, applies to every source band on the 2 ms audio clock.
+Rising and falling responses are symmetric; settled values and proportional
+input histories are preserved. Filtering changes motion, not measured sones.
+The native regression requires a half-height step to reach 90% within 32 ms and
+at least 60% attenuation of simultaneous, out-of-phase 8 Hz ±10% fluctuations.
+The production implementation is compared against independent scalar equations.
 
-The original controller used full-height acceleration for every movement. A
-1% correction completed in 4 ms and could launch a resting ball 32.61 cm above
-the bar even with restitution 0.15. The controller now scales its speed and
-acceleration to the requested travel, keeping 40 ms for a stable stroke from
-rest. On retargeting, the scale also accommodates existing velocity; velocity
-is preserved and reversals still brake. This changes physical motion without
-adding a threshold, height hold, or smoothing to the loudness measurements.
+[SuperFlux](https://phenicx.upf.edu/system/files/publications/Boeck_DAFx-13.pdf)
+novelty reuses the same FFT. Source attribution, loudness eligibility, rearming,
+and pulses are presentation choices. Spectral candidates can wait up to 30 ms
+for the same attack's integrated loudness to qualify; a measured loudness rise
+rejects spectral leakage at tone offsets. Tests cover sustained tones, vibrato,
+tremolo, gentle swells, repeated attacks, masked weak targets, silence, startup,
+and gain-only changes. This is prominent-attack detection, not note recognition.
 
-The [motion regression](responsive-display/motion.json) reduces that 1% rise's
-ball clearance to 1.10 mm. A repeating 8 Hz, ±0.5% fluctuation remains bounded
-and stops when its input becomes steady. Full-height strokes still arrive in
-41.67 ms. The [new reversal trace](responsive-display/strokes.json) arrives in
-58.33 ms, compared with the previous 50 ms; this is reported separately from
-rest-to-rest arrival. The trace includes all 24 balls at four world heights.
+White is confined to a one-pixel inner border with a 100 ms quadratic fade.
+It reaches exactly zero, has no renewable hold, and does not whiten the fill.
+Reduced Motion halves pulse intensity. Terminal and hardware behavior is unchanged.
+See [the complete numerical and transport contract](../loudness.md).
 
-Treble was present in the analysis but visually understated in mixed sound.
-To address the requested balance change, browser heights now use a fixed,
-gentle shelf: 1x through 2 kHz, increasing linearly with log2 frequency to 2x
-at 8 kHz, then constant. The shelf is evaluated at each source band's center.
-It is an artistic display emphasis, not a change to perceived loudness or a
-claim that raw sones ratios are still displayed unchanged. Zero remains zero;
-masking suppression and measured acoustic edges retain their original values.
-Terminal and hardware mapping remain unchanged.
+## Closed enclosure and restrained hops
 
-For a .02-peak 1 kHz tone plus a .01-peak 8 kHz tone, the treble-to-midrange
-height ratio rises from 0.3210 to 0.6421. [Production comparison](responsive-display/treble.json)
-confirms bit-identical ISO and raw partial fields across 8,000 frames of this
-mixture, white noise, low-pass noise, and silence. All 24 centers, boundaries,
-and both sweeps still pass the existing selectivity criteria after emphasis.
-The shared gain still uses the same adaptation settings and common headroom
-limit, now applied to the emphasized inputs.
+A real ceiling collider matches the visible boundary. Upper clearance reserves
+the largest sphere diameter, a hop allowance, and 4 mm. The minimum enclosure is
+0.40 m; initial placement fits without overlap. Shrinking waits for vacant
+clearance, preserving positions and velocities, while the camera fits the whole
+transitional enclosure and keeps guides and hit regions aligned.
 
-Current validation passes all 42 core tests in four feature configurations,
-the Clippy matrix, 23 physics tests (22 together plus the additional ball-launch
-regression), the worklet and Leptos checks/builds, and the unchanged ISO/MoSQiTo
-and partial-model oracle comparisons. The full Chromium/WebKit run passes all
-159 checks with the serial startup guard, one worker, and zero retries.
+Only excess upward velocity on separation from a bar-driven support chain is
+dissipated, limiting additional free-flight hops to `min(0.08*height, 0.05)` m,
+halved for Reduced Motion. Stacks propagate support. Carrying, ordinary drops,
+lateral/angular motion, and external forces remain intact. This launch limit is
+an animation choice, not a material measurement. Restitution remains 0.15.
 
-All six [current timing runs](responsive-display/browser-timing.json) pass the
-unchanged host gates at 59.54–60.10 FPS, p95 frame time 16.7–18 ms, and sampled
-physics debt below 8.31 ms. Chromium portrait fullscreen has 0.392% of frames
-over 25 ms (maximum 50 ms); the other runs have none. No simulation time is
-discarded. Portrait physics costs 4.83 ms/tick in Chromium and 5.25 ms/tick in
-WebKit, higher than the previous 4.12/4.03 ms despite fewer overload ticks
-(1,607/1,908 versus 3,525/3,491). Normal and landscape physics costs are lower.
-These results do not establish physical-phone performance; that gate remains.
+Near the ceiling, contact stiffness and positional stabilization increase to
+prevent compression through the roof. Ordinary collisions retain their prior
+response. Eight force-solver iterations, sphere CCD, the 128-contact-substep cap,
+and retained simulation time remain. [Physics details](../physics.md) distinguish
+force iterations from the additional positional stabilization passes.
 
-Reproduce the comparison with `node validation/partial/treble.mjs <baseline-wasm>`;
-the baseline is the production worklet from `51f805d`. The native regression
-`tiny_bar_corrections_do_not_launch_resting_balls_high` fails on that baseline.
+[Production stroke traces](contained-display/strokes.json) retain 41.67 ms
+rest-to-rest arrival, within the 50 ms requirement. Reversal is separate:
+25 ms to change direction and 58.33 ms to arrive. Normal stroke/minimum remains
+40 ms in both directions; Reduced Motion remains 320 ms.
 
-## Default input and quieter ball rebounds
+## Timing and validation
 
-The `/phone/` route previously checked generated audio automatically while the
-main status still said “Listening · Mic on.” That started a repeating test
-exercise without requesting the microphone, causing activity unrelated to room
-audio. Both routes now default to microphone input. Test tones require explicit
-selection, and their status says “Test audio · Mic off.” The status reads the
-active session source, so changing the next-start setting cannot relabel an
-existing capture. Browser regressions reproduce the old source mismatch and
-check silent microphone input, a real input signal, and return to silence.
+For the 0.2-peak 1 kHz burst in [presentation.json](contained-display/presentation.json),
+input-onset to 10%/50%/90% response is 10/24/38 ms for instantaneous partial
+loudness and 18/40/76 ms for short-term loudness. Mapped targets reach those
+fractions in 8/14/18 ms and filtered targets in 16/22/34 ms; mapping saturation
+explains why display fractions arrive earlier than loudness fractions. The
+white attack is accepted at 12 ms. These are signal-dependent boundaries, not
+additive delays. The window spans 42.67 ms; transport, physics, and rendering
+are measured separately.
 
-Default restitution is now 0.15 instead of 0.55: ideal stationary-surface rebound
-height falls from 30.25% to 2.25% of the drop height. A native regression requires
-a 50 cm drop to rebound less than 2.5 cm and settle on quiet bars. The
-[measured rebound](quiet-input/rebound.json) falls from 15.10 cm to 1.11 cm. Stroke timing,
-contact-only launches, gravity, CCD, containment, and the solver remain intact.
-The earlier timing comparisons below used restitution 0.55; new-default timing
-is recorded separately in [quiet-input/browser-timing.json](quiet-input/browser-timing.json).
-All six new-default host runs pass at 60.00–60.08 FPS, with p95 frame time
-16.7–17 ms, no frames over 25 ms, and sampled physics debt below 8.31 ms.
-Portrait fullscreen still reaches the substep cap frequently; physical-phone
-acceptance remains pending.
+The diagnostics-off WASM comparison adds 1.1–2.9% CPU time over `76af307` across
+the five fixtures. The repeating exercise takes 894.4 ms to process 4 seconds
+of PCM (22.36% of one host core), versus 876.0 ms before this change. These
+offline measurements do not establish a phone's real-time processing budget.
 
-## Session and recording repairs
+All 48 core tests pass in four feature configurations, with the Clippy matrix,
+all 26 native physics tests, worklet and Leptos checks/builds, pinned references,
+and all 159 Chromium/WebKit checks (one worker, zero retries). Replay remains
+identical at 30/60/120 render FPS. Full-height compression covers heights
+0.40, 0.415, 0.60, and 1.20 m, immediately and after three settling intervals;
+every sphere stays within the unchanged 5 mm ceiling tolerance.
 
-Every audio start receives a new identifier and initializes fresh diagnostics
-and source metadata, including microphone starts. Worklet packets carry the
-identifier; both the display consumer and recording reject stale sessions.
-Natural end, pause, resume, repeat changes, context interruption, and cleanup
-publish playback state. Ended callbacks from replaced buffer sources are ignored.
+All six [diagnostics-off runs](contained-display/browser-timing.json) pass the
+existing FPS, frame-time, debt, snapshot-age, and simulation-progress gates.
+Each uses the active repeating exercise, five seconds of warmup, and thirty
+seconds of measurement. No measured frame exceeds 25 ms, and no simulation time
+is discarded. Physics cost is compared with the previous `76af307` host results;
+these are separate runs, not controlled phone measurements.
 
-Phone acceptance requires the actively playing, repeating 24-tone exercise with
-diagnostics off. Any workload change invalidates both warmup and measurement
-immediately. Resume preserves invalid reasons. Exercise PCM is normalized to
-unit peak before applying the selected amplitude; all permitted levels preserve
-the changing pattern and reach the advertised Float32 peak without clipping.
-The regressions reproduced the reviewed implementation's failures before repair.
+| Browser / layout | FPS | p95 frame ms | Max sampled debt ms | Physics ms/tick, previous → current | Capped ticks |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chromium / normal | 60.00 | 16.7 | 8.27 | 2.37 → 1.27 | 0 |
+| Chromium / portrait-fullscreen | 60.00 | 16.8 | 8.27 | 4.83 → 2.95 | 14 |
+| Chromium / landscape-fullscreen | 60.00 | 16.7 | 8.23 | 1.38 → 0.84 | 0 |
+| WebKit, iPhone profile / normal | 60.92 | 18.0 | 8.00 | 2.24 → 1.41 | 0 |
+| WebKit, iPhone profile / portrait-fullscreen | 60.10 | 18.0 | 8.00 | 5.25 → 3.37 | 16 |
+| WebKit, iPhone profile / landscape-fullscreen | 60.11 | 18.0 | 8.00 | 1.70 → 0.93 | 0 |
 
-Normal transport remains one acknowledged 122-f64 snapshot. Optional v3 traces
-have 462 f64 values per row and distinguish the ISO timestamp and measurements,
-partial window-end timestamp, instantaneous and short-term partial bands, gain,
-24 emphasized presentation inputs, and targets. Historical v2 traces retain
-their 438-value layout. Trace packets remain bounded at 64 rows, recordings at 50,000 rows,
-and physics samples at 25,000; drops remain visible.
+Portrait fullscreen reaches the 128-substep cap on 14/16 ticks in Chromium/WebKit;
+the excess demand remains visible in the report. It does not accumulate debt or
+discard time. Other layouts have no capped ticks in these runs.
 
-## Motion and latency
+The separate [instrumented 25 ms burst run](contained-display/latency.json)
+observes 1% bar/render height at 93.3–98.7 ms in Chromium and 112.0–130.7 ms in
+WebKit from the source's scheduled onset. Historical partial-display results
+were 72–88 ms and 109.3–128 ms respectively; calmer filtering adds response time.
+The measured partial-loudness crossings are unchanged at 34–36 ms / 64–66 ms
+on these browser paths. This browser/source-clock measurement is distinct from
+the direct-PCM step above and the 41.67 ms physics-receipt stroke. Sampled
+transport age p95 is 4.0 / 1.33 ms. Chromium's -2.67 ms minimum is one audio
+quantum; this clock comparison cannot establish physical transport latency at
+that resolution. Collider and render readings
+are sampled once per animation frame, so coincident crossings do not imply zero
+render latency. Raw packet and frame timestamps are retained in the compressed
+artifact.
 
-Normal strokes and their configuration minimum are 0.040 seconds in either
-direction. Reduced Motion remains 0.320 seconds. The controller preserves
-velocity, brakes on reversal, and derives `v=2H/T`, `a=4H/T²`. Actual colliders,
-contact-only launches, sphere CCD, eight solver iterations, open-top containment,
-retained simulation time, and the 128-substep cap are retained.
-
-[Current production stroke traces](responsive-display/strokes.json) cover four world heights and all 24
-balls. Rest-to-rest strokes arrive within 1% in **41.67 ms**, within the 50 ms
-requirement at 120 Hz. The sampled near-peak reversal arrives in **58.33 ms**;
-direction changes after 25 ms in these traces. The
-1.2/2 m full-stroke cases reach the substep cap and report it. Twenty-three native
-physics tests pass, including single-ball and six-ball stack contact, repeated
-24-ball strokes, reversals, containment, persistent overlap, and identical
-30/60/120 FPS replay. Browser checks compare rendered geometry with interpolated
-collider snapshots, including under Reduced Motion.
-
-For a 1 kHz step at 0.02 peak PCM, measured from the input onset:
-
-| Response boundary | 10% | 50% | 90% |
-| --- | ---: | ---: | ---: |
-| Hann-window energy | 14 ms | 22 ms | 30 ms |
-| Instantaneous partial loudness | 4 ms | 10 ms | 18 ms |
-| Short-term partial loudness | 10 ms | 26 ms | 48 ms |
-
-These are nonlinear, signal-dependent response measurements, not additive fixed
-latencies. The window spans 42.67 ms and its center is 21.33 ms behind its end.
-Worklet delivery, physics receipt, travel, snapshot interpolation, and rendering
-remain separate. The physics arrival requirement starts at physics receipt.
-
-## Validation and reproduction
+Failed model, containment, or performance checks block promotion. Physical-phone
+acceptance and the existing production deployment gate remain in force.
 
 Run from the repository root with `.tools/bin` on PATH:
 
@@ -176,117 +144,14 @@ Run from the repository root with `.tools/bin` on PATH:
 python3 validation/validate.py core worklet physics leptos reference
 python3 validation/validate.py browser
 node validation/partial/worklet.mjs
-node validation/stroke-report.mjs docs/partial-loudness-results/strokes.json
-node validation/phone-timing.mjs http://127.0.0.1:8104 docs/partial-loudness-results
+node validation/partial/presentation.mjs .cache/before-contained.wasm
+node validation/stroke-report.mjs docs/partial-loudness-results/contained-display/strokes.json
+node validation/phone-timing.mjs https://musical-lights.test docs/partial-loudness-results/contained-display
+node validation/partial/latency.mjs https://musical-lights.test
 ```
 
-The `reference` target now includes the pinned independent partial-loudness oracle
-and retains every ISO/MoSQiTo check. The oracle requires `clang++`; its upstream
-sources are fetched unchanged into `.cache/partial-oracle`. The production WASM
-comparison uses `.cache/iso-display-before-partial.wasm`, captured from `bead4aa`
-before integration. The browser suite and timing tool retain the serial startup
-guard and require macOS host access. The adapted model's GPL-3.0-or-later notice,
-license, and corresponding-source location are distributed with the worklet.
-
-## Host performance
-
-All six diagnostics-off runs pass the host timing gates: at least 59 FPS, p95
-frame time at most 18.5 ms, fewer than 1% of frames above 25 ms, bounded physics
-debt and snapshot age, no discarded simulation time, and less than three ticks
-of simulation drift. These are 30-second Mac measurements after five seconds
-of warmup, not physical-phone acceptance.
-
-| Browser / layout | Before → after FPS | After p95 frame | Before → after physics CPU/tick | Before → after capped ticks |
-| --- | ---: | ---: | ---: | ---: |
-| chromium-mac / normal | 60.00 → 60.00 | 16.7 ms | 1.68 → 2.38 ms | 0 → 68 |
-| chromium-mac / portrait-fullscreen | 59.90 → 60.00 | 16.7 ms | 3.34 → 3.89 ms | 1570 → 3567 |
-| chromium-mac / landscape-fullscreen | 60.00 → 60.00 | 16.7 ms | 1.12 → 1.55 ms | 0 → 0 |
-| iphone-profile-webkit-mac / normal | 60.00 → 60.00 | 18.0 ms | 2.23 → 2.97 ms | 0 → 50 |
-| iphone-profile-webkit-mac / portrait-fullscreen | 60.00 → 60.00 | 18.0 ms | 3.88 → 4.14 ms | 1277 → 3511 |
-| iphone-profile-webkit-mac / landscape-fullscreen | 60.00 → 60.00 | 18.0 ms | 1.64 → 2.27 ms | 0 → 0 |
-
-No measured frame exceeded 25 ms. Maximum sampled physics debt was below
-8.31 ms in every layout. Portrait fullscreen frequently reaches the 128-substep
-cap, especially with 40 ms strokes. This remains a material physical-phone
-acceptance concern; the limit is visible and simulation time is retained.
-
-The [baseline](baseline/browser-timing.json) uses the archived 80 ms physics
-and ISO display with the **same corrected, peak-normalized exercise PCM** as
-the [new display](browser-timing.json). Both have diagnostics off. The initial
-IPv4 asset server later hit host socket-allocation failures (`EADDRNOTAVAIL`),
-so the new measurements serve identical built assets in-process via Playwright.
-AudioWorklet script loading uses the exact built script through a Blob URL
-because worklet module fetches bypass request routing. Audio, analysis, physics,
-and rendering all execute in their real browser threads. Measurement starts
-after warmup; this does not measure network/asset startup latency. No host
-network settings were changed. Use `https://musical-lights.test` as the URL
-argument to reproduce the in-process timing origin.
-
-The earlier source-input revision passed pinned core (41 tests × four feature
-configurations and the Clippy matrix),
-worklet, physics (20 tests), Leptos, ISO/MoSQiTo, and partial-reference validation.
-Its full browser suite passed **158 checks**, plus three startup-harness
-regressions and the exercise-PCM regression. A repeat during concurrent offline
-validation hit three Chromium page-load timeouts; the unchanged full suite
-then passed in isolation with the standard three workers and startup guard.
-
-The first Linux CI run subsequently failed six functional browser checks. Its
-fixtures assumed that a frozen browser audio clock was newer than an
-end-exclusive partial frame, that 500 ms always yielded more than 20 recorded
-inputs, and that a six-second buffer always finished within ten wall-clock
-seconds. Those fixtures now use monotonic packet clocks, observed input pulses,
-and accelerated playback to reach the browser's actual buffer-end callback.
-Calibration uses the capture context's clock rather than bridging two
-independent realtime contexts, and verifies that application cleanup closes it.
-The fixture leaves that context suspended until the application connects the
-complete worklet graph; resuming it inside fake microphone acquisition caused
-the two remaining startup failures. All four focused calibration checks pass
-with the corrected ordering.
-A local repeat also recorded a 256-sample callback gap: capture correctly
-stopped. Functional browser tests now run with one worker so concurrent live
-audio and offline stress tests do not contend. The startup guard, zero retries,
-model tolerances, motion limits, and dedicated performance gates are unchanged.
-
-A second Linux run passed 151 of 152 checks but stopped capture with a
-128-sample clock gap after tone pause/resume. Pausing now keeps the source
-connected: zero playback rate holds its position, and a shared playback gain
-mutes the held sample for both analysis and audible monitoring. Resume restores
-the same source. Natural completion is disconnected only on restart or cleanup;
-a generation token rejects ended callbacks from earlier playback states.
-The clock-gap check remains unchanged. Regressions measure silence and restored
-loudness across six pause/resume cycles and cover restart after natural end.
-The repaired Leptos build and all 158 Mac Chromium/WebKit checks pass.
-
-## Analysis cost and end-to-end onset
-
-The [production WASM comparison](worklet.json) processes four seconds of the
-normalized exercise in 46.8 ms with ISO alone and 878.8 ms with both models
-(about 22% of one realtime CPU budget on this Mac). Stationary/two-tone inputs
-cost 618–671 ms per four seconds; silence costs 193 ms per three seconds.
-These are offline elapsed-time samples, not AudioWorklet deadline guarantees.
-The independent model is materially more expensive. All 9,500 compared ISO
-frames remain bit-identical, and mapped partial-band ratio error stays below
-1.55e-7.
-
-The separate [instrumented burst runs](latency.json) capture real normal packets
-and rendered collider positions with diagnostics off. Each range covers five
-1 kHz burst onsets. The measurement threshold is 10% of that burst's measured
-peak; the collider/render threshold is 1% of usable full-height travel. These
-are different thresholds, so their differences are not additive stage delays.
-
-| Browser | Before → after measurement onset | Before → after observed collider/render onset | Before → after p95 packet age |
-| --- | ---: | ---: | ---: |
-| Chromium | 24–28 → 34–36 ms | 66.7–82.7 → 72–88 ms | 5.33 → 4.00 ms |
-| WebKit | 52–54 → 64–66 ms | 93.3–112 → 109.3–128 ms | 2.67 → 1.33 ms |
-
-The new perceptual measurement responds later for this burst even though a
-stable full-height physical stroke is faster. Browser audio clocks are
-quantized: WebKit occasionally reports packet age down to -2 ms for the new
-end-exclusive timestamp. This is clock resolution, not negative transport
-latency. Rendering samples observe the same collider position in each frame;
-the separate fixed-target physics test establishes the 41.67 ms travel result.
-Window response, temporal integration, packet age, and physical travel must
-therefore remain separately reported. The raw instrumented samples are in
-`latency-detail.json.gz`. Reproduce with
-`node validation/partial/latency.mjs https://musical-lights.test` after preparing
-the archived baseline WASM used by the comparison tools.
+Browser commands require macOS host access and retain the serial startup guard,
+one worker, and zero retries. The presentation baseline is the production WASM
+from `76af307`. Historical [responsive-display](responsive-display/browser-timing.json),
+[quiet-input](quiet-input/browser-timing.json), and [80 ms/ISO](baseline/browser-timing.json)
+measurements remain available. They do not validate this revision.

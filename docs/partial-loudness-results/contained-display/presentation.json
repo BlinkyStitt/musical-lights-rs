@@ -1,0 +1,86 @@
+{
+  "model": "unchanged MGB1997-GM2002; no frequency shelves",
+  "filter": {
+    "minCutoffHz": 1,
+    "derivativeCutoffHz": 1,
+    "beta": 0.8,
+    "sharedCoefficient": true
+  },
+  "cases": [
+    {
+      "kind": "stationary",
+      "frames": 2000,
+      "measurementsBitIdentical": true,
+      "maximumFilterError": 2.9695644276905853e-8,
+      "maximumTargetRatioError": 6.423684739687019e-8,
+      "oldCpuMs": 623.069792,
+      "cpuMs": 634.5623330000001,
+      "audioMs": 4000
+    },
+    {
+      "kind": "two",
+      "frames": 2000,
+      "measurementsBitIdentical": true,
+      "maximumFilterError": 2.9743645324487034e-8,
+      "maximumTargetRatioError": 8.014383101606626e-8,
+      "oldCpuMs": 623.6502920000003,
+      "cpuMs": 641.5799580000003,
+      "audioMs": 4000
+    },
+    {
+      "kind": "bursts",
+      "frames": 2000,
+      "measurementsBitIdentical": true,
+      "maximumFilterError": 2.95458472132637e-8,
+      "maximumTargetRatioError": 9.468201656037678e-8,
+      "oldCpuMs": 292.5775829999993,
+      "cpuMs": 296.8986249999998,
+      "audioMs": 4000
+    },
+    {
+      "kind": "exercise",
+      "frames": 2000,
+      "measurementsBitIdentical": true,
+      "maximumFilterError": 2.9801422551933854e-8,
+      "maximumTargetRatioError": 1.5454668900183322e-7,
+      "oldCpuMs": 876.0469169999997,
+      "cpuMs": 894.4302079999998,
+      "audioMs": 4000
+    },
+    {
+      "kind": "silence",
+      "frames": 1500,
+      "measurementsBitIdentical": true,
+      "maximumFilterError": 0,
+      "maximumTargetRatioError": 0,
+      "oldCpuMs": 189.591124999999,
+      "cpuMs": 191.66741700000057,
+      "audioMs": 3000
+    }
+  ],
+  "timing": {
+    "instantaneous": {
+      "0.1": 10,
+      "0.5": 24,
+      "0.9": 38
+    },
+    "shortTerm": {
+      "0.1": 18,
+      "0.5": 40,
+      "0.9": 76
+    },
+    "immediateTarget": {
+      "0.1": 8,
+      "0.5": 14,
+      "0.9": 18
+    },
+    "filteredTarget": {
+      "0.1": 16,
+      "0.5": 22,
+      "0.9": 34
+    },
+    "attackMs": 12.00000000000001
+  },
+  "windowSpanMs": 42.666666666666664,
+  "physicalPhone": false
+}

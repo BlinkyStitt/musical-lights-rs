@@ -16,10 +16,10 @@ for (const width of [375, 1440]) {
     const ratios = [.55,1.4,2.2,.8,3.1,1,4,1.8,.65,2.6,1.2,3.5,.65,1,1.2,.8,1.4,.55,.7,1.1,1.6,.9,1.3,.6];
     for (let i = 0; i < 24; i++) expect(initial.balls[i].radius * 2 / .048).toBeCloseTo(ratios[i], 5);
     await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
-    await expect.poll(async () => Math.min(...(await physicsState(page)).bars)).toBeGreaterThan(initial.height * .94);
+    await expect.poll(async () => Math.min(...(await physicsState(page)).bars)).toBeGreaterThan(initial.barMax - .005);
     const raised = await physicsState(page);
     expect(raised.balls.some((b, i) => b.position[1] > initial.balls[i].position[1] + .05)).toBe(true);
-    expect(raised.balls.some(b => b.position[1] > raised.height)).toBe(true);
+    expect(raised.balls.every(b => b.position[1] + b.radius <= raised.ceiling + .005)).toBe(true);
     expect(raised.balls.some((b, i) => b.color.some((c, j) => c !== initial.balls[i].color[j]))).toBe(true);
     const render = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
@@ -34,7 +34,7 @@ for (const width of [375, 1440]) {
       return { expected, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
         tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
     });
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(2);
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(3);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
@@ -66,7 +66,7 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
     await page.setViewportSize(size);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(async () => (await physicsState(page)).height).toBeCloseTo(1.2 * size.height / size.width, 2);
+    await expect.poll(async () => (await physicsState(page)).height).toBeCloseTo(Math.max(.4, 1.2 * size.height / size.width), 2);
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
     await page.keyboard.press('Escape');
   }

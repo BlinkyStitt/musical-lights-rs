@@ -11,7 +11,8 @@ pub const GAP: f32 = 0.002;
 pub const CORNER: f32 = 0.012;
 pub const POST_HEIGHT: f32 = 20.0;
 pub const MAX_SUBSTEPS: usize = 128;
-pub const HEADROOM: f32 = 0.05;
+pub const MIN_HEIGHT: f32 = 0.40;
+pub const CLEARANCE: f32 = 0.004;
 pub const BASELINE: f32 = 0.003;
 pub const SIZE_RATIOS: [f32; COUNT] = [
     0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5, 0.65, 1.0, 1.2, 0.8, 1.4, 0.55,
@@ -23,7 +24,8 @@ pub const IMPULSE_OFFSET: usize = BAR_OFFSET + COUNT;
 pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + COUNT * COUNT;
 pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + COUNT;
 pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
-pub const SNAPSHOT_LEN: usize = COST_OFFSET + 4;
+pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
+pub const SNAPSHOT_LEN: usize = GEOMETRY_OFFSET + 4;
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,8 +54,18 @@ impl Default for SimulationConfig {
     }
 }
 impl SimulationConfig {
+    pub fn hop_height(self, reduced: bool) -> f32 {
+        (self.height * 0.08).min(0.05) * if reduced { 0.5 } else { 1.0 }
+    }
+    pub fn bar_max(self) -> f32 {
+        // Keep the same geometry in Reduced Motion: only the release energy changes.
+        self.height
+            - SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP)
+            - self.hop_height(false)
+            - CLEARANCE
+    }
     pub fn motion_limits(self, reduced: bool) -> (f64, f64) {
-        let height = f64::from(self.height * (1.0 - HEADROOM) - BASELINE);
+        let height = f64::from(self.bar_max() - BASELINE);
         let time = f64::from(if reduced {
             self.reduced_stroke_seconds
         } else {
@@ -87,7 +99,7 @@ impl SimulationConfig {
             stroke_seconds: v[6],
             reduced_stroke_seconds: v[7],
         };
-        if !(0.05..=20.0).contains(&c.height)
+        if !(MIN_HEIGHT..=20.0).contains(&c.height)
             || !(0.0..=30.0).contains(&c.gravity)
             || !(1.0..=20000.0).contains(&c.density)
             || !(0.0..=1.0).contains(&c.restitution)
@@ -147,6 +159,10 @@ pub struct Simulation {
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; COUNT],
     touching: [[bool; COUNT]; COUNT],
+    ceiling: RigidBodyHandle,
+    ceiling_height: f32,
+    supported: [bool; COUNT],
+    driven: [bool; COUNT],
     input: SimulationInput,
     snapshot: SimulationSnapshot,
 }
@@ -166,8 +182,10 @@ impl Simulation {
                 dt: DT,
                 num_solver_iterations: 8,
                 max_ccd_substeps: 1,
-                // Lower restitution leaves denser resting stacks. Stiffer contacts
-                // keep the smallest spheres from sinking under heavier neighbors.
+                // Rapier's default assumes a 60 Hz step; our contact substeps
+                // can be smaller than that default minimum CCD interval.
+                min_ccd_dt: DT / MAX_SUBSTEPS as f32 / 100.0,
+                // Ordinary contacts retain the original restitution response.
                 contact_softness: SpringCoefficients {
                     natural_frequency: 60.0,
                     ..SpringCoefficients::contact_defaults()
@@ -180,7 +198,7 @@ impl Simulation {
             },
             ..PhysicsWorld::default()
         };
-        // Infinite side planes contain even launches above the camera. No ceiling.
+        // Closed enclosure: every visible boundary has a physical collider.
         for (normal, position) in [
             (Vector::Y, Vector::ZERO),
             (Vector::X, Vector::ZERO),
@@ -195,6 +213,12 @@ impl Simulation {
                     .restitution(config.restitution),
             );
         }
+        let (ceiling, _) = world.insert(
+            RigidBodyBuilder::fixed().translation(Vector::new(0.0, config.height, 0.0)),
+            ColliderBuilder::halfspace(Unit::new_unchecked(-Vector::Y))
+                .friction(config.friction)
+                .restitution(config.restitution),
+        );
         let bars = std::array::from_fn(|i| {
             world.insert(
                 RigidBodyBuilder::kinematic_position_based().translation(Vector::new(
@@ -213,14 +237,41 @@ impl Simulation {
                 .restitution(config.restitution),
             )
         });
+        let mut order: [usize; COUNT] = std::array::from_fn(|i| i);
+        order.sort_by(|&a, &b| SIZE_RATIOS[b].total_cmp(&SIZE_RATIOS[a]).then(a.cmp(&b)));
+        let mut spawn = [Vector::ZERO; COUNT];
+        let mut bottom = BASELINE + 0.002;
+        for (row_index, row) in order.chunks(6).enumerate() {
+            let diameter = SIZE_RATIOS[row[0]] * (PITCH - GAP);
+            for (column, &i) in row.iter().enumerate() {
+                let radius = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
+                let side = if (column + row_index).is_multiple_of(2) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                // Use the actual depth, avoiding perfectly collinear stacks
+                // that cannot spread sideways when every bar rises at once.
+                let shift = if row_index == 0 {
+                    0.0
+                } else if row_index.is_multiple_of(2) {
+                    -0.04
+                } else {
+                    0.04
+                };
+                spawn[i] = Vector::new(
+                    column as f32 * 0.2 + 0.1 + shift,
+                    bottom + radius,
+                    side * (config.depth / 2.0 - radius - 0.002) * 0.8,
+                );
+            }
+            bottom += diameter + 0.002;
+        }
         let balls = std::array::from_fn(|i| {
             let radius = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
-            // Separate rows by the largest diameter. No initial overlap at any aspect ratio.
-            let x = (i % 6) as f32 * 0.2 + 0.1;
-            let y = (i / 6) as f32 * 0.2 + 0.14;
             world.insert(
                 RigidBodyBuilder::dynamic()
-                    .translation(Vector::new(x, y, 0.0))
+                    .translation(spawn[i])
                     .ccd_enabled(true),
                 ColliderBuilder::ball(radius)
                     .density(config.density)
@@ -241,6 +292,10 @@ impl Simulation {
             bar_targets: [f64::from(BASELINE); COUNT],
             bar_motion_scales: [1.0; COUNT],
             touching: [[false; COUNT]; COUNT],
+            ceiling,
+            ceiling_height: config.height,
+            supported: [false; COUNT],
+            driven: [false; COUNT],
             input: SimulationInput {
                 height: config.height,
                 ..SimulationInput::default()
@@ -266,7 +321,7 @@ impl Simulation {
                 .pointer
                 .is_some_and(|p| p.iter().any(|v| !v.is_finite()))
             || !input.height.is_finite()
-            || !(0.05..=20.0).contains(&input.height)
+            || !(MIN_HEIGHT..=20.0).contains(&input.height)
         {
             return Err("Invalid or late simulation input");
         }
@@ -279,10 +334,9 @@ impl Simulation {
         let (max_speed, acceleration) = self.config.motion_limits(self.input.reduced_motion);
         let targets: [f64; COUNT] = std::array::from_fn(|i| {
             f64::from(BASELINE)
-                + f64::from(self.input.levels[i])
-                    * f64::from(self.config.height * (1.0 - HEADROOM) - BASELINE)
+                + f64::from(self.input.levels[i]) * f64::from(self.config.bar_max() - BASELINE)
         });
-        let travel = f64::from(self.config.height * (1.0 - HEADROOM) - BASELINE);
+        let travel = f64::from(self.config.bar_max() - BASELINE);
         for (i, &target) in targets.iter().enumerate() {
             if target != self.bar_targets[i] {
                 // A small correction takes the same stroke time as a full rise,
@@ -331,6 +385,7 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
         for _ in 0..substeps {
+            self.resize_ceiling();
             for (i, &(handle, _)) in self.bars.iter().enumerate() {
                 stroke(
                     &mut self.bar_positions[i],
@@ -363,8 +418,28 @@ impl Simulation {
                     body.add_force(acceleration * body.mass(), true);
                 }
             }
+            // Resolve fast ceiling compression without changing ordinary free
+            // impacts. Keep eight force-solver iterations; use extra positional
+            // stabilization only while a sphere is at/predictively near the roof.
+            let roof_contact = self.balls.iter().enumerate().any(|(i, (h, _))| {
+                let b = &self.world.bodies[*h];
+                b.is_enabled()
+                    && b.translation().y
+                        + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                        + b.linvel().y.max(0.0) * dt
+                        >= self.ceiling_height - CLEARANCE
+            });
+            self.world
+                .integration_parameters
+                .contact_softness
+                .natural_frequency = if roof_contact { 240.0 } else { 60.0 };
+            self.world
+                .integration_parameters
+                .num_internal_stabilization_iterations = if roof_contact { 8 } else { 1 };
             self.world.step();
-
+            let mut supported = [false; COUNT];
+            let mut driven = [false; COUNT];
+            let mut supports = [[false; COUNT]; COUNT];
             for (i, &(_, collider)) in self.balls.iter().enumerate() {
                 let mut touching = [false; COUNT];
                 for pair in self.world.narrow_phase.contact_pairs_with(collider) {
@@ -375,7 +450,23 @@ impl Simulation {
                     } else {
                         pair.collider1
                     };
+                    let upward = pair.has_any_active_contact()
+                        && pair.manifolds.iter().any(|m| {
+                            let sign = if pair.collider2 == collider {
+                                1.0
+                            } else {
+                                -1.0
+                            };
+                            m.data.normal.y * sign > 0.1
+                        });
+                    if upward
+                        && let Some(j) = self.balls.iter().position(|&(_, ball)| ball == other)
+                    {
+                        supports[i][j] = true;
+                    }
                     if let Some(j) = self.bars.iter().position(|&(_, bar)| bar == other) {
+                        supported[i] |= upward;
+                        driven[i] |= upward && impulse > 0.0 && self.bar_velocities[j] > 0.0;
                         touching[j] =
                             pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
@@ -392,15 +483,77 @@ impl Simulation {
                 }
                 self.touching[i] = touching;
             }
+            for _ in 0..COUNT {
+                let before = (supported, driven);
+                for i in 0..COUNT {
+                    for j in 0..COUNT {
+                        if supports[i][j] {
+                            supported[i] |= before.0[j];
+                            driven[i] |= before.1[j] || (before.0[j] && self.driven[j]);
+                        }
+                    }
+                }
+                if before == (supported, driven) {
+                    break;
+                }
+            }
+            let release_speed =
+                (2.0 * self.config.gravity * self.config.hop_height(self.input.reduced_motion))
+                    .sqrt();
+            for i in 0..COUNT {
+                // Remove excess launch energy only after bar support ends. Clamping
+                // a carried ball would drive its supporting collider through it.
+                if self.supported[i] && !supported[i] && self.driven[i] {
+                    let body = &mut self.world.bodies[self.balls[i].0];
+                    let mut velocity = body.linvel();
+                    if velocity.y > release_speed {
+                        velocity.y = release_speed;
+                        body.set_linvel(velocity, true);
+                    }
+                }
+                self.driven[i] = supported[i] && (driven[i] || self.driven[i]);
+            }
+            self.supported = supported;
         }
         self.tick += 1;
         self.write_transforms();
+    }
+    fn resize_ceiling(&mut self) {
+        if self.config.height >= self.ceiling_height {
+            self.ceiling_height = self.config.height;
+        } else {
+            let ball_top = self
+                .balls
+                .iter()
+                .enumerate()
+                .filter(|(_, (h, _))| self.world.bodies[*h].is_enabled())
+                .map(|(i, (h, _))| {
+                    self.world.bodies[*h].translation().y
+                        + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                        + CLEARANCE
+                })
+                .fold(0.0_f32, f32::max);
+            let bar_top = self.bar_positions.iter().copied().fold(0.0_f64, f64::max) as f32
+                + self.config.height
+                - self.config.bar_max();
+            self.ceiling_height = self
+                .ceiling_height
+                .min(self.config.height.max(ball_top).max(bar_top));
+        }
+        self.world.bodies[self.ceiling]
+            .set_translation(Vector::new(0.0, self.ceiling_height, 0.0), false);
     }
     fn write_transforms(&mut self) {
         let values = &mut self.snapshot.values;
         values[0] = self.tick as f32 / HZ as f32;
         values[1] = self.config.height;
         values[2] = self.tick as f32;
+        values[GEOMETRY_OFFSET..].copy_from_slice(&[
+            self.ceiling_height,
+            self.config.bar_max(),
+            self.config.hop_height(self.input.reduced_motion),
+            MIN_HEIGHT,
+        ]);
         for (i, &(handle, _)) in self.balls.iter().enumerate() {
             let body = &self.world.bodies[handle];
             let out = &mut values[3 + i * BODY_STRIDE..3 + (i + 1) * BODY_STRIDE];
@@ -502,7 +655,7 @@ impl PhysicsSimulation {
             GAP,
             CORNER,
             POST_HEIGHT,
-            HEADROOM,
+            0.0, // Historical headroom fraction; v2 publishes actual geometry below.
             BODY_STRIDE as f32,
             BAR_OFFSET as f32,
             IMPULSE_OFFSET as f32,
@@ -512,6 +665,9 @@ impl PhysicsSimulation {
             VELOCITY_OFFSET as f32,
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
+            GEOMETRY_OFFSET as f32,
+            2.0, // closed-enclosure geometry/snapshot version
+            MIN_HEIGHT,
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {

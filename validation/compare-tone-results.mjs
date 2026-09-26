@@ -20,8 +20,8 @@ for (let i = 0; i < current.length; i++) {
       assert.deepEqual(dataA.subarray(startA + 266, startA + 315), dataB.subarray(startB + 266, startB + 315), 'Partial measurement changed');
     const bands = Array.from(dataB.subarray(startB + inputB, startB + inputB + 24));
     const peak = Math.max(...bands), main = bands.indexOf(peak), gain = dataB[startB + schemaB.gain];
-    const scale = Math.min(gain, 1 / peak), targets = bands.map((_, j) => dataB[startB + schemaB.display + 2 + schemaB.step * j]);
-    const heights = bands.map((_, j) => dataA[startA + schemaA.display + 2 + schemaA.step * j]);
+    const scale = Math.min(gain, 1 / peak), targets = bands.map((_, j) => dataB[startB + schemaB.display + (schemaB.header ?? 2) + schemaB.step * j]);
+    const heights = bands.map((_, j) => dataA[startA + schemaA.display + (schemaA.header ?? 2) + schemaA.step * j]);
     const oldBands = Array.from(dataA.subarray(startA + inputA, startA + inputA + 24));
     const oldPeak = Math.max(...oldBands), oldMain = oldBands.indexOf(oldPeak);
     const oldGain = dataA[startA + schemaA.gain];

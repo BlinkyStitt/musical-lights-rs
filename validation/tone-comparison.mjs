@@ -34,7 +34,7 @@ for (const kind of Object.keys(toneCases).filter(x => x !== 'exercise')) {
       const a = bands.map(x => x / (1 + x));
       const b = bands.map(x => gain * x / (1 + gain * x));
       const c = bands.map(x => x * scale);
-      const production = bands.map((_, i) => row[schema.display + 2 + i * schema.step]);
+      const production = bands.map((_, i) => row[schema.display + (schema.header ?? 2) + i * schema.step]);
       for (let i = 0; i < 24; i++) {
         if (peak) maxError = Math.max(maxError, Math.abs(c[i] / c[main] - bands[i] / peak));
         const integral = Array.from(row.subarray(2 + i * 10, 12 + i * 10)).reduce((a, b) => a + b, 0) * .1;

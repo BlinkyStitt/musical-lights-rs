@@ -23,7 +23,7 @@ for (const [label, api, modulePath] of [['before', baseline, '.cache/baseline-ph
     for (let tick = 0; tick < output.length / 54; tick++) {
       if (tick % 2 === 0) {
         source = Math.min(frames - 1, Math.floor(tick / 120 / .002));
-        for (let i = 0; i < 24; i++) input[i] = rows[source * stride + schema.display + 2 + i * schema.step];
+        for (let i = 0; i < 24; i++) input[i] = rows[source * stride + schema.display + (schema.header ?? 2) + (schema.filtered ?? 0) + i * schema.step];
         sim.input(input);
       }
       sim.step();

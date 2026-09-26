@@ -37,6 +37,7 @@ fn gravity_matches_ballistic_position_and_velocity() {
     for gravity in [3.0, 9.81, 15.0] {
         let mut sim = world(SimulationConfig {
             gravity,
+            height: 5.0,
             ..SimulationConfig::default()
         });
         isolate(&mut sim, &[0]);
@@ -101,6 +102,7 @@ fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
     for speed in [1.0, 2.3, 5.0, 10.0, 20.0] {
         let mut sim = world(SimulationConfig {
             gravity: 0.0,
+            height: 5.0,
             ..SimulationConfig::default()
         });
         isolate(&mut sim, &[0]);
@@ -129,7 +131,7 @@ fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
 
 #[test]
 fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
-    for height in [0.1, 0.6, 2.0] {
+    for height in [0.4, 0.6, 2.0] {
         let mut sim = world(SimulationConfig {
             height,
             ..SimulationConfig::default()
@@ -147,7 +149,7 @@ fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
                 );
                 assert!(sim.snapshot.values[COST_OFFSET] <= MAX_SUBSTEPS as f32);
             }
-            let target = BASELINE + level * (height * (1.0 - HEADROOM) - BASELINE);
+            let target = BASELINE + level * (sim.config.bar_max() - BASELINE);
             assert!((sim.snapshot.values[BAR_OFFSET] - target).abs() < height * 0.01);
             assert!(sim.bar_velocities[0].abs() < 1e-6);
         }
@@ -200,7 +202,7 @@ fn small_corrections_keep_the_stroke_time_without_full_height_kicks() {
                     );
                 }
             }
-            let target = BASELINE + level * (sim.config.height * (1.0 - HEADROOM) - BASELINE);
+            let target = BASELINE + level * (sim.config.bar_max() - BASELINE);
             assert!((sim.snapshot.values[BAR_OFFSET] - target).abs() < 1e-5);
             assert!(sim.bar_velocities[0].abs() < 1e-6);
         }
@@ -278,12 +280,13 @@ fn reduced_motion_uses_a_slower_stroke() {
     for _ in 0..28 {
         sim.step();
     }
-    assert!((sim.snapshot.values[BAR_OFFSET] - 0.57).abs() < 0.001);
+    assert!((sim.snapshot.values[BAR_OFFSET] - sim.config.bar_max()).abs() < 0.001);
 }
 #[test]
 fn unequal_masses_transfer_linear_and_angular_momentum() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
+        height: 5.0,
         restitution: 1.0,
         friction: 0.4,
         ..SimulationConfig::default()
@@ -344,7 +347,7 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
     for tick in 0..HZ * 4 / 5 {
         sim.step();
         if tick == 11 {
-            assert!((sim.snapshot.values[BAR_OFFSET + 12] - 1.14).abs() < 0.0114);
+            assert!((sim.snapshot.values[BAR_OFFSET + 12] - sim.config.bar_max()).abs() < 0.0114);
         }
         for (j, i) in indices.into_iter().enumerate() {
             maximum[j] = maximum[j].max(position(&sim, i).y);
@@ -366,11 +369,14 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
             indices[j]
         );
     }
-    assert!((sim.snapshot.values[BAR_OFFSET + 12] - 1.14).abs() < 0.005);
+    assert!((sim.snapshot.values[BAR_OFFSET + 12] - sim.config.bar_max()).abs() < 0.005);
 }
 #[test]
 fn short_stroke_transfers_only_contact_impulses() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(SimulationConfig {
+        height: 1.2,
+        ..SimulationConfig::default()
+    });
     isolate(&mut sim, &[0, 1]);
     place(
         &mut sim,
@@ -419,6 +425,7 @@ fn side_front_and_back_walls_rebound_without_tunneling() {
     ] {
         let mut sim = world(SimulationConfig {
             gravity: 0.0,
+            height: 5.0,
             ..SimulationConfig::default()
         });
         isolate(&mut sim, &[0]);
@@ -445,7 +452,7 @@ fn side_front_and_back_walls_rebound_without_tunneling() {
     }
 }
 #[test]
-fn open_top_and_resize_preserve_ball_state() {
+fn ceiling_bounces_and_shrinks_without_teleporting_balls() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
     place(
@@ -458,21 +465,20 @@ fn open_top_and_resize_preserve_ball_state() {
     let v = velocity(&sim, 0);
     sim.apply(SimulationInput {
         tick: 0,
-        height: 0.3,
+        height: MIN_HEIGHT,
         ..SimulationInput::default()
     })
     .unwrap();
     assert_eq!(position(&sim, 0), p);
     assert_eq!(velocity(&sim, 0), v);
-    let mut above = false;
-    let mut returned = false;
+    let mut bounced = false;
     for _ in 0..HZ {
         sim.step();
-        above |= position(&sim, 0).y > 0.9;
-        returned |= above && position(&sim, 0).y < sim.config.height;
+        assert!(position(&sim, 0).y + radius(0) <= sim.ceiling_height + 0.002);
+        bounced |= velocity(&sim, 0).y < 0.0;
     }
-    assert!(above);
-    assert!(returned);
+    assert!(bounced);
+    assert_eq!(sim.ceiling_height, MIN_HEIGHT);
 }
 #[test]
 fn recorded_inputs_replay_identically_at_all_render_rates() {
@@ -528,6 +534,7 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
             let clearance =
                 p.x.min(WIDTH - p.x)
                     .min(p.y)
+                    .min(sim.ceiling_height - p.y)
                     .min(sim.config.depth / 2.0 - p.z.abs());
             assert!(clearance >= 0.0, "tick {tick}, ball {i} escaped: {p:?}");
             worst_penetration = worst_penetration.max(radius(i) - clearance);
@@ -566,6 +573,7 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
         let clearance =
             p.x.min(WIDTH - p.x)
                 .min(p.y)
+                .min(sim.ceiling_height - p.y)
                 .min(sim.config.depth / 2.0 - p.z.abs());
         assert!(
             clearance >= radius(i) - 0.001,
@@ -609,7 +617,7 @@ fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
     bar.set_translation(Vector::new(0.625, top - POST_HEIGHT / 2.0, 0.0), true);
     sim.bar_positions[12] = f64::from(top);
     let mut levels = [0.0; COUNT];
-    levels[12] = (top - BASELINE) / (sim.config.height * (1.0 - HEADROOM) - BASELINE);
+    levels[12] = (top - BASELINE) / (sim.config.bar_max() - BASELINE);
     input(&mut sim, levels);
     place(
         &mut sim,
@@ -631,12 +639,14 @@ fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
 fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
+        height: 5.0,
         ..SimulationConfig::default()
     });
     isolate(&mut sim, &[0]);
     place(&mut sim, 0, Vector::new(0.625, 2.0, 0.0), Vector::ZERO);
     sim.apply(SimulationInput {
         acceleration: [0.0, 2.0, 0.0],
+        height: 5.0,
         ..SimulationInput::default()
     })
     .unwrap();
@@ -666,6 +676,7 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
 fn ccd_resolves_two_fast_spheres_before_they_cross() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
+        height: 5.0,
         restitution: 1.0,
         friction: 0.0,
         ..SimulationConfig::default()
@@ -698,20 +709,24 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
 }
 
 #[test]
-fn infinite_sides_contain_launches_above_the_previous_wall_height() {
+fn all_six_enclosure_planes_contain_fast_launches() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
         0,
-        Vector::new(0.6, 150.0, 0.0),
+        Vector::new(0.6, 0.3, 0.0),
         Vector::new(80.0, 20.0, 40.0),
     );
     for _ in 0..HZ {
         sim.step();
         let p = position(&sim, 0);
         assert!(
-            p.x >= 0.0 && p.x <= WIDTH && p.z.abs() <= sim.config.depth / 2.0,
+            p.x >= 0.0
+                && p.x <= WIDTH
+                && p.y >= 0.0
+                && p.y <= sim.ceiling_height
+                && p.z.abs() <= sim.config.depth / 2.0,
             "escaped: {p:?}"
         );
     }
@@ -723,14 +738,14 @@ fn substep_overload_is_visible_without_discarding_a_tick() {
     place(
         &mut sim,
         0,
-        Vector::new(0.6, 150.0, 0.0),
+        Vector::new(0.6, 0.3, 0.0),
         Vector::new(0.0, 1000.0, 0.0),
     );
     sim.step();
     assert_eq!(sim.tick, 1);
     assert_eq!(sim.snapshot.values[COST_OFFSET], 128.0);
     assert!(sim.snapshot.values[COST_OFFSET + 1] > 0.0);
-    assert!((position(&sim, 0).y - (150.0 + 1000.0 * DT)).abs() < 0.01);
+    assert!(position(&sim, 0).y <= sim.ceiling_height);
 }
 
 #[test]
@@ -757,4 +772,90 @@ fn default_balls_have_a_small_rebound_and_settle_on_quiet_bars() {
     assert!(rebound < 0.025, "default rebound too large: {rebound} m");
     assert!(velocity(&sim, 0).length() < 0.01);
     assert!((position(&sim, 0).y - radius(0) - BASELINE).abs() < 0.001);
+}
+
+#[test]
+fn initial_placement_fits_the_minimum_closed_enclosure_without_overlap() {
+    let sim = world(SimulationConfig {
+        height: MIN_HEIGHT,
+        ..SimulationConfig::default()
+    });
+    for i in 0..COUNT {
+        let p = position(&sim, i);
+        assert!(p.y - radius(i) >= BASELINE && p.y + radius(i) < MIN_HEIGHT);
+        assert!(p.x >= radius(i) && p.x + radius(i) <= WIDTH);
+        for j in 0..i {
+            assert!((p - position(&sim, j)).length() >= radius(i) + radius(j));
+        }
+    }
+}
+
+#[test]
+fn simultaneous_full_strokes_do_not_push_stacks_through_the_ceiling() {
+    for height in [MIN_HEIGHT, 0.415, 0.6, 1.2] {
+        for warmup in [0, HZ / 8, HZ / 4, HZ] {
+            let mut sim = world(SimulationConfig {
+                height,
+                ..SimulationConfig::default()
+            });
+            for _ in 0..warmup {
+                sim.step();
+            }
+            input(&mut sim, [1.0; COUNT]);
+            let mut worst = 0.0_f32;
+            for _ in 0..HZ {
+                sim.step();
+                for i in 0..COUNT {
+                    worst = worst.max(position(&sim, i).y + radius(i) - sim.ceiling_height);
+                }
+            }
+            assert!(
+                worst <= 0.005,
+                "height={height}, warmup={warmup}: ceiling penetration {worst}"
+            );
+        }
+    }
+}
+
+#[test]
+fn strong_bar_launches_have_small_release_hops_in_both_motion_modes() {
+    for height in [MIN_HEIGHT, 0.6, 1.2] {
+        for reduced in [false, true] {
+            let mut sim = world(SimulationConfig {
+                height,
+                ..SimulationConfig::default()
+            });
+            isolate(&mut sim, &[0]);
+            place(
+                &mut sim,
+                0,
+                Vector::new(PITCH / 2.0, BASELINE + radius(0), 0.0),
+                Vector::ZERO,
+            );
+            for _ in 0..HZ {
+                sim.step();
+            }
+            let mut values = [0.0; COUNT];
+            values[0] = 1.0;
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels: values,
+                height,
+                reduced_motion: reduced,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            let mut worst = 0.0_f32;
+            for _ in 0..HZ * 2 {
+                sim.step();
+                worst =
+                    worst.max(position(&sim, 0).y - radius(0) - sim.snapshot.values[BAR_OFFSET]);
+                assert!(position(&sim, 0).y + radius(0) <= sim.ceiling_height + 0.002);
+            }
+            assert!(
+                worst <= sim.config.hop_height(reduced) + 0.005,
+                "H={height}, reduced={reduced}, hop={worst}"
+            );
+        }
+    }
 }

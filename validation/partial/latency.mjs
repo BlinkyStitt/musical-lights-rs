@@ -7,18 +7,13 @@ import checkBrowserStartup from '../browser-startup.mjs';
 import { staticPreview } from '../static-preview.mjs';
 const url=process.argv[2]??'http://127.0.0.1:8104';
 await checkBrowserStartup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
+const output=process.argv[3]??'docs/partial-loudness-results/contained-display';
 const results=[];
 for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
-  for(const baseline of [true,false]) {
     const browser=await engine.launch();
     try {
       const context=await browser.newContext({viewport:{width:390,height:844}});
       await staticPreview(context,url);
-      if(baseline) for(const [pattern,path] of [
-        ['**/loudness/loudness.wasm','.cache/iso-display-before-partial.wasm'],
-        ['**/physics/physics_bg.wasm','.cache/physics80-wasm/physics_bg.wasm'],
-        ['**/physics/physics.js','.cache/physics80-wasm/physics.js'],
-      ]) await context.route(pattern,route=>route.fulfill({path,contentType:path.endsWith('.wasm')?'application/wasm':'text/javascript'}));
       const page=await context.newPage();
       await page.addInitScript(()=>{
         const Context=window.AudioContext,Node=window.AudioWorkletNode;
@@ -28,7 +23,7 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
           this.port.addEventListener('message',({data})=>{
             if(data.type==='frame'&&window.latencyPackets.length<10000) window.latencyPackets.push({
               audioTime:window.latencyContext.currentTime,hostMs:performance.now(),sourceTime:data.state[0],
-              target:data.state[2+8*5],measured:data.state[6+8*5]});
+              target:data.state[3+8*4],filtered:data.state[4+8*4],attack:data.state[5+8*4],measured:data.state[6+8*4]});
           });
         }};
       });
@@ -45,7 +40,7 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
           frames.push({audioTime,hostMs:now,target:view.input[8],colliderTop:view.current[view.layout[9]+8],
             renderedTop:view.bars.instanceMatrix.array[8*16+13]+view.layout[6]/2,tick:view.current[2],debt:view.metrics.debt});
           if(audioTime<6)requestAnimationFrame(sample);
-          else resolve({frames,packets:window.latencyPackets,height:view.height,workload:view.report.audioState,config:view.config});
+          else resolve({frames,packets:window.latencyPackets,height:view.height,barMax:view.current[view.layout[17]+1],workload:view.report.audioState,config:view.config});
         };requestAnimationFrame(sample);
       }));
       const cycles=[];
@@ -55,7 +50,7 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
         const maximum=Math.max(...packets.map(p=>p.measured));
         const measured=packets.find(p=>p.measured>=maximum*.1);
         const raised=frames=>frames.find(p=>p.audioTime>=at&&p.audioTime<at+.5);
-        const threshold=.003+(data.height*.95-.003)*.01;
+        const threshold=.003+(data.barMax-.003)*.01;
         const collider=raised(data.frames.filter(p=>p.colliderTop>=threshold));
         const rendered=raised(data.frames.filter(p=>p.renderedTop>=threshold));
         assert(measured&&collider&&rendered);
@@ -65,11 +60,10 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
           render1PercentHeightMs:(rendered.audioTime-at)*1000});
       }
       const ages=data.packets.map(p=>(p.audioTime-p.sourceTime)*1000).sort((a,b)=>a-b);
-      const item={browserName,baseline,physicalPhone:false,instrumented:true,cycles,
+      const item={browserName,physicalPhone:false,instrumented:true,cycles,
         transportAgeMs:{min:ages[0],p95:ages[Math.ceil(ages.length*.95)-1],max:ages.at(-1)},...data};
-      results.push(item); console.log(browserName,baseline,cycles,item.transportAgeMs);
+      results.push(item); console.log(browserName,cycles,item.transportAgeMs);
     } finally {await browser.close();}
-  }
 }
-await writeFile('docs/partial-loudness-results/latency-detail.json.gz',gzipSync(JSON.stringify(results)));
-await writeFile('docs/partial-loudness-results/latency.json',JSON.stringify(results.map(({frames,packets,...rest})=>rest),null,2)+'\n');
+await writeFile(`${output}/latency-detail.json.gz`,gzipSync(JSON.stringify(results)));
+await writeFile(`${output}/latency.json`,JSON.stringify(results.map(({frames,packets,...rest})=>rest),null,2)+'\n');

@@ -8,6 +8,17 @@ regressions, and normalized exercise-PCM checks. The `reference` target builds
 the independent C++ stages with `clang++`; failed model checks stop validation.
 Physical-phone acceptance and the existing production deployment gate remain.
 
+The subsequent calmer-motion and closed-ceiling revision passes 48 core tests
+in each of four feature configurations, all 26 physics tests, the Clippy matrix,
+worklet/Leptos builds, pinned reference comparisons, and all 159 Chromium/WebKit
+checks with one worker and zero retries. New regressions cover symmetric shared
+filtering, modulated sustains without repeat flashes, articulated attacks,
+masked weak targets, small release hops, and full-height stack compression at
+four enclosure heights and four starting conditions. Raw ISO and partial values
+remain bit-identical to `76af307` across five production-WASM fixtures. See the
+[current report](partial-loudness-results/README.md) for separate diagnostics-off
+FPS/debt measurements and instrumented latency boundaries.
+
 The functional browser suite now uses one worker. Real-time AudioContexts and
 offline WASM stress tests must not compete for the same CPU budget: callback
 gaps correctly stop capture, as confirmed during the follow-up to the initial

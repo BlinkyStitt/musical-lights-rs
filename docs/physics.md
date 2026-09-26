@@ -4,7 +4,7 @@ The Leptos visualizer runs 24 spheres and 24 prescribed bars in Rapier 3D.
 `musical-lights-physics` contains the same simulation for native tests and WASM.
 The browser runs it in a dedicated Worker, separate from the AudioWorklet.
 Three.js 0.186.0 draws the actual collider transforms in one WebGL2 canvas,
-using one instanced sphere mesh and one instanced bar mesh.
+using one instanced sphere mesh, one instanced bar mesh, and a ceiling line.
 
 ## Physical setup
 
@@ -20,7 +20,8 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Restitution / friction | 0.15 / 0.20 |
 | Full-height rest-to-rest stroke | 40 ms in either direction; 320 ms Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
-| Visual headroom | 5% |
+| Reserved upper space | Largest sphere diameter + hop allowance + 4 mm |
+| Minimum enclosure height | 0.40 m |
 
 Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
@@ -31,17 +32,17 @@ height is 2.25% of the drop height, down from 30.25% at the previous 0.55.
 This reduces repeated bouncing while retaining the 40 ms bar stroke. Moving
 bars still transfer their motion through physical contacts.
 
-Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives full-height limits `v = 2H/T` and `a = 4H/T²`. Each new target scales both limits by the larger of its remaining-travel fraction and current-speed fraction, capped at one. Small corrections from rest therefore take the same 40 ms with proportionally gentler motion, instead of applying full acceleration to tiny fluctuations. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
+Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives full-height limits `v = 2H/T` and `a = 4H/T²`. Each new target scales both limits by the larger of its remaining-travel fraction and current-speed fraction, capped at one. Small corrections from rest therefore take the same 40 ms with proportionally gentler motion, instead of applying full acceleration to tiny fluctuations. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess upward release velocity is dissipated to limit extra hops to `min(0.08 * enclosure_height, 0.05 m)`, halved for Reduced Motion. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle top is 3 mm above the floor.
 
 Strokes from rest must arrive within 1% of a stable target within 50 ms of
 physics receipt. The production WASM arrives in 41.67 ms at the 120 Hz sampling
 grid in all tested world heights and directions. Reversal latency includes
 braking and is reported separately: the near-peak retarget trace arrives in
-58.33 ms. See [current stroke traces](partial-loudness-results/responsive-display/strokes.json).
+58.33 ms. See [current stroke traces](partial-loudness-results/contained-display/strokes.json).
 The minimum configurable normal stroke is 0.040 s; Reduced Motion stays 0.320 s.
 
 
-The enclosure uses a floor and four vertical half-spaces; the top is open. Side containment works above the camera and above the former 100 m walls. Each rounded bar extends 20 m below its top. Resize preserves ball state and retargets bars through the same controller.
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m below its top. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and retargets bars through the same controller. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
@@ -58,9 +59,9 @@ Rapier 0.34.0 with enhanced determinism and CCD on every sphere.
 
 Sphere CCD uses one internal CCD step. Each 120 Hz outer tick adds deterministic contact substeps based on sphere and bar travel, bounded at 128. Every contact substep retains eight solver iterations and its own kinematic target. Contact impulses accumulate over the whole outer tick. The controller uses no wall-clock feedback, so replay is independent of render rate.
 
-Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and contact natural frequency 60 Hz.
+Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and ordinary contact natural frequency 60 Hz. While a sphere is predictively near the ceiling, contact natural frequency is 240 Hz with eight positional stabilization passes per force-solver iteration, instead of one. There are still eight force-solver iterations. This prevents visible ceiling compression without changing ordinary elastic collisions. The CCD minimum interval is scaled below the smallest contact substep.
 
-The [current source-band and stroke report](partial-loudness-results/README.md) records the current stress and timing results. Strong launches can leave the open camera view and take much longer to return than with the previous speed limits. Tests allow ballistic return time before assessing persistent overlap.
+The [current source-band and stroke report](partial-loudness-results/README.md) records the current stress and timing results. Tests cover ceiling rebound, full-stroke stack compression, release hops, and persistent overlap after settling. The ceiling replaces the former open top.
 
 Settled spheres can rest on other spheres. The stress test requires an active
 contact path down to the floor or lowered bars for each sphere, as well as
@@ -72,7 +73,7 @@ the existing velocity and overlap limits.
 are independent of browser types. Snapshots contain sphere position, rotation,
 radius, mass, linear/angular velocity and color, actual bar tops, 24×24 bar
 contact impulses, and each sphere's total normal contact impulse in N·s.
-The WASM wrapper exposes numeric arrays and the snapshot memory location.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
 
 The worker clock runs independently of render frames. Each timer processes at
 most eight fixed steps. It retains elapsed time and reports outstanding delay;

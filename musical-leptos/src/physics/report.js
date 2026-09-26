@@ -90,10 +90,10 @@ export class PhoneReport {
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v3', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v4', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
-        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, 24 emphasized display inputs, display transport',
-        displayMapping: 'Browser treble emphasis: 1x through 2 kHz, rising linearly with log2 frequency to 2x at 8 kHz, then constant. One shared gain and headroom scale. Emphasized values are presentation inputs, not sones. Acoustic edges use unweighted partial sones.',
+        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, 24 spectral novelty values, 24 log-magnitude sums, versioned browser presentation transport',
+        displayMapping: 'Unweighted partial loudness; one shared gain and headroom scale. Browser motion: shared One Euro coefficient, minimum/derivative cutoff 1 Hz, beta 0.8. White: prominent spectral attacks, 100 ms pulse. Filtered targets and flashes are presentation, not sones.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead. Partial: causal 2048-sample Hann at 48 kHz, 96-sample hop; window center 21.33 ms before end; GM2002 short-term attack/release. Transport, physics and render timestamps are separate.',
         tone: this.toneMetadata };
       const parts = [JSON.stringify(header).slice(0, -1), ',"chunks":['];
@@ -204,7 +204,7 @@ export class PhoneReport {
       const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
       const snapshotProgressDriftMs = firstProgress && lastProgress
         ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v1',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v2',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,

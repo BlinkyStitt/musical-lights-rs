@@ -58,30 +58,52 @@ at the 2 ms hop the coefficients are `1 - 0.955²` and `1 - 0.98²`.
 These 24 partial values **do not sum to ISO total loudness**. Assigning them to
 source bands is this app's representation, not the ISO specific distribution.
 
-One unchanged adaptive gain and common headroom scale map those values to targets.
+One unchanged adaptive gain and common headroom scale map those values to immediate targets.
 The ISO total still controls the existing 0.1-sone gain-adaptation eligibility.
-No thresholds, sharpening, per-band normalization, or decorative height smoothing
-are added. White-edge attacks use measured short-term partial loudness.
-The terminal, LEDs, `LoudnessFrame`, calibration, and all 240 ISO values retain
-their original behavior. The independent reference and selectivity results are
-in [the partial-loudness report](partial-loudness-results/README.md).
+No frequency shelf, per-band normalization, measurement threshold, or sharpening
+is applied. The browser's separate presentation filter does not change sones.
+Terminal, LEDs, `LoudnessFrame`, calibration, and all 240 ISO values retain their
+original behavior. See [the current report](partial-loudness-results/README.md).
 
-Each bar keeps its fixed HSLuv color and rounded collider geometry. Rapier's
-rigid spheres receive contact impulses from the actual moving bars; rendering
-uses the collider transforms. The top remains open and visual headroom is 5%.
+Browser motion uses the One Euro filter, adapted to share one coefficient across
+all 24 bands. At every 2 ms frame, low-pass `(target - previous_filtered)/0.002`
+at 1 Hz; choose `cutoff = 1 + 0.8 * max(abs(filtered_derivative))` Hz. Apply
+`alpha = 1/(1 + 1/(2*pi*cutoff*0.002))` to every band. Rising and falling responses
+are symmetric. Settled values and proportional input histories are preserved;
+transient filtered heights are presentation values, not instantaneous sones.
 
-White edges have their own acoustic peak state, independent of display gain. A new acoustic rise above that peak starts a 350 ms edge hold, followed by `(1 + r*t) * exp(-r*t)` with `r = 30/s`, or `20/s` with Reduced Motion. This timing never holds a height. Removing the height hold removes the former combined bar/edge flash-rate guarantee; the fast bar response must be assessed visually with the tone page. Reduced Motion uses slower physical strokes.
+White edges use SuperFlux novelty from the same uncalibrated FFT magnitudes:
+quarter-tone triangular filters from 27.5 to 16 kHz, rounded to unique FFT bins,
+`log10(1 + magnitude)`, three-filter frequency maximum, and a five-hop difference.
+Positive differences are assigned by filter center to source bands. Candidates
+must exceed the past 100 ms mean by 0.1, equal/exceed the past 30 ms maximum,
+and reach 15% of the band's summed log magnitude. They can wait up to 30 ms for
+short-term partial loudness >=0.1 sones and immediate activity >=0.35, with a
+rise above the candidate's initial measured loudness. This last condition rejects
+spectral leakage when a tone stops. There is a 250 ms startup baseline, 160 ms
+minimum interval, and rearming after 60 ms below mean+0.05. Thresholds are display
+choices, not hearing thresholds or reliable musical-note recognition.
 
-The browser runs analysis in its own AudioWorklet WASM instance. It preallocates its input and state buffers and imports no browser functions into WASM. The current snapshot has 122 f64 values (976 bytes): audio seconds and Reduced Motion, then current target, acoustic peak sones, edge hold deadline, edge opacity, and current input sones for each of 24 bands. At most one display message waits for acknowledgement; analysis continues through page stalls.
+Each accepted attack gives only the one-pixel inner border a 100 ms quadratic
+pulse, `max(0, 1-age/0.100)^2`. There is no renewable hold or fill whitening.
+Reduced Motion halves pulse intensity and retains the 320 ms mechanical stroke.
+The [closed physical enclosure](physics.md) uses actual collider transforms.
 
-Optional v2 diagnostics attach at most 64 rows of 438 f64 values to the same
-acknowledged packet. Rows distinguish ISO sample index, total sones, all 240
-specific values and 24 integrals; partial window-end sample, 24 instantaneous
-and 24 short-term values; shared gain; and the display snapshot. Each packet
-has its audio-session identifier and trace version. Lost rows are counted.
-Recording caps storage at 50,000 rows and 25,000 physics snapshots. Every input
-start, including microphone restarts, resets buffers and source metadata; stale
-session packets are rejected. Diagnostics must be off for phone FPS acceptance.
+The browser runs analysis in a preallocated, DOM-free AudioWorklet WASM instance.
+The version-4 snapshot contains 99 f64 values (792 bytes): audio seconds,
+Reduced Motion, version, then immediate target, filtered target, attack timestamp
+(-1 means none), and raw partial sones for each band. At most one display message
+waits for acknowledgement; analysis continues through page stalls.
+
+Optional v4 diagnostics attach at most 64 rows of 463 f64 values. Offsets are
+0: ISO sample, 1: ISO total, 2: all 240 ISO specific values, 242: 24 ISO integrals,
+266: partial window-end sample, 267: instantaneous partial sones, 291: short-term
+partial sones, 315: gain, 316: novelty, 340: summed log magnitudes, 364: browser
+snapshot. Historical v1/v2/v3 layouts remain readable through `trace-layout.mjs`.
+Every packet has its session identifier; lost rows are counted. Recording is
+bounded to 50,000 rows and 25,000 physics snapshots. Every input start resets
+buffers and source metadata, including microphone restarts; stale sessions are
+rejected. Diagnostics must be off for phone FPS acceptance.
 
 [Physical bars](physics.md) use a 40 ms rest-to-rest stroke and must arrive within
 1% within 50 ms of physics input receipt. The causal analysis window, perceptual

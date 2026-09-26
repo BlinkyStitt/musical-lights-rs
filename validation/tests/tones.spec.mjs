@@ -122,13 +122,13 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
       });
       let error = 0;
       for (const row of rows) {
-        const bands = row.slice(316, 340), peak = Math.max(...bands);
-        const targets = bands.map((_, i) => row[342 + i * 5]), top = Math.max(...targets);
+        const bands = row.slice(291, 315), peak = Math.max(...bands);
+        const targets = bands.map((_, i) => row[367 + i * 4]), top = Math.max(...targets);
         if (peak) for (let i = 0; i < 24; i++) error = Math.max(error, Math.abs(targets[i] / top - bands[i] / peak));
       }
       return { error, metadata: report.toneMetadata, physics: report.tonePhysics.at(-1), stride: report.toneChunks[0].stride, sones: rows.at(-1)[1] };
     });
-    expect(data.stride).toBe(462); expect(data.error).toBeLessThan(2e-7);
+    expect(data.stride).toBe(463); expect(data.error).toBeLessThan(2e-7);
     expect(data.metadata.kind).toBe(kind); expect(data.physics.tops).toHaveLength(24);
     expect(data.physics.velocities).toHaveLength(24);
     if (kind === 'silence') expect(data.sones).toBe(0);

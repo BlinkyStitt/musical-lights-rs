@@ -100,20 +100,36 @@ export class PhysicsView {
     const box = this.layer.getBoundingClientRect(); this.motion.bounds = box;
     if (box.width <= 0 || box.height <= 0) return;
     this.width = this.layout?.[2] ?? 1.2;
-    this.height = this.width * box.height / box.width;
+    this.height = Math.max(this.layout?.[19] ?? .4, this.width * box.height / box.width);
     this.input[32] = this.height;
     this.renderer.setSize(box.width, box.height, false);
-    this.camera.left = -this.width / 2; this.camera.right = this.width / 2;
-    this.camera.top = this.height / 2; this.camera.bottom = -this.height / 2;
+    this.aspect = box.width / box.height;
+    this.fitEnclosure();
+  }
+  fitEnclosure() {
+    const geometry = this.layout?.[17];
+    const ceiling = this.current?.[geometry] ?? this.height;
+    const barMax = this.current?.[geometry + 1] ?? Math.max(.003, this.height - .246);
+    const visibleHeight = Math.max(this.height, ceiling);
+    const visibleWidth = visibleHeight * this.aspect;
+    const key = `${visibleHeight}/${visibleWidth}/${barMax}`;
+    if (key === this.geometryKey) return;
+    this.geometryKey = key; this.visibleHeight = visibleHeight;
+    this.camera.left = -visibleWidth / 2; this.camera.right = visibleWidth / 2;
+    this.camera.top = visibleHeight / 2; this.camera.bottom = -visibleHeight / 2;
     this.camera.near = 0.01; this.camera.far = 200;
     this.camera.updateProjectionMatrix(); this.setCamera(this.rotation ?? 0);
+    const side = Math.max(0, (1 - this.width / visibleWidth) * 50);
+    this.graph.style.setProperty('--plot-side-inset', `${side}%`);
+    this.graph.style.setProperty('--balloon-headroom', `${100 * (1 - barMax / visibleHeight)}%`);
+    this.graph.style.setProperty('--plot-baseline', `${100 * .003 / visibleHeight}%`);
   }
   setCamera(degrees) {
     if (degrees !== this.rotation) this.report?.invalidate('Camera changed during test');
     this.rotation = degrees;
     const angle = degrees * Math.PI / 180;
-    this.camera.position.set(this.width / 2 + Math.sin(angle) * 4, this.height / 2, Math.cos(angle) * 4);
-    this.camera.lookAt(this.width / 2, this.height / 2, 0);
+    this.camera.position.set(this.width / 2 + Math.sin(angle) * 4, this.visibleHeight / 2, Math.cos(angle) * 4);
+    this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0);
   }
   receive(data) {
     if (this.closed) return;
@@ -122,6 +138,7 @@ export class PhysicsView {
       this.layout = data.layout; this.config = data.config;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
+      this.measure();
       this.report = new PhoneReport(this);
     } else if (data.type === 'snapshot') {
       if (this.previous) this.buffers.push(this.previous.buffer);
@@ -162,8 +179,7 @@ export class PhysicsView {
           distance = min(distance, world.y);
           // fwidth is one device pixel. Scale to one CSS pixel at the capped pixel ratio.
           float inner = 1.0 - smoothstep((PIXEL_RATIO - 0.5) * fwidth(distance), (PIXEL_RATIO + 0.5) * fwidth(distance), distance);
-          vec3 fill = mix(tint, vec3(1.0), glow * 0.22);
-          gl_FragColor = vec4(mix(fill, vec3(1.0), inner * glow), 1.0);
+          gl_FragColor = vec4(mix(tint, vec3(1.0), inner * glow), 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -172,10 +188,16 @@ export class PhysicsView {
     this.bars = new THREE.InstancedMesh(geometry, material, count);
     for (let i = 0; i < count; i++) { this.color.fromArray(this.palette, i * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
+    this.ceiling = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
+    ]), new THREE.LineBasicMaterial({ color: getComputedStyle(this.graph).getPropertyValue('--line').trim() }));
+    this.scene.add(this.ceiling);
   }
   draw(now) {
     const [count, , , pitch, , , postHeight, , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
+    this.fitEnclosure();
+    this.ceiling.position.y = current[this.layout[17]];
     const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
     const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
     for (let i = 0; i < count; i++) {
@@ -209,7 +231,7 @@ export class PhysicsView {
     if (!paused && !this.closed) this.request = requestAnimationFrame(this.animate);
   }
   fail(message) { this.status.textContent = `Physics stopped: ${message}`; this.report?.invalidate(message); this.lost = true; this.pause(); }
-  disposeMeshes() { for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); } }
+  disposeMeshes() { for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
     this.closed = true; cancelAnimationFrame(this.request);
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;

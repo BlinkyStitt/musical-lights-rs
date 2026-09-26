@@ -3,7 +3,7 @@ import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.j
 import assert from 'node:assert/strict';
 const wasm = await init({ module_or_path: await readFile('musical-lights-physics/pkg/physics_bg.wasm') });
 const layout = PhysicsSimulation.layout(), results = [];
-for (const height of [.1, .6, 1.2, 2]) {
+for (const height of [.4, .6, 1.2, 2]) {
   const config = PhysicsSimulation.defaults(); config[0] = height;
   const sim = new PhysicsSimulation(config, new Float32Array(72).fill(.5));
   const state = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
@@ -17,8 +17,8 @@ for (const height of [.1, .6, 1.2, 2]) {
       sim.step(); const s = state();
       maxSubsteps = Math.max(maxSubsteps, s[layout[15]]);
       overload += Number(s[layout[15] + 1] > 0);
-      const top = s[layout[9]], target = .003 + level * (height * .95 - .003);
-      if (arrival == null && Math.abs(top - target) <= (height * .95 - .003) * .01) arrival = tick * 1000 / 120;
+      const top = s[layout[9]], target = .003 + level * (s[layout[17]+1] - .003);
+      if (arrival == null && Math.abs(top - target) <= (s[layout[17]+1] - .003) * .01) arrival = tick * 1000 / 120;
       trace.push({ ms: tick * 1000 / 120, top, velocity: s[layout[14]], substeps: s[layout[15]], excess: s[layout[15] + 1] });
     }
     assert(arrival <= 50); assert(Math.abs(state()[layout[14]]) < 1e-5);
@@ -32,7 +32,7 @@ for (const height of [.1, .6, 1.2, 2]) {
   for (let tick = 1; tick <= 24; tick++) {
     sim.step(); const s = state();
     if (reversalMs == null && s[layout[14]] < 0) reversalMs = tick * 1000 / 120;
-    if (reversalArrivalMs == null && Math.abs(s[layout[9]] - .003) < (height * .95 - .003) * .01) reversalArrivalMs = tick * 1000 / 120;
+    if (reversalArrivalMs == null && Math.abs(s[layout[9]] - .003) < (s[layout[17]+1] - .003) * .01) reversalArrivalMs = tick * 1000 / 120;
     reversalTrace.push({ ms: tick * 1000 / 120, top: s[layout[9]], velocity: s[layout[14]] });
   }
   results.push({ height, balls: 24, config: Array.from(config), maxSubsteps, overloadTicks: overload, reversalMs, reversalArrivalMs, reversalTrace, strokes });

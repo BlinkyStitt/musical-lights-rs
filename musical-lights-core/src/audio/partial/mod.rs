@@ -288,6 +288,16 @@ impl PartialLoudnessMeter {
         first_sample: u64,
         mut emit: impl FnMut(PartialLoudnessFrame),
     ) -> Result<(), LoudnessError> {
+        self.push_pcm_with_spectrum(samples, first_sample, |frame, _| emit(frame))
+    }
+    /// Reuse the uncalibrated FFT magnitudes for independent presentation features.
+    /// Neither these features nor display filtering feed back into loudness.
+    pub fn push_pcm_with_spectrum(
+        &mut self,
+        samples: &[f32],
+        first_sample: u64,
+        mut emit: impl FnMut(PartialLoudnessFrame, &[f64; BINS]),
+    ) -> Result<(), LoudnessError> {
         if first_sample != self.next_sample {
             return Err(LoudnessError::Discontinuity {
                 expected: self.next_sample,
@@ -314,7 +324,11 @@ impl PartialLoudnessMeter {
                 let c = bins[i + 1];
                 (f64::from(c.re).powi(2) + f64::from(c.im).powi(2)) * self.power_scale
             });
-            emit(self.spectrum.process(&powers, self.next_sample));
+            let magnitudes = core::array::from_fn(|i| Float::sqrt(powers[i] / self.power_scale));
+            emit(
+                self.spectrum.process(&powers, self.next_sample),
+                &magnitudes,
+            );
         }
         Ok(())
     }

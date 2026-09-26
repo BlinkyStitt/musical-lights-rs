@@ -23,26 +23,13 @@ impl Default for VisualGain {
 }
 
 impl VisualGain {
-    /// Browser presentation shelf: unity through 2 kHz, rising by one unit
-    /// over two octaves to 2x at 8 kHz. This is artistic emphasis, not sones.
-    pub fn browser_treble_weight(band: usize) -> f32 {
-        let center = (BARK_EDGES[band] + BARK_EDGES[band + 1]) * 0.5;
-        1.0 + (Float::log2(center / 2000.0) * 0.5).clamp(0.0, 1.0)
-    }
-
-    /// Keep the measured partial loudness for acoustic edges and diagnostics;
-    /// only browser heights receive the frequency shelf before shared gain.
+    /// Browser source bands retain their measured frequency balance.
     pub fn map_browser_partial(
         &mut self,
         bands: [f32; DISPLAY_BANDS],
         total_sones: f64,
     ) -> [BandLevel; DISPLAY_BANDS] {
-        let emphasized = core::array::from_fn(|i| bands[i] * Self::browser_treble_weight(i));
-        let mut mapped = self.map_bands(emphasized, total_sones).bands;
-        for (level, sones) in mapped.iter_mut().zip(bands) {
-            level.sones = sones;
-        }
-        mapped
+        self.map_bands(bands, total_sones).bands
     }
 
     /// Current shared display gain; measured sones remain unchanged.
@@ -259,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn browser_emphasis_preserves_measurements_and_uses_one_common_gain() {
+    fn browser_preserves_measured_frequency_balance_with_one_common_gain() {
         let mut gain = VisualGain::default();
         let mut bands = [0.0; DISPLAY_BANDS];
         bands[8] = 1.0;
@@ -268,7 +255,7 @@ mod tests {
             let mapped = gain.map_browser_partial(bands, 2.0);
             assert_eq!(mapped[8].sones, 1.0);
             assert_eq!(mapped[21].sones, 0.2);
-            assert!((mapped[21].activity / mapped[8].activity - 0.4).abs() < 1e-6);
+            assert!((mapped[21].activity / mapped[8].activity - 0.2).abs() < 1e-6);
             assert_eq!(mapped[23], BandLevel::default());
         }
         assert_eq!(
