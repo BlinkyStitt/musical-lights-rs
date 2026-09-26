@@ -33,6 +33,45 @@ fn input(sim: &mut Simulation, levels: [f32; COUNT]) {
     .unwrap();
 }
 #[test]
+fn scrolling_uses_the_visible_source_color_for_contacts_without_changing_motion() {
+    let mut fixed = world(SimulationConfig::default());
+    let mut scrolled = world(SimulationConfig::default());
+    for sim in [&mut fixed, &mut scrolled] {
+        isolate(sim, &[0]);
+        place(sim, 0, Vector::new(0.625, 0.2, 0.0), Vector::ZERO);
+    }
+    let offset = 5;
+    scrolled
+        .apply(SimulationInput {
+            band_offset: offset,
+            ..SimulationInput::default()
+        })
+        .unwrap();
+    let initial = fixed.colors[0];
+    for _ in 0..HZ {
+        fixed.step();
+        scrolled.step();
+        assert_eq!(position(&fixed, 0), position(&scrolled, 0));
+        assert_eq!(velocity(&fixed, 0), velocity(&scrolled, 0));
+    }
+    assert!(fixed.colors[0][0] > initial[0]);
+    let blend = (fixed.colors[0][0] - initial[0]) / (fixed.palette[12][0] - initial[0]);
+    let expected = initial[0] + (scrolled.palette[12 - offset][0] - initial[0]) * blend;
+    assert!((scrolled.colors[0][0] - expected).abs() < 1e-6);
+    let before = scrolled.input;
+    assert!(
+        scrolled
+            .apply(SimulationInput {
+                tick: scrolled.tick,
+                band_offset: COUNT,
+                ..before
+            })
+            .is_err()
+    );
+    assert_eq!(scrolled.input, before);
+}
+
+#[test]
 fn gravity_matches_ballistic_position_and_velocity() {
     for gravity in [3.0, 9.81, 15.0] {
         let mut sim = world(SimulationConfig {
@@ -558,6 +597,7 @@ fn recorded_inputs_replay_identically_at_all_render_rates() {
             tick,
             levels: std::array::from_fn(|i| ((tick as usize / 5 + i) % 11) as f32 / 10.0),
             acceleration: [((tick / 5) % 3) as f32 - 1.0, 0.0, 0.0],
+            band_offset: (tick as usize / 50) % COUNT,
             ..SimulationInput::default()
         })
         .collect();

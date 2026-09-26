@@ -53,6 +53,9 @@ export async function syntheticAudio(page, permission = 'granted') {
 }
 export async function startFrozen(page) {
   await physicsReady(page);
+  // Most physics fixtures measure fixed source columns. Scrolling has its own
+  // end-to-end checks and can be re-enabled explicitly after this helper.
+  await page.locator('.scroll-lights').uncheck();
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
   await page.evaluate(async () => {

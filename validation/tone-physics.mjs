@@ -16,7 +16,8 @@ for (const [label, api, modulePath] of [['before', baseline, '.cache/baseline-ph
     const schema = traceLayout(stride);
     const config = api.PhysicsSimulation.defaults();
     const sim = new api.PhysicsSimulation(config, new Float32Array(72).fill(.5));
-    const input = new Float32Array(33); input[32] = config[0];
+    // Historical engines predate the source offset added with layout version 3.
+    const input = new Float32Array(layout[18] >= 3 ? 34 : 33); input[32] = config[0];
     const output = new Float64Array(Math.floor(frames * .002 * 120) * 54);
     let rowIndex = 0, source = 0, maxDelay = 0, maxSubsteps = 0, overloadTicks = 0;
     const start = performance.now();

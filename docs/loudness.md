@@ -103,10 +103,18 @@ mean+0.05. Visual accents separately require a 160 ms minimum interval and 60 ms
 of quiet novelty to rearm. Diagnostics retain acoustic events and count those
 suppressed by the visual policy. See the [audio-engineering audit](audio-audit-results/README.md).
 
-Each accepted attack gives only the one-pixel inner border a 120 ms linear
-pulse, `max(0, 1-age/0.120)`. There is no renewable hold or fill whitening.
+Each accepted attack gives only the one-pixel inner border a 180 ms linear
+pulse, `max(0, 1-age/0.180)`. There is no renewable hold or fill whitening.
 Reduced Motion halves pulse intensity and retains the 320 ms mechanical stroke.
 The [closed physical enclosure](physics.md) uses actual collider transforms.
+
+**Scroll lights** moves the complete colored pattern one column to the right
+every approximately 1.44 seconds, wrapping at the edge, like the hat. It is a
+permutation of the 24 presentation bands: loudness values, colors, attack ages,
+and frequency labels travel together. No adjacent-band averaging or new attack
+is introduced. Turn it off for fixed bass-to-treble ordering. Reduced Motion
+disables automatic scrolling; hidden pages pause its clock without catch-up.
+The raw measurements and worklet snapshots always retain source-frequency order.
 
 The browser runs analysis in a preallocated, DOM-free AudioWorklet WASM instance.
 The version-4 snapshot contains 99 f64 values (792 bytes): audio seconds,
