@@ -47,3 +47,16 @@ test('an unknown nested route loads the app not-found view with HTTP 404', async
   expect((await request.get(`${origin}/missing-script.js`)).status()).toBe(404);
   expect(errors).toEqual([]);
 });
+
+for (const route of ['/', '/about/', '/phone/']) {
+  test(`Musical Lights branding fits a narrow header on ${route}`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.goto(`${origin}${route}`);
+    await expect(page.locator('.wordmark')).toHaveText('▂▅▃▆ Musical Lights');
+    await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute('content', 'Musical Lights');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+    const brand = await page.locator('.wordmark').boundingBox();
+    const nav = await page.locator('.site-header nav').boundingBox();
+    expect(brand.x + brand.width).toBeLessThanOrEqual(nav.x);
+  });
+}
