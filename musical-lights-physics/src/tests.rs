@@ -859,3 +859,96 @@ fn strong_bar_launches_have_small_release_hops_in_both_motion_modes() {
         }
     }
 }
+
+#[test]
+fn fullscreen_resize_is_bounded_and_repeated_packets_do_not_restart_it() {
+    for levels in [
+        [1.0; COUNT],
+        std::array::from_fn(|i| if i % 4 == 0 { 0.6 } else { 0.0 }),
+    ] {
+        let mut sim = world(SimulationConfig {
+            height: 0.927803,
+            ..SimulationConfig::default()
+        });
+        for _ in 0..2 * HZ {
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels,
+                height: 0.927803,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            sim.step();
+        }
+        for height in [2.596923, 0.5545024, MIN_HEIGHT] {
+            let before = sim.config.height;
+            let p = position(&sim, 0);
+            let v = velocity(&sim, 0);
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels,
+                height,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            assert_eq!(position(&sim, 0), p);
+            assert_eq!(velocity(&sim, 0), v);
+            assert_eq!(sim.config.height, before);
+            for tick in 1..=RESIZE_TICKS {
+                sim.apply(SimulationInput {
+                    tick: sim.tick,
+                    levels,
+                    height,
+                    ..SimulationInput::default()
+                })
+                .unwrap();
+                sim.step();
+                assert!(
+                    sim.config.height >= before.min(height)
+                        && sim.config.height <= before.max(height)
+                );
+                assert_eq!(
+                    sim.snapshot.values[COST_OFFSET + 1],
+                    0.0,
+                    "resize capped at {tick}"
+                );
+                if tick == RESIZE_TICKS / 2 {
+                    assert!((sim.config.height - (before + height) / 2.0).abs() < 1e-6);
+                }
+                for i in 0..COUNT {
+                    assert!(position(&sim, i).y + radius(i) <= sim.ceiling_height + 0.002);
+                }
+            }
+            assert_eq!(sim.config.height, height);
+            assert_eq!(sim.snapshot.values[1], height);
+        }
+    }
+}
+
+#[test]
+fn resize_reversal_starts_at_applied_height_and_replays_at_all_frame_rates() {
+    let replay = |fps| {
+        let mut sim = world(SimulationConfig::default());
+        for _ in 0..fps {
+            for _ in 0..HZ / fps {
+                let height = if sim.tick < 18 { 2.596923 } else { MIN_HEIGHT };
+                let previous = sim.config.height;
+                sim.apply(SimulationInput {
+                    tick: sim.tick,
+                    height,
+                    ..SimulationInput::default()
+                })
+                .unwrap();
+                assert_eq!(sim.config.height, previous);
+                sim.step();
+                if sim.tick > 18 {
+                    assert!(sim.config.height <= previous);
+                }
+            }
+        }
+        assert_eq!(sim.config.height, MIN_HEIGHT);
+        sim.snapshot
+    };
+    assert_eq!(replay(30), replay(60));
+    assert_eq!(replay(60), replay(120));
+}

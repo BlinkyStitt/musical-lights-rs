@@ -107,7 +107,16 @@ playback, not what a listener hears.
 
 [Open the audible comparison](index.html). It replays the exact float32 PCM
 used in the release producer and shows previous/current traces on one audio
-clock. The simplified monochrome bars are diagnostic; [actual renderer
+output clock, mapped from `getOutputTimestamp()` and its performance timestamp.
+Playback completion waits for the output timeline to reach the end. If the API
+is unavailable or invalid, the page subtracts available base/output latency
+estimates and labels timing approximate; without estimates it labels timing
+unverified. These fallback runs cannot establish precise flash timing. Exported
+notes retain the clock methods and latency estimates for each playback. A
+200 ms delayed-output regression checks the actual comparison canvas and its
+buffered ending in Chromium and WebKit.
+
+The simplified monochrome bars are diagnostic; [actual renderer
 clips](../flash-results/index.html) separately demonstrate the white border.
 Playback volume is not calibrated SPL. Review notes can be exported, and there
 are no fabricated human annotations or automatic listening passes.
