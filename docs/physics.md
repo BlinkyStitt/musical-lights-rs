@@ -117,6 +117,21 @@ The renderer owns the complete transfer pool and returns both snapshots on
 reset. Phone acceptance also checks snapshot age and displayed tick progress;
 a running worker with a frozen renderer cannot pass on frame rate alone.
 
+The browser's **Scroll lights** setting rotates complete source bands to the
+right at the hat's approximately 1.44-second column cadence. Fixed bar colliders
+receive the newly assigned height through their existing motion controller;
+balls remain in the same enclosure and collide with those real bar positions.
+The input's source offset also selects the visible bar color for impact blends.
+Scroll changes do not create attacks or modify measured loudness. The clock
+pauses while hidden and resets when listening stops; Reduced Motion and the
+unchecked toggle use the original fixed source order.
+
+Physics layout version 3 retains the geometry offsets and adds a 34th input
+value: the whole-column source offset (0–23). Replay records this alongside the
+physical target heights. Older reports require their matching engine. Tone
+diagnostics retain canonical source-band measurements and identify the requested
+offset beside each physical target sample.
+
 One animation loop interpolates snapshots and updates the accessible audio
 meters. ResizeObserver caches layout measurements. The renderer caps pixel
 ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
@@ -186,8 +201,9 @@ python3 validation/validate.py browser
 ```
 
 On macOS, use host access for browser checks and keep the serial startup guard.
-The motion and wall update passed 30 native physics tests, native/WASM Clippy,
-pinned Leptos validation, and 186 browser checks plus 10 harness checks.
+The scrolling and flash update passed 50 core tests in each of four feature
+configurations, 31 native physics tests, native/WASM Clippy, pinned worklet and
+Leptos validation, and 190 browser checks plus 10 harness checks.
 These results do not establish CI, physical-phone acceptance, or production
 deployment.
 

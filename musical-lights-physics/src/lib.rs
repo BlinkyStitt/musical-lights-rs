@@ -126,6 +126,7 @@ pub struct SimulationInput {
     pub pointer: Option<[f32; 3]>,
     pub reduced_motion: bool,
     pub height: f32,
+    pub band_offset: usize,
 }
 impl Default for SimulationInput {
     fn default() -> Self {
@@ -136,6 +137,7 @@ impl Default for SimulationInput {
             pointer: None,
             reduced_motion: false,
             height: SimulationConfig::default().height,
+            band_offset: 0,
         }
     }
 }
@@ -345,6 +347,7 @@ impl Simulation {
                 .is_some_and(|p| p.iter().any(|v| !v.is_finite()))
             || !input.height.is_finite()
             || !(MIN_HEIGHT..=20.0).contains(&input.height)
+            || input.band_offset >= COUNT
         {
             return Err("Invalid or late simulation input");
         }
@@ -511,8 +514,10 @@ impl Simulation {
                             let mass = self.world.bodies[self.balls[i].0].mass();
                             let blend = (impulse / mass * 0.15).clamp(0.0, 0.5);
                             for c in 0..3 {
-                                self.colors[i][c] +=
-                                    (self.palette[j][c] - self.colors[i][c]) * blend;
+                                self.colors[i][c] += (self.palette
+                                    [(j + COUNT - self.input.band_offset) % COUNT][c]
+                                    - self.colors[i][c])
+                                    * blend;
                             }
                         }
                     }
@@ -702,18 +707,23 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            2.0, // closed-enclosure geometry/snapshot version
+            3.0, // scrolling source identity included in recorded inputs
             MIN_HEIGHT,
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
-        // 24 levels, 3 acceleration values, pointer active + xyz, reduced, height.
-        if values.len() != 33
+        // 24 levels, 3 acceleration values, pointer active + xyz, reduced, height, source offset.
+        if values.len() != 34
             || values.iter().any(|v| !v.is_finite())
             || ![0.0, 1.0].contains(&values[27])
             || ![0.0, 1.0].contains(&values[31])
+            || values[33] < 0.0
+            || values[33] >= COUNT as f32
+            || values[33].fract() != 0.0
         {
-            return Err(JsError::new("Expected 33 simulation inputs"));
+            return Err(JsError::new(
+                "Expected 34 simulation inputs with a whole-column offset",
+            ));
         }
         let input = SimulationInput {
             tick: self.0.tick,
@@ -722,6 +732,7 @@ impl PhysicsSimulation {
             pointer: (values[27] == 1.0).then_some([values[28], values[29], values[30]]),
             reduced_motion: values[31] == 1.0,
             height: values[32],
+            band_offset: values[33] as usize,
         };
         self.0.apply(input).map_err(JsError::new)
     }

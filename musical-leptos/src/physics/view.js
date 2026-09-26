@@ -48,7 +48,7 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(33);
+    this.input = new Float32Array(34);
     this.edges = new Float32Array(24);
     this.acceleration = [0, 0, 0];
     this.tilt = [0, 0, 0];
@@ -228,7 +228,7 @@ export class PhysicsView {
       defines: { PIXEL_RATIO: Math.min(devicePixelRatio, 2).toFixed(1) },
     });
     this.bars = new THREE.InstancedMesh(geometry, material, count);
-    for (let i = 0; i < count; i++) { this.color.fromArray(this.palette, i * 3); this.bars.setColorAt(i, this.color); }
+    for (let i = 0; i < count; i++) { this.color.fromArray(this.palette, ((i + count - this.input[33]) % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
     this.ceiling = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
@@ -262,8 +262,20 @@ export class PhysicsView {
     this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);
   }
-  push(levels, edges) { this.input.set(levels, 0); this.edges.set(edges); }
-  stopMotion() { this.motion.stopMotion(); this.tilt = [0, 0, 0]; this.acceleration = [0, 0, 0]; this.input.fill(0, 0, 27); this.edges.fill(0); }
+  push(levels, edges, offset = 0) {
+    this.input.set(levels, 0); this.edges.set(edges);
+    if (offset !== this.input[33]) {
+      this.input[33] = offset;
+      if (this.bars) {
+        for (let slot = 0; slot < 24; slot++) {
+          this.color.fromArray(this.palette, ((slot + 24 - offset) % 24) * 3);
+          this.bars.setColorAt(slot, this.color);
+        }
+        this.bars.instanceColor.needsUpdate = true;
+      }
+    }
+  }
+  stopMotion() { this.motion.stopMotion(); this.tilt = [0, 0, 0]; this.acceleration = [0, 0, 0]; this.input.fill(0, 0, 27); this.push(new Float32Array(24), new Float32Array(24), 0); }
   pause() {
     if (this.request != null) cancelAnimationFrame(this.request);
     this.request = null;

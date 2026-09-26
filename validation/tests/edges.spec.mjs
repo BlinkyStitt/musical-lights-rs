@@ -10,7 +10,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
       for (const fps of [30, 60, 120]) {
         window.sendBars(Array(24).fill(.4), 1);
         const start = window.audioNow, edges = [];
-        for (const age of [...Array.from({ length: Math.ceil(.12 * fps) }, (_, i) => i / fps), .120001, 1]) {
+        for (const age of [...Array.from({ length: Math.ceil(.18 * fps) }, (_, i) => i / fps), .180001, 1]) {
           window.audioNow = start + age;
           const state = new Float64Array(99);
           state.set([window.audioNow, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0, 4]);
@@ -28,9 +28,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     });
     const intensity = reducedMotion === 'reduce' ? .5 : 1;
     for (const { fps, edges } of runs) for (const { age, edge } of edges) {
-      expect(edge, `${fps} FPS at ${age}s`).toBeCloseTo(Math.max(0, 1 - age / .12) * intensity, 6);
+      expect(edge, `${fps} FPS at ${age}s`).toBeCloseTo(Math.max(0, 1 - age / .18) * intensity, 6);
       if (age <= 1 / fps) expect(edge).toBeGreaterThanOrEqual(.7 * intensity);
-      if (age >= .12) expect(edge).toBe(0);
+      if (age >= .18) expect(edge).toBe(0);
     }
     await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
   });
@@ -71,9 +71,9 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       expect(Math.min(...rgb(left + Math.ceil(2 * pixels.ratio)))).toBeLessThan(245);
     }
     await page.screenshot({ path: info.outputPath('white-inner-edge.png'), fullPage: true });
-    await page.evaluate(() => { window.audioNow += .060; });
+    await page.evaluate(() => { window.audioNow += .090; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBeCloseTo(reducedMotion === 'reduce' ? .25 : .5, 6);
-    await page.evaluate(() => { window.audioNow += .060001; });
+    await page.evaluate(() => { window.audioNow += .090001; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
     await page.evaluate(() => { window.audioNow += 10; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);

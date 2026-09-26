@@ -148,6 +148,10 @@ pub fn DancingLights() -> impl IntoView {
         })
     };
     let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
+    let (scrolling, set_scrolling) = signal(true);
+    let (scroll_offset, set_scroll_offset) = signal(0usize);
+    let source_band =
+        move |slot: usize| (slot + DISPLAY_BANDS - scroll_offset.get()) % DISPLAY_BANDS;
     let (listening, set_listening) = signal(false);
     let (generated, set_generated) = signal(false);
     let (capture_status, set_capture_status) =
@@ -245,20 +249,27 @@ pub fn DancingLights() -> impl IntoView {
         }
         let alive = owner.alive.clone();
         let physics = owner.physics.clone();
-        let animation = match DisplayAnimation::new(session.clone(), move |values, fps| {
-            if !alive.get() {
-                return;
-            }
-            if let Some(physics) = physics.borrow().as_ref() {
-                physics.push(values);
-            }
-            if audio.get_untracked() != values {
-                set_audio.set(values);
-            }
-            if let Some(fps) = fps {
-                set_frame_rate.set(Some(fps));
-            }
-        }) {
+        let animation = match DisplayAnimation::new(
+            session.clone(),
+            move || scrolling.get_untracked() && listening.get_untracked(),
+            move |values, fps, offset| {
+                if !alive.get() {
+                    return;
+                }
+                if let Some(physics) = physics.borrow().as_ref() {
+                    physics.push(values, offset);
+                }
+                if scroll_offset.get_untracked() != offset {
+                    set_scroll_offset.set(offset);
+                }
+                if audio.get_untracked() != values {
+                    set_audio.set(values);
+                }
+                if let Some(fps) = fps {
+                    set_frame_rate.set(Some(fps));
+                }
+            },
+        ) {
             Ok(animation) => animation,
             Err(error) => {
                 session.stop();
@@ -298,6 +309,7 @@ pub fn DancingLights() -> impl IntoView {
                                 set_listening.set(false);
                                 set_starting.set(false);
                                 set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
+                                set_scroll_offset.set(0);
                                 set_frame_rate.set(None);
                                 let owner = failure_owner.clone();
                                 // Release the message closure after it returns.
@@ -344,6 +356,7 @@ pub fn DancingLights() -> impl IntoView {
                             set_error.set(None);
                             set_audio_stopped.set(false);
                             set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
+                            set_scroll_offset.set(0);
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
@@ -370,21 +383,23 @@ pub fn DancingLights() -> impl IntoView {
                 <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
                     hidden=move || selected_band.get().is_none()
                     style=move || selected_band.get().map(|index| {
-                        let color = screen_color(colors[index]);
+                        let color = screen_color(colors[source_band(index)]);
                         format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue)
                     })>
                     <span class="frequency-swatch" aria-hidden="true"></span>
-                    <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[index], frequency_edges[index + 1]))}</span>
+                    <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[source_band(index)], frequency_edges[source_band(index) + 1]))}</span>
                 </div>
-                <div id="dancinglights" role="group" aria-label="Audio spectrum, bass to treble" on:keydown=navigate_sample>
-                    {BARK_EDGES.windows(2).enumerate().map(|(group, edges)| {
-                        let color = screen_color(palette.colors[group]);
-                        let style = format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue);
+                <div id="dancinglights" role="group" aria-label=move || if scroll_offset.get() == 0 { "Audio spectrum, bass to treble" } else { "Audio spectrum, wrapped frequency bands" } on:keydown=navigate_sample>
+                    {(0..DISPLAY_BANDS).map(|group| {
+                        let style = move || {
+                            let color = screen_color(palette.colors[source_band(group)]);
+                            format!("--band-color: color(srgb {} {} {});", color.red, color.green, color.blue)
+                        };
                         view! {
                             <div class="bark-group" role="group"
-                                aria-label=format!("Band {}, {}–{} Hz", group + 1, edges[0], edges[1]) style=style>
+                                aria-label=move || { let band = source_band(group); format!("Band {}, {}–{} Hz", band + 1, frequency_edges[band], frequency_edges[band + 1]) } style=style>
                                 <div class="meter" role="meter"
-                                    aria-label=format!("≈ {}–{} Hz", edges[0], edges[1])
+                                    aria-label=move || { let band = source_band(group); format!("≈ {}–{} Hz", frequency_edges[band], frequency_edges[band + 1]) }
                                     node_ref=sample_nodes.with_value(|nodes| nodes[group])
                                     tabindex=move || if active_sample.get() == group { "0" } else { "-1" }
                                     aria-describedby=move || (selected_band.get() == Some(group)).then_some("frequency-readout")
@@ -405,13 +420,16 @@ pub fn DancingLights() -> impl IntoView {
                     <span class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></span>
                     <span class="balloon-layer" aria-hidden="true" node_ref=canvas_layer></span>
                 </div>
-                <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
+                <div class="spectrum-labels" aria-hidden="true"><span>{move || if scroll_offset.get() == 0 { "BASS" } else { "" }}</span><span>{move || if scroll_offset.get() == 0 { "MIDRANGE" } else { "SCROLLING →" }}</span><span>{move || if scroll_offset.get() == 0 { "TREBLE" } else { "" }}</span></div>
             </div>
             <div class="display-note">
                 <p class="control-note">{move || if listening.get() {
                     format!("Sample rate: {} Hz", sample_rate.get())
                 } else { "Allow microphone access to begin. No recording.".into() }}</p>
                 <p class="display-status">
+                <label class="scroll-control" title="Move the colored bands right. Automatic scrolling is off with Reduced Motion."><input class="scroll-lights" type="checkbox" tabindex="0" prop:checked=move || scrolling.get()
+                    on:change=move |event| set_scrolling.set(event_target_checked(&event))/>
+                    " Scroll lights"</label>
                     <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>
                     <span class="frame-rate" aria-label="Frame rate" title="Frames per second">
                         {move || frame_rate.get().map_or_else(|| "— FPS".into(), |fps| format!("{fps:.0} FPS"))}

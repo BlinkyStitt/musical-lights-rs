@@ -7,7 +7,7 @@ for (const height of [.4, .6, 1.2, 2]) {
   const config = PhysicsSimulation.defaults(); config[0] = height;
   const sim = new PhysicsSimulation(config, new Float32Array(72).fill(.5));
   const state = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
-  const input = new Float32Array(33); input[32] = height;
+  const input = new Float32Array(34); input[32] = height;
   let maxSubsteps = 0, overload = 0;
   const strokes = [];
   for (const level of [1, 0, 1, 0]) {

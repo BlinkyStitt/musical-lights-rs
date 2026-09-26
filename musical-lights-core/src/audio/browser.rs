@@ -13,6 +13,7 @@ use num::Float;
 const DT: f64 = HOP as f64 / 48000.0;
 const FILTER_CAPACITY: usize = 256;
 const HISTORY: usize = 50;
+pub const ATTACK_FLASH_SECONDS: f64 = 0.180;
 
 fn alpha(cutoff: f64) -> f64 {
     1.0 / (1.0 + 1.0 / (2.0 * core::f64::consts::PI * cutoff * DT))
@@ -49,10 +50,11 @@ impl BrowserSnapshot {
             edges: self.attacks.map(|attack| {
                 attack.map_or(0.0, |start| {
                     let age = (at - start).max(0.0);
-                    if age >= 0.120 {
+                    if age >= ATTACK_FLASH_SECONDS {
                         0.0
                     } else {
-                        ((1.0 - age / 0.120) * if self.reduced { 0.5 } else { 1.0 }) as f32
+                        ((1.0 - age / ATTACK_FLASH_SECONDS) * if self.reduced { 0.5 } else { 1.0 })
+                            as f32
                     }
                 })
             }),
