@@ -1,0 +1,310 @@
+{
+  "before": [
+    {
+      "browser": "chromium",
+      "version": "154.0.8037.0",
+      "physicalPhone": false,
+      "origin": "https://blink.stitthappens.com",
+      "errors": [],
+      "windows": [
+        {
+          "event": "enter",
+          "fps": 60.00600060006,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.800000000000182,
+          "over25Fraction": 0,
+          "maxDebt": 8.200195312499751,
+          "maxSnapshotAge": 11.899999999999636,
+          "overloadTicks": 5,
+          "fromHeight": 0.9278030395507812,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "landscape",
+          "fps": 60.00300015000751,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.80000000000109,
+          "over25Fraction": 0,
+          "maxDebt": 8.233479817707867,
+          "maxSnapshotAge": 11.299999997019768,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.5545023679733276
+        },
+        {
+          "event": "portrait",
+          "fps": 60.00600060006003,
+          "p95": 16.799999999999272,
+          "maxFrame": 16.80000000000109,
+          "over25Fraction": 0,
+          "maxDebt": 8.300048828124337,
+          "maxSnapshotAge": 26.99999999403917,
+          "overloadTicks": 2,
+          "fromHeight": 0.5545023679733276,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "exit",
+          "fps": 60.00300015000751,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.80000000000109,
+          "over25Fraction": 0,
+          "maxDebt": 8.266764322915906,
+          "maxSnapshotAge": 12.399999997020132,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.9278030395507812
+        }
+      ],
+      "discardedSimulationMs": 0,
+      "workload": {
+        "sessionId": 1,
+        "source": "generated",
+        "sampleRate": 48000,
+        "diagnostics": false,
+        "state": "playing",
+        "repeat": true,
+        "kind": "exercise",
+        "frequency": 1000,
+        "dbfs": -34,
+        "peakAmplitude": 0.0199526231496888,
+        "audioStart": 0,
+        "channel": 0,
+        "pascalsPerUnit": 2,
+        "calibrated": false,
+        "reason": "context running"
+      },
+      "build": "513d6159f960f1436aab087563e2f94b74584dc1"
+    },
+    {
+      "browser": "webkit",
+      "version": "26.6",
+      "physicalPhone": false,
+      "origin": "https://blink.stitthappens.com",
+      "errors": [],
+      "windows": [
+        {
+          "event": "enter",
+          "fps": 60,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999776,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 6,
+          "fromHeight": 0.9278030395507812,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "landscape",
+          "fps": 59.97001499250375,
+          "p95": 17,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999501,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.5545023679733276
+        },
+        {
+          "event": "portrait",
+          "fps": 60,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999476,
+          "maxSnapshotAge": 26,
+          "overloadTicks": 4,
+          "fromHeight": 0.5545023679733276,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "exit",
+          "fps": 61.030515257628814,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999298,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.9278030395507812
+        }
+      ],
+      "discardedSimulationMs": 0,
+      "workload": {
+        "sessionId": 1,
+        "source": "generated",
+        "sampleRate": 48000,
+        "diagnostics": false,
+        "state": "playing",
+        "repeat": true,
+        "kind": "exercise",
+        "frequency": 1000,
+        "dbfs": -34,
+        "peakAmplitude": 0.0199526231496888,
+        "audioStart": 0,
+        "channel": 0,
+        "pascalsPerUnit": 2,
+        "calibrated": false,
+        "reason": "context running"
+      },
+      "build": "513d6159f960f1436aab087563e2f94b74584dc1"
+    }
+  ],
+  "after": [
+    {
+      "browser": "chromium",
+      "version": "154.0.8037.0",
+      "physicalPhone": false,
+      "origin": "https://musical-lights.test",
+      "errors": [],
+      "windows": [
+        {
+          "event": "enter",
+          "fps": 60.00300015000749,
+          "p95": 16.799999999999272,
+          "maxFrame": 16.800000000000182,
+          "over25Fraction": 0,
+          "maxDebt": 7.9001464843746465,
+          "maxSnapshotAge": 12.300000005960555,
+          "overloadTicks": 0,
+          "fromHeight": 0.9278030395507812,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "landscape",
+          "fps": 60.00600060006,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.800000000000182,
+          "over25Fraction": 0,
+          "maxDebt": 7.400146484374579,
+          "maxSnapshotAge": 11.100000002979868,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.5545023679733276
+        },
+        {
+          "event": "portrait",
+          "fps": 60.00300015000751,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.80000000000109,
+          "over25Fraction": 0,
+          "maxDebt": 7.93343098958279,
+          "maxSnapshotAge": 10.800000002980596,
+          "overloadTicks": 0,
+          "fromHeight": 0.5545023679733276,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "exit",
+          "fps": 60.00600060006003,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.80000000000109,
+          "over25Fraction": 0,
+          "maxDebt": 7.266764322915952,
+          "maxSnapshotAge": 12.600000005961192,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.9278030395507812
+        }
+      ],
+      "discardedSimulationMs": 0,
+      "workload": {
+        "sessionId": 1,
+        "source": "generated",
+        "sampleRate": 48000,
+        "diagnostics": false,
+        "state": "playing",
+        "repeat": true,
+        "kind": "exercise",
+        "frequency": 1000,
+        "dbfs": -34,
+        "peakAmplitude": 0.0199526231496888,
+        "audioStart": 0,
+        "channel": 0,
+        "pascalsPerUnit": 2,
+        "calibrated": false,
+        "reason": "context running"
+      },
+      "build": "08d31d3d5c962a6aa9a322da9df732fdd6493a7f-dirty"
+    },
+    {
+      "browser": "webkit",
+      "version": "26.6",
+      "physicalPhone": false,
+      "origin": "https://musical-lights.test",
+      "errors": [],
+      "windows": [
+        {
+          "event": "enter",
+          "fps": 60.5,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999794,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 2,
+          "fromHeight": 0.9278030395507812,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "landscape",
+          "fps": 60.120240480961925,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999597,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.5545023679733276
+        },
+        {
+          "event": "portrait",
+          "fps": 59.97001499250375,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999474,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 5,
+          "fromHeight": 0.5545023679733276,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "exit",
+          "fps": 60,
+          "p95": 18,
+          "maxFrame": 18,
+          "over25Fraction": 0,
+          "maxDebt": 7.999999999999325,
+          "maxSnapshotAge": 17,
+          "overloadTicks": 1,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.9278030395507812
+        }
+      ],
+      "discardedSimulationMs": 0,
+      "workload": {
+        "sessionId": 1,
+        "source": "generated",
+        "sampleRate": 48000,
+        "diagnostics": false,
+        "state": "playing",
+        "repeat": true,
+        "kind": "exercise",
+        "frequency": 1000,
+        "dbfs": -34,
+        "peakAmplitude": 0.0199526231496888,
+        "audioStart": 0,
+        "channel": 0,
+        "pascalsPerUnit": 2,
+        "calibrated": false,
+        "reason": "context running"
+      },
+      "build": "08d31d3d5c962a6aa9a322da9df732fdd6493a7f-dirty"
+    }
+  ]
+}

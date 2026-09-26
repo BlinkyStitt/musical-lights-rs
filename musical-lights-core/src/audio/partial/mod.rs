@@ -257,6 +257,7 @@ pub struct PartialLoudnessMeter {
     hop: usize,
     next_sample: u64,
     power_scale: f64,
+    onset_scale: f64,
 }
 impl PartialLoudnessMeter {
     pub fn new(calibration: Calibration) -> Self {
@@ -272,6 +273,7 @@ impl PartialLoudnessMeter {
             cursor: 0,
             hop: 0,
             next_sample: 0,
+            onset_scale: f64::from(calibration.pascals_per_unit()) / 2.0,
             power_scale: 2.0 * scale * scale / (WINDOW * WINDOW) as f64 / 0.375,
         }
     }
@@ -290,7 +292,9 @@ impl PartialLoudnessMeter {
     ) -> Result<(), LoudnessError> {
         self.push_pcm_with_spectrum(samples, first_sample, |frame, _| emit(frame))
     }
-    /// Reuse the uncalibrated FFT magnitudes for independent presentation features.
+    /// Reuse pressure-scaled FFT magnitudes for independent onset features.
+    /// The fixed reference is 2 Pa per unit (the default calibration). Equivalent
+    /// pressure waveforms yield equivalent features regardless of recording gain.
     /// Neither these features nor display filtering feed back into loudness.
     pub fn push_pcm_with_spectrum(
         &mut self,
@@ -324,7 +328,9 @@ impl PartialLoudnessMeter {
                 let c = bins[i + 1];
                 (f64::from(c.re).powi(2) + f64::from(c.im).powi(2)) * self.power_scale
             });
-            let magnitudes = core::array::from_fn(|i| Float::sqrt(powers[i] / self.power_scale));
+            let magnitudes = core::array::from_fn(|i| {
+                Float::sqrt(powers[i] / self.power_scale) * self.onset_scale
+            });
             emit(
                 self.spectrum.process(&powers, self.next_sample),
                 &magnitudes,

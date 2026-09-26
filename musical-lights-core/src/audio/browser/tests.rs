@@ -73,8 +73,9 @@ fn pulses_expire_exactly_and_transport_rejects_corruption() {
     let mut s = BrowserSnapshot::new(1.0);
     s.attacks[4] = Some(1.0);
     assert_eq!(s.frame(1.0).edges[4], 1.0);
-    assert!((s.frame(1.05).edges[4] - 0.25).abs() < 1e-6);
-    assert_eq!(s.frame(1.100001).edges[4], 0.0);
+    assert!((s.frame(1.06).edges[4] - 0.5).abs() < 1e-6);
+    assert!(s.frame(1.119).edges[4] > 0.0);
+    assert_eq!(s.frame(1.12).edges[4], 0.0);
     s.reduced = true;
     assert_eq!(s.frame(1.0).edges[4], 0.5);
     let mut transport = [0.0; BrowserSnapshot::TRANSPORT_LEN];
@@ -85,6 +86,36 @@ fn pulses_expire_exactly_and_transport_rejects_corruption() {
     transport[2] = 4.0;
     transport[5] = f64::NAN;
     assert!(BrowserSnapshot::from_transport(&transport).is_none());
+}
+
+#[test]
+fn linear_pulses_remain_visible_at_each_frame_rate_without_packet_renewal() {
+    for fps in [30, 60, 120] {
+        for reduced in [false, true] {
+            let intensity = if reduced { 0.5 } else { 1.0 };
+            let mut s = BrowserSnapshot::new(0.0);
+            s.reduced = reduced;
+            s.attacks[4] = Some(0.0);
+            for frame in 0..=fps {
+                let at = frame as f64 / fps as f64;
+                // Newer packets keep the original attack timestamp.
+                s.at = at;
+                let mut packet = [0.0; BrowserSnapshot::TRANSPORT_LEN];
+                s.write_transport(&mut packet);
+                let received = BrowserSnapshot::from_transport(&packet).unwrap();
+                let edge = received.frame(at).edges[4];
+                let expected = ((1.0 - at / 0.120).max(0.0) * intensity) as f32;
+                assert!((edge - expected).abs() < 1e-6);
+                if at <= 1.0 / fps as f64 {
+                    assert!(edge >= 0.7 * intensity as f32);
+                }
+                if at >= 0.120 {
+                    assert_eq!(edge, 0.0);
+                }
+            }
+            assert_eq!(s.frame(0.120).edges[4], 0.0);
+        }
+    }
 }
 
 #[test]
@@ -123,7 +154,7 @@ fn real_fft_attacks_flash_once_but_sustains_and_modulation_do_not_retrigger() {
                         sones: n as f32,
                         activity: (n / 4.0).min(1.0) as f32,
                     });
-                    p.push(frame.sample_index as f64 / 48000.0, values, spectrum, false);
+                    p.push(&frame, values, spectrum, false);
                     for (old, new) in previous.iter_mut().zip(p.snapshot.attacks) {
                         if *old != new {
                             flashes += 1;
@@ -147,7 +178,11 @@ fn gain_only_changes_silence_and_startup_cannot_flash() {
     let spectrum = [1.0; BINS];
     for n in 1..1000 {
         p.push(
-            n as f64 * DT,
+            &PartialLoudnessFrame {
+                sample_index: n * HOP as u64,
+                instantaneous_sones: [1.0; 24],
+                short_term_sones: [1.0; 24],
+            },
             levels(if n % 100 < 50 { 0.4 } else { 0.8 }),
             &spectrum,
             false,
@@ -189,7 +224,7 @@ fn repeated_attacks_rearm_but_swells_and_a_masked_weak_target_do_not_flash() {
                         sones: n as f32,
                         activity: (n / 4.0).min(1.0) as f32,
                     });
-                    presentation.push(frame.sample_index as f64 / 48000.0, levels, spectrum, false);
+                    presentation.push(&frame, levels, spectrum, false);
                     for (old, new) in previous.iter_mut().zip(presentation.snapshot.attacks) {
                         if *old != new {
                             flashes += 1;
@@ -201,4 +236,37 @@ fn repeated_attacks_rearm_but_swells_and_a_masked_weak_target_do_not_flash() {
         }
         assert_eq!(flashes, expected, "{kind}");
     }
+}
+
+#[test]
+fn attacks_are_independent_of_display_enlargement_and_reduced_motion() {
+    let mut meter = PartialLoudnessMeter::new(Calibration::default());
+    let mut small = BrowserPresentation::new(0.0);
+    let mut large = BrowserPresentation::new(0.0);
+    for chunk in 0..750 {
+        let pcm = core::array::from_fn::<_, HOP, _>(|i| {
+            let t = (chunk * HOP + i) as f64 / 48000.0;
+            if (0.4..0.7).contains(&t) || (1.0..1.3).contains(&t) {
+                (0.006 * Float::sin(core::f64::consts::TAU * 150.0 * t)) as f32
+            } else {
+                0.0
+            }
+        });
+        meter
+            .push_pcm_with_spectrum(&pcm, (chunk * HOP) as u64, |frame, spectrum| {
+                let levels = |gain: f64| {
+                    frame.short_term_sones.map(|n| BandLevel {
+                        sones: n as f32,
+                        activity: (n * gain).min(1.0) as f32,
+                    })
+                };
+                small.push(&frame, levels(0.001), spectrum, false);
+                large.push(&frame, levels(100.0), spectrum, true);
+                assert_eq!(small.acoustic.events, large.acoustic.events);
+                assert_eq!(small.snapshot.attacks, large.snapshot.attacks);
+                assert_eq!(small.suppressed, large.suppressed);
+            })
+            .unwrap();
+    }
+    assert!(small.snapshot.attacks[1].is_some_and(|at| (1.0..1.1).contains(&at)));
 }

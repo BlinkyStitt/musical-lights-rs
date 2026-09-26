@@ -1,0 +1,151 @@
+{
+  "upstreamRevision": "82de790f79c5b358040861e8bdb906a55009b117",
+  "numpyVersion": "2.5.3",
+  "sourceSha256": {
+    "validation/partial/window-audit.py": "925314e12782e83b989ba89195e33176311b76a720802489fdc3dd091233b394",
+    "validation/partial/oracle.cpp": "f05047fb1568e69080d1ce0566bd376dc89e3a7b274daa20df4645f6eece78d0"
+  },
+  "status": "quantified model difference, not a conformance pass",
+  "fixed": {
+    "windowMs": 42.666666666666664,
+    "hopMs": 2,
+    "centerBeforeEndMs": 21.333333333333332
+  },
+  "reference": {
+    "windowMs": [
+      64,
+      32,
+      16,
+      8,
+      4,
+      2
+    ],
+    "hopMs": 1,
+    "fftSize": 4096,
+    "centerBeforeEndMs": 32,
+    "frequencyLimitHz": 15001
+  },
+  "fittedGain": false,
+  "fittedTimeShift": false,
+  "cases": [
+    {
+      "frequencyHz": 50,
+      "pcmSha256": "4cc389552a32157f5372b9b16827610798d6120f4e72c623f01e60e2d4f978ea",
+      "fixed": {
+        "dominantBand": 0,
+        "steadySones": 0.20245163643622655,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 0,
+        "steadySones": 0.2143136969036675,
+        "rise90Ms": 84.99999999999997,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.05520746483532374
+    },
+    {
+      "frequencyHz": 150,
+      "pcmSha256": "cb3ca637a2fc3ae14fc177e429d848a32347dd04e082193dfd24dc7d542fee11",
+      "fixed": {
+        "dominantBand": 1,
+        "steadySones": 1.0263234107955324,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 1,
+        "steadySones": 1.0785211300892175,
+        "rise90Ms": 83.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.27025317489253775
+    },
+    {
+      "frequencyHz": 250,
+      "pcmSha256": "b7979094416dbe1a7beee1d9a0d7d276c9687dd5426c62886111b2a89d43fcb5",
+      "fixed": {
+        "dominantBand": 2,
+        "steadySones": 1.5336557434449976,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 2,
+        "steadySones": 1.4923049765850194,
+        "rise90Ms": 84.99999999999997,
+        "fall10Ms": 145.00000000000003
+      },
+      "maxBandDifferenceSones": 0.4459508368884186
+    },
+    {
+      "frequencyHz": 1000,
+      "pcmSha256": "9d744134a8465db30de6649ebc3afb324afafbcf4c1254a660392dc5fb16cc23",
+      "fixed": {
+        "dominantBand": 8,
+        "steadySones": 2.5587137031050373,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 8,
+        "steadySones": 2.300863415576015,
+        "rise90Ms": 82.99999999999996,
+        "fall10Ms": 145.00000000000003
+      },
+      "maxBandDifferenceSones": 0.8999545415205135
+    },
+    {
+      "frequencyHz": 3400,
+      "pcmSha256": "9748d871c0fece49b544cadb632e81e9278b02ad0baef929e743c2258297c428",
+      "fixed": {
+        "dominantBand": 16,
+        "steadySones": 4.428845757390889,
+        "rise90Ms": 70.0,
+        "fall10Ms": 140.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 16,
+        "steadySones": 3.3275677260576244,
+        "rise90Ms": 81.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 1.9989837798484391
+    },
+    {
+      "frequencyHz": 8600,
+      "pcmSha256": "a4f863f4ea85355adad022319bc1190e8f202508b47b52feac160a969aee2264",
+      "fixed": {
+        "dominantBand": 21,
+        "steadySones": 1.1766276677461436,
+        "rise90Ms": 68.0,
+        "fall10Ms": 142.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 21,
+        "steadySones": 1.2332481650752043,
+        "rise90Ms": 81.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.5682074909837557
+    },
+    {
+      "frequencyHz": 13700,
+      "pcmSha256": "bdb3cc087a1c2a96ddd34862191aa6dae485bfaae5bb20f11601ef4235ccd20f",
+      "fixed": {
+        "dominantBand": 23,
+        "steadySones": 0.7150811980088965,
+        "rise90Ms": 66.0,
+        "fall10Ms": 142.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 23,
+        "steadySones": 0.7551520820981525,
+        "rise90Ms": 81.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.36714802574416194
+    }
+  ]
+}

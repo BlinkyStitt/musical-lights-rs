@@ -9,12 +9,22 @@
 #include "modules/ARAverager.h"
 #include <iostream>
 #include <iomanip>
+#include <string>
 using namespace loudness;
 const double edges[] = {0,100,200,300,400,510,630,770,920,1080,1270,1480,1720,2000,2320,2700,3150,3700,4400,5300,6400,7700,9500,12000,15500};
-int main(int argc, char**) {
+int main(int argc, char** argv) {
     RealVec frequencies;
     for (int i=1;i<=853;++i) frequencies.push_back(i*48000.0/2048);
-    if (argc>1) {
+    double rate = 500;
+    const bool grid = argc > 1 && std::string(argv[1]) == "--grid";
+    if (grid) {
+        double count;
+        if (!std::cin.read(reinterpret_cast<char*>(&count), 8) || count < 1 || count > 4096) return 2;
+        if (!std::cin.read(reinterpret_cast<char*>(&rate), 8) || rate <= 0) return 2;
+        frequencies.resize(static_cast<int>(count));
+        if (!std::cin.read(reinterpret_cast<char*>(frequencies.data()), frequencies.size()*8)) return 2;
+    }
+    if (argc>1 && !grid) {
         OME ome(OME::ANSIS342007_MIDDLE_EAR, OME::ANSIS342007_FREEFIELD);
         ome.interpolateResponse(frequencies);
         std::cout << std::setprecision(17);
@@ -22,8 +32,9 @@ int main(int argc, char**) {
         return 0;
     }
     SignalBank input;
-    input.initialize(25,1,853,1,48000);
-    input.setCentreFreqs(frequencies); input.setFrameRate(500);
+    const int bins = frequencies.size();
+    input.initialize(25,1,bins,1,48000);
+    input.setCentreFreqs(frequencies); input.setFrameRate(rate);
     WeightSpectrum weight(OME::ANSIS342007_MIDDLE_EAR, OME::ANSIS342007_FREEFIELD);
     MultiSourceRoexBank roex(.25);
     SpecificPartialLoudnessMGB1997 partial(false,false);
@@ -32,16 +43,16 @@ int main(int argc, char**) {
     weight.addTargetModule(roex); roex.addTargetModule(partial);
     partial.addTargetModule(instant); instant.addTargetModule(temporal);
     if (!weight.initialize(input)) return 1;
-    double powers[853];
+    RealVec powers(bins);
     auto emit = [](double x) { std::cout.write(reinterpret_cast<char*>(&x),8); };
-    while (std::cin.read(reinterpret_cast<char*>(powers),sizeof(powers))) {
+    while (std::cin.read(reinterpret_cast<char*>(powers.data()),bins*8)) {
         input.zeroSignals();
-        for (int bin=0;bin<853;++bin) {
+        for (int bin=0;bin<bins;++bin) {
             int band=0; while(band<24 && frequencies[bin]>=edges[band+1]) ++band;
             input.setSample(band,0,bin,0,powers[bin]);
         }
         weight.process(input);
-        for(int bin=0;bin<853;++bin) {
+        for(int bin=0;bin<bins;++bin) {
             double power=0; for(int s=0;s<25;++s) power+=weight.getOutput().getSample(s,0,bin,0);
             emit(power);
         }

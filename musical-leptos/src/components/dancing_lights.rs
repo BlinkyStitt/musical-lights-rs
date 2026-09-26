@@ -37,6 +37,46 @@ impl SessionOwner {
     }
 }
 
+// Keep the error state available while its detailed notice expires. Identical
+// repeated callbacks must not restart the timer; clearing the source rearms it.
+fn transient_notice(
+    message: impl Fn() -> Option<String> + Send + Sync + 'static,
+) -> ReadSignal<Option<String>> {
+    let (visible, set_visible) = signal(None::<String>);
+    let previous = StoredValue::new(None::<String>);
+    let timer = StoredValue::new(None::<TimeoutHandle>);
+    let cancel = move || {
+        timer.update_value(|timer| {
+            if let Some(timer) = timer.take() {
+                timer.clear();
+            }
+        })
+    };
+    on_cleanup(cancel);
+    Effect::new(move |_| {
+        let message = message();
+        if previous.get_value() == message {
+            return;
+        }
+        previous.set_value(message.clone());
+        cancel();
+        set_visible.set(message.clone());
+        if message.is_some() {
+            match set_timeout(
+                move || {
+                    set_visible.set(None);
+                    timer.set_value(None);
+                },
+                Duration::from_secs(4),
+            ) {
+                Ok(handle) => timer.set_value(Some(handle)),
+                Err(error) => log::warn!("Could not schedule notice expiry: {error:?}"),
+            }
+        }
+    });
+    visible
+}
+
 #[component]
 pub fn DancingLights() -> impl IntoView {
     let palette = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0);
@@ -111,18 +151,24 @@ pub fn DancingLights() -> impl IntoView {
     let (listening, set_listening) = signal(false);
     let (generated, set_generated) = signal(false);
     let (capture_status, set_capture_status) =
-        signal(String::from("Uncalibrated · relative light activity"));
+        signal(String::from("Uncalibrated · estimated perceived loudness"));
     let (input_channel, set_input_channel) = signal(1u32);
     let (reference_level, set_reference_level) = signal(94.0f64);
     let (calibrating, set_calibrating) = signal(false);
     let (clipped, set_clipped) = signal(0u64);
     let (starting, set_starting) = signal(false);
     let (error, set_error) = signal(None::<String>);
+    let error_notice = transient_notice(move || error.get());
+    let (audio_stopped, set_audio_stopped) = signal(false);
     let (sample_rate, set_sample_rate) = signal(0.0);
     let (frame_rate, set_frame_rate) = signal(None::<f64>);
     let (wake_status, set_wake_status) = signal(String::from("Keeping screen awake…"));
     let (fullscreen, set_fullscreen) = signal(false);
     let (screen_error, set_screen_error) = signal(String::new());
+    let screen_notice = transient_notice(move || {
+        let text = screen_error.get();
+        (!text.is_empty()).then_some(text)
+    });
     let screen = StoredValue::new_local(None::<ScreenSession>);
     let card = NodeRef::<leptos::html::Section>::new();
     card.on_load(move |element| {
@@ -180,12 +226,14 @@ pub fn DancingLights() -> impl IntoView {
             return;
         }
         set_error.set(None);
+        set_audio_stopped.set(false);
         set_clipped.set(0);
         set_calibrating.set(false);
         set_frame_rate.set(None);
         let session = match AudioSession::new() {
             Ok(session) => session,
             Err(error) => {
+                set_audio_stopped.set(true);
                 set_error.set(Some(format!("Audio context: {error:?}")));
                 return;
             }
@@ -215,6 +263,7 @@ pub fn DancingLights() -> impl IntoView {
             Err(error) => {
                 session.stop();
                 owner.stop();
+                set_audio_stopped.set(true);
                 set_error.set(Some(format!("Display: {error:?}")));
                 return;
             }
@@ -243,6 +292,7 @@ pub fn DancingLights() -> impl IntoView {
                                 set_calibrating.set(false);
                             }
                             AudioUpdate::Error(message) => {
+                                set_audio_stopped.set(true);
                                 set_error.set(Some(message));
                                 set_calibrating.set(false);
                                 set_listening.set(false);
@@ -274,6 +324,7 @@ pub fn DancingLights() -> impl IntoView {
                 Err(error) => {
                     owner.stop();
                     set_frame_rate.set(None);
+                    set_audio_stopped.set(true);
                     set_error.set(Some(format!("Microphone: {error:?}")));
                 }
             }
@@ -291,6 +342,7 @@ pub fn DancingLights() -> impl IntoView {
                             set_listening.set(false);
                             set_frame_rate.set(None);
                             set_error.set(None);
+                            set_audio_stopped.set(false);
                             set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
                         }>"Stop listening"</button>
                     }>
@@ -370,7 +422,7 @@ pub fn DancingLights() -> impl IntoView {
             <details class="calibration-controls">
                 <summary>"Input calibration"</summary>
 
-                <p>"Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
+                <p>"Bars estimate perceived loudness within the mix, with one automatically adjusting display scale. White borders accent detected attacks. Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
                 <label>"Input channel "<input type="number" min="1" step="1" prop:value=move || input_channel.get() disabled=move || listening.get() || starting.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<u32>() { set_input_channel.set(value.max(1)); } }/></label>
                 <label>"Reference level (dB SPL) "<input type="number" step="0.1" prop:value=move || reference_level.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<f64>() { set_reference_level.set(value); } }/></label>
                 <button disabled=move || !listening.get() || calibrating.get() on:click=move |_| {
@@ -387,8 +439,11 @@ pub fn DancingLights() -> impl IntoView {
             </details>
             <p class="physics-status" role="status"></p>
             <details class="physics-controls"></details>
-            <p class="audio-error" role="alert">{move || error.get()}</p>
-            <p class="screen-error" role="status">{move || screen_error.get()}</p>
+            <p class="audio-error" role="alert">{move || error_notice.get()}</p>
+            <p class="audio-stopped" role="status">{move || if audio_stopped.get() && error_notice.get().is_none() {
+                if fullscreen.get() { "Audio stopped. Exit fullscreen to restart." } else { "Audio stopped. Tap Start listening to restart." }
+            } else { "" }}</p>
+            <p class="screen-error" role="status">{move || screen_notice.get()}</p>
         </section>
     }
 }

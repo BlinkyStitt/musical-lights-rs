@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import { heldOut, corpusPCM } from '../partial/audit-corpus.mjs';
+import { flashPCM, flashTrace, flashSummary } from '../partial/flash-fixtures.mjs';
 
 const bytes = await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url));
 const module = new WebAssembly.Module(bytes);
@@ -25,6 +28,38 @@ function processor(channel = 0) {
 function tone(length, frequency = 50, gain = 0.5) {
   return Float32Array.from({ length }, (_, i) => Math.sin(i * 2 * Math.PI * frequency / 48000) * gain);
 }
+
+for (const [name, frequency, band, peak] of [['bass', 150, 1, .466], ['treble', 8600, 21, .566]]) {
+  test(`production WASM flashes both ${name} attacks below 60 percent height`, () => {
+    const rows = flashTrace(module, flashPCM('repeated', frequency, .006));
+    const summary = flashSummary(rows, band);
+    expect(summary.peakFiltered).toBeCloseTo(peak, 2);
+    expect(summary.attacks).toHaveLength(2);
+    for (const [i, onset] of [.4, 1].entries()) {
+      expect(summary.attacks[i]).toBeGreaterThan(onset);
+      expect(summary.attacks[i]).toBeLessThan(onset + .1);
+    }
+    // No extra band or offset flashes, including after both notes have stopped.
+    const events = rows.flatMap((_, i) => i === 0 ? [] : Array.from({ length: 24 }, (_, band) =>
+      rows[i][369 + 4 * band] !== rows[i - 1][369 + 4 * band] ? rows[i][369 + 4 * band] : -1)).filter(at => at >= 0);
+    expect(events).toEqual(summary.attacks);
+  });
+}
+
+test('production WASM rejects sustain modulation, swells, masked notes, offsets and silence', () => {
+  for (const frequency of [150, 1000, 8600]) {
+    for (const kind of ['sustain', 'vibrato', 'tremolo', 'swell', 'masked', 'silence']) {
+      const rows = flashTrace(module, flashPCM(kind, frequency));
+      const attacks = Array.from({ length: 24 }, (_, band) => flashSummary(rows, band).attacks).flat();
+      const label = `${kind} at ${frequency} Hz`;
+      if (['sustain', 'vibrato', 'tremolo'].includes(kind)) {
+        expect(attacks, label).toHaveLength(1);
+        expect(attacks[0], label).toBeGreaterThan(.4);
+        expect(attacks[0], label).toBeLessThan(.5);
+      } else expect(attacks, label).toEqual([]);
+    }
+  }
+});
 
 test('browser preserves the measured balance of a weaker high tone', () => {
   const p = processor();
@@ -169,20 +204,56 @@ test('diagnostic frames preserve all 240 measurements and bound a stalled receiv
     }
     expect(w.processor_trace_dropped(h)).toBe(0);
     expect(rows.length).toBe(250);
-    if (reference) expect(rows).toEqual(reference);
+    if (reference) assert.deepEqual(rows, reference);
     else reference = rows;
+    let integrationError = 0, ratioError = 0;
     for (const row of rows) {
       const bands = row.slice(291, 315), peak = Math.max(...bands);
       const targets = bands.map((_, i) => row[367 + 4 * i]), top = Math.max(...targets);
       for (let i = 0; i < 24; i++) {
         const integrated = row.slice(2 + 10 * i, 12 + 10 * i).reduce((a, b) => a + b, 0) * .1;
-        expect(row[242 + i]).toBeCloseTo(integrated, 6);
-        if (peak) expect(targets[i] / top).toBeCloseTo(bands[i] / peak, 6);
+        integrationError = Math.max(integrationError, Math.abs(row[242 + i] - integrated));
+        if (peak) ratioError = Math.max(ratioError, Math.abs(targets[i] / top - bands[i] / peak));
       }
     }
+    expect(integrationError).toBeLessThan(5e-7);
+    expect(ratioError).toBeLessThan(5e-7);
     expect(p.push(pcm)).toBe(true);
     expect(w.processor_trace_count(h)).toBe(64);
     expect(w.processor_trace_dropped(h)).toBeGreaterThan(0);
     expect(p.messages).toHaveLength(1);
   }
 });
+
+test('equivalent pressure is invariant to recording gain, calibration, callback size and Reduced Motion', () => {
+  const pcm = flashPCM('repeated', 150, .006);
+  const reference = flashTrace(module, pcm);
+  for (const [factor, calibration, chunk, reduced] of [[.5, 4, 96, false], [2, 1, 800, true]]) {
+    const actual = flashTrace(module, pcm.map(x => x * factor), reduced, { calibration, chunk });
+    expect(actual).toHaveLength(reference.length);
+    let maxError = 0;
+    for (let n = 0; n < actual.length; n++) {
+      // Reduced Motion is a rendering flag, not a detector input.
+      for (let i = 0; i < actual[n].length; i++) {
+        if (i !== 365) maxError = Math.max(maxError, Math.abs(actual[n][i] - reference[n][i]));
+      }
+    }
+    expect(maxError).toBeLessThan(5e-11);
+    expect(flashSummary(actual, 1).attacks).toHaveLength(2);
+  }
+});
+
+for (const fixture of heldOut) {
+  test(`held-out acoustic fixture: ${fixture.name}`, () => {
+    const rows = flashTrace(module, corpusPCM(fixture));
+    const events = Array.from({ length: 24 }, (_, b) => [...new Set(rows.map(r => r[463 + b]).filter(at => at >= 0))]).flat();
+    const flashes = Array.from({ length: 24 }, (_, b) => flashSummary(rows, b).attacks).flat();
+    expect(events).toHaveLength(fixture.expectedAcoustic ?? fixture.expected);
+    if (fixture.expected !== undefined) expect(flashes).toHaveLength(fixture.expected);
+    for (const at of events) expect(fixture.starts.some(start => at > start && at < start + .1)).toBe(true);
+    if (fixture.name === 'articulated-train') {
+      expect(flashes).toEqual([events[0], events[2]]);
+      expect(rows.at(-1)[487 + 8]).toBe(2);
+    }
+  });
+}

@@ -128,7 +128,7 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
       }
       return { error, metadata: report.toneMetadata, physics: report.tonePhysics.at(-1), stride: report.toneChunks[0].stride, sones: rows.at(-1)[1] };
     });
-    expect(data.stride).toBe(463); expect(data.error).toBeLessThan(2e-7);
+    expect(data.stride).toBe(511); expect(data.error).toBeLessThan(2e-7);
     expect(data.metadata.kind).toBe(kind); expect(data.physics.tops).toHaveLength(24);
     expect(data.physics.velocities).toHaveLength(24);
     if (kind === 'silence') expect(data.sones).toBe(0);

@@ -101,7 +101,7 @@ export function captureStatus(node) {
     if (!profile) return 'Uncalibrated';
     if (profile.session.source === 'generated') return 'Generated test signal · microphone off';
     if (!profile.raw) return 'Uncalibrated · capture processing is unverified';
-    return profile.calibrated ? 'Calibrated for this input' : 'Uncalibrated · relative light activity';
+    return profile.calibrated ? 'Calibrated for this input' : 'Uncalibrated · estimated perceived loudness';
 }
 
 export function saveCalibration(node, pascalsPerUnit) {

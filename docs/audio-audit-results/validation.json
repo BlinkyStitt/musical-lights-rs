@@ -1,0 +1,34 @@
+{
+  "host": "macOS-26.2-arm64-arm-64bit",
+  "physicalIPhone": "unavailable; acceptance pending",
+  "humanListening": "pending",
+  "core": {
+    "testsPerFeatureConfiguration": 50,
+    "featureConfigurations": 4,
+    "clippyMatrix": "passed"
+  },
+  "physics": {
+    "nativeTests": 26,
+    "status": "passed"
+  },
+  "worklet": "pinned formatting, WASM clippy and release build passed",
+  "leptos": "pinned host test, host/WASM clippy, formatting and release build passed",
+  "reference": "ISO 20 cases, MoSQiTo 4 cases, partial stage/PCM reference checks passed; six-window differences quantified",
+  "browser": {
+    "tests": 177,
+    "workers": 1,
+    "retries": 0,
+    "serialStartupGuard": true,
+    "engines": [
+      "Chromium",
+      "WebKit"
+    ],
+    "status": "passed"
+  },
+  "logsSha256": {
+    "validation-final.log": "54cb98da662b4469253606cb033b813bfce0225d9fb79dc1b695340cdb0de50b",
+    "browser-final.log": "66c5f1ce34bba9d72d91ac335e18be3fa8a5f2068e672d2021fcdab5aa374398",
+    "unchanged.log": "5e555e1466dd3f075b1fe3d6a71e09ee560e943903f65c792bf6471703f8d3e2",
+    "report.log": "adc2871d5a5ec1c51000a703e8b812803f055fa4c8a81f6315a2a4b3fecdd179"
+  }
+}

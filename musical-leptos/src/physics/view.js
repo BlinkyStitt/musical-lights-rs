@@ -2,6 +2,40 @@ import * as THREE from './three.module.js';
 import { RoundedBoxGeometry } from './RoundedBoxGeometry.js';
 import { PhoneReport } from './report.js';
 
+// Separate a transient notice from cumulative diagnostic counters and stopped state.
+export class PhysicsNotice {
+  constructor(node) { this.node = node; this.overloads = 0; this.incident = false; }
+  render() {
+    const text = this.persistent ? (this.message || this.persistent) : (this.report || this.message || '');
+    if (this.node.textContent !== text) this.node.textContent = text;
+  }
+  show(message, persistent = '') {
+    clearTimeout(this.timer);
+    this.message = message; this.persistent = persistent; this.render();
+    this.timer = setTimeout(() => { this.message = ''; this.render(); }, 4000);
+  }
+  sample(metrics, now, stepMs) {
+    const overloads = metrics.overloadTicks ?? 0;
+    const overloaded = overloads > this.overloads;
+    this.overloads = overloads;
+    const message = overloaded ? 'Motion briefly reached its physics work limit.'
+      : metrics.snapshotAgeMs > 100 ? 'Motion updates are delayed.'
+      : metrics.debt > 2 * stepMs ? 'Motion is catching up.' : '';
+    if (message) {
+      this.healthySince = null;
+      if (!this.incident && !this.persistent) { this.incident = true; this.show(message); }
+    } else {
+      this.healthySince ??= now;
+      if (now - this.healthySince >= 1000) this.incident = false;
+    }
+  }
+  clear() {
+    clearTimeout(this.timer); this.message = ''; this.persistent = ''; this.incident = false;
+    this.healthySince = null; this.render();
+  }
+  close() { clearTimeout(this.timer); }
+}
+
 export class PhysicsView {
   constructor(layer, palette, onFrame, motion) {
     this.layer = layer;
@@ -22,6 +56,7 @@ export class PhysicsView {
     this.metrics = { frames: 0, renderMs: 0, debt: 0, maxDebt: 0, physicsSteps: 0, physicsMs: 0, discardedSimulationMs: 0 };
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)');
     this.status = this.card.querySelector('.physics-status');
+    this.notice = new PhysicsNotice(this.status);
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera();
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
@@ -31,11 +66,11 @@ export class PhysicsView {
     this.renderer.domElement.setAttribute('aria-label', '24 rigid balls and audio bars');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
-      event.preventDefault(); this.lost = true; this.pause(); this.status.textContent = 'Graphics paused. Waiting for the WebGL context.';
+      event.preventDefault(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
       this.report?.invalidate('WebGL context lost');
     });
     this.canvas.addEventListener('webglcontextrestored', this.contextRestored = () => {
-      this.lost = false; this.status.textContent = ''; this.pause();
+      this.lost = false; this.notice.clear(); this.pause();
     });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2));
     const light = new THREE.DirectionalLight(0xffffff, 2); light.position.set(-1, 3, 4); this.scene.add(light);
@@ -43,7 +78,7 @@ export class PhysicsView {
     this.object = new THREE.Object3D(); this.color = new THREE.Color(); this.quaternion = new THREE.Quaternion();
     this.listeners = [];
     this.motion = motion;
-    this.observer = new ResizeObserver(() => this.measure()); this.observer.observe(layer);
+    this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
     this.listen(document, 'visibilitychange', () => { if (document.hidden) this.report?.invalidate('Page hidden during test'); this.pause(); });
     this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'rigid-body-physics' });
@@ -56,6 +91,7 @@ export class PhysicsView {
       this.request = null;
       if (this.closed || document.hidden || this.lost) return;
       const start = performance.now();
+      if (this.resizePending) { this.resizePending = false; this.measure(); }
       this.onFrame(now, false);
       this.input[31] = this.reduced.matches ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = Math.max(-100, Math.min(100,
@@ -72,12 +108,11 @@ export class PhysicsView {
       const cost = performance.now() - start;
       this.metrics.frames++; this.metrics.renderMs += cost;
       this.report?.frame(now, cost);
+      this.notice.sample(this.metrics, now, 1000 / (this.layout?.[1] ?? 120));
       if (!this.lastStatus || now - this.lastStatus > 1000) {
-        this.status.textContent = this.report?.active ? this.report.query('.phone-progress').textContent
-          : this.report?.result ? this.report.query('.phone-progress').textContent + (this.card.hasAttribute('data-expanded') ? ' Exit fullscreen to review and export the report.' : '')
-          : this.metrics.overloadTicks > 0 ? `Physics contact substep limit reached on ${this.metrics.overloadTicks} ticks; simulation time retained`
-          : this.metrics.snapshotAgeMs > 100 ? `Physics snapshot delay: ${this.metrics.snapshotAgeMs.toFixed(1)} ms`
-          : this.metrics.debt > 2 * 1000 / (this.layout?.[1] ?? 120) ? `Physics delay: ${this.metrics.debt.toFixed(1)} ms` : '';
+        this.notice.report = this.report?.active ? this.report.query('.phone-progress').textContent
+          : this.report?.result ? this.report.query('.phone-progress').textContent + (this.card.hasAttribute('data-expanded') ? ' Exit fullscreen to review and export the report.' : '') : '';
+        this.notice.render();
         this.lastStatus = now;
       }
       this.request = requestAnimationFrame(this.animate);
@@ -102,7 +137,10 @@ export class PhysicsView {
     this.width = this.layout?.[2] ?? 1.2;
     this.height = Math.max(this.layout?.[19] ?? .4, this.width * box.height / box.width);
     this.input[32] = this.height;
-    this.renderer.setSize(box.width, box.height, false);
+    if (box.width !== this.canvasWidth || box.height !== this.canvasHeight) {
+      this.renderer.setSize(box.width, box.height, false);
+      this.canvasWidth = box.width; this.canvasHeight = box.height;
+    }
     this.aspect = box.width / box.height;
     this.fitEnclosure();
   }
@@ -230,10 +268,10 @@ export class PhysicsView {
     this.worker?.postMessage({ type: 'pause', paused });
     if (!paused && !this.closed) this.request = requestAnimationFrame(this.animate);
   }
-  fail(message) { this.status.textContent = `Physics stopped: ${message}`; this.report?.invalidate(message); this.lost = true; this.pause(); }
+  fail(message) { this.notice.show(`Physics stopped: ${message}`, 'Motion stopped. Reload to restart.'); this.report?.invalidate(message); this.lost = true; this.pause(); }
   disposeMeshes() { for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
-    this.closed = true; cancelAnimationFrame(this.request);
+    this.closed = true; cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
     this.observer.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();

@@ -1,0 +1,1839 @@
+{
+  "baselineCommit": "513d6159f960f1436aab087563e2f94b74584dc1",
+  "baselineWasmSha256": "4d030e7dcaf216e1eb2d6d5c48fd5ab8027e84ace2f9fa5b38b11995876ddc4e",
+  "wasmSha256": "c5c30c9f44272427e9a5a903bd34a224c258b5d04ab33019ed81d0d983b9c9df",
+  "sourceSha256": {
+    "musical-lights-core/src/audio/browser.rs": "f37c102cab831bf161c4f438984ab0127cf7e9cfd79996486f6ec8003bd5077e",
+    "musical-lights-core/src/audio/partial/mod.rs": "19bf90019e71368a333ef6486e00921a5d5538c2e291744038735ca768cabe91",
+    "musical-lights-worklet/src/lib.rs": "a1169859084bc0de9fdba2ecf6f24c05102e88c97471649e65e14346f2fd6c0a",
+    "validation/partial/audit-corpus.mjs": "2dedd2f834b0e396191493853d96be951593f3cc1911e105dd7465cf736816c6"
+  },
+  "node": "v26.8.2",
+  "ffmpeg": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+  "rust": "rustc 1.100.0-nightly (a36d05efa 2026-09-09)",
+  "assumedPascalsPerUnit": 2,
+  "physicalPhone": "unavailable; pending",
+  "humanListening": "pending",
+  "detector": {
+    "candidateMs": 60,
+    "floorSones": 0.1,
+    "relativeProminence": 0.3,
+    "crestLookbackMs": 10,
+    "crestTolerance": 0.05,
+    "acousticQuietMs": 10,
+    "visualQuietMs": 60,
+    "visualIntervalMs": 160,
+    "fadeMs": 120,
+    "fade": "linear",
+    "reducedIntensity": 0.5
+  },
+  "cases": [
+    {
+      "name": "recovered-150",
+      "expected": 2,
+      "provenance": "development regression",
+      "pcmSha256": "dffd34f4d5a502ef452ac375a6afb9df96ab9e97bbb30854daf2c7f88cbb79db",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 14.000000000000012,
+      "filteredPeakRatio": 0.9993149435115807,
+      "bands": [
+        {
+          "band": 1,
+          "peakTarget": 0.46661803126335144,
+          "peakFiltered": 0.466298371553421,
+          "attacks": [
+            0.446,
+            1.046
+          ],
+          "acoustic": [
+            0.446,
+            1.046
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 2,
+          "peakTarget": 0.029749292880296707,
+          "peakFiltered": 0.01593618094921112,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 3,
+          "peakTarget": 0.029500316828489304,
+          "peakFiltered": 0.017530445009469986,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 4,
+          "peakTarget": 0.013744032941758633,
+          "peakFiltered": 0.008094057440757751,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 5,
+          "peakTarget": 0.01178676076233387,
+          "peakFiltered": 0.006881102453917265,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 0.008696223609149456,
+          "peakFiltered": 0.005009688436985016,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 7,
+          "peakTarget": 0.0054158479906618595,
+          "peakFiltered": 0.003065044293180108,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 8,
+          "peakTarget": 0.0020754209253937006,
+          "peakFiltered": 0.001154814031906426,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "recovered-8600",
+      "expected": 2,
+      "provenance": "development regression",
+      "pcmSha256": "96dd835bcc65e8f6549d8a18f7eea981c32059312a33339499bb5e53361e77fe",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 12.00000000000001,
+      "filteredPeakRatio": 0.9995912247326645,
+      "bands": [
+        {
+          "band": 11,
+          "peakTarget": 0.0014391823206096888,
+          "peakFiltered": 0.0008907833835110068,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 12,
+          "peakTarget": 0.0036596939899027348,
+          "peakFiltered": 0.0022896656300872564,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 13,
+          "peakTarget": 0.0062560513615608215,
+          "peakFiltered": 0.003998126368969679,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 14,
+          "peakTarget": 0.012025974690914154,
+          "peakFiltered": 0.0077986037358641624,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 15,
+          "peakTarget": 0.016386423259973526,
+          "peakFiltered": 0.010745310224592686,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 16,
+          "peakTarget": 0.02132798545062542,
+          "peakFiltered": 0.014082325622439384,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 17,
+          "peakTarget": 0.026451632380485535,
+          "peakFiltered": 0.017512109130620956,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 18,
+          "peakTarget": 0.02599778212606907,
+          "peakFiltered": 0.017141813412308693,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 19,
+          "peakTarget": 0.017826629802584648,
+          "peakFiltered": 0.011625134386122227,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 20,
+          "peakTarget": 0.00746031804010272,
+          "peakFiltered": 0.00459373788908124,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 21,
+          "peakTarget": 0.5653160214424133,
+          "peakFiltered": 0.5650849342346191,
+          "attacks": [
+            0.44,
+            1.04
+          ],
+          "acoustic": [
+            0.44,
+            1.04
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 22,
+          "peakTarget": 0.001315549248829484,
+          "peakFiltered": 0.0007591656176373363,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "confirmation-mid",
+      "frequency": 570,
+      "amplitude": 0.009,
+      "starts": [
+        0.35,
+        1.1
+      ],
+      "duration": 0.18,
+      "ramp": 0.01,
+      "expected": 2,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "c667d7e13dd49f59e6a54f04fe42fe975c090e6eb22746e66f663bdcfc52bb4d",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 10.000000000000009,
+      "filteredPeakRatio": 1,
+      "bands": [
+        {
+          "band": 4,
+          "peakTarget": 0.003462177701294422,
+          "peakFiltered": 0.0022606165148317814,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 5,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [
+            0.398,
+            1.148
+          ],
+          "acoustic": [
+            0.398,
+            1.148
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 0.00975500512868166,
+          "peakFiltered": 0.006185454782098532,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "confirmation-high",
+      "frequency": 7000,
+      "amplitude": 0.009,
+      "starts": [
+        0.35,
+        1.1
+      ],
+      "duration": 0.18,
+      "ramp": 0.01,
+      "expected": 2,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "496dd3d48af8457a5ec0f86be55517f81182a0d2ee76ff1521b6fd671e5477e1",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 8.000000000000007,
+      "filteredPeakRatio": 0.9996860224915257,
+      "bands": [
+        {
+          "band": 20,
+          "peakTarget": 0.9704483151435852,
+          "peakFiltered": 0.9701436161994934,
+          "attacks": [
+            0.396,
+            1.146
+          ],
+          "acoustic": [
+            0.396,
+            1.146
+          ],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "confirmation-burst",
+      "frequency": 2150,
+      "amplitude": 0.025,
+      "starts": [
+        0.35,
+        1.1
+      ],
+      "duration": 0.02,
+      "ramp": 0.003,
+      "expected": 2,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "fa523c3f5b2ee63faa4d0fd8c71803815e033499c577e8a92bf3c1329f95269f",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 14.000000000000012,
+      "filteredPeakRatio": 0.9999256134033203,
+      "bands": [
+        {
+          "band": 8,
+          "peakTarget": 0.0010008362587541342,
+          "peakFiltered": 0.000956752453930676,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 10,
+          "peakTarget": 0.0034544116351753473,
+          "peakFiltered": 0.0033357811626046896,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 11,
+          "peakTarget": 0.00246845162473619,
+          "peakFiltered": 0.0017184565076604486,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 12,
+          "peakTarget": 0.001860094373114407,
+          "peakFiltered": 0.0013572799507528543,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 13,
+          "peakTarget": 1,
+          "peakFiltered": 0.9999256134033203,
+          "attacks": [
+            0.386,
+            1.136
+          ],
+          "acoustic": [
+            0.386,
+            1.136
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 14,
+          "peakTarget": 0.0024094011168926954,
+          "peakFiltered": 0.0017401392105966806,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "confirmation-swell",
+      "frequency": 570,
+      "amplitude": 0.04,
+      "starts": [
+        0.35
+      ],
+      "duration": 1.2,
+      "ramp": 0.7,
+      "expected": 0,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "2dd2be380dd5e7df9129892b3483b2350a5bfe826e7ab64f7d0f59bca13fa135",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 7.999999999999952,
+      "filteredPeakRatio": 1,
+      "bands": [
+        {
+          "band": 5,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "low-mid-repeat",
+      "frequency": 250,
+      "amplitude": 0.012,
+      "starts": [
+        0.4,
+        1
+      ],
+      "duration": 0.24,
+      "ramp": 0.005,
+      "expected": 2,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "d96d85fc00efa3cc2327a498a310d9ee06299b5e7f3982ffe3608929f7fcda4c",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 8.000000000000007,
+      "filteredPeakRatio": 1,
+      "bands": [
+        {
+          "band": 1,
+          "peakTarget": 0.013043005019426346,
+          "peakFiltered": 0.00826496072113514,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 2,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [
+            0.45,
+            1.05
+          ],
+          "acoustic": [
+            0.45,
+            1.05
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 3,
+          "peakTarget": 0.05526171252131462,
+          "peakFiltered": 0.03495841845870018,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 4,
+          "peakTarget": 0.0012446126202121377,
+          "peakFiltered": 0.0008173719397746027,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 5,
+          "peakTarget": 0.014427957125008106,
+          "peakFiltered": 0.010405248962342739,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 0.0030343872494995594,
+          "peakFiltered": 0.0021629594266414642,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "upper-mid-repeat",
+      "frequency": 3400,
+      "amplitude": 0.008,
+      "starts": [
+        0.4,
+        1
+      ],
+      "duration": 0.24,
+      "ramp": 0.015,
+      "expected": 2,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "08c77e63598675ffa1e493b74627e718c334a5c5188560363394b5326a238de0",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 14.000000000000012,
+      "filteredPeakRatio": 1,
+      "bands": [
+        {
+          "band": 16,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [
+            0.45,
+            1.05
+          ],
+          "acoustic": [
+            0.45,
+            1.05
+          ],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "soft-crest",
+      "frequency": 1600,
+      "amplitude": 0.02,
+      "starts": [
+        0.4
+      ],
+      "duration": 0.6,
+      "ramp": 0.025,
+      "expected": 1,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "e5f4fc75fc7f0ec04b798a4b645fd0a846909b6fe1c43b11d8c77dd612da2fc6",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 12.00000000000001,
+      "filteredPeakRatio": 1,
+      "bands": [
+        {
+          "band": 11,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [
+            0.458
+          ],
+          "acoustic": [
+            0.458
+          ],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "articulated-train",
+      "frequency": 1000,
+      "amplitude": 0.02,
+      "starts": [
+        0.4,
+        0.52,
+        0.64,
+        0.76
+      ],
+      "duration": 0.06,
+      "ramp": 0.002,
+      "expectedAcoustic": 4,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "54478629103b55358fa63afc7baaa9803a7c686711aaccb286f6095e5685950b",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 14.000000000000012,
+      "filteredPeakRatio": 0.9999954104423523,
+      "bands": [
+        {
+          "band": 3,
+          "peakTarget": 0.003228631569072604,
+          "peakFiltered": 0.002513494808226824,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 5,
+          "peakTarget": 0.006770153995603323,
+          "peakFiltered": 0.005642206408083439,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 0.045933693647384644,
+          "peakFiltered": 0.038674939423799515,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 7,
+          "peakTarget": 0.06133606284856796,
+          "peakFiltered": 0.053000979125499725,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 8,
+          "peakTarget": 1,
+          "peakFiltered": 0.9999954104423523,
+          "attacks": [
+            0.446,
+            0.686
+          ],
+          "acoustic": [
+            0.446,
+            0.566,
+            0.686,
+            0.806
+          ],
+          "suppressed": 2
+        },
+        {
+          "band": 9,
+          "peakTarget": 0.0242171511054039,
+          "peakFiltered": 0.01984579674899578,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 10,
+          "peakTarget": 0.0026953353080898523,
+          "peakFiltered": 0.0022174580954015255,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 11,
+          "peakTarget": 0.003828063141554594,
+          "peakFiltered": 0.00308200903236866,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 12,
+          "peakTarget": 0.008751727640628815,
+          "peakFiltered": 0.0068140351213514805,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 13,
+          "peakTarget": 0.007743187248706818,
+          "peakFiltered": 0.006139607168734074,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 14,
+          "peakTarget": 0.002554974053055048,
+          "peakFiltered": 0.0020079941023141146,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 15,
+          "peakTarget": 0.002355004660785198,
+          "peakFiltered": 0.0018548347288742661,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "gentle-rise",
+      "frequency": 3400,
+      "amplitude": 0.02,
+      "starts": [
+        0.4
+      ],
+      "duration": 1.1,
+      "ramp": 0.6,
+      "expected": 0,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "e82f90ca6f5689cfeb45739c948ef94968c836b9fd3cce14ce66203e471f88bb",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 6.000000000000005,
+      "filteredPeakRatio": 1,
+      "bands": [
+        {
+          "band": 16,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "short-burst",
+      "frequency": 1000,
+      "amplitude": 0.02,
+      "starts": [
+        0.4,
+        1
+      ],
+      "duration": 0.01,
+      "ramp": 0.001,
+      "expected": 2,
+      "provenance": "held-out synthetic; expectations frozen in audit-corpus.mjs before first run",
+      "pcmSha256": "baaa285c2803680c7022acab36df522afe58ae82328d08c52424912084689d1c",
+      "samples": 96000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": null,
+      "filteredPeakRatio": 0.8824158916050172,
+      "bands": [
+        {
+          "band": 2,
+          "peakTarget": 0.0030217263847589493,
+          "peakFiltered": 0.002477864734828472,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 3,
+          "peakTarget": 0.025151900947093964,
+          "peakFiltered": 0.021753376349806786,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 4,
+          "peakTarget": 0.027649620547890663,
+          "peakFiltered": 0.024709824472665787,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 5,
+          "peakTarget": 0.05991813912987709,
+          "peakFiltered": 0.05391735956072807,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 0.08848579972982407,
+          "peakFiltered": 0.08046618849039078,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 7,
+          "peakTarget": 0.07790319621562958,
+          "peakFiltered": 0.0702519491314888,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 8,
+          "peakTarget": 0.8010355234146118,
+          "peakFiltered": 0.7068464756011963,
+          "attacks": [
+            0.432,
+            1.032
+          ],
+          "acoustic": [
+            0.432,
+            1.032
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 9,
+          "peakTarget": 0.02810480445623398,
+          "peakFiltered": 0.02352137491106987,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 10,
+          "peakTarget": 0.02852604165673256,
+          "peakFiltered": 0.025369912385940552,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 11,
+          "peakTarget": 0.04287125915288925,
+          "peakFiltered": 0.03873011842370033,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 12,
+          "peakTarget": 0.013033670373260975,
+          "peakFiltered": 0.011588573455810547,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 13,
+          "peakTarget": 0.014423435553908348,
+          "peakFiltered": 0.01255087647587061,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 14,
+          "peakTarget": 0.03263404220342636,
+          "peakFiltered": 0.02870354801416397,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 15,
+          "peakTarget": 0.004574737977236509,
+          "peakFiltered": 0.0038975931238383055,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 16,
+          "peakTarget": 0.01324530690908432,
+          "peakFiltered": 0.01133396103978157,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "trumpet",
+      "provenance": {
+        "repository": "https://github.com/librosa/data",
+        "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+        "source": "audio/sorohanro_-_solo-trumpet-06.ogg",
+        "sourceSha256": "8374466fd3951d24509da6e799b132a0db0bdeda69d99c69d989a6888d3d727d",
+        "license": "CC-BY-3.0",
+        "transformation": "FFmpeg mono average, 48 kHz, seconds 0–5.333395833333333, fixed peak 0.2",
+        "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+      },
+      "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+      "samples": 256003,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 8.000000000000007,
+      "filteredPeakRatio": 0.999999463558197,
+      "bands": [
+        {
+          "band": 2,
+          "peakTarget": 0.040318768471479416,
+          "peakFiltered": 0.038152288645505905,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 3,
+          "peakTarget": 0.7502753734588623,
+          "peakFiltered": 0.7478538751602173,
+          "attacks": [
+            1.69,
+            2.572
+          ],
+          "acoustic": [
+            1.69,
+            2.572
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 4,
+          "peakTarget": 1,
+          "peakFiltered": 0.9999205470085144,
+          "attacks": [
+            0.612,
+            0.94,
+            1.122,
+            1.436,
+            2.06
+          ],
+          "acoustic": [
+            0.612,
+            0.94,
+            1.122,
+            1.436,
+            2.06
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 5,
+          "peakTarget": 1,
+          "peakFiltered": 0.9512913823127747,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 1,
+          "peakFiltered": 0.999972403049469,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 7,
+          "peakTarget": 1,
+          "peakFiltered": 0.9999996423721313,
+          "attacks": [
+            0.77,
+            1.582,
+            2.064,
+            2.396
+          ],
+          "acoustic": [
+            0.77,
+            1.582,
+            2.064,
+            2.396
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 8,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [
+            1.112,
+            1.432,
+            2.586
+          ],
+          "acoustic": [
+            1.112,
+            1.432,
+            2.586
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 9,
+          "peakTarget": 1,
+          "peakFiltered": 1,
+          "attacks": [
+            0.746,
+            1.584,
+            2.4
+          ],
+          "acoustic": [
+            0.746,
+            1.584,
+            2.4
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 10,
+          "peakTarget": 1,
+          "peakFiltered": 0.999999463558197,
+          "attacks": [
+            0.624,
+            0.948,
+            1.11,
+            1.442
+          ],
+          "acoustic": [
+            0.624,
+            0.948,
+            1.11,
+            1.442,
+            1.512
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 11,
+          "peakTarget": 0.5956544876098633,
+          "peakFiltered": 0.5629717111587524,
+          "attacks": [
+            0.424,
+            0.756,
+            1.168,
+            1.59,
+            2.404
+          ],
+          "acoustic": [
+            0.424,
+            0.756,
+            1.168,
+            1.59,
+            2.404
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 12,
+          "peakTarget": 0.8926185369491577,
+          "peakFiltered": 0.8616610765457153,
+          "attacks": [
+            0.618,
+            0.942,
+            1.114,
+            1.44,
+            1.684,
+            2.064
+          ],
+          "acoustic": [
+            0.618,
+            0.942,
+            1.114,
+            1.44,
+            1.51,
+            1.684,
+            2.064
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 13,
+          "peakTarget": 0.5621773600578308,
+          "peakFiltered": 0.5295610427856445,
+          "attacks": [
+            0.43,
+            0.75,
+            1.17,
+            1.598,
+            2.066
+          ],
+          "acoustic": [
+            0.43,
+            0.75,
+            1.17,
+            1.598,
+            1.738,
+            2.066
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 14,
+          "peakTarget": 0.7324400544166565,
+          "peakFiltered": 0.7294681072235107,
+          "attacks": [
+            0.614,
+            1.114,
+            1.442,
+            2.404,
+            2.606
+          ],
+          "acoustic": [
+            0.614,
+            1.114,
+            1.176,
+            1.442,
+            2.404,
+            2.606
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 15,
+          "peakTarget": 0.7224752306938171,
+          "peakFiltered": 0.7107556462287903,
+          "attacks": [
+            0.62,
+            1.112,
+            1.452,
+            2.066,
+            2.362
+          ],
+          "acoustic": [
+            0.62,
+            1.112,
+            1.452,
+            1.512,
+            2.066,
+            2.362
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 16,
+          "peakTarget": 0.574680745601654,
+          "peakFiltered": 0.560299813747406,
+          "attacks": [
+            0.946,
+            2.07
+          ],
+          "acoustic": [
+            0.946,
+            2.07
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 17,
+          "peakTarget": 0.4143933951854706,
+          "peakFiltered": 0.3964165449142456,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 18,
+          "peakTarget": 0.2175048440694809,
+          "peakFiltered": 0.21056534349918365,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 19,
+          "peakTarget": 0.10915051400661469,
+          "peakFiltered": 0.10724423080682755,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 20,
+          "peakTarget": 0.0740370973944664,
+          "peakFiltered": 0.07145321369171143,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 21,
+          "peakTarget": 0.030996738001704216,
+          "peakFiltered": 0.029736775904893875,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        },
+        {
+          "band": 22,
+          "peakTarget": 0.0013609472662210464,
+          "peakFiltered": 0.0013261210406199098,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    },
+    {
+      "name": "music",
+      "provenance": {
+        "repository": "https://github.com/librosa/data",
+        "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+        "source": "audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+        "sourceSha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+        "license": "CC-BY-3.0",
+        "transformation": "FFmpeg mono average, 48 kHz, seconds 8–14, fixed peak 0.2",
+        "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+      },
+      "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+      "samples": 288000,
+      "rate": 48000,
+      "measurementsAndTargetsBitIdentical": true,
+      "strongestBandFiltered90DelayMs": 8.000000000000007,
+      "filteredPeakRatio": 0.9892358779907227,
+      "bands": [
+        {
+          "band": 0,
+          "peakTarget": 0.5597410202026367,
+          "peakFiltered": 0.5480493903160095,
+          "attacks": [
+            0.38,
+            2.012,
+            2.936,
+            3.622,
+            4.094,
+            4.554,
+            4.768
+          ],
+          "acoustic": [
+            0.38,
+            2.012,
+            2.936,
+            3.622,
+            4.094,
+            4.554,
+            4.768
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 1,
+          "peakTarget": 1,
+          "peakFiltered": 0.9999745488166809,
+          "attacks": [
+            0.414,
+            0.606,
+            1.052,
+            1.318,
+            1.802,
+            2.864,
+            3.592,
+            4.3,
+            5.448
+          ],
+          "acoustic": [
+            0.414,
+            0.606,
+            1.052,
+            1.318,
+            1.802,
+            1.982,
+            2.864,
+            3.592,
+            4.3,
+            5.448
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 2,
+          "peakTarget": 0.40200307965278625,
+          "peakFiltered": 0.3327816128730774,
+          "attacks": [
+            1.29,
+            1.752,
+            1.944,
+            2.138,
+            2.662,
+            3.088,
+            3.294,
+            4.986
+          ],
+          "acoustic": [
+            1.29,
+            1.752,
+            1.944,
+            1.978,
+            2.138,
+            2.252,
+            2.662,
+            2.73,
+            2.764,
+            2.804,
+            3.088,
+            3.144,
+            3.294,
+            3.37,
+            4.986
+          ],
+          "suppressed": 7
+        },
+        {
+          "band": 3,
+          "peakTarget": 1,
+          "peakFiltered": 0.9993438720703125,
+          "attacks": [
+            0.586,
+            0.862,
+            1.128,
+            1.752,
+            2.676,
+            2.866,
+            3.186,
+            3.586,
+            4.048,
+            4.278,
+            4.554,
+            4.722,
+            5.434
+          ],
+          "acoustic": [
+            0.586,
+            0.862,
+            1.128,
+            1.752,
+            2.676,
+            2.866,
+            3.186,
+            3.258,
+            3.586,
+            3.858,
+            3.942,
+            4.048,
+            4.278,
+            4.554,
+            4.59,
+            4.722,
+            4.784,
+            4.838,
+            5.434,
+            5.666
+          ],
+          "suppressed": 7
+        },
+        {
+          "band": 4,
+          "peakTarget": 0.953956663608551,
+          "peakFiltered": 0.9265891313552856,
+          "attacks": [
+            0.516,
+            1.254,
+            2.272,
+            2.582,
+            3.564,
+            4.22,
+            5.422
+          ],
+          "acoustic": [
+            0.516,
+            0.602,
+            1.254,
+            2.272,
+            2.582,
+            3.564,
+            4.22,
+            4.254,
+            5.422
+          ],
+          "suppressed": 2
+        },
+        {
+          "band": 5,
+          "peakTarget": 0.32065483927726746,
+          "peakFiltered": 0.2733907103538513,
+          "attacks": [
+            0.584,
+            3.582,
+            4.274,
+            5.428
+          ],
+          "acoustic": [
+            0.584,
+            3.582,
+            4.274,
+            5.428
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 6,
+          "peakTarget": 0.841918408870697,
+          "peakFiltered": 0.8288549184799194,
+          "attacks": [
+            0.374,
+            0.872,
+            1.534,
+            1.776,
+            1.994,
+            2.458,
+            2.696,
+            4.168,
+            5.01,
+            5.3,
+            5.68,
+            5.936
+          ],
+          "acoustic": [
+            0.374,
+            0.872,
+            1.534,
+            1.688,
+            1.776,
+            1.874,
+            1.994,
+            2.458,
+            2.696,
+            2.82,
+            4.168,
+            5.01,
+            5.3,
+            5.34,
+            5.68,
+            5.936
+          ],
+          "suppressed": 4
+        },
+        {
+          "band": 7,
+          "peakTarget": 1,
+          "peakFiltered": 0.9892358779907227,
+          "attacks": [
+            1.144,
+            1.314,
+            1.78,
+            1.972,
+            3.146,
+            3.612,
+            3.832,
+            4.292,
+            4.53,
+            4.982,
+            5.236,
+            5.444
+          ],
+          "acoustic": [
+            1.144,
+            1.314,
+            1.78,
+            1.972,
+            3.146,
+            3.612,
+            3.832,
+            4.292,
+            4.53,
+            4.982,
+            5.236,
+            5.318,
+            5.444
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 8,
+          "peakTarget": 0.7162505388259888,
+          "peakFiltered": 0.6729640364646912,
+          "attacks": [
+            1.752,
+            2.678,
+            3.152,
+            3.366,
+            3.81,
+            4.014,
+            4.768,
+            5.004,
+            5.214
+          ],
+          "acoustic": [
+            1.752,
+            2.678,
+            3.152,
+            3.198,
+            3.366,
+            3.81,
+            3.872,
+            4.014,
+            4.084,
+            4.768,
+            5.004,
+            5.214,
+            5.296
+          ],
+          "suppressed": 4
+        },
+        {
+          "band": 9,
+          "peakTarget": 0.776474118232727,
+          "peakFiltered": 0.744562566280365,
+          "attacks": [
+            0.384,
+            0.592,
+            1.29,
+            2.664,
+            3.4,
+            3.596,
+            3.984,
+            4.286,
+            4.886,
+            5.442
+          ],
+          "acoustic": [
+            0.384,
+            0.592,
+            1.29,
+            2.664,
+            3.4,
+            3.596,
+            3.984,
+            4.286,
+            4.886,
+            5.442
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 10,
+          "peakTarget": 0.3624233305454254,
+          "peakFiltered": 0.34934201836586,
+          "attacks": [
+            1.766,
+            4.016,
+            4.31,
+            5.458,
+            5.722
+          ],
+          "acoustic": [
+            1.766,
+            4.016,
+            4.12,
+            4.31,
+            5.458,
+            5.722
+          ],
+          "suppressed": 1
+        },
+        {
+          "band": 11,
+          "peakTarget": 0.567886471748352,
+          "peakFiltered": 0.5487671494483948,
+          "attacks": [
+            0.542,
+            2.128,
+            5.236,
+            5.622
+          ],
+          "acoustic": [
+            0.542,
+            2.128,
+            5.236,
+            5.622
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 12,
+          "peakTarget": 0.36287418007850647,
+          "peakFiltered": 0.3449253439903259,
+          "attacks": [
+            1.322
+          ],
+          "acoustic": [
+            1.322
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 13,
+          "peakTarget": 0.18743783235549927,
+          "peakFiltered": 0.18130043148994446,
+          "attacks": [
+            4.238
+          ],
+          "acoustic": [
+            4.238
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 14,
+          "peakTarget": 0.3079252541065216,
+          "peakFiltered": 0.2924068570137024,
+          "attacks": [
+            0.862,
+            1.298,
+            1.778,
+            2.116,
+            2.34,
+            2.572,
+            3.046,
+            3.958,
+            4.224,
+            4.994
+          ],
+          "acoustic": [
+            0.862,
+            1.298,
+            1.778,
+            2.116,
+            2.34,
+            2.572,
+            2.7,
+            3.046,
+            3.144,
+            3.958,
+            4.224,
+            4.994
+          ],
+          "suppressed": 2
+        },
+        {
+          "band": 15,
+          "peakTarget": 0.2886579930782318,
+          "peakFiltered": 0.28334522247314453,
+          "attacks": [
+            1.76,
+            2.358,
+            3.146,
+            3.958,
+            4.204
+          ],
+          "acoustic": [
+            1.76,
+            2.358,
+            3.146,
+            3.958,
+            4.204
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 16,
+          "peakTarget": 0.6012334823608398,
+          "peakFiltered": 0.5744653940200806,
+          "attacks": [
+            0.292,
+            0.752,
+            1.312,
+            1.662,
+            1.888,
+            2.116,
+            2.354,
+            2.61,
+            3.056,
+            3.986,
+            4.2,
+            4.538,
+            5.934
+          ],
+          "acoustic": [
+            0.292,
+            0.752,
+            0.854,
+            1.312,
+            1.662,
+            1.888,
+            1.974,
+            2.116,
+            2.354,
+            2.61,
+            2.72,
+            3.056,
+            3.18,
+            3.986,
+            4.2,
+            4.538,
+            5.934
+          ],
+          "suppressed": 4
+        },
+        {
+          "band": 17,
+          "peakTarget": 0.4710654616355896,
+          "peakFiltered": 0.42704156041145325,
+          "attacks": [
+            0.274,
+            0.538,
+            1.228,
+            1.754,
+            2.14,
+            2.352,
+            2.582,
+            3.144,
+            3.966,
+            4.226,
+            4.988,
+            5.966
+          ],
+          "acoustic": [
+            0.274,
+            0.538,
+            1.228,
+            1.288,
+            1.754,
+            2.14,
+            2.352,
+            2.582,
+            2.686,
+            3.144,
+            3.966,
+            4.226,
+            4.988,
+            5.966
+          ],
+          "suppressed": 2
+        },
+        {
+          "band": 18,
+          "peakTarget": 0.6225939393043518,
+          "peakFiltered": 0.5916227698326111,
+          "attacks": [
+            0.278,
+            0.542,
+            0.764,
+            1.09,
+            1.298,
+            1.466,
+            1.66,
+            2.112,
+            2.34,
+            2.606,
+            3.04,
+            3.624,
+            3.842,
+            4.192,
+            4.43,
+            4.696,
+            4.91,
+            5.348,
+            5.69,
+            5.858
+          ],
+          "acoustic": [
+            0.278,
+            0.542,
+            0.764,
+            0.864,
+            1.09,
+            1.216,
+            1.298,
+            1.466,
+            1.66,
+            1.774,
+            2.112,
+            2.34,
+            2.606,
+            2.696,
+            3.04,
+            3.158,
+            3.624,
+            3.842,
+            3.962,
+            4.192,
+            4.43,
+            4.538,
+            4.696,
+            4.91,
+            4.992,
+            5.348,
+            5.46,
+            5.69,
+            5.858,
+            5.934
+          ],
+          "suppressed": 10
+        },
+        {
+          "band": 19,
+          "peakTarget": 0.2642715275287628,
+          "peakFiltered": 0.2419147491455078,
+          "attacks": [
+            1.308,
+            1.538,
+            1.728,
+            2.132,
+            2.35,
+            2.592,
+            3.056,
+            3.502,
+            3.952
+          ],
+          "acoustic": [
+            1.308,
+            1.538,
+            1.728,
+            2.132,
+            2.35,
+            2.592,
+            2.672,
+            3.056,
+            3.132,
+            3.502,
+            3.952
+          ],
+          "suppressed": 2
+        },
+        {
+          "band": 20,
+          "peakTarget": 0.2647721469402313,
+          "peakFiltered": 0.24800243973731995,
+          "attacks": [
+            0.308,
+            1.304,
+            1.758,
+            1.984,
+            2.362,
+            2.58,
+            3.048,
+            3.968,
+            4.212
+          ],
+          "acoustic": [
+            0.308,
+            1.304,
+            1.758,
+            1.984,
+            2.12,
+            2.362,
+            2.58,
+            2.668,
+            2.702,
+            3.048,
+            3.156,
+            3.968,
+            4.212
+          ],
+          "suppressed": 4
+        },
+        {
+          "band": 21,
+          "peakTarget": 0.1505386233329773,
+          "peakFiltered": 0.14801768958568573,
+          "attacks": [
+            3.162
+          ],
+          "acoustic": [
+            3.162
+          ],
+          "suppressed": 0
+        },
+        {
+          "band": 22,
+          "peakTarget": 0.11656102538108826,
+          "peakFiltered": 0.11258362978696823,
+          "attacks": [],
+          "acoustic": [],
+          "suppressed": 0
+        }
+      ]
+    }
+  ]
+}

@@ -12,6 +12,7 @@ pub const CORNER: f32 = 0.012;
 pub const POST_HEIGHT: f32 = 20.0;
 pub const MAX_SUBSTEPS: usize = 128;
 pub const MIN_HEIGHT: f32 = 0.40;
+pub const RESIZE_TICKS: u32 = HZ * 3 / 10;
 pub const CLEARANCE: f32 = 0.004;
 pub const BASELINE: f32 = 0.003;
 pub const SIZE_RATIOS: [f32; COUNT] = [
@@ -161,6 +162,8 @@ pub struct Simulation {
     touching: [[bool; COUNT]; COUNT],
     ceiling: RigidBodyHandle,
     ceiling_height: f32,
+    resize_from: f32,
+    resize_tick: u32,
     supported: [bool; COUNT],
     driven: [bool; COUNT],
     input: SimulationInput,
@@ -294,6 +297,8 @@ impl Simulation {
             touching: [[false; COUNT]; COUNT],
             ceiling,
             ceiling_height: config.height,
+            resize_from: config.height,
+            resize_tick: RESIZE_TICKS,
             supported: [false; COUNT],
             driven: [false; COUNT],
             input: SimulationInput {
@@ -325,12 +330,25 @@ impl Simulation {
         {
             return Err("Invalid or late simulation input");
         }
-        // Resizing changes the physical setup, never ball transforms, velocities or sizes.
-        self.config.height = input.height;
+        // The input requests a room size; snapshots/config report the applied size.
+        // Retarget from the current height, without touching body momentum.
+        if input.height != self.input.height {
+            self.resize_from = self.config.height;
+            self.resize_tick = 0;
+        }
         self.input = input;
         Ok(())
     }
     pub fn step(&mut self) {
+        if self.resize_tick < RESIZE_TICKS {
+            self.resize_tick += 1;
+            let t = self.resize_tick as f32 / RESIZE_TICKS as f32;
+            self.config.height = if self.resize_tick == RESIZE_TICKS {
+                self.input.height
+            } else {
+                self.resize_from + (self.input.height - self.resize_from) * t * t * (3.0 - 2.0 * t)
+            };
+        }
         let (max_speed, acceleration) = self.config.motion_limits(self.input.reduced_motion);
         let targets: [f64; COUNT] = std::array::from_fn(|i| {
             f64::from(BASELINE)
