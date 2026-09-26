@@ -58,6 +58,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 #dancinglights::before { content: ""; position: absolute; inset: var(--balloon-headroom) var(--plot-side-inset) var(--plot-baseline); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); pointer-events: none; }
 .balloon-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; contain: layout paint; pointer-events: none; }
 .balloon-layer canvas { display: block; width: 100%; height: 100%; }
+.bark-copy { position: absolute; top: 0; bottom: 0; }
 .bark-group { position: relative; min-width: 0; }
 .meter { position: relative; height: 100%; min-width: 0; }
 .meter:focus-visible { z-index: 2; }

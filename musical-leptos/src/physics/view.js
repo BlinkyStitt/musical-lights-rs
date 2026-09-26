@@ -50,6 +50,20 @@ export class PhysicsView {
     this.sequence = 0;
     this.input = new Float32Array(34);
     this.edges = new Float32Array(24);
+    this.meshEdges = new Float32Array(72);
+    this.timing = { snapshots: [], resizes: [] };
+    this.meters = [...this.graph.querySelectorAll('[role="meter"]')];
+    this.groups = this.meters.map((meter, i) => {
+      const group = meter.parentElement; group.dataset.sourceBand = i;
+      Object.assign(group.style, { position: 'absolute', top: '0', bottom: '0' });
+      return group;
+    });
+    this.copies = this.meters.map((meter, i) => {
+      const copy = document.createElement('span'); copy.className = 'bark-copy';
+      copy.setAttribute('aria-hidden', 'true'); copy.dataset.sourceBand = i;
+      for (const type of ['pointerenter', 'pointerleave']) copy.addEventListener(type, event => meter.dispatchEvent(new PointerEvent(type, { pointerType: event.pointerType })));
+      this.graph.append(copy); return copy;
+    });
     this.acceleration = [0, 0, 0];
     this.tilt = [0, 0, 0];
     this.accelerationAt = 0;
@@ -140,6 +154,7 @@ export class PhysicsView {
     if (box.width <= 0 || box.height <= 0) return;
     this.width = this.layout?.[2] ?? 1.2;
     this.height = Math.max(this.layout?.[19] ?? .4, this.width * box.height / box.width);
+    if (this.input[32] !== this.height && this.timing.resizes.length < 5000) this.timing.resizes.push({ at: performance.now(), from: this.input[32], to: this.height });
     this.input[32] = this.height;
     if (box.width !== this.canvasWidth || box.height !== this.canvasHeight) {
       this.renderer.setSize(box.width, box.height, false);
@@ -165,6 +180,7 @@ export class PhysicsView {
     this.graph.style.setProperty('--plot-side-inset', `${side}%`);
     this.graph.style.setProperty('--balloon-headroom', `${100 * (1 - barMax / visibleHeight)}%`);
     this.graph.style.setProperty('--plot-baseline', `${100 * .003 / visibleHeight}%`);
+    this.positionMeters(this.renderedPhase ?? 0);
   }
   setCamera(degrees) {
     if (degrees !== this.rotation) this.report?.invalidate('Camera changed during test');
@@ -177,6 +193,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
+      if (data.layout[18] !== 4 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
@@ -190,6 +207,11 @@ export class PhysicsView {
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
       this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
+      // Geometry and accessible surfaces must describe the newly published room,
+      // even when a worker message arrives between animation frames.
+      this.fitEnclosure();
+      this.metrics.maxSchedulingGap = data.maxSchedulingGap; this.metrics.maxStepMs = data.maxStepMs;
+      if (this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, substeps: data.maxSubsteps, height: this.current[1] });
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
@@ -204,7 +226,7 @@ export class PhysicsView {
     // Two chords per quarter-circle keep the narrow caps smooth at screen size.
     // Avoid dense subdivisions across all six faces of each long bar.
     const geometry = new RoundedBoxGeometry(pitch - gap, postHeight, this.config[5], 1, radius);
-    geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.edges, 1));
+    geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     const material = new THREE.ShaderMaterial({
       uniforms: { halfWidth: { value: (pitch - gap) / 2 }, radius: { value: radius }, postHeight: { value: postHeight } },
       vertexShader: `attribute float edge;
@@ -215,7 +237,7 @@ export class PhysicsView {
       fragmentShader: `uniform float halfWidth; uniform float radius; uniform float postHeight;
         varying vec3 tint; varying vec3 local; varying vec3 world; varying float glow;
         void main() {
-          if (world.y < 0.0) discard;
+          if (world.y < 0.0 || world.x < 0.0 || world.x > 1.2) discard;
           vec2 q = vec2(abs(local.x) - (halfWidth - radius), local.y - (postHeight * 0.5 - radius));
           float distance = radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
           distance = min(distance, world.y);
@@ -227,8 +249,8 @@ export class PhysicsView {
         }`,
       defines: { PIXEL_RATIO: Math.min(devicePixelRatio, 2).toFixed(1) },
     });
-    this.bars = new THREE.InstancedMesh(geometry, material, count);
-    for (let i = 0; i < count; i++) { this.color.fromArray(this.palette, ((i + count - this.input[33]) % count) * 3); this.bars.setColorAt(i, this.color); }
+    this.bars = new THREE.InstancedMesh(geometry, material, count * 3);
+    for (let i = 0; i < count * 3; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
     this.ceiling = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
@@ -242,6 +264,11 @@ export class PhysicsView {
     this.ceiling.position.y = current[this.layout[17]];
     const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
     const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
+    const phaseOffset = this.layout[20];
+    const phaseDelta = (current[phaseOffset] - previous[phaseOffset] + count) % count;
+    const phase = (previous[phaseOffset] + phaseDelta * alpha) % count;
+    this.renderedPhase = phase;
+    this.positionMeters(phase);
     for (let i = 0; i < count; i++) {
       const offset = 3 + i * stride;
       this.object.position.set(
@@ -253,8 +280,12 @@ export class PhysicsView {
       this.object.scale.setScalar(current[offset + 7]); this.object.updateMatrix(); this.balls.setMatrixAt(i, this.object.matrix);
       this.color.fromArray(current, offset + 15); this.balls.setColorAt(i, this.color);
       const top = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
-      this.object.position.set((i + 0.5) * pitch, top - postHeight / 2, 0);
-      this.object.quaternion.identity(); this.object.scale.setScalar(1); this.object.updateMatrix(); this.bars.setMatrixAt(i, this.object.matrix);
+      const column = (i + phase) % count;
+      this.object.quaternion.identity(); this.object.scale.setScalar(1);
+      for (let copy = 0; copy < 3; copy++) {
+        this.object.position.set((column + 0.5 + (copy === 1 ? -count : copy === 2 ? count : 0)) * pitch, top - postHeight / 2, 0);
+        this.object.updateMatrix(); this.bars.setMatrixAt(i + copy * count, this.object.matrix);
+      }
     }
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
@@ -262,18 +293,32 @@ export class PhysicsView {
     this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);
   }
-  push(levels, edges, offset = 0) {
-    this.input.set(levels, 0); this.edges.set(edges);
-    if (offset !== this.input[33]) {
-      this.input[33] = offset;
-      if (this.bars) {
-        for (let slot = 0; slot < 24; slot++) {
-          this.color.fromArray(this.palette, ((slot + 24 - offset) % 24) * 3);
-          this.bars.setColorAt(slot, this.color);
-        }
-        this.bars.instanceColor.needsUpdate = true;
-      }
+  positionMeters(phase) {
+    const count = this.meters.length;
+    const inset = Math.max(0, (1 - this.width / (this.visibleHeight * this.aspect)) * 50);
+    if (this.meterPhase === phase && this.meterInset === inset) return;
+    this.meterPhase = phase; this.meterInset = inset;
+    const columnWidth = (100 - 2 * inset) / count;
+    const wrapped = phase > .00001;
+    if (wrapped !== this.wrappedLabels) {
+      this.wrappedLabels = wrapped;
+      const labels = this.card.querySelectorAll('.spectrum-labels span');
+      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? (i === 1 ? 'SCROLLING →' : '') : text; });
     }
+    // One accessible node per source; only the pointer surface is copied at
+    // the seam. Stationary frames do not repeat layout/style writes.
+    for (let i = 0; i < count; i++) {
+      const column = (i + phase) % count, group = this.groups[i], copy = this.copies[i];
+      group.style.left = `${inset + column * columnWidth}%`;
+      group.style.width = `${Math.min(1, count - column) * columnWidth}%`;
+      copy.style.left = `${inset}%`;
+      copy.style.width = `${Math.max(0, column + 1 - count) * columnWidth}%`;
+    }
+  }
+  push(levels, edges, scrolling = false) {
+    this.input.set(levels, 0); this.edges.set(edges);
+    for (let copy = 0; copy < 3; copy++) this.meshEdges.set(edges, copy * 24);
+    this.input[33] = scrolling ? 1 : 0;
   }
   stopMotion() { this.motion.stopMotion(); this.tilt = [0, 0, 0]; this.acceleration = [0, 0, 0]; this.input.fill(0, 0, 27); this.push(new Float32Array(24), new Float32Array(24), 0); }
   pause() {
@@ -291,6 +336,7 @@ export class PhysicsView {
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
     this.observer.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();
+    for (const copy of this.copies) copy.remove();
     this.canvas.removeEventListener('webglcontextlost', this.contextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.contextRestored);
     this.disposeMeshes(); this.renderer.dispose(); this.renderer.forceContextLoss(); this.canvas.remove();

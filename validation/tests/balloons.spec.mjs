@@ -4,7 +4,7 @@ import { physicsReady, physicsState, syntheticAudio, startFrozen } from '../phys
 
 const url = 'http://127.0.0.1:8101';
 
-test('hat scrolling carries loudness, colors, flashes and labels right while bars remain physical', async ({ page }, info) => {
+test('continuous scrolling carries source identity and stops in place', async ({ page }, info) => {
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);
   await expect(page.locator('.scroll-lights')).toBeChecked();
   await startFrozen(page);
@@ -18,33 +18,34 @@ test('hat scrolling carries loudness, colors, flashes and labels right while bar
     } }));
   });
   const sourceLabel = await page.getByRole('meter').first().getAttribute('aria-label');
-  const lastLabel = await page.getByRole('meter').last().getAttribute('aria-label');
   await page.locator('.scroll-lights').check();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(1);
-  await expect(page.getByRole('meter').nth(1)).toHaveAttribute('aria-label', sourceLabel);
-  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', lastLabel);
-  await expect(page.getByRole('meter').nth(1)).toHaveAttribute('aria-valuenow', '60');
-  await expect.poll(async () => {
-    const state = await physicsState(page);
-    return Math.abs(state.bars[1] - (.003 + .6 * (state.barMax - .003)));
-  }).toBeLessThan(.005);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.3);
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', sourceLabel);
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '60');
   const moved = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    return { edges: Array.from(v.edges), colors: Array.from(v.bars.instanceColor.array), palette: Array.from(v.palette) };
+    return { edges: Array.from(v.edges), colors: Array.from(v.bars.instanceColor.array), palette: Array.from(v.palette),
+      phase: v.renderedPhase, x: v.bars.instanceMatrix.array[12], top: v.current[v.layout[9]], max: v.current[v.layout[17] + 1] };
   });
-  expect(moved.edges[1]).toBe(1); expect(moved.edges[0]).toBe(0);
-  expect(moved.colors.slice(3, 6)).toEqual(moved.palette.slice(0, 3));
-  expect(moved.colors.slice(0, 3)).toEqual(moved.palette.slice(69, 72));
+  expect(moved.edges[0]).toBe(1); expect(moved.edges[1]).toBe(0);
+  expect(moved.colors.slice(0, 3)).toEqual(moved.palette.slice(0, 3));
+  expect(moved.x).toBeCloseTo((.5 + moved.phase) * .05, 5);
+  expect(moved.top).toBeCloseTo(.003 + .6 * (moved.max - .003), 4);
   await page.screenshot({ path: info.outputPath('scrolling-bands.png') });
   await page.evaluate(() => { window.audioNow += .181; });
   await expect.poll(async () => Math.max(...(await physicsState(page)).edges)).toBe(0);
   await page.locator('.scroll-lights').uncheck();
-  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', sourceLabel);
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(0);
+  await page.waitForTimeout(350);
+  const phase = await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBe(phase);
+  expect(phase).toBeGreaterThan(.3);
+  await page.locator('.scroll-lights').check();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(phase + .1);
   await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
 });
 
-test('Reduced Motion suppresses scrolling and Stop restores the fixed spectrum', async ({ page }) => {
+test('Reduced Motion suppresses scrolling and Stop retains source identity', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
   await page.locator('.scroll-lights').check();
@@ -292,4 +293,25 @@ test('phone acceptance rejects frozen snapshots despite 60 FPS and a current wor
     return { moving, frozen, stale };
   });
   expect(results).toEqual({ moving: true, frozen: false, stale: false });
+});
+
+test('wrapped pointer surfaces and keyboard focus retain the source frequency', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  const last = await page.getByRole('meter').last().getAttribute('aria-label');
+  await page.locator('.scroll-lights').check();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.4);
+  await page.locator('.scroll-lights').uncheck(); await page.waitForTimeout(350);
+  await page.locator('.bark-copy[data-source-band="23"]').hover();
+  await expect(page.locator('.frequency-tooltip')).toContainText(last);
+  await page.getByRole('meter').first().focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('meter').last()).toBeFocused();
+  await expect(page.locator('.frequency-tooltip')).toContainText(last);
+  await page.locator('.scroll-lights').check();
+  await page.getByRole('meter').last().focus();
+  const before = await page.getByRole('meter').last().getAttribute('aria-label');
+  await page.waitForTimeout(1600);
+  await expect(page.getByRole('meter').last()).toBeFocused();
+  await expect(page.getByRole('meter').last()).toHaveAttribute('aria-label', before);
+  await expect(page.getByRole('meter')).toHaveCount(24);
 });

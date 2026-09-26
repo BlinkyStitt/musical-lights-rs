@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { test } from 'node:test';
+import init, { PhysicsSimulation } from '../../musical-lights-physics/pkg/physics.js';
+const wasm = await init({ module_or_path: await readFile(new URL('../../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
+
+test('the built WASM accepts protocol 4 scrolling and stops at its published phase', () => {
+  const layout = PhysicsSimulation.layout();
+  assert.equal(layout[18], 4, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
+  const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), new Float32Array(72).fill(.5));
+  try {
+    const input = new Float32Array(34); input[32] = .6; input[33] = 1;
+    sim.input(input);
+    for (let i = 0; i < 240; i++) sim.step();
+    const phase = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])[layout[20]];
+    assert(Math.abs(phase() - (2 - .060) * 55.5 / 80) < .001);
+    input[33] = 0; sim.input(input);
+    for (let i = 0; i < 30; i++) sim.step();
+    const stopped = phase();
+    for (let i = 0; i < 30; i++) sim.step();
+    assert.equal(phase(), stopped);
+    input[33] = 3;
+    assert.throws(() => sim.input(input), /scrolling enablement/);
+  } finally { sim.free(); }
+});

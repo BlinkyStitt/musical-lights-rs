@@ -107,7 +107,7 @@ export class Scene {
       if (!this.closed) layer.closest('.audio-card').querySelector('.physics-status').textContent = `Cannot start 3D physics: ${error}`;
     });
   }
-  push(levels, edges, offset) { this.view?.push(levels, edges, offset); }
+  push(levels, edges, scrolling) { this.view?.push(levels, edges, scrolling); }
   startMotion() { this.input.startMotion(); }
   stopMotion() { this.input.stopMotion(); this.view?.stopMotion(); }
   close() { this.closed = true; this.input.close(); this.view?.close(); this.view = null; }
