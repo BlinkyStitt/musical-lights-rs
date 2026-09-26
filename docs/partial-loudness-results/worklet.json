@@ -1,161 +1,162 @@
 {
+  "mapping": "browser-treble-shelf-2x",
   "cases": [
     {
       "kind": "stationary",
       "frames": 2000,
       "isoBitIdentical": true,
-      "maximumRatioError": 6.423684739687019e-8,
       "audioMs": 4000,
-      "beforeCpuMs": 35.743875,
-      "afterCpuMs": 617.672583
+      "beforeCpuMs": 35.51991599999997,
+      "afterCpuMs": 619.158375,
+      "maximumEmphasizedRatioError": 3.305053464242036e-08
     },
     {
       "kind": "two",
       "frames": 2000,
       "isoBitIdentical": true,
-      "maximumRatioError": 8.014383101606626e-8,
       "audioMs": 4000,
-      "beforeCpuMs": 40.134665999999925,
-      "afterCpuMs": 671.0432919999998
+      "beforeCpuMs": 40.301750000000084,
+      "afterCpuMs": 624.2180000000003,
+      "maximumEmphasizedRatioError": 2.683969030359279e-08
     },
     {
       "kind": "bursts",
       "frames": 2000,
       "isoBitIdentical": true,
-      "maximumRatioError": 9.468201656037678e-8,
       "audioMs": 4000,
-      "beforeCpuMs": 28.550500000000284,
-      "afterCpuMs": 306.35308299999997
+      "beforeCpuMs": 28.140583000000333,
+      "afterCpuMs": 295.4192089999997,
+      "maximumEmphasizedRatioError": 4.2840687108913755e-08
     },
     {
       "kind": "silence",
       "frames": 1500,
       "isoBitIdentical": true,
-      "maximumRatioError": 0,
       "audioMs": 3000,
-      "beforeCpuMs": 20.88870799999995,
-      "afterCpuMs": 192.93695900000012
+      "beforeCpuMs": 20.59474999999975,
+      "afterCpuMs": 189.94387499999993,
+      "maximumEmphasizedRatioError": 0
     },
     {
       "kind": "exercise",
       "frames": 2000,
       "isoBitIdentical": true,
-      "maximumRatioError": 1.5454668900183322e-7,
       "audioMs": 4000,
-      "beforeCpuMs": 46.821375000000444,
-      "afterCpuMs": 878.7952909999995
+      "beforeCpuMs": 46.517125000000306,
+      "afterCpuMs": 882.9461670000001,
+      "maximumEmphasizedRatioError": 9.840063597277293e-08
     }
   ],
   "centers": [
     {
       "hz": 50,
-      "mappedFraction": 0.999995067061598
+      "mappedFraction": 0.999995067059485
     },
     {
       "hz": 150,
-      "mappedFraction": 0.9999955229593759
+      "mappedFraction": 0.9999955229410246
     },
     {
       "hz": 250,
-      "mappedFraction": 0.9999986384474995
+      "mappedFraction": 0.999998638415187
     },
     {
       "hz": 350,
-      "mappedFraction": 0.999999998332997
+      "mappedFraction": 0.9999999982902827
     },
     {
       "hz": 450,
-      "mappedFraction": 0.9999996988272722
+      "mappedFraction": 0.9999996987735896
     },
     {
       "hz": 570,
-      "mappedFraction": 0.9999997135657644
+      "mappedFraction": 0.9999997135007765
     },
     {
       "hz": 700,
-      "mappedFraction": 0.9999999970577018
+      "mappedFraction": 0.9999999969814575
     },
     {
       "hz": 840,
-      "mappedFraction": 0.9999999971123599
+      "mappedFraction": 0.9999999970227766
     },
     {
       "hz": 1000,
-      "mappedFraction": 0.9999999840485603
+      "mappedFraction": 0.9999999839403193
     },
     {
       "hz": 1170,
-      "mappedFraction": 0.999999998898188
+      "mappedFraction": 0.9999999987631449
     },
     {
       "hz": 1370,
-      "mappedFraction": 0.9999999971669193
+      "mappedFraction": 0.9999999970100677
     },
     {
       "hz": 1600,
-      "mappedFraction": 0.9999999989943114
+      "mappedFraction": 0.99999999883681
     },
     {
       "hz": 1850,
-      "mappedFraction": 0.9999999991981294
+      "mappedFraction": 0.9999999990549222
     },
     {
       "hz": 2150,
-      "mappedFraction": 0.999999999366237
+      "mappedFraction": 0.9999999992927804
     },
     {
       "hz": 2500,
-      "mappedFraction": 0.9999999995067335
+      "mappedFraction": 0.9999999995129443
     },
     {
       "hz": 2900,
-      "mappedFraction": 0.9999999995925037
+      "mappedFraction": 0.9999999996471354
     },
     {
       "hz": 3400,
-      "mappedFraction": 0.9999999996179527
+      "mappedFraction": 0.9999999997014652
     },
     {
       "hz": 4050,
-      "mappedFraction": 0.9999999995793274
+      "mappedFraction": 0.9999999996884696
     },
     {
       "hz": 4800,
-      "mappedFraction": 0.9999999994614059
+      "mappedFraction": 0.9999999996105489
     },
     {
       "hz": 5800,
-      "mappedFraction": 0.9999999991808316
+      "mappedFraction": 0.9999999994113409
     },
     {
       "hz": 7000,
-      "mappedFraction": 0.9999999988018544
+      "mappedFraction": 0.9999999991531936
     },
     {
       "hz": 8600,
-      "mappedFraction": 0.9999999986387806
+      "mappedFraction": 0.9999999990474926
     },
     {
       "hz": 10700,
-      "mappedFraction": 0.9999999989690611
+      "mappedFraction": 0.999999999267037
     },
     {
       "hz": 13700,
-      "mappedFraction": 0.9999999989110345
+      "mappedFraction": 0.9999999992049354
     }
   ],
   "boundaries": [
     {
       "hz": 100,
-      "mappedMaxNonadjacentOverPeak": 0.00001769108749493935
+      "mappedMaxNonadjacentOverPeak": 1.769108749493935e-05
     },
     {
       "hz": 200,
-      "mappedMaxNonadjacentOverPeak": 7.832118464213177e-7
+      "mappedMaxNonadjacentOverPeak": 7.832118464213177e-07
     },
     {
       "hz": 300,
-      "mappedMaxNonadjacentOverPeak": 1.0101922620085009e-7
+      "mappedMaxNonadjacentOverPeak": 1.0101922620085009e-07
     },
     {
       "hz": 400,
@@ -163,19 +164,19 @@
     },
     {
       "hz": 510,
-      "mappedMaxNonadjacentOverPeak": 2.61850342069382e-7
+      "mappedMaxNonadjacentOverPeak": 2.61850342069382e-07
     },
     {
       "hz": 630,
-      "mappedMaxNonadjacentOverPeak": 2.143809352261883e-9
+      "mappedMaxNonadjacentOverPeak": 2.143809352261883e-09
     },
     {
       "hz": 770,
-      "mappedMaxNonadjacentOverPeak": 1.7092555149034183e-9
+      "mappedMaxNonadjacentOverPeak": 1.7092555149034183e-09
     },
     {
       "hz": 920,
-      "mappedMaxNonadjacentOverPeak": 9.095050046425968e-9
+      "mappedMaxNonadjacentOverPeak": 9.095050046425968e-09
     },
     {
       "hz": 1080,
@@ -187,65 +188,65 @@
     },
     {
       "hz": 1480,
-      "mappedMaxNonadjacentOverPeak": 1.9300340255078573e-10
+      "mappedMaxNonadjacentOverPeak": 2.1646201400351105e-10
     },
     {
       "hz": 1720,
-      "mappedMaxNonadjacentOverPeak": 2.6864878647042486e-10
+      "mappedMaxNonadjacentOverPeak": 3.3554533419740345e-10
     },
     {
       "hz": 2000,
-      "mappedMaxNonadjacentOverPeak": 1.8077372931912805e-10
+      "mappedMaxNonadjacentOverPeak": 2.7278049263834703e-10
     },
     {
       "hz": 2320,
-      "mappedMaxNonadjacentOverPeak": 8.082343609847074e-11
+      "mappedMaxNonadjacentOverPeak": 1.0479019735276651e-10
     },
     {
       "hz": 2700,
-      "mappedMaxNonadjacentOverPeak": 1.0196070376888855e-10
+      "mappedMaxNonadjacentOverPeak": 8.760687314479654e-11
     },
     {
       "hz": 3150,
-      "mappedMaxNonadjacentOverPeak": 1.4765176581388317e-10
+      "mappedMaxNonadjacentOverPeak": 1.2230930157564046e-10
     },
     {
       "hz": 3700,
-      "mappedMaxNonadjacentOverPeak": 1.2257517223446257e-10
+      "mappedMaxNonadjacentOverPeak": 9.454077104509295e-11
     },
     {
       "hz": 4400,
-      "mappedMaxNonadjacentOverPeak": 1.7183711398249812e-10
+      "mappedMaxNonadjacentOverPeak": 1.3359305328641824e-10
     },
     {
       "hz": 5300,
-      "mappedMaxNonadjacentOverPeak": 1.9427204289712563e-10
+      "mappedMaxNonadjacentOverPeak": 1.7885924685767662e-10
     },
     {
       "hz": 6400,
-      "mappedMaxNonadjacentOverPeak": 2.730230208580764e-10
+      "mappedMaxNonadjacentOverPeak": 2.409948074433288e-10
     },
     {
       "hz": 7700,
-      "mappedMaxNonadjacentOverPeak": 7.153602521979733e-10
+      "mappedMaxNonadjacentOverPeak": 5.86234967701213e-10
     },
     {
       "hz": 9500,
-      "mappedMaxNonadjacentOverPeak": 4.2445650375329147e-10
+      "mappedMaxNonadjacentOverPeak": 3.478404678469515e-10
     },
     {
       "hz": 12000,
-      "mappedMaxNonadjacentOverPeak": 1.9408035700666184e-10
+      "mappedMaxNonadjacentOverPeak": 1.5122574026360525e-10
     }
   ],
   "sweeps": [
     {
       "direction": "up",
-      "mappedMaxNonadjacentOverPeak": 0.00006395402534345432
+      "mappedMaxNonadjacentOverPeak": 6.395402534345432e-05
     },
     {
       "direction": "down",
-      "mappedMaxNonadjacentOverPeak": 0.00006540641112985143
+      "mappedMaxNonadjacentOverPeak": 6.540641023506258e-05
     }
   ]
 }

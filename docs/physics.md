@@ -31,13 +31,13 @@ height is 2.25% of the drop height, down from 30.25% at the previous 0.55.
 This reduces repeated bouncing while retaining the 40 ms bar stroke. Moving
 bars still transfer their motion through physical contacts.
 
-Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives `v = 2H/T` and `a = 4H/T²`. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
+Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives full-height limits `v = 2H/T` and `a = 4H/T²`. Each new target scales both limits by the larger of its remaining-travel fraction and current-speed fraction, capped at one. Small corrections from rest therefore take the same 40 ms with proportionally gentler motion, instead of applying full acceleration to tiny fluctuations. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
 
 Strokes from rest must arrive within 1% of a stable target within 50 ms of
 physics receipt. The production WASM arrives in 41.67 ms at the 120 Hz sampling
 grid in all tested world heights and directions. Reversal latency includes
 braking and is reported separately: the near-peak retarget trace arrives in
-50 ms. See [current stroke traces](partial-loudness-results/strokes.json).
+58.33 ms. See [current stroke traces](partial-loudness-results/responsive-display/strokes.json).
 The minimum configurable normal stroke is 0.040 s; Reduced Motion stays 0.320 s.
 
 

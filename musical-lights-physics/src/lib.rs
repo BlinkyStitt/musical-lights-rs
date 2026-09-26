@@ -142,6 +142,8 @@ pub struct Simulation {
     bars: [(RigidBodyHandle, ColliderHandle); COUNT],
     bar_positions: [f64; COUNT],
     bar_velocities: [f64; COUNT],
+    bar_targets: [f64; COUNT],
+    bar_motion_scales: [f64; COUNT],
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; COUNT],
     touching: [[bool; COUNT]; COUNT],
@@ -236,6 +238,8 @@ impl Simulation {
             colors: palette,
             bar_positions: [f64::from(BASELINE); COUNT],
             bar_velocities: [0.0; COUNT],
+            bar_targets: [f64::from(BASELINE); COUNT],
+            bar_motion_scales: [1.0; COUNT],
             touching: [[false; COUNT]; COUNT],
             input: SimulationInput {
                 height: config.height,
@@ -278,11 +282,25 @@ impl Simulation {
                 + f64::from(self.input.levels[i])
                     * f64::from(self.config.height * (1.0 - HEADROOM) - BASELINE)
         });
+        let travel = f64::from(self.config.height * (1.0 - HEADROOM) - BASELINE);
+        for (i, &target) in targets.iter().enumerate() {
+            if target != self.bar_targets[i] {
+                // A small correction takes the same stroke time as a full rise,
+                // with proportionally smaller speed and acceleration. Previously
+                // 1% fluctuations used full acceleration and completed in 4 ms.
+                // Include existing speed so retargeting never deletes momentum.
+                self.bar_motion_scales[i] = ((target - self.bar_positions[i]).abs() / travel)
+                    .max(self.bar_velocities[i].abs() / max_speed)
+                    .min(1.0);
+                self.bar_targets[i] = target;
+            }
+        }
         let bar_speed = (0..COUNT)
             .map(|i| {
                 let speed = self.bar_velocities[i].abs();
                 if (targets[i] - self.bar_positions[i]).abs() > 1e-9 {
-                    speed.max((speed + acceleration * f64::from(DT)).min(max_speed))
+                    let scale = self.bar_motion_scales[i];
+                    speed.max((speed + acceleration * scale * f64::from(DT)).min(max_speed * scale))
                 } else {
                     speed
                 }
@@ -319,8 +337,8 @@ impl Simulation {
                     &mut self.bar_velocities[i],
                     targets[i],
                     f64::from(dt),
-                    max_speed,
-                    acceleration,
+                    max_speed * self.bar_motion_scales[i],
+                    acceleration * self.bar_motion_scales[i],
                 );
                 let body = &mut self.world.bodies[handle];
                 let mut position = body.translation();

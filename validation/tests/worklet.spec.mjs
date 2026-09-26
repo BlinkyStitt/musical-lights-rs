@@ -26,6 +26,22 @@ function tone(length, frequency = 50, gain = 0.5) {
   return Float32Array.from({ length }, (_, i) => Math.sin(i * 2 * Math.PI * frequency / 48000) * gain);
 }
 
+test('treble emphasis reveals a weaker high tone while preserving its measured partial loudness', () => {
+  const p = processor();
+  const samples = tone(48000, 1000, .02);
+  const treble = tone(48000, 8000, .01);
+  for (let i = 0; i < samples.length; i++) samples[i] += treble[i];
+  for (let i = 0; i < samples.length; i += 128) expect(p.push(samples.subarray(i, i + 128))).toBe(true);
+  const state = p.snapshot();
+  const measuredRatio = state[6 + 21 * 5] / state[6 + 8 * 5];
+  const heightRatio = state[2 + 21 * 5] / state[2 + 8 * 5];
+  expect(measuredRatio).toBeGreaterThan(.30);
+  expect(measuredRatio).toBeLessThan(.34);
+  expect(heightRatio).toBeCloseTo(2 * measuredRatio, 6);
+  expect(heightRatio).toBeGreaterThan(.6);
+  expect(state[2 + 23 * 5]).toBeLessThan(.00001);
+});
+
 test('a steady quiet tone adapts its bars without holding the white glow on', () => {
   const p = processor();
   // One exact second repeats without phase jumps, including across callbacks.
@@ -154,8 +170,8 @@ test('diagnostic frames preserve all 240 measurements and bound a stalled receiv
     if (reference) expect(rows).toEqual(reference);
     else reference = rows;
     for (const row of rows) {
-      const bands = row.slice(291, 315), peak = Math.max(...bands);
-      const targets = bands.map((_, i) => row[318 + 5 * i]), top = Math.max(...targets);
+      const bands = row.slice(316, 340), peak = Math.max(...bands);
+      const targets = bands.map((_, i) => row[342 + 5 * i]), top = Math.max(...targets);
       for (let i = 0; i < 24; i++) {
         const integrated = row.slice(2 + 10 * i, 12 + 10 * i).reduce((a, b) => a + b, 0) * .1;
         expect(row[242 + i]).toBeCloseTo(integrated, 6);

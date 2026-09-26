@@ -90,9 +90,10 @@ export class PhoneReport {
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v2', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v3', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
-        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, display transport',
+        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, 24 emphasized display inputs, display transport',
+        displayMapping: 'Browser treble emphasis: 1x through 2 kHz, rising linearly with log2 frequency to 2x at 8 kHz, then constant. One shared gain and headroom scale. Emphasized values are presentation inputs, not sones. Acoustic edges use unweighted partial sones.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead. Partial: causal 2048-sample Hann at 48 kHz, 96-sample hop; window center 21.33 ms before end; GM2002 short-term attack/release. Transport, physics and render timestamps are separate.',
         tone: this.toneMetadata };
       const parts = [JSON.stringify(header).slice(0, -1), ',"chunks":['];

@@ -1,7 +1,7 @@
 # Source-band loudness and 40 ms strokes
 
-The complete Mac Chromium/WebKit suite passes **158 checks** after the session and fixture
-repairs described below. All four focused calibration checks also pass. See
+The complete Mac Chromium/WebKit suite passes **159 checks** after the session,
+small-movement, and treble-display repairs described below. All four focused calibration checks also pass. See
 [PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18) for current CI
 and preview status. The PR remains draft pending physical-phone acceptance.
 
@@ -18,7 +18,9 @@ filter spacing. The complete mixture sets the filter shapes; the other slices
 and 15.5–20 kHz residual spectrum mask each target. Partial values do not sum to
 ISO total loudness. ISO total, all 240 specific values, and terminal/hardware
 behavior remain unchanged. No display sharpening or suppressive thresholds
-were added. One shared adaptive gain and common headroom scale preserve ratios.
+were added. Browser heights now receive the treble emphasis described below,
+then one shared adaptive gain and common headroom scale preserve the emphasized
+ratios. Raw partial measurements and their acoustic edge inputs are unchanged.
 
 The [model report](model.json) compares the unmodified C++ oracle at
 [`82de790f79c5b358040861e8bdb906a55009b117`](https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117)
@@ -33,9 +35,62 @@ All 24 settled center tones exceed 90% in the intended source band. Every tested
 boundary has each nonadjacent bar below 10% of the peak. Upward/downward 24-second
 sweeps pass that nonadjacent criterion against the fixed causal window center;
 no delay is fitted. [Production WASM checks](worklet.json) repeat the center,
-boundary, and sweep checks after mapping. Ratio error stays below 2e-7. The
+boundary, and sweep checks after mapping. Emphasized-input ratio error stays below 2e-7. The
 before/after production traces have bit-identical ISO fields for stationary,
 two-tone, burst, silence, and exercise inputs.
+
+## Small movements and treble visibility
+
+The original controller used full-height acceleration for every movement. A
+1% correction completed in 4 ms and could launch a resting ball 32.61 cm above
+the bar even with restitution 0.15. The controller now scales its speed and
+acceleration to the requested travel, keeping 40 ms for a stable stroke from
+rest. On retargeting, the scale also accommodates existing velocity; velocity
+is preserved and reversals still brake. This changes physical motion without
+adding a threshold, height hold, or smoothing to the loudness measurements.
+
+The [motion regression](responsive-display/motion.json) reduces that 1% rise's
+ball clearance to 1.10 mm. A repeating 8 Hz, ±0.5% fluctuation remains bounded
+and stops when its input becomes steady. Full-height strokes still arrive in
+41.67 ms. The [new reversal trace](responsive-display/strokes.json) arrives in
+58.33 ms, compared with the previous 50 ms; this is reported separately from
+rest-to-rest arrival. The trace includes all 24 balls at four world heights.
+
+Treble was present in the analysis but visually understated in mixed sound.
+To address the requested balance change, browser heights now use a fixed,
+gentle shelf: 1x through 2 kHz, increasing linearly with log2 frequency to 2x
+at 8 kHz, then constant. The shelf is evaluated at each source band's center.
+It is an artistic display emphasis, not a change to perceived loudness or a
+claim that raw sones ratios are still displayed unchanged. Zero remains zero;
+masking suppression and measured acoustic edges retain their original values.
+Terminal and hardware mapping remain unchanged.
+
+For a .02-peak 1 kHz tone plus a .01-peak 8 kHz tone, the treble-to-midrange
+height ratio rises from 0.3210 to 0.6421. [Production comparison](responsive-display/treble.json)
+confirms bit-identical ISO and raw partial fields across 8,000 frames of this
+mixture, white noise, low-pass noise, and silence. All 24 centers, boundaries,
+and both sweeps still pass the existing selectivity criteria after emphasis.
+The shared gain still uses the same adaptation settings and common headroom
+limit, now applied to the emphasized inputs.
+
+Current validation passes all 42 core tests in four feature configurations,
+the Clippy matrix, 23 physics tests (22 together plus the additional ball-launch
+regression), the worklet and Leptos checks/builds, and the unchanged ISO/MoSQiTo
+and partial-model oracle comparisons. The full Chromium/WebKit run passes all
+159 checks with the serial startup guard, one worker, and zero retries.
+
+All six [current timing runs](responsive-display/browser-timing.json) pass the
+unchanged host gates at 59.54–60.10 FPS, p95 frame time 16.7–18 ms, and sampled
+physics debt below 8.31 ms. Chromium portrait fullscreen has 0.392% of frames
+over 25 ms (maximum 50 ms); the other runs have none. No simulation time is
+discarded. Portrait physics costs 4.83 ms/tick in Chromium and 5.25 ms/tick in
+WebKit, higher than the previous 4.12/4.03 ms despite fewer overload ticks
+(1,607/1,908 versus 3,525/3,491). Normal and landscape physics costs are lower.
+These results do not establish physical-phone performance; that gate remains.
+
+Reproduce the comparison with `node validation/partial/treble.mjs <baseline-wasm>`;
+the baseline is the production worklet from `51f805d`. The native regression
+`tiny_bar_corrections_do_not_launch_resting_balls_high` fails on that baseline.
 
 ## Default input and quieter ball rebounds
 
@@ -75,10 +130,11 @@ unit peak before applying the selected amplitude; all permitted levels preserve
 the changing pattern and reach the advertised Float32 peak without clipping.
 The regressions reproduced the reviewed implementation's failures before repair.
 
-Normal transport remains one acknowledged 122-f64 snapshot. Optional v2 traces
-have 438 f64 values per row and distinguish the ISO timestamp and measurements,
+Normal transport remains one acknowledged 122-f64 snapshot. Optional v3 traces
+have 462 f64 values per row and distinguish the ISO timestamp and measurements,
 partial window-end timestamp, instantaneous and short-term partial bands, gain,
-and targets. Trace packets remain bounded at 64 rows, recordings at 50,000 rows,
+24 emphasized presentation inputs, and targets. Historical v2 traces retain
+their 438-value layout. Trace packets remain bounded at 64 rows, recordings at 50,000 rows,
 and physics samples at 25,000; drops remain visible.
 
 ## Motion and latency
@@ -89,11 +145,11 @@ velocity, brakes on reversal, and derives `v=2H/T`, `a=4H/T²`. Actual colliders
 contact-only launches, sphere CCD, eight solver iterations, open-top containment,
 retained simulation time, and the 128-substep cap are retained.
 
-[Production stroke traces](strokes.json) cover four world heights and all 24
+[Current production stroke traces](responsive-display/strokes.json) cover four world heights and all 24
 balls. Rest-to-rest strokes arrive within 1% in **41.67 ms**, within the 50 ms
-requirement at 120 Hz. The sampled near-peak reversal arrives in **50 ms**;
-direction changes after 16.67–25 ms depending on contact subdivision. The
-1.2/2 m full-stroke cases reach the substep cap and report it. Twenty native
+requirement at 120 Hz. The sampled near-peak reversal arrives in **58.33 ms**;
+direction changes after 25 ms in these traces. The
+1.2/2 m full-stroke cases reach the substep cap and report it. Twenty-three native
 physics tests pass, including single-ball and six-ball stack contact, repeated
 24-ball strokes, reversals, containment, persistent overlap, and identical
 30/60/120 FPS replay. Browser checks compare rendered geometry with interpolated
@@ -166,9 +222,10 @@ after warmup; this does not measure network/asset startup latency. No host
 network settings were changed. Use `https://musical-lights.test` as the URL
 argument to reproduce the in-process timing origin.
 
-Pinned core (41 tests × four feature configurations and the Clippy matrix),
-worklet, physics (20 tests), Leptos, ISO/MoSQiTo, and partial-reference validation
-pass. The full browser suite passes **158 checks**, plus three startup-harness
+The earlier source-input revision passed pinned core (41 tests × four feature
+configurations and the Clippy matrix),
+worklet, physics (20 tests), Leptos, ISO/MoSQiTo, and partial-reference validation.
+Its full browser suite passed **158 checks**, plus three startup-harness
 regressions and the exercise-PCM regression. A repeat during concurrent offline
 validation hit three Chromium page-load timeouts; the unchanged full suite
 then passed in isolation with the standard three workers and startup guard.

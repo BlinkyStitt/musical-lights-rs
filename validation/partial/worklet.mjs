@@ -29,37 +29,37 @@ for(const kind of ['stationary','two','bursts','silence','exercise']) {
   const pcm=tonePCM(kind).subarray(0,48000*4);
   const before=run(previous,pcm,true), after=run(current,pcm,true);
   assert.equal(after.rows.length,before.rows.length);
-  let maximumRatioError=0;
+  let maximumEmphasizedRatioError=0;
   for(let j=0;j<after.rows.length;j++) {
     assert.deepEqual(after.rows[j].slice(0,266),before.rows[j].slice(0,266),'ISO measurement changed');
-    const row=after.rows[j], partial=Array.from(row.slice(291,315)), peak=Math.max(...partial);
-    const targets=partial.map((_,i)=>row[318+5*i]), top=Math.max(...targets);
+    const row=after.rows[j], emphasized=Array.from(row.slice(316,340)), peak=Math.max(...emphasized);
+    const targets=emphasized.map((_,i)=>row[342+5*i]), top=Math.max(...targets);
     for(let i=0;i<24;i++) {
-      assert(Number.isFinite(partial[i]) && partial[i]>=0);
-      if(peak) maximumRatioError=Math.max(maximumRatioError,Math.abs(partial[i]/peak-targets[i]/top));
+      assert(Number.isFinite(emphasized[i]) && emphasized[i]>=0);
+      if(peak) maximumEmphasizedRatioError=Math.max(maximumEmphasizedRatioError,Math.abs(emphasized[i]/peak-targets[i]/top));
     }
   }
-  assert(maximumRatioError<2e-7);
+  assert(maximumEmphasizedRatioError<2e-7);
   const beforeCost=run(previous,pcm,false).elapsed, afterCost=run(current,pcm,false).elapsed;
   assert(afterCost<pcm.length/48*.5,'Analysis uses over half of realtime on this host');
-  cases.push({kind,frames:after.rows.length,isoBitIdentical:true,maximumRatioError,audioMs:pcm.length/48,beforeCpuMs:beforeCost,afterCpuMs:afterCost});
+  cases.push({kind,frames:after.rows.length,isoBitIdentical:true,maximumEmphasizedRatioError,audioMs:pcm.length/48,beforeCpuMs:beforeCost,afterCpuMs:afterCost});
   console.log(cases.at(-1));
 }
 const centers=[];
 for(const [band,f] of frequencies.entries()) {
   const pcm=tonePCM('stationary',f,.02).subarray(0,48000);
   const {rows}=run(current,pcm,true), row=rows.at(-1);
-  const targets=Array.from({length:24},(_,i)=>row[318+5*i]);
+  const targets=Array.from({length:24},(_,i)=>row[342+5*i]);
   const fraction=targets[band]/targets.reduce((a,b)=>a+b,0);
   assert(fraction>=.9);
   centers.push({hz:f,mappedFraction:fraction});
 }
-await writeFile('docs/partial-loudness-results/worklet.json',JSON.stringify({cases,centers},null,2)+'\n');
+await writeFile('docs/partial-loudness-results/worklet.json',JSON.stringify({mapping:'browser-treble-shelf-2x',cases,centers},null,2)+'\n');
 const edges=[100,200,300,400,510,630,770,920,1080,1270,1480,1720,2000,2320,2700,3150,3700,4400,5300,6400,7700,9500,12000];
 const boundaries=[];
 for(const [band,f] of edges.entries()) {
   const {rows}=run(current,tonePCM('stationary',f,.02).subarray(0,48000),true), row=rows.at(-1);
-  const targets=Array.from({length:24},(_,i)=>row[318+5*i]), peak=Math.max(...targets);
+  const targets=Array.from({length:24},(_,i)=>row[342+5*i]), peak=Math.max(...targets);
   const ratio=Math.max(...targets.filter((_,i)=>i!==band&&i!==band+1))/peak;
   assert(ratio<.1);boundaries.push({hz:f,mappedMaxNonadjacentOverPeak:ratio});
 }
@@ -74,9 +74,9 @@ for(const direction of ['up','down']) {
   for(const row of rows.slice(250)) {
     const t=Math.max(0,row[266]-1024)/(24*48000), f=50*(13700/50)**(direction==='up'?t:1-t);
     const band=edges.filter(x=>x<=f).length;
-    const targets=Array.from({length:24},(_,i)=>row[318+5*i]), peak=Math.max(...targets);
+    const targets=Array.from({length:24},(_,i)=>row[342+5*i]), peak=Math.max(...targets);
     worst=Math.max(worst,Math.max(...targets.filter((_,i)=>Math.abs(i-band)>1))/peak);
   }
   assert(worst<.1);sweeps.push({direction,mappedMaxNonadjacentOverPeak:worst});
 }
-await writeFile('docs/partial-loudness-results/worklet.json',JSON.stringify({cases,centers,boundaries,sweeps},null,2)+'\n');
+await writeFile('docs/partial-loudness-results/worklet.json',JSON.stringify({mapping:'browser-treble-shelf-2x',cases,centers,boundaries,sweeps},null,2)+'\n');

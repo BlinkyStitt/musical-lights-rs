@@ -178,6 +178,90 @@ fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
     }
 }
 #[test]
+fn small_corrections_keep_the_stroke_time_without_full_height_kicks() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[]);
+    let (full_speed, full_acceleration) = sim.config.motion_limits(false);
+    for amplitude in [0.001, 0.01, 0.1] {
+        for level in [amplitude, 0.0] {
+            input(&mut sim, [level; COUNT]);
+            for tick in 0..6 {
+                let before = sim.bar_velocities[0];
+                sim.step();
+                assert!(sim.bar_velocities[0].abs() <= full_speed * f64::from(amplitude) + 1e-5);
+                assert!(
+                    (sim.bar_velocities[0] - before).abs()
+                        <= full_acceleration * f64::from(amplitude) * f64::from(DT) + 1e-5
+                );
+                if tick == 0 {
+                    assert!(
+                        sim.bar_velocities[0].abs() > 0.0,
+                        "small sounds must still move"
+                    );
+                }
+            }
+            let target = BASELINE + level * (sim.config.height * (1.0 - HEADROOM) - BASELINE);
+            assert!((sim.snapshot.values[BAR_OFFSET] - target).abs() < 1e-5);
+            assert!(sim.bar_velocities[0].abs() < 1e-6);
+        }
+    }
+}
+
+#[test]
+fn tiny_bar_corrections_do_not_launch_resting_balls_high() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(PITCH * 0.5, BASELINE + radius(0), 0.0),
+        Vector::ZERO,
+    );
+    for _ in 0..HZ {
+        sim.step();
+    }
+    let mut levels = [0.0; COUNT];
+    levels[0] = 0.01;
+    input(&mut sim, levels);
+    let mut clearance = 0.0_f32;
+    for _ in 0..HZ {
+        sim.step();
+        clearance =
+            clearance.max(position(&sim, 0).y - radius(0) - sim.snapshot.values[BAR_OFFSET]);
+    }
+    eprintln!("1% bar rise: maximum ball clearance {clearance} m");
+    assert!(
+        clearance < 0.015,
+        "tiny correction launched a ball {clearance} m"
+    );
+    assert!(velocity(&sim, 0).length() < 0.01);
+}
+
+#[test]
+fn small_repeated_fluctuations_do_not_build_up_bar_speed() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[]);
+    input(&mut sim, [0.4; COUNT]);
+    for _ in 0..12 {
+        sim.step();
+    }
+    let mut peak = 0.0_f64;
+    for tick in 0..HZ * 2 {
+        let level = 0.4 + 0.005 * (tick as f32 * DT * 8.0 * std::f32::consts::TAU).sin();
+        input(&mut sim, [level; COUNT]);
+        sim.step();
+        peak = peak.max(sim.bar_velocities[0].abs());
+    }
+    eprintln!("8 Hz, +/-0.5% target: peak bar speed {peak} m/s");
+    assert!(peak < 0.3, "small fluctuations kick the bars at {peak} m/s");
+    input(&mut sim, [0.4; COUNT]);
+    for _ in 0..HZ {
+        sim.step();
+    }
+    assert!(sim.bar_velocities[0].abs() < 1e-6);
+}
+
+#[test]
 fn reduced_motion_uses_a_slower_stroke() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[]);

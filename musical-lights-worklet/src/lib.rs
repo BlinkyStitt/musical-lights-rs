@@ -8,7 +8,7 @@ use musical_lights_core::audio::{
 
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
-const TRACE_STRIDE: usize = 316 + SNAPSHOT_SIZE;
+const TRACE_STRIDE: usize = 340 + SNAPSHOT_SIZE;
 
 const SNAPSHOT_SIZE: usize = DisplaySnapshot::<DISPLAY_BANDS>::TRANSPORT_LEN;
 
@@ -135,8 +135,10 @@ impl AudioProcessor {
                     |frame| {
                         display.push(
                             frame.sample_index as f64 / SAMPLE_RATE as f64,
-                            gain.map_bands(frame.short_term_sones.map(|s| s as f32), iso.sones)
-                                .bands,
+                            gain.map_browser_partial(
+                                frame.short_term_sones.map(|s| s as f32),
+                                iso.sones,
+                            ),
                             reduced,
                         );
                         if trace_enabled {
@@ -153,7 +155,13 @@ impl AudioProcessor {
                                 row[267..291].copy_from_slice(&frame.instantaneous_sones);
                                 row[291..315].copy_from_slice(&frame.short_term_sones);
                                 row[315] = gain.factor();
-                                display.write_transport(&mut row[316..]);
+                                for (i, value) in row[316..340].iter_mut().enumerate() {
+                                    *value = f64::from(
+                                        frame.short_term_sones[i] as f32
+                                            * VisualGain::browser_treble_weight(i),
+                                    );
+                                }
+                                display.write_transport(&mut row[340..]);
                                 *trace_count += 1;
                             } else {
                                 *trace_dropped = trace_dropped.saturating_add(1);
