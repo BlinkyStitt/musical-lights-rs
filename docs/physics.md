@@ -17,7 +17,8 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Sphere diameter | Original 24 size ratios × 48 mm |
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
-| Restitution / friction | 0.15 / 0.20 |
+| Ball, bar, floor and ceiling restitution / friction | 0.15 / 0.20 |
+| Vertical wall restitution / friction | 0.55 minimum / 0 |
 | Full-height rest-to-rest stroke | 40 ms in either direction; 320 ms Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved upper space | Largest sphere diameter + hop allowance + 4 mm |
@@ -31,6 +32,14 @@ The default restitution is 0.15. For a stationary surface, the ideal rebound
 height is 2.25% of the drop height, down from 30.25% at the previous 0.55.
 This reduces repeated bouncing while retaining the 40 ms bar stroke. Moving
 bars still transfer their motion through physical contacts.
+
+The four vertical walls have a separate material: zero friction lets balls
+slide down even while a shake presses them against a side, front, or back wall.
+Their restitution is 0.55, combined with the ball's value using the maximum;
+the wall therefore returns more of an impact's normal speed without adding
+energy. This is a visual tuning choice, not a measured material. Rapier's
+predictive soft contacts can return less than the ideal 55%. A ball at rest
+does not receive an artificial kick away from a wall.
 
 Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives full-height limits `v = 2H/T` and `a = 4H/T²`. Each new target scales both limits by the larger of its remaining-travel fraction and current-speed fraction, capped at one. Small corrections from rest therefore take the same 40 ms with proportionally gentler motion, instead of applying full acceleration to tiny fluctuations. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess upward release velocity is dissipated to limit extra hops to `min(0.08 * enclosure_height, 0.05 m)`, halved for Reduced Motion. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle top is 3 mm above the floor.
 
@@ -46,9 +55,30 @@ The enclosure uses six half-spaces, including a real downward-facing ceiling. Ea
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
-m/s²; screen rotation maps its axes. Tilt adds an acceleration field of up to
+m/s²; all three axes contribute, including shaking into or out of the screen.
+Screen rotation maps the two in-plane axes; the opposite acceleration is
+applied to the balls, as if shaking their enclosure. Tilt adds a field of up to
 2 m/s² per axis. The simulation applies force as mass × acceleration each tick.
 Reduced Motion scales external acceleration to 10% and uses the configured slower stroke time.
+
+Motion and tilt permissions are requested from the Start listening click and
+enabled independently, so a pending tilt request cannot block granted motion
+access. Stop and route cleanup invalidate both requests and remove listeners.
+When linear acceleration is unavailable, a 250 ms exponential baseline removes
+the slow gravity component from gravity-inclusive readings. This fallback is
+an approximation: fast rotations can also appear as shakes. Its first reading,
+restart, and gaps of at least 500 ms establish a fresh baseline without a kick.
+Shake forces expire 150 ms after the last usable reading. Sensor semantics
+follow the [Device Orientation and Motion specification](https://www.w3.org/TR/orientation-event/).
+
+Physical-phone motion acceptance remains a separate check: after Start listening
+and allowing motion access, try left/right, up/down, and toward/away shakes in
+portrait and landscape. Repeat with music driving the bars; both sources must
+move the balls together. Hold still to check that shaking stops, then press Stop
+to check that sensor forces stop while gravity continues. Side impacts should
+rebound, and balls pressed against vertical walls should still fall when they
+have no support underneath. Synthetic browser events do not verify the phone's
+actual sensors or permission prompts.
 
 ## Engine selection and limits
 
@@ -156,10 +186,10 @@ python3 validation/validate.py browser
 ```
 
 On macOS, use host access for browser checks and keep the serial startup guard.
-The final local run passed 16 native physics tests, native/WASM Clippy, pinned
-Leptos validation, and 105 browser checks plus three startup harness checks.
-Core and AudioWorklet validation also passed. These results do not establish
-CI, physical-phone acceptance, or production deployment.
+The motion and wall update passed 30 native physics tests, native/WASM Clippy,
+pinned Leptos validation, and 186 browser checks plus 10 harness checks.
+These results do not establish CI, physical-phone acceptance, or production
+deployment.
 
 Seven Chromium layout and keyboard checks also passed in a Linux container
 limited to one CPU and 3 GB RAM, with three test workers. Each layout case

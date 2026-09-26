@@ -110,6 +110,42 @@ test('physical controls require reset while camera rotation preserves the runnin
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(20);
 });
 
+test('depth shakes and audio bars both move balls while tilt permission is still pending', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(url);
+  await page.evaluate(() => {
+    Object.defineProperty(DeviceOrientationEvent, 'requestPermission', { value: () => new Promise(() => {}) });
+  });
+  await startFrozen(page);
+  // Let gravity settle first so a depth velocity cannot be attributed to spawn.
+  await page.waitForTimeout(2000);
+  const before = await physicsState(page);
+  const samples = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics;
+    window.sendBars(Array(24).fill(.5));
+    const samples = [];
+    const until = performance.now() + 700;
+    while (performance.now() < until) {
+      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: null, y: null, z: 8 } }));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const { current: state, layout } = view;
+      samples.push({ input: view.input[26], bars: Array.from(state.slice(layout[9], layout[10])),
+        balls: Array.from({ length: layout[0] }, (_, i) => {
+          const o = 3 + i * layout[8];
+          return { y: state[o + 1], vz: state[o + 11] };
+        }) });
+    }
+    return samples;
+  });
+  expect(samples.some(s => s.input === -8)).toBe(true);
+  expect(samples.some(s => s.balls.some(b => b.vz < -.1))).toBe(true);
+  expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
+  expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[26])).toBe(0);
+  await page.getByRole('button', { name: 'Stop listening' }).click();
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 5, z: 5 } })));
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+});
+
 for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
   test(`late sensor permission cannot restore listeners after ${end}`, async ({ page }) => {
     await syntheticAudio(page, 'pending'); await page.goto(url); await physicsReady(page);
