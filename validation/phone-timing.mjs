@@ -1,3 +1,5 @@
+import { assertBrowserEnvironment } from './browser-environment.mjs';
+assertBrowserEnvironment();
 // Host measurements only; these never constitute physical-phone acceptance.
 import { chromium, webkit, devices } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -12,7 +14,8 @@ const summary = values => {
   const sorted = values.toSorted((a,b) => a-b);
   return { mean: values.reduce((a,b) => a+b,0) / values.length, p95: sorted[Math.ceil(sorted.length * .95) - 1], max: sorted.at(-1) };
 };
-await checkBrowserStartup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'webkit', use: { browserName: 'webkit' } }] });
+const finishBrowserAudit = await checkBrowserStartup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'webkit', use: { browserName: 'webkit' } }] });
+try {
 const result = await readFile(`${output}/browser-timing-detail.json.gz`).then(bytes => JSON.parse(gunzipSync(bytes))).catch(() => []);
 for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-profile-webkit-mac', webkit, devices['iPhone 13']]]) {
   const browser = await engine.launch();
@@ -78,3 +81,4 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
   } finally { await browser.close(); }
 }
 if (!baseline) assert(result.length === 6 && result.every(r => r.numericPass), 'Browser performance blocks partial-loudness promotion');
+} finally { await finishBrowserAudit(); }

@@ -1,3 +1,5 @@
+import { assertBrowserEnvironment } from '../browser-environment.mjs';
+assertBrowserEnvironment();
 // Render the actual before/after Leptos builds from their production PCM traces.
 // Usage: node validation/partial/flash-demo.mjs .cache/flash-before-site
 import { readFile, mkdir, stat } from 'node:fs/promises';
@@ -7,7 +9,8 @@ import checkBrowserStartup from '../browser-startup.mjs';
 import { syntheticAudio, startFrozen } from '../physics-state.mjs';
 import { flashPCM, flashTrace } from './flash-fixtures.mjs';
 
-await checkBrowserStartup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium' } }] });
+const finishBrowserAudit = await checkBrowserStartup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium' } }] });
+try {
 const browser = await chromium.launch();
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.css': 'text/css', '.png': 'image/png', '.ico': 'image/x-icon' };
 try {
@@ -63,3 +66,4 @@ try {
     }
   }
 } finally { await browser.close(); }
+} finally { await finishBrowserAudit(); }

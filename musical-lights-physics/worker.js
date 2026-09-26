@@ -11,15 +11,28 @@ let paused = true, debt = 0, maxDebt = 0, pending = [], request = null;
 let input = new Float32Array(34), recording = null, recordingOverflow = false;
 let costs = new Float32Array(capacity), costCount = 0, totalCost = 0, steps = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
+let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
 let substepTotal = 0, maxSubsteps = 0, overloadTicks = 0, substepCosts = [];
 const absoluteNow = () => performance.timeOrigin + performance.now();
 const snapshot = () => new Float32Array(wasm.memory.buffer, simulation.snapshot_ptr(), layout[12]);
 
-function schedule() { clearTimeout(timer); if (!paused) timer = setTimeout(run, 4); }
+// MessageChannel yields to queued inputs without the nested-timer 4 ms clamp.
+const catchup = new MessageChannel();
+let scheduled = 0;
+catchup.port1.onmessage = ({ data }) => { if (data === scheduled) run(); };
+function schedule() {
+  clearTimeout(timer);
+  const generation = ++scheduled;
+  if (paused) return;
+  if (debt >= stepMs) catchup.port2.postMessage(generation);
+  else timer = setTimeout(() => { if (generation === scheduled) run(); }, Math.min(4, stepMs - debt));
+}
 function run() {
   if (paused || !simulation) return;
   const now = absoluteNow();
-  debt += now - lastTime;
+  schedulingGap = now - lastTime; maxSchedulingGap = Math.max(maxSchedulingGap, schedulingGap);
+  const batchStart = performance.now();
+  debt += schedulingGap;
   lastTime = now;
   // Keep all elapsed time. A slow worker reports debt and continues in bounded batches.
   let batch = 0;
@@ -36,7 +49,7 @@ function run() {
     const start = performance.now();
     simulation.step();
     const cost = performance.now() - start;
-    totalCost += cost; steps++;
+    totalCost += cost; steps++; maxStepMs = Math.max(maxStepMs, cost);
     if (recording) {
       if (costCount < capacity) costs[costCount++] = cost;
       else recordingOverflow = true;
@@ -50,6 +63,9 @@ function run() {
     debt -= stepMs;
     batch++;
   }
+  batchMs = performance.now() - batchStart;
+  // Include execution time when deciding whether the next batch is overdue.
+  const finished = absoluteNow(); debt += finished - lastTime; lastTime = finished;
   maxDebt = Math.max(maxDebt, debt);
   publish();
   schedule();
@@ -60,7 +76,7 @@ function publish() {
   output.set(snapshot());
   output.set(impulseTotals, layout[10]);
   impulseTotals.fill(0);
-  postMessage({ type: 'snapshot', buffer, debt, maxDebt, steps, totalCost,
+  postMessage({ type: 'snapshot', buffer, schedulingGap, maxSchedulingGap, batchMs, maxStepMs, debt, maxDebt, steps, totalCost,
     tick: simulation.tick(), substepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow(), sequence: request.sequence }, [buffer]);
   buffer = null;
   request = null;
@@ -72,6 +88,7 @@ function reset(values) {
   input = new Float32Array(34); input[32] = config[0];
   simulation.input(input);
   pending = []; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
+  schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;
   substepTotal = 0; maxSubsteps = 0; overloadTicks = 0; substepCosts = [];
   impulseTotals.fill(0); lastTime = origin = absoluteNow();
 }

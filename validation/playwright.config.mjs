@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+process.env.DEBUG = [process.env.DEBUG, 'pw:browser'].filter(Boolean).join(',');
 export default defineConfig({
   testDir: './tests',
   globalSetup: './browser-startup.mjs',
@@ -7,8 +8,8 @@ export default defineConfig({
   fullyParallel: false,
   retries: 0,
   workers: 1,
-  reporter: 'list',
-  use: { headless: true, screenshot: 'only-on-failure' },
+  reporter: [['list'], ['./browser-process-reporter.mjs']],
+  use: { headless: true, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   projects: [
     { name: 'chromium', testIgnore: '**/mobile-screen.spec.mjs', use: { browserName: 'chromium' } },
     { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/routes.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/listening-review.spec.mjs'], use: { browserName: 'webkit' } },

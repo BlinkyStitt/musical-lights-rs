@@ -1,3 +1,5 @@
+import { assertBrowserEnvironment } from '../browser-environment.mjs';
+assertBrowserEnvironment();
 // Instrumented latency run, separate from the diagnostics-off FPS benchmark.
 import { chromium, webkit } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
@@ -6,7 +8,8 @@ import assert from 'node:assert/strict';
 import checkBrowserStartup from '../browser-startup.mjs';
 import { staticPreview } from '../static-preview.mjs';
 const url=process.argv[2]??'http://127.0.0.1:8104';
-await checkBrowserStartup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
+const finishBrowserAudit = await checkBrowserStartup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
+try {
 const output=process.argv[3]??'docs/partial-loudness-results/contained-display';
 const results=[];
 for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
@@ -67,3 +70,4 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
 }
 await writeFile(`${output}/latency-detail.json.gz`,gzipSync(JSON.stringify(results)));
 await writeFile(`${output}/latency.json`,JSON.stringify(results.map(({frames,packets,...rest})=>rest),null,2)+'\n');
+} finally { await finishBrowserAudit(); }

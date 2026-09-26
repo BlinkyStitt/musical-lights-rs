@@ -1,3 +1,5 @@
+import { assertBrowserEnvironment } from './browser-environment.mjs';
+assertBrowserEnvironment();
 // Measure served release artifacts through real AudioWorklet transfer/ACK and DOM paths.
 // Usage: node measure-spectrum.mjs ROOT LABEL OUTPUT.json [PROFILE_FILTER]
 import { chromium, webkit, devices } from '@playwright/test';
@@ -68,8 +70,9 @@ const result = { label, at: new Date().toISOString(), host: { platform: platform
   workletSha256: createHash('sha256').update(bytes).digest('hex'), indexSha256: createHash('sha256').update(await readFile(resolve(dist, 'index.html'))).digest('hex'),
   hostWorklet: hostWorkletCost(), profiles: [] };
 await mkdir(dirname(output), { recursive: true });
+let finishBrowserAudit;
 try {
-  await checkBrowserStartup({ filteredProjects: ['chromium', 'webkit'].map(name => ({ name, use: { browserName: name } })) });
+  finishBrowserAudit = await checkBrowserStartup({ filteredProjects: ['chromium', 'webkit'].map(name => ({ name, use: { browserName: name } })) });
   const profiles = [
     ['desktop-chromium', chromium, { viewport: { width: 1440, height: 1000 } }],
     ['iphone-profile-webkit-on-mac', webkit, devices['iPhone 13']],
@@ -255,4 +258,4 @@ try {
   }
   await writeFile(output, JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify(result, null, 2));
-} finally { await new Promise(resolve => server.close(resolve)); }
+} finally { await new Promise(resolve => server.close(resolve)); await finishBrowserAudit?.(); }
