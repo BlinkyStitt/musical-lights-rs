@@ -56,7 +56,7 @@ contact-only launches, gravity, CCD, containment, and the solver remain intact.
 The earlier timing comparisons below used restitution 0.55; new-default timing
 is recorded separately in [quiet-input/browser-timing.json](quiet-input/browser-timing.json).
 All six new-default host runs pass at 60.00–60.08 FPS, with p95 frame time
-16.8–17 ms, no frames over 25 ms, and sampled physics debt below 8.31 ms.
+16.7–17 ms, no frames over 25 ms, and sampled physics debt below 8.31 ms.
 Portrait fullscreen still reaches the substep cap frequently; physical-phone
 acceptance remains pending.
 
