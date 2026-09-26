@@ -32,6 +32,7 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
       }
       const errors = []; page.on('pageerror', error => errors.push(error.message));
       await page.goto(`${url}/phone/`);
+      await page.locator('.generated-audio').check();
       await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
       assert(Math.abs(await page.evaluate(() => document.querySelector('#dancinglights').physics.config[6]) - (baseline ? .08 : .04)) < 1e-6);
       await page.getByRole('button', { name: 'Start listening', exact: true }).click();

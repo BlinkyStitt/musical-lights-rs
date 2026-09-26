@@ -19,7 +19,8 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   // leave every ball at rest before a slower browser reaches the Stop button.
   await page.goto('http://127.0.0.1:8101/phone/');
   await physicsReady(page);
-  await expect(page.locator('.generated-audio')).toBeChecked();
+  await expect(page.locator('.generated-audio')).not.toBeChecked();
+  await page.locator('.generated-audio').check();
   await page.getByRole('button', { name: 'Start listening' }).tap();
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   const calls = await page.evaluate(() => window.sensorRequests);

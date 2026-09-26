@@ -144,7 +144,8 @@ test('context loss pauses physics and restoration resumes without losing the Exi
 
 test('phone page sends generated PCM through the audio processor and exports an honest incomplete report', async ({ page }) => {
   await page.goto(`${url}/phone`); await physicsReady(page);
-  await expect(page.locator('.generated-audio')).toBeChecked();
+  await expect(page.locator('.generated-audio')).not.toBeChecked();
+  await page.locator('.generated-audio').check();
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);

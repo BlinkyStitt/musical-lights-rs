@@ -43,7 +43,7 @@ impl Default for SimulationConfig {
             height: 0.6,
             gravity: 9.81,
             density: 1100.0,
-            restitution: 0.55,
+            restitution: 0.15,
             friction: 0.20,
             depth: 0.24,
             stroke_seconds: 0.040,

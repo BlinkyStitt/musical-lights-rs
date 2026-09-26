@@ -648,3 +648,29 @@ fn substep_overload_is_visible_without_discarding_a_tick() {
     assert!(sim.snapshot.values[COST_OFFSET + 1] > 0.0);
     assert!((position(&sim, 0).y - (150.0 + 1000.0 * DT)).abs() < 0.01);
 }
+
+#[test]
+fn default_balls_have_a_small_rebound_and_settle_on_quiet_bars() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(0.625, BASELINE + radius(0) + 0.5, 0.0),
+        Vector::ZERO,
+    );
+    let mut contacted = false;
+    let mut rebound = 0.0_f32;
+    for _ in 0..HZ * 3 {
+        sim.step();
+        contacted |= sim.snapshot.values[CONTACT_OFFSET] > 0.0;
+        if contacted {
+            rebound = rebound.max(position(&sim, 0).y - radius(0) - BASELINE);
+        }
+    }
+    assert!(contacted);
+    println!("default 0.5 m drop: rebound {rebound} m");
+    assert!(rebound < 0.025, "default rebound too large: {rebound} m");
+    assert!(velocity(&sim, 0).length() < 0.01);
+    assert!((position(&sim, 0).y - radius(0) - BASELINE).abs() < 0.001);
+}

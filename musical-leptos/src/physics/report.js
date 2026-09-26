@@ -26,7 +26,7 @@ export class PhoneReport {
       <label>Camera rotation (degrees)<input class="camera-rotation" type="range" min="-40" max="40" value="0"></label>
       <button type="button" class="physics-reset">Apply settings and reset</button>
       <p><a href="/phone">Open the phone test page</a></p>
-      <label><input type="checkbox" class="generated-audio"> Use generated audio through the audio processor on the next Start listening</label>
+      <label><input type="checkbox" class="generated-audio"> Use test tones instead of the microphone on the next Start listening</label>
       <label>Tone on next Start<select class="tone-kind"><option value="exercise">Changing 24-tone exercise</option><option value="stationary">Stationary tone (60 s)</option><option value="stepped">Step through all 24 bands (48 s)</option><option value="sweep">Continuous sweep (24 s)</option><option value="two">Two tones (30 s)</option><option value="volume">Volume steps (90 s)</option><option value="bursts">Short bursts (8 s)</option><option value="silence">Silence (3 s)</option></select></label>
       <label>Frequency (Hz)<input class="tone-frequency" type="number" min="20" max="15500" value="1000"></label>
       <label>Input level (dBFS peak)<input class="tone-level" type="number" min="-90" max="-12" value="-34"></label>
@@ -46,7 +46,6 @@ export class PhoneReport {
       <p class="phone-progress" role="status"></p>
       <label><input class="phone-smooth" type="checkbox"> I confirm that the motion looked smooth</label>
       <button type="button" class="phone-export" disabled>Export test report</button>`;
-    this.query('.generated-audio').checked = location.pathname.replace(/\/$/, '') === '/phone';
     if (location.pathname.replace(/\/$/, '') === '/phone') this.host.open = true;
     this.listen('.camera-rotation', 'input', event => view.setCamera(Number(event.target.value)));
     this.listen('.physics-reset', 'click', () => {

@@ -1,6 +1,6 @@
 # Source-band loudness and 40 ms strokes
 
-The complete Mac Chromium/WebKit suite passes **156 checks** after the session and fixture
+The complete Mac Chromium/WebKit suite passes **158 checks** after the session and fixture
 repairs described below. All four focused calibration checks also pass. See
 [PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18) for current CI
 and preview status. The PR remains draft pending physical-phone acceptance.
@@ -37,6 +37,29 @@ boundary, and sweep checks after mapping. Ratio error stays below 2e-7. The
 before/after production traces have bit-identical ISO fields for stationary,
 two-tone, burst, silence, and exercise inputs.
 
+## Default input and quieter ball rebounds
+
+The `/phone/` route previously checked generated audio automatically while the
+main status still said “Listening · Mic on.” That started a repeating test
+exercise without requesting the microphone, causing activity unrelated to room
+audio. Both routes now default to microphone input. Test tones require explicit
+selection, and their status says “Test audio · Mic off.” The status reads the
+active session source, so changing the next-start setting cannot relabel an
+existing capture. Browser regressions reproduce the old source mismatch and
+check silent microphone input, a real input signal, and return to silence.
+
+Default restitution is now 0.15 instead of 0.55: ideal stationary-surface rebound
+height falls from 30.25% to 2.25% of the drop height. A native regression requires
+a 50 cm drop to rebound less than 2.5 cm and settle on quiet bars. The
+[measured rebound](quiet-input/rebound.json) falls from 15.10 cm to 1.11 cm. Stroke timing,
+contact-only launches, gravity, CCD, containment, and the solver remain intact.
+The earlier timing comparisons below used restitution 0.55; new-default timing
+is recorded separately in [quiet-input/browser-timing.json](quiet-input/browser-timing.json).
+All six new-default host runs pass at 60.00–60.08 FPS, with p95 frame time
+16.8–17 ms, no frames over 25 ms, and sampled physics debt below 8.31 ms.
+Portrait fullscreen still reaches the substep cap frequently; physical-phone
+acceptance remains pending.
+
 ## Session and recording repairs
 
 Every audio start receives a new identifier and initializes fresh diagnostics
@@ -70,7 +93,7 @@ retained simulation time, and the 128-substep cap are retained.
 balls. Rest-to-rest strokes arrive within 1% in **41.67 ms**, within the 50 ms
 requirement at 120 Hz. The sampled near-peak reversal arrives in **50 ms**;
 direction changes after 16.67–25 ms depending on contact subdivision. The
-0.6/1.2/2 m full-stroke cases reach the substep cap and report it. Nineteen native
+1.2/2 m full-stroke cases reach the substep cap and report it. Twenty native
 physics tests pass, including single-ball and six-ball stack contact, repeated
 24-ball strokes, reversals, containment, persistent overlap, and identical
 30/60/120 FPS replay. Browser checks compare rendered geometry with interpolated
@@ -144,8 +167,8 @@ network settings were changed. Use `https://musical-lights.test` as the URL
 argument to reproduce the in-process timing origin.
 
 Pinned core (41 tests × four feature configurations and the Clippy matrix),
-worklet, physics (19 tests), Leptos, ISO/MoSQiTo, and partial-reference validation
-pass. The full browser suite passes **156 checks**, plus three startup-harness
+worklet, physics (20 tests), Leptos, ISO/MoSQiTo, and partial-reference validation
+pass. The full browser suite passes **158 checks**, plus three startup-harness
 regressions and the exercise-PCM regression. A repeat during concurrent offline
 validation hit three Chromium page-load timeouts; the unchanged full suite
 then passed in isolation with the standard three workers and startup guard.
@@ -175,7 +198,7 @@ the same source. Natural completion is disconnected only on restart or cleanup;
 a generation token rejects ended callbacks from earlier playback states.
 The clock-gap check remains unchanged. Regressions measure silence and restored
 loudness across six pause/resume cycles and cover restart after natural end.
-The repaired Leptos build and all 156 Mac Chromium/WebKit checks pass.
+The repaired Leptos build and all 158 Mac Chromium/WebKit checks pass.
 
 ## Analysis cost and end-to-end onset
 

@@ -12,6 +12,8 @@ use web_sys::{
 extern "C" {
     #[wasm_bindgen(catch, js_name = acquireInput)]
     async fn acquire_input(context: &AudioContext) -> Result<MediaStream, JsValue>;
+    #[wasm_bindgen(js_name = inputIsGenerated)]
+    fn input_is_generated(stream: &MediaStream) -> bool;
     #[wasm_bindgen(js_name = releaseInput)]
     fn release_input(stream: &MediaStream);
     #[wasm_bindgen(catch, js_name = prepareProcessor)]
@@ -78,6 +80,13 @@ impl AudioSession {
                 reduced_motion: false,
             }))),
         })
+    }
+    pub fn is_generated(&self) -> bool {
+        self.resources
+            .borrow()
+            .as_ref()
+            .and_then(|resources| resources.stream.as_ref())
+            .is_some_and(input_is_generated)
     }
     pub fn sample_rate(&self) -> f32 {
         48_000.0

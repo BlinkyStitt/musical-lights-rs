@@ -17,7 +17,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Sphere diameter | Original 24 size ratios × 48 mm |
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
-| Restitution / friction | 0.55 / 0.20 |
+| Restitution / friction | 0.15 / 0.20 |
 | Full-height rest-to-rest stroke | 40 ms in either direction; 320 ms Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Visual headroom | 5% |
@@ -26,10 +26,10 @@ Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
 compress, and the application does not add launch impulses.
 
-The default restitution is 0.55, reduced from the initial 0.85 prototype.
-For a stationary surface, the ideal rebound height is about 30% of the drop
-height, compared with 72% at 0.85. Moving bars still transfer their motion
-through physical contacts.
+The default restitution is 0.15. For a stationary surface, the ideal rebound
+height is 2.25% of the drop height, down from 30.25% at the previous 0.55.
+This reduces repeated bouncing while retaining the 40 ms bar stroke. Moving
+bars still transfer their motion through physical contacts.
 
 Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives `v = 2H/T` and `a = 4H/T²`. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. The idle top is 3 mm above the floor.
 

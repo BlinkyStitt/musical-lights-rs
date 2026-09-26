@@ -33,6 +33,7 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
         }};
       });
       await page.goto(`${url}/phone/`);
+      await page.locator('.generated-audio').check();
       await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
       await page.locator('.tone-kind').selectOption('bursts');
       await page.getByRole('button',{name:'Start listening',exact:true}).click();

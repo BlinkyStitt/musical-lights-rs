@@ -6,31 +6,31 @@
       0.10000000149011612,
       9.8100004196167,
       1100,
-      0.550000011920929,
+      0.15000000596046448,
       0.20000000298023224,
       0.23999999463558197,
       0.03999999910593033,
       0.3199999928474426
     ],
-    "maxSubsteps": 30,
+    "maxSubsteps": 20,
     "overloadTicks": 0,
-    "reversalMs": 25,
+    "reversalMs": 16.666666666666668,
     "reversalArrivalMs": 50,
     "reversalTrace": [
       {
         "ms": 8.333333333333334,
         "top": 0.058902740478515625,
-        "velocity": 1.916666865348816
+        "velocity": 1.9166667461395264
       },
       {
         "ms": 16.666666666666668,
         "top": 0.06688880920410156,
-        "velocity": 6.693881715591488e-8
+        "velocity": -9.371434117610988e-8
       },
       {
         "ms": 25,
         "top": 0.058902740478515625,
-        "velocity": -1.9166667461395264
+        "velocity": -1.9166669845581055
       },
       {
         "ms": 33.333333333333336,
@@ -40,12 +40,12 @@
       {
         "ms": 41.666666666666664,
         "top": 0.010986328125,
-        "velocity": -1.9166669845581055
+        "velocity": -1.9166666269302368
       },
       {
         "ms": 50,
         "top": 0.0030002593994140625,
-        "velocity": -1.3387763431182975e-7
+        "velocity": 0
       },
       {
         "ms": 58.333333333333336,
@@ -168,63 +168,63 @@
             "ms": 33.333333333333336,
             "top": 0.0898885726928711,
             "velocity": 1.5333328247070312,
-            "substeps": 22,
+            "substeps": 18,
             "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 20,
+            "substeps": 16,
             "excess": 0
           },
           {
             "ms": 50,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 23,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 22,
+            "substeps": 13,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 14,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 14,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 19,
+            "substeps": 10,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 19,
+            "substeps": 11,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 13,
+            "substeps": 9,
             "excess": 0
           }
         ]
@@ -237,84 +237,84 @@
             "ms": 8.333333333333334,
             "top": 0.08701419830322266,
             "velocity": -1.9166667461395264,
-            "substeps": 15,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 16.666666666666668,
             "top": 0.06305599212646484,
             "velocity": -3.833333730697632,
-            "substeps": 17,
+            "substeps": 14,
             "excess": 0
           },
           {
             "ms": 25,
             "top": 0.028875350952148438,
             "velocity": -3.4499998092651367,
-            "substeps": 18,
+            "substeps": 14,
             "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.008111000061035156,
-            "velocity": -1.5333328247070312,
-            "substeps": 18,
+            "velocity": -1.5333329439163208,
+            "substeps": 14,
             "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 16,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 12,
+            "substeps": 8,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 11,
+            "substeps": 7,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 11,
+            "substeps": 7,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 11,
+            "substeps": 7,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 11,
+            "substeps": 7,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 11,
+            "substeps": 7,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 11,
+            "substeps": 7,
             "excess": 0
           }
         ]
@@ -327,84 +327,84 @@
             "ms": 8.333333333333334,
             "top": 0.010986328125,
             "velocity": 1.916666865348816,
-            "substeps": 13,
+            "substeps": 9,
             "excess": 0
           },
           {
             "ms": 16.666666666666668,
             "top": 0.03494453430175781,
             "velocity": 3.833333730697632,
-            "substeps": 15,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 25,
             "top": 0.06912517547607422,
             "velocity": 3.4499998092651367,
-            "substeps": 22,
+            "substeps": 18,
             "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.0898885726928711,
             "velocity": 1.5333329439163208,
-            "substeps": 27,
+            "substeps": 19,
             "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 30,
+            "substeps": 20,
             "excess": 0
           },
           {
             "ms": 50,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 21,
+            "substeps": 16,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 16,
+            "substeps": 14,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 20,
+            "substeps": 13,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 20,
+            "substeps": 13,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 20,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 17,
+            "substeps": 12,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.0950002670288086,
             "velocity": 0,
-            "substeps": 17,
+            "substeps": 12,
             "excess": 0
           }
         ]
@@ -416,85 +416,85 @@
           {
             "ms": 8.333333333333334,
             "top": 0.08701419830322266,
-            "velocity": -1.9166667461395264,
-            "substeps": 19,
+            "velocity": -1.916666865348816,
+            "substeps": 14,
             "excess": 0
           },
           {
             "ms": 16.666666666666668,
             "top": 0.06305599212646484,
             "velocity": -3.833333730697632,
-            "substeps": 21,
+            "substeps": 16,
             "excess": 0
           },
           {
             "ms": 25,
             "top": 0.028875350952148438,
             "velocity": -3.4499995708465576,
-            "substeps": 22,
+            "substeps": 17,
             "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.008111000061035156,
             "velocity": -1.5333328247070312,
-            "substeps": 22,
+            "substeps": 17,
             "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 20,
+            "substeps": 15,
             "excess": 0
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 16,
+            "substeps": 11,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 15,
+            "substeps": 10,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 15,
+            "substeps": 10,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 15,
+            "substeps": 10,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 15,
+            "substeps": 10,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 15,
+            "substeps": 10,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 15,
+            "substeps": 10,
             "excess": 0
           }
         ]
@@ -508,46 +508,46 @@
       0.6000000238418579,
       9.8100004196167,
       1100,
-      0.550000011920929,
+      0.15000000596046448,
       0.20000000298023224,
       0.23999999463558197,
       0.03999999910593033,
       0.3199999928474426
     ],
-    "maxSubsteps": 128,
-    "overloadTicks": 16,
-    "reversalMs": 16.666666666666668,
+    "maxSubsteps": 120,
+    "overloadTicks": 0,
+    "reversalMs": 25,
     "reversalArrivalMs": 50,
     "reversalTrace": [
       {
         "ms": 8.333333333333334,
         "top": 0.3475313186645508,
-        "velocity": 11.8125
+        "velocity": 11.812500953674316
       },
       {
         "ms": 16.666666666666668,
         "top": 0.39675045013427734,
-        "velocity": -9.282302926294506e-8
+        "velocity": 3.609785323988035e-7
       },
       {
         "ms": 25,
         "top": 0.3475313186645508,
-        "velocity": -11.8125
+        "velocity": -11.812500953674316
       },
       {
         "ms": 33.333333333333336,
         "top": 0.1998748779296875,
-        "velocity": -23.625
+        "velocity": -23.625001907348633
       },
       {
         "ms": 41.666666666666664,
         "top": 0.05221843719482422,
-        "velocity": -11.812500953674316
+        "velocity": -11.812501907348633
       },
       {
         "ms": 50,
         "top": 0.0030002593994140625,
-        "velocity": -7.219573205929919e-8
+        "velocity": -0.0000012376406175462762
       },
       {
         "ms": 58.333333333333336,
@@ -663,70 +663,70 @@
             "ms": 25,
             "top": 0.41053104400634766,
             "velocity": 21.262496948242188,
-            "substeps": 128,
-            "excess": 1
+            "substeps": 100,
+            "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.5384998321533203,
             "velocity": 9.449995994567871,
-            "substeps": 128,
-            "excess": 15
+            "substeps": 120,
+            "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 128,
-            "excess": 25
+            "substeps": 99,
+            "excess": 0
           },
           {
             "ms": 50,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 119,
+            "substeps": 72,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 119,
+            "substeps": 72,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 119,
+            "substeps": 72,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 118,
+            "substeps": 72,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 118,
+            "substeps": 72,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 116,
+            "substeps": 71,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 116,
+            "substeps": 71,
             "excess": 0
           }
         ]
@@ -739,84 +739,84 @@
             "ms": 8.333333333333334,
             "top": 0.5207815170288086,
             "velocity": -11.812500953674316,
-            "substeps": 128,
-            "excess": 3
+            "substeps": 86,
+            "excess": 0
           },
           {
             "ms": 16.666666666666668,
             "top": 0.3731250762939453,
             "velocity": -23.625001907348633,
-            "substeps": 128,
-            "excess": 18
+            "substeps": 101,
+            "excess": 0
           },
           {
             "ms": 25,
             "top": 0.16246891021728516,
             "velocity": -21.262496948242188,
-            "substeps": 128,
-            "excess": 23
+            "substeps": 106,
+            "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.0345001220703125,
             "velocity": -9.449995994567871,
-            "substeps": 128,
-            "excess": 23
+            "substeps": 106,
+            "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 128,
-            "excess": 14
+            "substeps": 97,
+            "excess": 0
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 115,
+            "substeps": 70,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 115,
+            "substeps": 70,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 115,
+            "substeps": 69,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 114,
+            "substeps": 69,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 114,
+            "substeps": 69,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 114,
+            "substeps": 69,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 114,
+            "substeps": 68,
             "excess": 0
           }
         ]
@@ -828,85 +828,85 @@
           {
             "ms": 8.333333333333334,
             "top": 0.05221843719482422,
-            "velocity": 11.812500953674316,
-            "substeps": 128,
+            "velocity": 11.8125,
+            "substeps": 83,
             "excess": 0
           },
           {
             "ms": 16.666666666666668,
             "top": 0.1998748779296875,
-            "velocity": 23.625001907348633,
-            "substeps": 128,
-            "excess": 15
+            "velocity": 23.625,
+            "substeps": 98,
+            "excess": 0
           },
           {
             "ms": 25,
             "top": 0.41053104400634766,
             "velocity": 21.262496948242188,
-            "substeps": 128,
-            "excess": 21
+            "substeps": 104,
+            "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.5384998321533203,
-            "velocity": 9.449995994567871,
-            "substeps": 128,
-            "excess": 21
+            "velocity": 9.449996948242188,
+            "substeps": 103,
+            "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 128,
-            "excess": 12
+            "substeps": 94,
+            "excess": 0
           },
           {
             "ms": 50,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 112,
+            "substeps": 67,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 112,
+            "substeps": 67,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 112,
+            "substeps": 67,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 112,
+            "substeps": 67,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 112,
+            "substeps": 66,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 111,
+            "substeps": 66,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.5699996948242188,
             "velocity": 0,
-            "substeps": 111,
+            "substeps": 66,
             "excess": 0
           }
         ]
@@ -918,85 +918,85 @@
           {
             "ms": 8.333333333333334,
             "top": 0.5207815170288086,
-            "velocity": -11.8125,
-            "substeps": 125,
+            "velocity": -11.812500953674316,
+            "substeps": 81,
             "excess": 0
           },
           {
             "ms": 16.666666666666668,
             "top": 0.3731250762939453,
-            "velocity": -23.625,
-            "substeps": 128,
-            "excess": 8
+            "velocity": -23.625001907348633,
+            "substeps": 95,
+            "excess": 0
           },
           {
             "ms": 25,
             "top": 0.16246891021728516,
             "velocity": -21.262496948242188,
-            "substeps": 128,
-            "excess": 14
+            "substeps": 101,
+            "excess": 0
           },
           {
             "ms": 33.333333333333336,
             "top": 0.0345001220703125,
             "velocity": -9.449996948242188,
-            "substeps": 128,
-            "excess": 14
+            "substeps": 101,
+            "excess": 0
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 128,
-            "excess": 5
+            "substeps": 92,
+            "excess": 0
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 106,
+            "substeps": 65,
             "excess": 0
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 105,
+            "substeps": 65,
             "excess": 0
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 105,
+            "substeps": 64,
             "excess": 0
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 105,
+            "substeps": 64,
             "excess": 0
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 105,
+            "substeps": 64,
             "excess": 0
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 105,
+            "substeps": 64,
             "excess": 0
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
-            "substeps": 104,
+            "substeps": 64,
             "excess": 0
           }
         ]
@@ -1010,7 +1010,7 @@
       1.2000000476837158,
       9.8100004196167,
       1100,
-      0.550000011920929,
+      0.15000000596046448,
       0.20000000298023224,
       0.23999999463558197,
       0.03999999910593033,
@@ -1159,77 +1159,77 @@
             "top": 0.39779186248779297,
             "velocity": 47.375003814697266,
             "substeps": 128,
-            "excess": 24
+            "excess": 1
           },
           {
             "ms": 25,
             "top": 0.8202190399169922,
             "velocity": 42.63749313354492,
             "substeps": 128,
-            "excess": 154
+            "excess": 67
           },
           {
             "ms": 33.333333333333336,
             "top": 1.076833724975586,
             "velocity": 18.949993133544922,
             "substeps": 128,
-            "excess": 125
+            "excess": 92
           },
           {
             "ms": 41.666666666666664,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 107
+            "excess": 74
           },
           {
             "ms": 50,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 52
+            "excess": 20
           },
           {
             "ms": 58.333333333333336,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 52
+            "excess": 20
           },
           {
             "ms": 66.66666666666667,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 52
+            "excess": 20
           },
           {
             "ms": 75,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 52
+            "excess": 18
           },
           {
             "ms": 83.33333333333333,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 51
+            "excess": 18
           },
           {
             "ms": 91.66666666666667,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 50
+            "excess": 18
           },
           {
             "ms": 100,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 50
+            "excess": 18
           }
         ]
       },
@@ -1242,84 +1242,84 @@
             "top": 1.0413017272949219,
             "velocity": -23.687501907348633,
             "substeps": 128,
-            "excess": 80
+            "excess": 47
           },
           {
             "ms": 16.666666666666668,
             "top": 0.7452077865600586,
             "velocity": -47.375003814697266,
             "substeps": 128,
-            "excess": 110
+            "excess": 77
           },
           {
             "ms": 25,
             "top": 0.3227815628051758,
             "velocity": -42.63749313354492,
             "substeps": 128,
-            "excess": 121
+            "excess": 89
           },
           {
             "ms": 33.333333333333336,
             "top": 0.06616687774658203,
             "velocity": -18.949993133544922,
             "substeps": 128,
-            "excess": 121
+            "excess": 89
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 103
+            "excess": 71
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 49
+            "excess": 17
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 49
+            "excess": 16
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 49
+            "excess": 16
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 48
+            "excess": 16
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 48
+            "excess": 16
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 48
+            "excess": 15
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 48
+            "excess": 15
           }
         ]
       },
@@ -1332,84 +1332,84 @@
             "top": 0.10169792175292969,
             "velocity": 23.687501907348633,
             "substeps": 128,
-            "excess": 78
+            "excess": 45
           },
           {
             "ms": 16.666666666666668,
             "top": 0.39779186248779297,
             "velocity": 47.375003814697266,
             "substeps": 128,
-            "excess": 107
+            "excess": 75
           },
           {
             "ms": 25,
             "top": 0.8202190399169922,
             "velocity": 42.63749313354492,
             "substeps": 128,
-            "excess": 119
+            "excess": 86
           },
           {
             "ms": 33.333333333333336,
             "top": 1.076833724975586,
             "velocity": 18.949993133544922,
             "substeps": 128,
-            "excess": 119
+            "excess": 86
           },
           {
             "ms": 41.666666666666664,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 101
+            "excess": 68
           },
           {
             "ms": 50,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 47
+            "excess": 14
           },
           {
             "ms": 58.333333333333336,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 47
+            "excess": 14
           },
           {
             "ms": 66.66666666666667,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 46
+            "excess": 14
           },
           {
             "ms": 75,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 46
+            "excess": 13
           },
           {
             "ms": 83.33333333333333,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 46
+            "excess": 13
           },
           {
             "ms": 91.66666666666667,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 46
+            "excess": 13
           },
           {
             "ms": 100,
             "top": 1.140000343322754,
             "velocity": 0,
             "substeps": 128,
-            "excess": 46
+            "excess": 13
           }
         ]
       },
@@ -1422,84 +1422,84 @@
             "top": 1.0413017272949219,
             "velocity": -23.687501907348633,
             "substeps": 128,
-            "excess": 75
+            "excess": 42
           },
           {
             "ms": 16.666666666666668,
             "top": 0.7452077865600586,
             "velocity": -47.375003814697266,
             "substeps": 128,
-            "excess": 105
+            "excess": 72
           },
           {
             "ms": 25,
             "top": 0.3227815628051758,
             "velocity": -42.63749313354492,
             "substeps": 128,
-            "excess": 117
+            "excess": 84
           },
           {
             "ms": 33.333333333333336,
             "top": 0.06616687774658203,
             "velocity": -18.949993133544922,
             "substeps": 128,
-            "excess": 117
+            "excess": 84
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 98
+            "excess": 66
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 44
+            "excess": 12
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 44
+            "excess": 11
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 44
+            "excess": 11
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 44
+            "excess": 11
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 44
+            "excess": 11
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 43
+            "excess": 11
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 43
+            "excess": 10
           }
         ]
       }
@@ -1512,7 +1512,7 @@
       2,
       9.8100004196167,
       1100,
-      0.550000011920929,
+      0.15000000596046448,
       0.20000000298023224,
       0.23999999463558197,
       0.03999999910593033,
@@ -1661,77 +1661,77 @@
             "top": 0.6616802215576172,
             "velocity": 79.04167175292969,
             "substeps": 128,
-            "excess": 121
+            "excess": 87
           },
           {
             "ms": 25,
             "top": 1.3664684295654297,
             "velocity": 71.13748931884766,
             "substeps": 128,
-            "excess": 295
+            "excess": 198
           },
           {
             "ms": 33.333333333333336,
             "top": 1.7946109771728516,
             "velocity": 31.616655349731445,
             "substeps": 128,
-            "excess": 250
+            "excess": 245
           },
           {
             "ms": 41.666666666666664,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 230
+            "excess": 214
           },
           {
             "ms": 50,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 140
+            "excess": 124
           },
           {
             "ms": 58.333333333333336,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 143
+            "excess": 124
           },
           {
             "ms": 66.66666666666667,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 142
+            "excess": 124
           },
           {
             "ms": 75,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 142
+            "excess": 124
           },
           {
             "ms": 83.33333333333333,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 142
+            "excess": 124
           },
           {
             "ms": 91.66666666666667,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 141
+            "excess": 123
           },
           {
             "ms": 100,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 140
+            "excess": 123
           }
         ]
       },
@@ -1744,84 +1744,84 @@
             "top": 1.7353296279907227,
             "velocity": -39.520835876464844,
             "substeps": 128,
-            "excess": 190
+            "excess": 173
           },
           {
             "ms": 16.666666666666668,
             "top": 1.2413196563720703,
             "velocity": -79.04167175292969,
             "substeps": 128,
-            "excess": 235
+            "excess": 223
           },
           {
             "ms": 25,
             "top": 0.5365314483642578,
             "velocity": -71.13748931884766,
             "substeps": 128,
-            "excess": 255
+            "excess": 242
           },
           {
             "ms": 33.333333333333336,
             "top": 0.10838890075683594,
             "velocity": -31.616655349731445,
             "substeps": 128,
-            "excess": 255
+            "excess": 242
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 225
+            "excess": 212
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 135
+            "excess": 122
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 134
+            "excess": 122
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 134
+            "excess": 122
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 134
+            "excess": 121
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 134
+            "excess": 121
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 134
+            "excess": 121
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 133
+            "excess": 121
           }
         ]
       },
@@ -1834,84 +1834,84 @@
             "top": 0.16767024993896484,
             "velocity": 39.520835876464844,
             "substeps": 128,
-            "excess": 183
+            "excess": 171
           },
           {
             "ms": 16.666666666666668,
             "top": 0.6616802215576172,
             "velocity": 79.04167175292969,
             "substeps": 128,
-            "excess": 233
+            "excess": 220
           },
           {
             "ms": 25,
             "top": 1.3664684295654297,
             "velocity": 71.13748931884766,
             "substeps": 128,
-            "excess": 253
+            "excess": 240
           },
           {
             "ms": 33.333333333333336,
             "top": 1.7946109771728516,
             "velocity": 31.616655349731445,
             "substeps": 128,
-            "excess": 252
+            "excess": 240
           },
           {
             "ms": 41.666666666666664,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 222
+            "excess": 210
           },
           {
             "ms": 50,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 132
+            "excess": 120
           },
           {
             "ms": 58.333333333333336,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 132
+            "excess": 119
           },
           {
             "ms": 66.66666666666667,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 132
+            "excess": 119
           },
           {
             "ms": 75,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 132
+            "excess": 119
           },
           {
             "ms": 83.33333333333333,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 131
+            "excess": 119
           },
           {
             "ms": 91.66666666666667,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 131
+            "excess": 119
           },
           {
             "ms": 100,
             "top": 1.8999996185302734,
             "velocity": 0,
             "substeps": 128,
-            "excess": 131
+            "excess": 118
           }
         ]
       },
@@ -1924,84 +1924,84 @@
             "top": 1.7353296279907227,
             "velocity": -39.520835876464844,
             "substeps": 128,
-            "excess": 181
+            "excess": 168
           },
           {
             "ms": 16.666666666666668,
             "top": 1.2413196563720703,
             "velocity": -79.04167175292969,
             "substeps": 128,
-            "excess": 230
+            "excess": 218
           },
           {
             "ms": 25,
             "top": 0.5365314483642578,
             "velocity": -71.13748931884766,
             "substeps": 128,
-            "excess": 250
+            "excess": 238
           },
           {
             "ms": 33.333333333333336,
             "top": 0.10838890075683594,
             "velocity": -31.616655349731445,
             "substeps": 128,
-            "excess": 250
+            "excess": 237
           },
           {
             "ms": 41.666666666666664,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 220
+            "excess": 207
           },
           {
             "ms": 50,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 130
+            "excess": 117
           },
           {
             "ms": 58.333333333333336,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 130
+            "excess": 117
           },
           {
             "ms": 66.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 129
+            "excess": 117
           },
           {
             "ms": 75,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 129
+            "excess": 117
           },
           {
             "ms": 83.33333333333333,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 129
+            "excess": 116
           },
           {
             "ms": 91.66666666666667,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 129
+            "excess": 116
           },
           {
             "ms": 100,
             "top": 0.0030002593994140625,
             "velocity": 0,
             "substeps": 128,
-            "excess": 129
+            "excess": 116
           }
         ]
       }

@@ -14,6 +14,7 @@ test.afterEach(async ({ page }, info) => {
 
 async function acceptancePage(page, repeat = true) {
   await page.goto('http://127.0.0.1:8101/phone'); await physicsReady(page);
+  await page.locator('.generated-audio').check();
   await page.locator('.ios-version').fill('test');
   await page.locator('.low-power-off').check();
   await page.locator('.tone-repeat').setChecked(repeat);
@@ -75,6 +76,7 @@ test('each microphone session resets diagnostics and rejects stale tone packets'
     };
   });
   await page.goto('http://127.0.0.1:8101/phone'); await physicsReady(page);
+  await page.locator('.generated-audio').check();
   await page.locator('.tone-trace').check();
   let previous;
   for (const source of ['generated', 'microphone', 'microphone']) {
@@ -83,6 +85,7 @@ test('each microphone session resets diagnostics and rejects stale tone packets'
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(0);
     const metadata = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneMetadata);
     expect(metadata.source).toBe(source);
+    await expect(page.locator('.mic-status')).toHaveText(source === 'generated' ? 'Test audio · Mic off' : 'Listening · Mic on');
     expect(metadata.sessionId).not.toBe(previous);
     if (source === 'microphone') expect(metadata.kind).toBeUndefined();
     const result = await page.evaluate(oldId => {
@@ -102,11 +105,13 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
   test(`phone tone ${kind} uses the real worklet with synchronized diagnostics`, async ({ page }) => {
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto('http://127.0.0.1:8101/phone'); await physicsReady(page);
+    await page.locator('.generated-audio').check();
     await page.locator('.tone-kind').selectOption(kind);
     await page.locator('.tone-trace').check();
     await page.getByRole('button', { name: 'Start listening', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
     await expect(page.locator('.tone-status')).toContainText(kind);
+    await expect(page.locator('.mic-status')).toHaveText('Test audio · Mic off');
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(100);
     const data = await page.evaluate(() => {
       const report = document.querySelector('#dancinglights').physics.report;
@@ -173,6 +178,7 @@ test('a new non-exercise session cannot restore an invalid acceptance run', asyn
 
 test('repeated pauses preserve recording continuity and resume audible tone output', async ({ page }) => {
   await page.goto('http://127.0.0.1:8101/phone'); await physicsReady(page);
+  await page.locator('.generated-audio').check();
   await page.locator('.tone-kind').selectOption('stationary');
   await page.locator('.tone-trace').check();
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
@@ -203,6 +209,43 @@ test('a naturally ended tone restarts and ignores the replaced source callback',
   await page.evaluate(() => window.oldEnded());
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
+  await expect(page.getByRole('alert')).toBeEmpty();
+  await page.locator('.stop-listening').click();
+});
+
+test('phone Start listens to microphone silence until real input arrives', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeContext = AudioContext;
+    window.AudioContext = class extends NativeContext {
+      constructor(...args) { super(...args); window.micContext = this; }
+    };
+    window.micRequests = 0;
+    MediaDevices.prototype.getUserMedia = async () => {
+      window.micRequests++;
+      const context = window.micContext, tone = context.createOscillator();
+      tone.frequency.value = 1000;
+      window.micGain = context.createGain(); window.micGain.gain.value = 0;
+      const destination = context.createMediaStreamDestination();
+      tone.connect(window.micGain); window.micGain.connect(destination); tone.start();
+      return destination.stream;
+    };
+  });
+  await page.goto('http://127.0.0.1:8101/phone'); await physicsReady(page);
+  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+  await expect(page.locator('.stop-listening')).toBeVisible();
+  const actual = await page.evaluate(() => ({
+    requests: window.micRequests,
+    source: document.querySelector('#dancinglights').physics.report.audioState.source,
+    label: document.querySelector('.mic-status').textContent,
+  }));
+  expect(actual).toEqual({ requests: 1, source: 'microphone', label: 'Listening · Mic on' });
+  const peak = () => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)));
+  await page.waitForTimeout(500);
+  expect(await peak()).toBe(0);
+  await page.evaluate(() => { window.micGain.gain.value = .02; });
+  await expect.poll(peak).toBeGreaterThan(.1);
+  await page.evaluate(() => { window.micGain.gain.value = 0; });
+  await expect.poll(peak, { timeout: 10000 }).toBeLessThan(.001);
   await expect(page.getByRole('alert')).toBeEmpty();
   await page.locator('.stop-listening').click();
 });
