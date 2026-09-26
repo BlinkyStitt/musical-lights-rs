@@ -36,6 +36,13 @@ The ESP32 uses 48 kHz, Philips mono left-channel, signed 16-bit input on BCLK 26
 
 ## Display contract
 
+The browser is an adaptive visualization of estimated human perceived loudness
+within the mix. It is not a peak/RMS equipment meter. The acoustic estimates
+account for frequency sensitivity, masking and time integration. Without input
+calibration, absolute sones are not established; even calibrated values model a
+listener and cannot predict every person's hearing. Automatic enlargement means
+bar height cannot be compared as an absolute loudness value across time.
+
 One slow gain follows the strongest of the 24 bands. Its target maps that band to 80% activity. Gain stays between 1/64 and 64, changes downward with a 2 s time constant and upward with a 20 s time constant, and freezes below 0.1 total sone. Band targets are proportional: `band_sones * min(gain, 1 / peak_band_sones)`. Headroom limits the common scale for all bands; no band clips independently. The shared gain seeks `0.8 / peak_band_sones`. The panel applies the same rule after bass aggregation, with one common scale across its rows. These values are **artistic activity**, not loudness units. A steady tone remains visible; the gain does not learn it as noise.
 
 The browser assigns partial loudness to 24 disjoint source frequency ranges.
@@ -72,20 +79,32 @@ at 1 Hz; choose `cutoff = 1 + 0.8 * max(abs(filtered_derivative))` Hz. Apply
 are symmetric. Settled values and proportional input histories are preserved;
 transient filtered heights are presentation values, not instantaneous sones.
 
-White edges use SuperFlux novelty from the same uncalibrated FFT magnitudes:
-quarter-tone triangular filters from 27.5 to 16 kHz, rounded to unique FFT bins,
-`log10(1 + magnitude)`, three-filter frequency maximum, and a five-hop difference.
-Positive differences are assigned by filter center to source bands. Candidates
-must exceed the past 100 ms mean by 0.1, equal/exceed the past 30 ms maximum,
-and reach 15% of the band's summed log magnitude. They can wait up to 30 ms for
-short-term partial loudness >=0.1 sones and immediate activity >=0.35, with a
-rise above the candidate's initial measured loudness. This last condition rejects
-spectral leakage when a tone stops. There is a 250 ms startup baseline, 160 ms
-minimum interval, and rearming after 60 ms below mean+0.05. Thresholds are display
-choices, not hearing thresholds or reliable musical-note recognition.
+White edges are heuristic accents, separate from the perceived-loudness estimate.
+The detector receives only pressure-scaled FFT magnitudes and unscaled partial
+sones, never display gain, bar height, physics or frame rate. Magnitudes use a
+fixed 2 Pa/unit reference so reciprocal changes in recording gain and calibration
+leave the acoustic features unchanged. SuperFlux-style novelty uses quarter-tone
+triangles from 27.5 to 16 kHz, `log10(1 + magnitude)`, a three-filter frequency
+maximum and a five-hop difference. This adapts the published feature; it is not
+an implementation of a validated audibility classifier.
 
-Each accepted attack gives only the one-pixel inner border a 100 ms quadratic
-pulse, `max(0, 1-age/0.100)^2`. There is no renewable hold or fill whitening.
+Candidates exceed the past 100 ms mean by 0.1, equal/exceed the past 30 ms
+maximum, and reach 15% of the band's summed log magnitude. Within 60 ms,
+short-term partial loudness must rise above its initial value and reach 0.1 sone.
+Both instantaneous and short-term loudness must reach 30% of the strongest band
+at that time, suppressing weak transient FFT leakage. Instantaneous loudness
+10 ms earlier must be at least 95% of its current value: the rise has reached
+its crest, rather than continuing as a gentle swell. These engineering thresholds
+can omit weak or slow audible attacks; they are not hearing thresholds and never
+alter the loudness values or bar targets.
+
+Acoustic events use a 250 ms startup baseline and rearm after 10 ms below
+mean+0.05. Visual accents separately require a 160 ms minimum interval and 60 ms
+of quiet novelty to rearm. Diagnostics retain acoustic events and count those
+suppressed by the visual policy. See the [audio-engineering audit](audio-audit-results/README.md).
+
+Each accepted attack gives only the one-pixel inner border a 120 ms linear
+pulse, `max(0, 1-age/0.120)`. There is no renewable hold or fill whitening.
 Reduced Motion halves pulse intensity and retains the 320 ms mechanical stroke.
 The [closed physical enclosure](physics.md) uses actual collider transforms.
 
@@ -95,11 +114,12 @@ Reduced Motion, version, then immediate target, filtered target, attack timestam
 (-1 means none), and raw partial sones for each band. At most one display message
 waits for acknowledgement; analysis continues through page stalls.
 
-Optional v4 diagnostics attach at most 64 rows of 463 f64 values. Offsets are
+Optional v5 diagnostics attach at most 64 rows of 511 f64 values. Offsets are
 0: ISO sample, 1: ISO total, 2: all 240 ISO specific values, 242: 24 ISO integrals,
 266: partial window-end sample, 267: instantaneous partial sones, 291: short-term
 partial sones, 315: gain, 316: novelty, 340: summed log magnitudes, 364: browser
-snapshot. Historical v1/v2/v3 layouts remain readable through `trace-layout.mjs`.
+snapshot (99 values), 463: 24 acoustic event timestamps (-1 means none),
+487: 24 cumulative visual suppression counts. Historical v1–v4 layouts remain readable through `trace-layout.mjs`.
 Every packet has its session identifier; lost rows are counted. Recording is
 bounded to 50,000 rows and 25,000 physics snapshots. Every input start resets
 buffers and source metadata, including microphone restarts; stale sessions are

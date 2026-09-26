@@ -9,7 +9,7 @@ use musical_lights_core::audio::{
 
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
-const TRACE_STRIDE: usize = 364 + SNAPSHOT_SIZE;
+const TRACE_STRIDE: usize = 364 + SNAPSHOT_SIZE + 48;
 
 const SNAPSHOT_SIZE: usize = BrowserSnapshot::TRANSPORT_LEN;
 
@@ -135,7 +135,7 @@ impl AudioProcessor {
                     first_sample + offset as u64,
                     |frame, spectrum| {
                         display.push(
-                            frame.sample_index as f64 / SAMPLE_RATE as f64,
+                            &frame,
                             gain.map_browser_partial(
                                 frame.short_term_sones.map(|s| s as f32),
                                 iso.sones,
@@ -157,9 +157,13 @@ impl AudioProcessor {
                                 row[267..291].copy_from_slice(&frame.instantaneous_sones);
                                 row[291..315].copy_from_slice(&frame.short_term_sones);
                                 row[315] = gain.factor();
-                                row[316..340].copy_from_slice(&display.novelty);
-                                row[340..364].copy_from_slice(&display.magnitude);
-                                display.snapshot.write_transport(&mut row[364..]);
+                                row[316..340].copy_from_slice(&display.acoustic.novelty);
+                                row[340..364].copy_from_slice(&display.acoustic.magnitude);
+                                display.snapshot.write_transport(&mut row[364..463]);
+                                for i in 0..24 {
+                                    row[463 + i] = display.acoustic.events[i].unwrap_or(-1.0);
+                                    row[487 + i] = f64::from(display.suppressed[i]);
+                                }
                                 *trace_count += 1;
                             } else {
                                 *trace_dropped = trace_dropped.saturating_add(1);
@@ -253,7 +257,7 @@ macro_rules! export {
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
 export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace_enabled = enabled != 0; p.trace_count = 0; p.trace_dropped = 0; });
 export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ptr());
-export!(processor_trace_version(handle) -> u32, _p => 4);
+export!(processor_trace_version(handle) -> u32, _p => 5);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);
 export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);

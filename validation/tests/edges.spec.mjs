@@ -1,6 +1,41 @@
 import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs';
 
+for (const reducedMotion of ['no-preference', 'reduce']) {
+  test(`linear pulses survive 30/60/120 FPS sampling and repeated packets, ${reducedMotion}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    await syntheticAudio(page); await page.goto('http://127.0.0.1:8101'); await startFrozen(page);
+    const runs = await page.evaluate(async () => {
+      const runs = [];
+      for (const fps of [30, 60, 120]) {
+        window.sendBars(Array(24).fill(.4), 1);
+        const start = window.audioNow, edges = [];
+        for (const age of [...Array.from({ length: Math.ceil(.12 * fps) }, (_, i) => i / fps), .120001, 1]) {
+          window.audioNow = start + age;
+          const state = new Float64Array(99);
+          state.set([window.audioNow, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0, 4]);
+          for (let i = 0; i < 24; i++) state.set([.4, .4, start, 0], 3 + i * 4);
+          // Deliver both a newer snapshot and a duplicate; neither renews the attack.
+          for (let repeat = 0; repeat < 2; repeat++) window.testNode.port.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
+          }));
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          edges.push({ age, edge: document.querySelector('#dancinglights').physics.edges[0] });
+        }
+        runs.push({ fps, edges });
+      }
+      return runs;
+    });
+    const intensity = reducedMotion === 'reduce' ? .5 : 1;
+    for (const { fps, edges } of runs) for (const { age, edge } of edges) {
+      expect(edge, `${fps} FPS at ${age}s`).toBeCloseTo(Math.max(0, 1 - age / .12) * intensity, 6);
+      if (age <= 1 / fps) expect(edge).toBeGreaterThanOrEqual(.7 * intensity);
+      if (age >= .12) expect(edge).toBe(0);
+    }
+    await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+  });
+}
+
 for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-preference', 'reduce']) {
   test(`canvas glow retains rainbow centers and a one-pixel inner edge in ${colorScheme}, ${reducedMotion}`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -36,8 +71,10 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       expect(Math.min(...rgb(left + Math.ceil(2 * pixels.ratio)))).toBeLessThan(245);
     }
     await page.screenshot({ path: info.outputPath('white-inner-edge.png'), fullPage: true });
-    await page.evaluate(() => { window.audioNow += .101; });
-    await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBeLessThan(.1);
+    await page.evaluate(() => { window.audioNow += .060; });
+    await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBeCloseTo(reducedMotion === 'reduce' ? .25 : .5, 6);
+    await page.evaluate(() => { window.audioNow += .060001; });
+    await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
     await page.evaluate(() => { window.audioNow += 10; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
     expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.bars.instanceColor.array))).toEqual(pixels.colors);

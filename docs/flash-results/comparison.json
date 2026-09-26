@@ -1,0 +1,455 @@
+{
+  "baseline": "513d615",
+  "physicalPhone": false,
+  "cases": [
+    {
+      "name": "repeated-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0.46661803126335144,
+        "peakFiltered": 0.466298371553421,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0.46661803126335144,
+        "peakFiltered": 0.466298371553421,
+        "attacks": [
+          0.446,
+          1.046
+        ]
+      }
+    },
+    {
+      "name": "sustain-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.43
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.448
+        ]
+      }
+    },
+    {
+      "name": "vibrato-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9999999403953552,
+        "attacks": [
+          0.432
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9999999403953552,
+        "attacks": [
+          0.45
+        ]
+      }
+    },
+    {
+      "name": "tremolo-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9999949932098389,
+        "attacks": [
+          0.43
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9999949932098389,
+        "attacks": [
+          0.448
+        ]
+      }
+    },
+    {
+      "name": "swell-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9999930262565613,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9999930262565613,
+        "attacks": []
+      }
+    },
+    {
+      "name": "masked-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0.013337802141904831,
+        "peakFiltered": 0.00958763062953949,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0.013337802141904831,
+        "peakFiltered": 0.00958763062953949,
+        "attacks": []
+      }
+    },
+    {
+      "name": "silence-150",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      }
+    },
+    {
+      "name": "repeated-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.426,
+          1.028
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.446,
+          1.046
+        ]
+      }
+    },
+    {
+      "name": "sustain-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.42
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.448
+        ]
+      }
+    },
+    {
+      "name": "vibrato-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.42
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.448
+        ]
+      }
+    },
+    {
+      "name": "tremolo-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.42
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.448
+        ]
+      }
+    },
+    {
+      "name": "swell-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      }
+    },
+    {
+      "name": "masked-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      }
+    },
+    {
+      "name": "silence-1000",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      }
+    },
+    {
+      "name": "repeated-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0.5653160214424133,
+        "peakFiltered": 0.5650849342346191,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0.5653160214424133,
+        "peakFiltered": 0.5650849342346191,
+        "attacks": [
+          0.44,
+          1.04
+        ]
+      }
+    },
+    {
+      "name": "sustain-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.424
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.442
+        ]
+      }
+    },
+    {
+      "name": "vibrato-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.424
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.444
+        ]
+      }
+    },
+    {
+      "name": "tremolo-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.424
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": [
+          0.442
+        ]
+      }
+    },
+    {
+      "name": "swell-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      }
+    },
+    {
+      "name": "masked-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0.000012286880519241095,
+        "peakFiltered": 0.000008459307537123095,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0.000012286880519241095,
+        "peakFiltered": 0.000008459307537123095,
+        "attacks": []
+      }
+    },
+    {
+      "name": "silence-8600",
+      "frames": 1000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      }
+    },
+    {
+      "name": "stationary",
+      "frames": 2000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 1,
+        "attacks": []
+      }
+    },
+    {
+      "name": "two",
+      "frames": 2000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0.5764249563217163,
+        "peakFiltered": 0.5764248967170715,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0.5764249563217163,
+        "peakFiltered": 0.5764248967170715,
+        "attacks": []
+      }
+    },
+    {
+      "name": "bursts",
+      "frames": 2000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9973035454750061,
+        "attacks": [
+          1.02,
+          2.02,
+          3.02
+        ]
+      },
+      "after": {
+        "peakTarget": 1,
+        "peakFiltered": 0.9973035454750061,
+        "attacks": [
+          1.04,
+          2.04,
+          3.04
+        ]
+      }
+    },
+    {
+      "name": "exercise",
+      "frames": 2000,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0.5356627702713013,
+        "peakFiltered": 0.5352445840835571,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0.5356627702713013,
+        "peakFiltered": 0.5352445840835571,
+        "attacks": [
+          1.42,
+          2.858
+        ]
+      }
+    },
+    {
+      "name": "silence",
+      "frames": 1500,
+      "measurementsAndTargetsBitIdentical": true,
+      "before": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      },
+      "after": {
+        "peakTarget": 0,
+        "peakFiltered": 0,
+        "attacks": []
+      }
+    }
+  ]
+}

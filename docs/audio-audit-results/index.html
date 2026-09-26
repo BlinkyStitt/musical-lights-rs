@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perceived loudness — listening review</title>
+<style>
+body {font: 1rem system-ui,sans-serif; max-width: 900px; margin: auto; padding: 1rem; color: #111; background: #fff}
+button,select,textarea {font: inherit; padding: .6rem; margin: .3rem 0} canvas {width:100%; background:#111} textarea {display:block; width:95%}
+</style>
+<h1>Perceived loudness — listening review</h1>
+<p>Listen to the same waveform while comparing the previous and current attack accents. Loudness measurements, automatic enlargement and filtered bar heights are identical.</p>
+<p>This is a synchronized diagnostic replay, sampled every 10 ms, with simplified bars. <a href="../flash-demo/">The actual renderer comparison</a> is separate. Speaker volume affects what you hear; playback has no calibrated sound-pressure level.</p>
+<label>Sound <select id="fixture"></select></label>
+<button id="play" disabled>Play comparison</button> <button id="stop" disabled>Stop</button>
+<p id="status" role="status">Loading fixtures…</p>
+<canvas width="900" height="340" aria-label="Previous and current bar heights and attack accents"></canvas>
+<p><strong>Human listening and physical iPhone acceptance are pending.</strong> The automated results establish numerical behavior, not an audio engineer’s approval. A missing flash does not prove a sound is inaudible.</p>
+<label>Listening notes (heard attack time, missed or unwanted flash, playback device)
+<textarea id="notes" rows="4"></textarea></label><button id="save">Save notes for this sound</button> <button id="export">Export review notes</button>
+<p>Natural excerpts: “Jazz Trumpet Loops Pack in F 90 bpm” by <a href="https://freesound.org/s/77711/">Mihai Sorohan</a>, and “Vibe Ace” by <a href="https://freemusicarchive.org/music/Kevin_MacLeod/Jazz_Sampler/Vibe_Ace">Kevin MacLeod</a>, both <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. Excerpts up to six seconds, converted to mono 48 kHz and scaled to peak 0.2. Sources and hashes are in <a href="audit.json">the evidence report</a>.</p>
+<p><a href="/phone/">Live application</a></p>
+<script type="module">
+const $ = s => document.querySelector(s), select=$('#fixture'), status=$('#status'), canvas=$('canvas'), ctx=canvas.getContext('2d');
+const report=await fetch('audit.json').then(r=>r.json());
+for(const c of report.cases){const o=document.createElement('option');o.value=c.name;o.textContent=c.name;select.append(o);}
+const notes={}; let audio, source, started=0, trace, duration=0, raf;
+function draw(time){ctx.fillStyle='#111';ctx.fillRect(0,0,900,340);ctx.font='18px system-ui';
+for(const [side,key,label] of [[0,'before','Previous'],[1,'after','Current']]){ctx.fillStyle='#fff';ctx.fillText(label,side*450+12,26);
+const rows=trace?.[key], row=rows?.findLast(r=>r[0]<=time);if(!row)continue;
+for(let b=0;b<24;b++){const x=side*450+12+b*17.5,h=Math.max(2,row[1+b*2]*260),at=row[2+b*2];ctx.fillStyle='#666';ctx.fillRect(x,310-h,13,h);
+const age=time-at,fade=key==='before'?(1-age/.1)**2:1-age/.12;
+if(at>=0&&age>=0&&age<(key==='before'?.1:.12)){ctx.strokeStyle=`rgba(255,255,255,${fade})`;ctx.lineWidth=2;ctx.strokeRect(x+1,311-h,11,h-2);}
+}}
+}
+function stop(){source?.stop();source=null;cancelAnimationFrame(raf);$('#stop').disabled=true;$('#play').disabled=false;select.disabled=false;}
+$('#play').onclick=async()=>{stop();$('#play').disabled=true;select.disabled=true;status.textContent='Loading sound…';
+try{audio??=new AudioContext({sampleRate:48000});await audio.resume();const name=select.value;
+const [bytes,data]=await Promise.all([fetch(`${name}.f32`).then(r=>r.arrayBuffer()),fetch(`${name}.json`).then(r=>r.json())]);trace=data;
+const samples=new Float32Array(bytes),buffer=audio.createBuffer(1,samples.length,48000);buffer.copyToChannel(samples,0);duration=buffer.duration;
+source=audio.createBufferSource();source.buffer=buffer;source.connect(audio.destination);started=audio.currentTime;source.start();$('#stop').disabled=false;
+function tick(){const at=audio.currentTime-started;draw(at);status.textContent=`${name}: ${Math.min(at,duration).toFixed(2)} / ${duration.toFixed(2)} s`;
+if(at<duration)raf=requestAnimationFrame(tick);else{source=null;$('#play').disabled=false;$('#stop').disabled=true;select.disabled=false;}}
+tick();}catch(e){stop();status.textContent=`Playback failed: ${e.message}`;}};
+$('#stop').onclick=stop;select.onchange=()=>{stop();trace=null;draw(0);$('#notes').value=notes[select.value]??'';};
+$('#save').onclick=()=>{notes[select.value]=$('#notes').value;status.textContent='Notes saved in this page. Export before closing.';};
+$('#export').onclick=()=>{notes[select.value]=$('#notes').value;const blob=new Blob([JSON.stringify({wasmSha256:report.wasmSha256,userAgent:navigator.userAgent,notes},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='listening-review.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('#play').disabled=false;status.textContent='Ready. Choose a sound and play.';draw(0);
+</script>
+</html>

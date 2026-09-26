@@ -111,7 +111,7 @@ pub fn DancingLights() -> impl IntoView {
     let (listening, set_listening) = signal(false);
     let (generated, set_generated) = signal(false);
     let (capture_status, set_capture_status) =
-        signal(String::from("Uncalibrated · relative light activity"));
+        signal(String::from("Uncalibrated · estimated perceived loudness"));
     let (input_channel, set_input_channel) = signal(1u32);
     let (reference_level, set_reference_level) = signal(94.0f64);
     let (calibrating, set_calibrating) = signal(false);
@@ -370,7 +370,7 @@ pub fn DancingLights() -> impl IntoView {
             <details class="calibration-controls">
                 <summary>"Input calibration"</summary>
 
-                <p>"Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
+                <p>"Bars estimate perceived loudness within the mix, with one automatically adjusting display scale. White borders accent detected attacks. Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
                 <label>"Input channel "<input type="number" min="1" step="1" prop:value=move || input_channel.get() disabled=move || listening.get() || starting.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<u32>() { set_input_channel.set(value.max(1)); } }/></label>
                 <label>"Reference level (dB SPL) "<input type="number" step="0.1" prop:value=move || reference_level.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<f64>() { set_reference_level.set(value); } }/></label>
                 <button disabled=move || !listening.get() || calibrating.get() on:click=move |_| {

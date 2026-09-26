@@ -90,10 +90,10 @@ export class PhoneReport {
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v4', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v5', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
-        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, 24 spectral novelty values, 24 log-magnitude sums, versioned browser presentation transport',
-        displayMapping: 'Unweighted partial loudness; one shared gain and headroom scale. Browser motion: shared One Euro coefficient, minimum/derivative cutoff 1 Hz, beta 0.8. White: prominent spectral attacks, 100 ms pulse. Filtered targets and flashes are presentation, not sones.',
+        rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, 24 spectral novelty values, 24 log-magnitude sums, 99-value browser presentation transport, 24 acoustic event timestamps, 24 visual suppression counts',
+        displayMapping: 'Unweighted partial loudness; one shared gain and headroom scale. Browser motion: shared One Euro coefficient, minimum/derivative cutoff 1 Hz, beta 0.8. White: pressure-scaled spectral novelty, rising partial loudness above 0.1 sone, acoustic prominence and a bounded rise crest within 60 ms; independent of display gain. Acoustic events are separate from the 160 ms visual interval and 60 ms quiet rearming. 120 ms linear pulse. Filtered targets and flashes are presentation, not sones.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead. Partial: causal 2048-sample Hann at 48 kHz, 96-sample hop; window center 21.33 ms before end; GM2002 short-term attack/release. Transport, physics and render timestamps are separate.',
         tone: this.toneMetadata };
       const parts = [JSON.stringify(header).slice(0, -1), ',"chunks":['];

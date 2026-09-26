@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attack flashes — before and after</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: auto; padding: 1rem; }
+  .pair { display: flex; flex-wrap: wrap; gap: 1rem; }
+  figure { flex: 1 1 300px; margin: 0; max-width: 390px; }
+  video { width: 100%; height: auto; }
+  button { padding: .75rem; font: inherit; }
+</style>
+<h1>Attack flashes — before and after</h1>
+<p>Two notes per clip, with identical loudness and bar targets. The new settings restore brief white inner borders while retaining the colored fill.</p>
+<p>These silent clips replay production-WASM measurements through the actual browser builds at 30 FPS. They are controlled render demonstrations; physical iPhone validation is pending.</p>
+<p>The correction now qualifies attacks using acoustic features, independently of bar height. Automated swell regressions pass. Human listening and physical iPhone acceptance remain pending. <a href="../audio-audit/">Open the audible review</a>.</p>
+<button id="replay">Replay all clips together</button>
+<h2>Bass: 150 Hz, 46.6% height</h2>
+<div class="pair">
+  <figure><figcaption>Before — no flashes</figcaption><video src="bass-before.mp4" controls autoplay loop muted playsinline></video></figure>
+  <figure><figcaption>After — two flashes</figcaption><video src="bass-after.mp4" controls autoplay loop muted playsinline></video></figure>
+</div>
+<h2>Treble: 8,600 Hz, 56.5% height</h2>
+<div class="pair">
+  <figure><figcaption>Before — no flashes</figcaption><video src="treble-before.mp4" controls autoplay loop muted playsinline></video></figure>
+  <figure><figcaption>After — two flashes</figcaption><video src="treble-after.mp4" controls autoplay loop muted playsinline></video></figure>
+</div>
+<p><a href="/phone/">Open the live phone preview</a></p>
+<script>
+document.querySelector('#replay').addEventListener('click', () => {
+  for (const video of document.querySelectorAll('video')) {
+    video.currentTime = 0;
+    video.play().catch(() => {});
+  }
+});
+</script>
+</html>

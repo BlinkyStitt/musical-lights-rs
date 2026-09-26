@@ -1,5 +1,9 @@
 # Accurate loudness, calmer motion, and contained balls
 
+This report records PR #18. Its attack settings, timings and test counts are
+historical. See the [follow-up audio-engineering audit](../audio-audit-results/README.md)
+for the current attack detector, calibration correction and quantified front-end limitations.
+
 This revision of [PR #18](https://github.com/BlinkyStitt/musical-lights-rs/pull/18)
 removes frequency emphasis, stabilizes browser motion, replaces renewable white
 holds with prominent-attack pulses, and closes the physical enclosure.

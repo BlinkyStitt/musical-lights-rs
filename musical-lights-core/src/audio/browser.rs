@@ -5,7 +5,7 @@
 //! SuperFlux novelty (Böck, Widmer, DAFx 2013), adapted to causal 2 ms frames
 //! and source-band attribution. Thresholds and flashes are presentation choices.
 use super::{
-    partial::{BINS, HOP, WINDOW},
+    partial::{BINS, HOP, PartialLoudnessFrame, WINDOW},
     visual::{BARK_EDGES, BandLevel, DISPLAY_BANDS, DisplayFrame},
 };
 use num::Float;
@@ -49,10 +49,10 @@ impl BrowserSnapshot {
             edges: self.attacks.map(|attack| {
                 attack.map_or(0.0, |start| {
                     let age = (at - start).max(0.0);
-                    if age >= 0.100 {
+                    if age >= 0.120 {
                         0.0
                     } else {
-                        ((1.0 - age / 0.100).powi(2) * if self.reduced { 0.5 } else { 1.0 }) as f32
+                        ((1.0 - age / 0.120) * if self.reduced { 0.5 } else { 1.0 }) as f32
                     }
                 })
             }),
@@ -112,6 +112,14 @@ pub struct BrowserPresentation {
     pub snapshot: BrowserSnapshot,
     derivative: [f64; DISPLAY_BANDS],
     filtered: [f64; DISPLAY_BANDS],
+    pub acoustic: AcousticAttacks,
+    visual_armed: [bool; DISPLAY_BANDS],
+    pub suppressed: [u32; DISPLAY_BANDS],
+}
+
+/// Acoustic onset heuristic. It never receives display gain, height or motion.
+/// These events are candidates for accents, not measurements of audibility.
+pub struct AcousticAttacks {
     filters: [Triangle; FILTER_CAPACITY],
     filter_count: usize,
     spectra: [[f64; FILTER_CAPACITY]; 6],
@@ -120,11 +128,14 @@ pub struct BrowserPresentation {
     started_at: f64,
     armed: [bool; DISPLAY_BANDS],
     quiet: [usize; DISPLAY_BANDS],
-    candidate: [Option<(f64, f32)>; DISPLAY_BANDS],
+    candidate: [Option<(f64, f64)>; DISPLAY_BANDS],
+    previous_sones: [f64; DISPLAY_BANDS],
+    instantaneous: [[f64; DISPLAY_BANDS]; 6],
+    pub events: [Option<f64>; DISPLAY_BANDS],
     pub novelty: [f64; DISPLAY_BANDS],
     pub magnitude: [f64; DISPLAY_BANDS],
 }
-impl BrowserPresentation {
+impl AcousticAttacks {
     pub fn new(at: f64) -> Self {
         // Quarter-tone centers, A4=440 Hz, rounded to unique FFT bins as in
         // the reference. Include one outer knot on each side of 27.5..16000 Hz.
@@ -157,9 +168,9 @@ impl BrowserPresentation {
             };
         }
         Self {
-            snapshot: BrowserSnapshot::new(at),
-            derivative: [0.0; DISPLAY_BANDS],
-            filtered: [0.0; DISPLAY_BANDS],
+            previous_sones: [0.0; DISPLAY_BANDS],
+            instantaneous: [[0.0; DISPLAY_BANDS]; 6],
+            events: [None; DISPLAY_BANDS],
             filters,
             filter_count: count - 2,
             spectra: [[0.0; FILTER_CAPACITY]; 6],
@@ -173,17 +184,13 @@ impl BrowserPresentation {
             magnitude: [0.0; DISPLAY_BANDS],
         }
     }
-    pub fn push(
+    fn push(
         &mut self,
-        at: f64,
-        levels: [BandLevel; DISPLAY_BANDS],
+        frame: &PartialLoudnessFrame,
         spectrum: &[f64; BINS],
-        reduced: bool,
-    ) {
-        let previous_sones = self.snapshot.sones;
-        self.smooth(levels);
-        self.snapshot.at = at;
-        self.snapshot.reduced = reduced;
+    ) -> [bool; DISPLAY_BANDS] {
+        let at = frame.sample_index as f64 / 48000.0;
+        let mut events = [false; DISPLAY_BANDS];
         let slot = self.frames % 6;
         let old = (self.frames + 1) % 6; // five 2 ms hops ago
         self.novelty.fill(0.0);
@@ -213,7 +220,17 @@ impl BrowserPresentation {
                 self.magnitude[f.band] += value;
             }
         }
-        for (i, level) in levels.iter().enumerate() {
+        let strongest = frame
+            .short_term_sones
+            .iter()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        let strongest_instant = frame
+            .instantaneous_sones
+            .iter()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        for (i, &sones) in frame.short_term_sones.iter().enumerate() {
             let mean = self.history.iter().map(|h| h[i]).sum::<f64>() / HISTORY as f64;
             let peak = (1..=15)
                 .map(|age| self.history[(self.frames + HISTORY - age) % HISTORY][i])
@@ -224,16 +241,14 @@ impl BrowserPresentation {
             } else {
                 self.quiet[i] = 0;
             }
-            if self.quiet[i] >= 30 {
+            if self.quiet[i] >= 5 {
                 self.armed[i] = true;
             }
-            let interval = self.snapshot.attacks[i].is_none_or(|last| at - last >= 0.160 - 1e-9);
             if self.candidate[i].is_some_and(|(deadline, _)| at > deadline) {
                 self.candidate[i] = None;
             }
             if at - self.started_at >= 0.250
                 && self.armed[i]
-                && interval
                 && flux >= peak
                 && flux > mean + 0.1
                 && flux >= 0.15 * self.magnitude[i]
@@ -241,23 +256,74 @@ impl BrowserPresentation {
             {
                 // Spectral novelty precedes short-term loudness. Keep a bounded
                 // candidate while that same attack reaches the loudness gate.
-                self.candidate[i] = Some((at + 0.030, previous_sones[i]));
+                self.candidate[i] = Some((at + 0.060, self.previous_sones[i]));
             }
             // A stopped tone can create spectral leakage novelty. It is not a
             // new loud attack when that band's measured loudness is falling.
-            if self.candidate[i].is_some_and(|(_, baseline)| level.sones > baseline)
+            if self.candidate[i].is_some_and(|(_, baseline)| sones > baseline)
                 && self.armed[i]
-                && interval
-                && level.sones >= 0.1
-                && level.activity >= 0.35
+                && sones >= 0.1
+                // Reject brief leakage in weak neighboring bands, using the
+                // acoustic estimates before any adaptive display mapping.
+                && sones >= 0.3 * strongest
+                && frame.instantaneous_sones[i] >= 0.3 * strongest_instant
+                // A bounded attack has reached its crest; a continuing gentle
+                // crescendo does not qualify. 5% is a heuristic tolerance,
+                // not a hearing threshold or a loudness-model correction.
+                && self.instantaneous[old][i] >= 0.95 * frame.instantaneous_sones[i]
             {
-                self.snapshot.attacks[i] = Some(at);
+                self.events[i] = Some(at);
+                events[i] = true;
                 self.armed[i] = false;
                 self.candidate[i] = None;
             }
         }
         self.history[self.frames % HISTORY] = self.novelty;
+        self.instantaneous[slot] = frame.instantaneous_sones;
+        self.previous_sones = frame.short_term_sones;
         self.frames += 1;
+        events
+    }
+}
+
+impl BrowserPresentation {
+    pub fn new(at: f64) -> Self {
+        Self {
+            snapshot: BrowserSnapshot::new(at),
+            derivative: [0.0; DISPLAY_BANDS],
+            filtered: [0.0; DISPLAY_BANDS],
+            acoustic: AcousticAttacks::new(at),
+            visual_armed: [true; DISPLAY_BANDS],
+            suppressed: [0; DISPLAY_BANDS],
+        }
+    }
+    pub fn push(
+        &mut self,
+        frame: &PartialLoudnessFrame,
+        levels: [BandLevel; DISPLAY_BANDS],
+        spectrum: &[f64; BINS],
+        reduced: bool,
+    ) {
+        let at = frame.sample_index as f64 / 48000.0;
+        self.smooth(levels);
+        self.snapshot.at = at;
+        self.snapshot.reduced = reduced;
+        let events = self.acoustic.push(frame, spectrum);
+        for (i, event) in events.into_iter().enumerate() {
+            if self.acoustic.quiet[i] >= 30 {
+                self.visual_armed[i] = true;
+            }
+            if event {
+                let interval =
+                    self.snapshot.attacks[i].is_none_or(|last| at - last >= 0.160 - 1e-9);
+                if interval && self.visual_armed[i] {
+                    self.snapshot.attacks[i] = Some(at);
+                    self.visual_armed[i] = false;
+                } else {
+                    self.suppressed[i] = self.suppressed[i].saturating_add(1);
+                }
+            }
+        }
     }
     fn smooth(&mut self, levels: [BandLevel; DISPLAY_BANDS]) {
         let mut speed = 0.0_f64;
