@@ -1,6 +1,8 @@
 # Rigid-body prototype
 
-The Leptos visualizer runs 24 spheres and 24 prescribed bars in Rapier 3D.
+The Leptos visualizer runs 8 spheres and 24 prescribed bars in Rapier 3D.
+The display target is smooth 60 FPS; 120 FPS is optional. Physics retains a
+fixed 120 Hz clock with collision substeps and no discarded simulation time.
 `musical-lights-physics` contains the same simulation for native tests and WASM.
 The browser runs it in a dedicated Worker, separate from the AudioWorklet.
 Three.js 0.186.0 draws the actual collider transforms in one WebGL2 canvas,
@@ -14,7 +16,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | --- | --- |
 | Width / depth | 1.2 m / 0.24 m |
 | Bar pitch / gap / top corner radius | 50 mm / 2 mm / 12 mm |
-| Sphere diameter | Original 24 size ratios × 48 mm |
+| Sphere diameter | 8 size ratios × 48 mm |
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
 | Ball, bar, floor and ceiling restitution / friction | 0.15 / 0.20 |
@@ -107,7 +109,7 @@ Post speeds contribute to this bound only where their swept region can reach
 a sphere during the tick. The region includes lateral travel, vertical travel,
 sphere velocity, applied acceleration and contact prediction distance. Empty
 space strokes still advance on every tick. Collider source tags and bit masks
-propagate stack support without scanning every collider or a 24×24 matrix for
+propagate stack support without scanning every collider or a full ball-to-ball matrix for
 each contact substep. Worker timing artifacts retain each batch's total and
 maximum substeps alongside execution time and scheduling delay.
 Worker batches yield after eight ticks or one tick's worth of execution time,
@@ -126,16 +128,19 @@ the existing velocity and overlap limits.
 
 `SimulationConfig`, tick-stamped `SimulationInput`, and `SimulationSnapshot`
 are independent of browser types. Snapshots contain sphere position, rotation,
-radius, mass, linear/angular velocity and color, actual bar tops, 24×24 bar
+radius, mass, linear/angular velocity and color, actual bar tops, 8×24 bar
 contact impulses, and each sphere's total normal contact impulse in N·s.
-The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 5 separates the 24 source bands in `layout[0]` from the 8 balls in `layout[21]`, with compact body and contact arrays. The ball count stays constant across normal and fullscreen views, so resizing never removes or respawns bodies. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
 
 The worker clock runs independently of render frames. Each batch processes at
 most eight fixed steps. Overdue batches yield through MessageChannel without a
 nested timer delay. It retains elapsed time and reports outstanding delay;
 it never discards simulation time to improve the FPS display. The page permits
-one outstanding snapshot request, uses a three-buffer transfer pool, and limits
-queued inputs to 256. Input recording preserves the source timestamp and the
+one outstanding snapshot request and returns the next buffer immediately on
+receipt, independently of animation-frame callbacks. The worker publishes at
+most once per two simulation ticks (60 Hz), so a delayed render cannot starve
+the view of fresh state and a stalled main thread cannot accumulate snapshots.
+The page uses a three-buffer transfer pool and limits queued inputs to 256. Input recording preserves the source timestamp and the
 tick when the simulation applied it. Exported reports replay exactly with the
 same WASM build at 30, 60, and 120 render FPS.
 

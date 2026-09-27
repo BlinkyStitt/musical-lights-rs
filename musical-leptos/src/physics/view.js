@@ -77,7 +77,7 @@ export class PhysicsView {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.localClippingEnabled = true;
     this.layer.append(this.renderer.domElement);
-    this.renderer.domElement.setAttribute('aria-label', '24 rigid balls and audio bars');
+    this.renderer.domElement.setAttribute('aria-label', '8 rigid balls and 24 audio bars');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
       event.preventDefault(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
@@ -110,12 +110,9 @@ export class PhysicsView {
       this.input[31] = this.reduced.matches ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = Math.max(-100, Math.min(100,
         this.tilt[i] + (now - this.accelerationAt < 150 ? this.acceleration[i] : 0)));
-      if (this.ready && !this.inflight) {
-        const buffer = this.buffers.pop();
-        if (!buffer) { this.fail('Snapshot buffer ownership was lost'); return; }
+      if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
-          sequence: ++this.sequence, input: this.input, buffer }, [buffer]);
-        this.inflight = true;
+          sequence: ++this.sequence, input: this.input });
       }
       if (this.current) this.draw(now);
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
@@ -193,12 +190,13 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 4 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 5 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
       this.measure();
       this.report = new PhoneReport(this);
+      this.requestSnapshot();
     } else if (data.type === 'snapshot') {
       if (this.previous) this.buffers.push(this.previous.buffer);
       this.previous = this.current;
@@ -212,6 +210,7 @@ export class PhysicsView {
       this.fitEnclosure();
       this.metrics.maxSchedulingGap = data.maxSchedulingGap; this.metrics.maxStepMs = data.maxStepMs;
       if (this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
+      this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
@@ -219,10 +218,17 @@ export class PhysicsView {
       this.report?.receive(data);
     } else this.report?.receive(data);
   }
+  requestSnapshot() {
+    if (this.closed || !this.ready || this.inflight) return;
+    const buffer = this.buffers.pop();
+    if (!buffer) { this.fail('Snapshot buffer ownership was lost'); return; }
+    this.inflight = true;
+    this.worker.postMessage({ type: 'snapshot', buffer }, [buffer]);
+  }
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, gap, radius, postHeight] = this.layout;
-    this.balls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 }), count);
+    this.balls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 }), this.layout[21]);
     // Two chords per quarter-circle keep the narrow caps smooth at screen size.
     // Avoid dense subdivisions across all six faces of each long bar.
     const geometry = new RoundedBoxGeometry(pitch - gap, postHeight, this.config[5], 1, radius);
@@ -269,7 +275,7 @@ export class PhysicsView {
     const phase = (previous[phaseOffset] + phaseDelta * alpha) % count;
     this.renderedPhase = phase;
     this.positionMeters(phase);
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < this.layout[21]; i++) {
       const offset = 3 + i * stride;
       this.object.position.set(
         previous[offset] + (current[offset] - previous[offset]) * alpha,
@@ -279,6 +285,8 @@ export class PhysicsView {
       this.quaternion.fromArray(current, offset + 3); this.object.quaternion.slerp(this.quaternion, alpha);
       this.object.scale.setScalar(current[offset + 7]); this.object.updateMatrix(); this.balls.setMatrixAt(i, this.object.matrix);
       this.color.fromArray(current, offset + 15); this.balls.setColorAt(i, this.color);
+    }
+    for (let i = 0; i < count; i++) {
       const top = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
       const column = (i + phase) % count;
       this.object.quaternion.identity(); this.object.scale.setScalar(1);

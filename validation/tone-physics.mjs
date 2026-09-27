@@ -40,7 +40,7 @@ for (const [label, api, modulePath] of [['before', baseline, '.cache/baseline-ph
       }
       rowIndex += 28;
       maxDelay = Math.max(maxDelay, at - rows[source * stride + schema.sample] / 48000);
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < (layout[21] ?? layout[0]); i++) {
         const j = 3 + i * layout[8], [x, y, z] = state.subarray(j, j + 3);
         assert(x >= 0 && x <= layout[2] && y >= 0 && Math.abs(z) <= config[5] / 2, `${label}/${kind}: ball ${i} escaped at ${at}`);
       }

@@ -151,6 +151,10 @@ The production WASM processed four seconds of audio in 782 ms on this Mac
 
 ## Primary references
 
+The [research and sources overview](../loudness.md#research-and-sources) also
+links the partial-loudness and One Euro papers and explains which app behavior
+each source informs.
+
 - [ISO 532-1:2017](https://www.iso.org/standard/63077.html): the separate Zwicker total/specific-loudness path.
 - [Glasberg and Moore (2002)](https://aes.org/publications/elibrary-page/?id=11081): time-varying loudness and the multiresolution front end.
 - [Pinned upstream modules](https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117/src): the executable partial-loudness oracle.

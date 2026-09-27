@@ -35,7 +35,7 @@ for (const height of [.4, .6, 1.2, 2]) {
     if (reversalArrivalMs == null && Math.abs(s[layout[9]] - .003) < (s[layout[17]+1] - .003) * .01) reversalArrivalMs = tick * 1000 / 120;
     reversalTrace.push({ ms: tick * 1000 / 120, top: s[layout[9]], velocity: s[layout[14]] });
   }
-  results.push({ height, balls: 24, config: Array.from(config), maxSubsteps, overloadTicks: overload, reversalMs, reversalArrivalMs, reversalTrace, strokes });
+  results.push({ height, balls: layout[21], config: Array.from(config), maxSubsteps, overloadTicks: overload, reversalMs, reversalArrivalMs, reversalTrace, strokes });
   sim.free();
 }
 await writeFile(process.argv[2] ?? 'docs/gain-stroke-results/strokes.json', JSON.stringify(results, null, 2) + '\n');

@@ -152,8 +152,19 @@ Run `python3 validation/validate.py all` with the documented toolchains. Its `re
 
 The software reference checks support confidence in the implemented algorithm. They do not calibrate a microphone, establish an individual's perception, certify ISO compliance, measure an ESP32 processing budget, or establish physical LED color and luminance. Hardware timing, DMA stress, microphone format and gain, electrical current, response curves, and observed flicker still need bench validation before hardware claims.
 
-Sources:
+## Research and sources
 
+The website's [Research behind the lights](https://blink.stitthappens.com/about/#research-heading)
+section introduces these papers in plain language. Their roles in this implementation are:
+
+- [Böck and Widmer (DAFx 2013), vibrato suppression / SuperFlux](https://www.cp.jku.at/research/papers/Boeck_Widmer_DAFx_2013.pdf): the spectral novelty feature used for attack accents. Source-band attribution, acoustic eligibility, and flash timing are app adaptations.
+- [Moore, Glasberg, and Baer (1997), thresholds, loudness, and partial loudness](https://aes.org/publications/elibrary-page/?id=10272): the MGB1997 partial-loudness equations used for masking within the mix.
+- [Glasberg and Moore (2002), loudness of time-varying sounds](https://aes.org/publications/elibrary-page/?id=11081): short-term temporal integration. The browser's fixed analysis window differs from the paper's multiresolution front end; see the [window audit](audio-audit-results/README.md).
+- [Casiez, Roussel, and Vogel (CHI 2012), One Euro filter](https://gery.casiez.net/1euro/): browser motion smoothing, adapted to use a shared coefficient across bands. DOI: [10.1145/2207676.2208639](https://doi.org/10.1145/2207676.2208639).
+
+Standards, reference implementations, and supporting documentation:
+
+- [ISO 532-1:2017, Zwicker loudness method](https://www.iso.org/standard/63077.html)
 - [ISO 532-1 supplementary programs and reference signals](https://standards.iso.org/iso/532/-1/ed-1/en/)
 - [MoSQITo time-varying loudness implementation](https://github.com/Eomys/MoSQITo/tree/v1.2.1/mosqito/sq_metrics/loudness/loudness_zwtv)
 - [Resampler 0.5.1 streaming API and filter design](https://docs.rs/resampler/0.5.1/resampler/)
@@ -163,3 +174,13 @@ Sources:
 MoSQITo-derived tables and algorithm attribution appear in `THIRD_PARTY_NOTICES.md`.
 
 The reference target also builds the pinned independent [deeuu/loudness oracle](https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117) and compares source-band spectral, excitation, partial-loudness and temporal stages. See `validation/partial`.
+
+### Earlier Bark-scale references
+
+The older [`bark_scale.rs`](../musical-lights-core/src/audio/bark_scale.rs)
+records two alternative frequency-to-Bark formulas in comments. They are
+historical references, not active calculations in the current loudness model;
+that helper uses a band-edge lookup table.
+
+- [Hartmut Traunmüller (1990), Analytical expressions for the tonotopic sensory scale](https://doi.org/10.1121/1.399849). The [author's publication page](https://resources.ling.su.se/hartmut/aktupub.html) also links the paper and a unit converter.
+- [Shihua Wang, Andrew Sekey, and Allen Gersho (1992), An Objective Measure for Predicting Subjective Quality of Speech Coders](https://doi.org/10.1109/49.138987).

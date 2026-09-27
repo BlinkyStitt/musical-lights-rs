@@ -59,7 +59,7 @@ test('Reduced Motion suppresses scrolling and Stop retains source identity', asy
 });
 
 for (const width of [375, 1440]) {
-  test(`24 rigid spheres use a single WebGL2 canvas and physical bar positions at ${width}px`, async ({ page }, info) => {
+  test(`8 rigid spheres use a single WebGL2 canvas and physical bar positions at ${width}px`, async ({ page }, info) => {
     test.setTimeout(60000);
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -68,8 +68,9 @@ for (const width of [375, 1440]) {
     await expect(page.locator('#dancinglights canvas')).toHaveCount(1);
     await expect(page.getByRole('meter')).toHaveCount(24);
     const initial = await physicsState(page);
-    const ratios = [.55,1.4,2.2,.8,3.1,1,4,1.8,.65,2.6,1.2,3.5,.65,1,1.2,.8,1.4,.55,.7,1.1,1.6,.9,1.3,.6];
-    for (let i = 0; i < 24; i++) expect(initial.balls[i].radius * 2 / .048).toBeCloseTo(ratios[i], 5);
+    const ratios = [.55,1.4,2.2,.8,3.1,1,4,1.8];
+    expect(initial.balls).toHaveLength(8);
+    for (let i = 0; i < 8; i++) expect(initial.balls[i].radius * 2 / .048).toBeCloseTo(ratios[i], 5);
     await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
     await expect.poll(async () => Math.min(...(await physicsState(page)).bars)).toBeGreaterThan(initial.barMax - .005);
     const raised = await physicsState(page);
@@ -86,15 +87,16 @@ for (const width of [375, 1440]) {
         const current = v.current[v.layout[9] + i], previous = (v.previous ?? v.current)[v.layout[9] + i];
         return previous + (current - previous) * v.renderAlpha;
       });
-      return { expected, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
+      return { expected, ballInstances: v.balls.count, barInstances: v.bars.count, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
         tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
     });
+    expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(72);
     expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(3);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
     await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
-    await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length, { timeout: 30000 }).toBeGreaterThan(12);
+    await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length, { timeout: 30000 }).toBe(8);
     expect(errors).toEqual([]);
   });
 }
@@ -142,7 +144,12 @@ test('pointer and device inputs apply recorded forces and reduced motion reduces
   await page.evaluate(() => {
     window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: -8, y: 0, z: 0 } }));
   });
-  await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.velocity[0] > .05).length).toBeGreaterThan(8);
+  // Preserve the original requirement that more than a third respond, without
+  // coupling a sensor check to a historical particle count.
+  await expect.poll(async () => {
+    const { balls } = await physicsState(page);
+    return balls.filter(b => b.velocity[0] > .05).length / balls.length;
+  }).toBeGreaterThan(1 / 3);
   const box = await page.locator('canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
@@ -184,7 +191,7 @@ test('depth shakes and audio bars both move balls while tilt permission is still
       await new Promise(resolve => requestAnimationFrame(resolve));
       const { current: state, layout } = view;
       samples.push({ input: view.input[26], bars: Array.from(state.slice(layout[9], layout[10])),
-        balls: Array.from({ length: layout[0] }, (_, i) => {
+        balls: Array.from({ length: layout[21] }, (_, i) => {
           const o = 3 + i * layout[8];
           return { y: state[o + 1], vz: state[o + 11] };
         }) });
@@ -257,6 +264,9 @@ test('phone page sends generated PCM through the audio processor and exports an 
   expect(report.discardedSimulationMs).toBe(0);
   expect(report.config[5]).toBeCloseTo(0.36, 5);
   expect((await replayReport(report)).every(result => result.matches)).toBe(true);
+  const historical = { ...report, layout: [...report.layout] };
+  historical.layout[18] = 4;
+  await expect(replayReport(historical)).rejects.toThrow('matching historical engine');
   const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export test report' }).click();
   expect((await download).suggestedFilename()).toContain('normal.json');
 });
@@ -271,6 +281,26 @@ test('a delayed worker reports debt and catches up without discarding simulation
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 30);
   await expect.poll(async () => (await physicsState(page)).metrics.debt).toBeLessThan(17);
   expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
+});
+
+test('snapshots stay fresh while the render loop is paused', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  const result = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics;
+    cancelAnimationFrame(view.request);
+    const tick = view.current[2], frames = view.metrics.frames, samples = view.timing.snapshots.length;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return { ticks: view.current[2] - tick, frames: view.metrics.frames - frames,
+        samples: view.timing.snapshots.length - samples, age: performance.now() - view.received,
+        buffers: view.buffers.length + Number(Boolean(view.previous)) + Number(Boolean(view.current)) + Number(view.inflight) };
+    } finally { view.request = requestAnimationFrame(view.animate); }
+  });
+  expect(result.frames).toBe(0);
+  expect(result.ticks).toBeGreaterThan(24);
+  expect(result.samples).toBeGreaterThan(5);
+  expect(result.age).toBeLessThan(100);
+  expect(result.buffers).toBe(3);
 });
 
 test('expensive physics ticks yield snapshots between steps and retain their debt', async ({ page }) => {
