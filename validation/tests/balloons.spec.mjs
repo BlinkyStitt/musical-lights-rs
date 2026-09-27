@@ -273,6 +273,30 @@ test('a delayed worker reports debt and catches up without discarding simulation
   expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
 });
 
+test('expensive physics ticks yield snapshots between steps and retain their debt', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  await page.evaluate(() => { document.querySelector('#dancinglights').physics.timing.snapshots = []; });
+  const worker = page.workers().find(worker => worker.url().endsWith('/physics/worker.js'));
+  const before = await physicsState(page);
+  await worker.evaluate(async () => {
+    const { PhysicsSimulation } = await import('/physics/physics.js');
+    const step = PhysicsSimulation.prototype.step;
+    let remaining = 8;
+    PhysicsSimulation.prototype.step = function () {
+      step.call(this);
+      const end = performance.now() + 20;
+      while (performance.now() < end) { /* Reproduce expensive indivisible contact steps. */ }
+      if (--remaining === 0) PhysicsSimulation.prototype.step = step;
+    };
+  });
+  await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 60);
+  const costly = await page.evaluate(() => document.querySelector('#dancinglights').physics.timing.snapshots.filter(sample => sample.batchMs >= 20));
+  expect(costly.length).toBeGreaterThanOrEqual(3);
+  expect(costly.every(sample => sample.ticks === 1)).toBe(true);
+  await expect.poll(async () => (await physicsState(page)).metrics.debt).toBeLessThan(17);
+  expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
+});
+
 test('phone acceptance rejects frozen snapshots despite 60 FPS and a current worker', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   const results = await page.evaluate(() => {

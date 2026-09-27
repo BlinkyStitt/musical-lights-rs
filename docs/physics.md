@@ -110,6 +110,9 @@ space strokes still advance on every tick. Collider source tags and bit masks
 propagate stack support without scanning every collider or a 24×24 matrix for
 each contact substep. Worker timing artifacts retain each batch's total and
 maximum substeps alongside execution time and scheduling delay.
+Worker batches yield after eight ticks or one tick's worth of execution time,
+whichever comes first. An individual tick remains indivisible, and overdue
+work continues immediately after yielding without dropping simulation time.
 
 Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and ordinary contact natural frequency 60 Hz. While a sphere is predictively near the ceiling, contact natural frequency is 240 Hz with eight positional stabilization passes per force-solver iteration, instead of one. There are still eight force-solver iterations. This prevents visible ceiling compression without changing ordinary elastic collisions. The CCD minimum interval is scaled below the smallest contact substep.
 
