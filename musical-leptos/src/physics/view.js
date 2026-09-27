@@ -110,12 +110,9 @@ export class PhysicsView {
       this.input[31] = this.reduced.matches ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = Math.max(-100, Math.min(100,
         this.tilt[i] + (now - this.accelerationAt < 150 ? this.acceleration[i] : 0)));
-      if (this.ready && !this.inflight) {
-        const buffer = this.buffers.pop();
-        if (!buffer) { this.fail('Snapshot buffer ownership was lost'); return; }
+      if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
-          sequence: ++this.sequence, input: this.input, buffer }, [buffer]);
-        this.inflight = true;
+          sequence: ++this.sequence, input: this.input });
       }
       if (this.current) this.draw(now);
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
@@ -199,6 +196,7 @@ export class PhysicsView {
       this.makeMeshes(); this.ready = true;
       this.measure();
       this.report = new PhoneReport(this);
+      this.requestSnapshot();
     } else if (data.type === 'snapshot') {
       if (this.previous) this.buffers.push(this.previous.buffer);
       this.previous = this.current;
@@ -212,12 +210,20 @@ export class PhysicsView {
       this.fitEnclosure();
       this.metrics.maxSchedulingGap = data.maxSchedulingGap; this.metrics.maxStepMs = data.maxStepMs;
       if (this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
+      this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
       this.previous = this.current = null; this.makeMeshes();
       this.report?.receive(data);
     } else this.report?.receive(data);
+  }
+  requestSnapshot() {
+    if (this.closed || !this.ready || this.inflight) return;
+    const buffer = this.buffers.pop();
+    if (!buffer) { this.fail('Snapshot buffer ownership was lost'); return; }
+    this.inflight = true;
+    this.worker.postMessage({ type: 'snapshot', buffer }, [buffer]);
   }
   makeMeshes() {
     this.disposeMeshes();

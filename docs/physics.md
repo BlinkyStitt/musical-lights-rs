@@ -136,8 +136,11 @@ The worker clock runs independently of render frames. Each batch processes at
 most eight fixed steps. Overdue batches yield through MessageChannel without a
 nested timer delay. It retains elapsed time and reports outstanding delay;
 it never discards simulation time to improve the FPS display. The page permits
-one outstanding snapshot request, uses a three-buffer transfer pool, and limits
-queued inputs to 256. Input recording preserves the source timestamp and the
+one outstanding snapshot request and returns the next buffer immediately on
+receipt, independently of animation-frame callbacks. The worker publishes at
+most once per two simulation ticks (60 Hz), so a delayed render cannot starve
+the view of fresh state and a stalled main thread cannot accumulate snapshots.
+The page uses a three-buffer transfer pool and limits queued inputs to 256. Input recording preserves the source timestamp and the
 tick when the simulation applied it. Exported reports replay exactly with the
 same WASM build at 30, 60, and 120 render FPS.
 

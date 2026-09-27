@@ -7,7 +7,7 @@ const ready = init().then(instance => {
 });
 const capacity = 50000;
 let simulation, config, palette, buffer, timer, lastTime, origin;
-let paused = true, debt = 0, maxDebt = 0, pending = [], request = null;
+let paused = true, debt = 0, maxDebt = 0, pending = [], publishedTick = -2;
 let input = new Float32Array(34), recording = null, recordingOverflow = false;
 let costs = new Float32Array(capacity), costCount = 0, totalCost = 0, steps = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
@@ -77,15 +77,17 @@ function run() {
   schedule();
 }
 function publish() {
-  if (!request || !buffer) return;
+  // Publish at 60 Hz of simulation time, independently of render callbacks.
+  // One transferred buffer bounds queued snapshots even if the main thread stalls.
+  if (!buffer || simulation.tick() < publishedTick + 2) return;
+  publishedTick = simulation.tick();
   const output = new Float32Array(buffer);
   output.set(snapshot());
   output.set(impulseTotals, layout[10]);
   impulseTotals.fill(0);
   postMessage({ type: 'snapshot', buffer, schedulingGap, maxSchedulingGap, batchMs, batchTicks, batchSubsteps, batchMaxSubsteps, maxStepMs, debt, maxDebt, steps, totalCost,
-    tick: simulation.tick(), substepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow(), sequence: request.sequence }, [buffer]);
+    tick: simulation.tick(), substepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow() }, [buffer]);
   buffer = null;
-  request = null;
 }
 function reset(values) {
   simulation?.free();
@@ -93,7 +95,7 @@ function reset(values) {
   simulation = new PhysicsSimulation(config, palette);
   input = new Float32Array(34); input[32] = config[0];
   simulation.input(input);
-  pending = []; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
+  pending = []; publishedTick = -2; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
   schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;
   batchTicks = 0; batchSubsteps = 0; batchMaxSubsteps = 0;
   substepTotal = 0; maxSubsteps = 0; overloadTicks = 0; substepCosts = [];
@@ -110,13 +112,15 @@ self.onmessage = async ({ data }) => {
         buffer = null;
         postMessage({ type: 'ready', config: Array.from(config), layout: Array.from(layout) });
         schedule(); break;
+      case 'snapshot':
+        if (buffer) throw new Error('Snapshot buffer ownership was duplicated');
+        buffer = data.buffer;
+        publish(); break;
       case 'pulse': {
-        if (data.buffer) buffer = data.buffer;
-        request = data;
         const tick = Math.max(simulation.tick(), Math.ceil((data.timestamp - origin) / stepMs));
         if (pending.length >= 256) throw new Error('Physics input queue is full');
         pending.push({ tick, timestamp: data.timestamp, values: data.input });
-        publish(); break;
+        break;
       }
       case 'pause':
         if (data.paused === paused) break;

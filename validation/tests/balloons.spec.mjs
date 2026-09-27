@@ -278,6 +278,26 @@ test('a delayed worker reports debt and catches up without discarding simulation
   expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
 });
 
+test('snapshots stay fresh while the render loop is paused', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  const result = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics;
+    cancelAnimationFrame(view.request);
+    const tick = view.current[2], frames = view.metrics.frames, samples = view.timing.snapshots.length;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return { ticks: view.current[2] - tick, frames: view.metrics.frames - frames,
+        samples: view.timing.snapshots.length - samples, age: performance.now() - view.received,
+        buffers: view.buffers.length + Number(Boolean(view.previous)) + Number(Boolean(view.current)) + Number(view.inflight) };
+    } finally { view.request = requestAnimationFrame(view.animate); }
+  });
+  expect(result.frames).toBe(0);
+  expect(result.ticks).toBeGreaterThan(24);
+  expect(result.samples).toBeGreaterThan(5);
+  expect(result.age).toBeLessThan(100);
+  expect(result.buffers).toBe(3);
+});
+
 test('expensive physics ticks yield snapshots between steps and retain their debt', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   await page.evaluate(() => { document.querySelector('#dancinglights').physics.timing.snapshots = []; });

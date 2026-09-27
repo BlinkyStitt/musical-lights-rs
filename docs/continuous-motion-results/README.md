@@ -55,10 +55,10 @@ browser FPS or phone acceptance. The display target is 60 FPS; 120 FPS is option
 The [guarded host browser measurement](fullscreen-timing.json) passed the
 existing 60 FPS acceptance thresholds in Chromium and iPhone-profile Mac WebKit
 for fullscreen entry, landscape, portrait, and exit. Chromium measured
-59.50–60.01 FPS with frame-interval p95 ≤16.8 ms; WebKit measured 60.00–61.03 FPS
-with p95 18 ms. Maximum snapshot age was 26 ms and maximum simulation debt
-8.81 ms. The full local 200-check browser suite also passed; its fullscreen
-trace reached 10.73 ms debt and 23.24 ms snapshot age. These results do not
+60.00 FPS with frame-interval p95 ≤16.8 ms; WebKit measured 59.94–61.03 FPS
+with p95 18 ms. Maximum snapshot age was 26.2 ms and maximum simulation debt
+9.0 ms. The full local 202-check browser suite also passed; its fullscreen
+trace reached 10.24 ms debt and 18.90 ms snapshot age. These results do not
 establish performance on Linux CI or physical iPhones.
 
 Reproduce each side with `node validation/physics-cost.mjs PHYSICS_WASM OUTPUT_JSON`
