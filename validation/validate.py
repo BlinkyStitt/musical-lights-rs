@@ -47,6 +47,8 @@ def validate(name):
         environment = ROOT / "validation/loudness/.venv/bin"
         paths = [
             "validation/validate.py",
+            "validation/install_tools.py",
+            "validation/tooling",
             "validation/loudness/validate.py",
             "validation/loudness/tones.py",
             "validation/partial/validate.py",
