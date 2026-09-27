@@ -12,6 +12,7 @@ let input = new Float32Array(34), recording = null, recordingOverflow = false;
 let costs = new Float32Array(capacity), costCount = 0, totalCost = 0, steps = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
 let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
+let batchSubsteps = 0, batchMaxSubsteps = 0;
 let substepTotal = 0, maxSubsteps = 0, overloadTicks = 0, substepCosts = [];
 const absoluteNow = () => performance.timeOrigin + performance.now();
 const snapshot = () => new Float32Array(wasm.memory.buffer, simulation.snapshot_ptr(), layout[12]);
@@ -36,6 +37,7 @@ function run() {
   lastTime = now;
   // Keep all elapsed time. A slow worker reports debt and continues in bounded batches.
   let batch = 0;
+  batchSubsteps = 0; batchMaxSubsteps = 0;
   while (debt + 1e-6 >= stepMs && batch < 8) {
     while (pending.length && pending[0].tick <= simulation.tick()) {
       const event = pending.shift();
@@ -56,6 +58,7 @@ function run() {
     }
     const state = snapshot();
     const substeps = state[layout[15]], excess = state[layout[15] + 1];
+    batchSubsteps += substeps; batchMaxSubsteps = Math.max(batchMaxSubsteps, substeps);
     substepTotal += substeps; maxSubsteps = Math.max(maxSubsteps, substeps);
     if (excess > 0) overloadTicks++;
     if (recording && substepCosts.length < capacity) substepCosts.push([simulation.tick(), substeps, excess, cost]);
@@ -76,7 +79,7 @@ function publish() {
   output.set(snapshot());
   output.set(impulseTotals, layout[10]);
   impulseTotals.fill(0);
-  postMessage({ type: 'snapshot', buffer, schedulingGap, maxSchedulingGap, batchMs, maxStepMs, debt, maxDebt, steps, totalCost,
+  postMessage({ type: 'snapshot', buffer, schedulingGap, maxSchedulingGap, batchMs, batchSubsteps, batchMaxSubsteps, maxStepMs, debt, maxDebt, steps, totalCost,
     tick: simulation.tick(), substepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow(), sequence: request.sequence }, [buffer]);
   buffer = null;
   request = null;
@@ -89,6 +92,7 @@ function reset(values) {
   simulation.input(input);
   pending = []; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
   schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;
+  batchSubsteps = 0; batchMaxSubsteps = 0;
   substepTotal = 0; maxSubsteps = 0; overloadTicks = 0; substepCosts = [];
   impulseTotals.fill(0); lastTime = origin = absoluteNow();
 }

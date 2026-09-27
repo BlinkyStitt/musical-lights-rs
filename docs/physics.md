@@ -60,7 +60,9 @@ The full pattern travels right at 55.5 / 80 columns per second, with a 120 ms
 smoothstep speed transition. Stop, disabling scrolling, and Reduced Motion
 stop in place; enabling scrolling resumes there. Hidden pages pause simulation.
 Each source has three physical copies; only copies beyond the closed side walls
-recycle. Rendering clips copies to the enclosure. The 24 accessible meters keep
+recycle. Copies farther than one column outside either wall are disabled in
+the solver and re-enabled before they can contact a ball. Rendering clips
+copies to the enclosure. The 24 accessible meters keep
 source identity while their pointer regions and keyboard focus follow the bars.
 
 The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m below its top. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
@@ -100,6 +102,14 @@ reproduced tunneling. The single active dependency is therefore pinned to
 Rapier 0.34.0 with enhanced determinism and CCD on every sphere.
 
 Sphere CCD uses one internal CCD step. Each 120 Hz outer tick adds deterministic contact substeps based on sphere and bar travel, bounded at 128. Every contact substep retains eight solver iterations and its own kinematic target. Contact impulses accumulate over the whole outer tick. The controller uses no wall-clock feedback, so replay is independent of render rate.
+
+Post speeds contribute to this bound only where their swept region can reach
+a sphere during the tick. The region includes lateral travel, vertical travel,
+sphere velocity, applied acceleration and contact prediction distance. Empty
+space strokes still advance on every tick. Collider source tags and bit masks
+propagate stack support without scanning every collider or a 24×24 matrix for
+each contact substep. Worker timing artifacts retain each batch's total and
+maximum substeps alongside execution time and scheduling delay.
 
 Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and ordinary contact natural frequency 60 Hz. While a sphere is predictively near the ceiling, contact natural frequency is 240 Hz with eight positional stabilization passes per force-solver iteration, instead of one. There are still eight force-solver iterations. This prevents visible ceiling compression without changing ordinary elastic collisions. The CCD minimum interval is scaled below the smallest contact substep.
 

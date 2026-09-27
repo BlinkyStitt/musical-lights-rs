@@ -48,8 +48,19 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
             .map(|(h, _)| sim.world.bodies[*h].translation().x)
             .collect();
         sim.step();
+        assert!(
+            sim.bars
+                .iter()
+                .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
+                .count()
+                <= COUNT + 2
+        );
         for (i, (h, _)) in sim.bars.iter().enumerate() {
             let x = sim.world.bodies[*h].translation().x;
+            assert_eq!(
+                sim.world.bodies[*h].is_enabled(),
+                (-PITCH..=WIDTH + PITCH).contains(&x)
+            );
             if (x - before[i]).abs() > PITCH {
                 assert!(x < -PITCH || x > WIDTH + PITCH);
                 assert!(before[i] < -PITCH || before[i] > WIDTH + PITCH);
@@ -94,6 +105,42 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
         sim.step();
     }
     assert_eq!(sim.scroll_phase, reduced);
+}
+
+#[test]
+fn empty_space_strokes_skip_contact_work_but_nearby_strokes_keep_it() {
+    let mut quiet = world(SimulationConfig::default());
+    let mut distant = world(SimulationConfig::default());
+    for sim in [&mut quiet, &mut distant] {
+        isolate(sim, &[0]);
+        place(sim, 0, Vector::new(PITCH / 2.0, 0.15, 0.0), Vector::ZERO);
+    }
+    let mut levels = [0.0; COUNT];
+    levels[23] = 1.0;
+    input(&mut distant, levels);
+    let mut quiet_cost = 0.0_f32;
+    for _ in 0..6 {
+        quiet.step();
+        distant.step();
+        assert_eq!(
+            quiet.snapshot.values[COST_OFFSET],
+            distant.snapshot.values[COST_OFFSET]
+        );
+        assert_eq!(position(&quiet, 0), position(&distant, 0));
+        quiet_cost = quiet_cost.max(quiet.snapshot.values[COST_OFFSET]);
+    }
+    levels[0] = 1.0;
+    input(&mut distant, levels);
+    let mut contact_cost = 0.0_f32;
+    let mut impulse = 0.0;
+    for _ in 0..6 {
+        distant.step();
+        contact_cost = contact_cost.max(distant.snapshot.values[COST_OFFSET]);
+        impulse += distant.snapshot.values[IMPULSE_OFFSET];
+        assert!(position(&distant, 0).y >= distant.bar_positions[0] as f32 + radius(0) - 0.002);
+    }
+    assert!(contact_cost > quiet_cost);
+    assert!(impulse > 0.0);
 }
 
 #[test]

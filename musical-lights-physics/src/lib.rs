@@ -266,6 +266,7 @@ impl Simulation {
                     config.depth / 2.0 - CORNER,
                     CORNER,
                 )
+                .user_data((COUNT + 1 + i % COUNT) as u128)
                 .friction(config.friction)
                 .restitution(config.restitution),
             )
@@ -307,6 +308,7 @@ impl Simulation {
                     .translation(spawn[i])
                     .ccd_enabled(true),
                 ColliderBuilder::ball(radius)
+                    .user_data((i + 1) as u128)
                     .density(config.density)
                     .friction(config.friction)
                     .restitution(config.restitution),
@@ -401,23 +403,20 @@ impl Simulation {
             self.scroll_enabled = enabled;
         }
         let resize_speed = (travel - old_travel).abs() / f64::from(DT);
-        let bar_speed = self
-            .motions
-            .iter()
-            .map(|motion| {
-                (0..=32)
-                    .map(|i| {
-                        motion
-                            .sample(f64::from(DT) * i as f64 / 32.0)
-                            .velocity
-                            .abs()
-                            * travel
-                    })
-                    .fold(0.0_f64, f64::max)
-            })
-            .fold(0.0_f64, f64::max)
-            + resize_speed
-            + SCROLL_SPEED * f64::from(PITCH);
+        let bar_speeds: [f64; COUNT] = std::array::from_fn(|i| {
+            let motion = &self.motions[i];
+            (0..=32)
+                .map(|j| {
+                    motion
+                        .sample(f64::from(DT) * j as f64 / 32.0)
+                        .velocity
+                        .abs()
+                        * travel
+                })
+                .fold(0.0_f64, f64::max)
+                + resize_speed
+                + SCROLL_SPEED * f64::from(PITCH)
+        });
         let ball_speed = self
             .balls
             .iter()
@@ -426,6 +425,41 @@ impl Simulation {
                 b.is_enabled().then_some(f64::from(b.linvel().length()))
             })
             .fold(0.0_f64, f64::max);
+        // A fast post in empty space does not require every contact in the room
+        // to be solved at its speed. Conservative swept bounds include a whole
+        // tick of both bodies' travel plus force/contact prediction margins.
+        let force_bound = self.config.gravity
+            + Vector::from_array(self.input.acceleration).length()
+            + if self.input.pointer.is_some() {
+                15.0
+            } else {
+                0.0
+            };
+        let margin = 0.002 + f64::from(force_bound) * f64::from(DT).powi(2);
+        let ball_reach = ball_speed * f64::from(DT) + margin;
+        let bar_speed = self
+            .bars
+            .iter()
+            .enumerate()
+            .filter_map(|(copy, &(h, _))| {
+                let post = &self.world.bodies[h];
+                let speed = bar_speeds[copy % COUNT];
+                let reach_x = f64::from(PITCH / 2.0) + SCROLL_SPEED * f64::from(PITCH * DT);
+                let top = self.bar_positions[copy % COUNT] + speed * f64::from(DT);
+                self.balls
+                    .iter()
+                    .enumerate()
+                    .any(|(i, &(ball, _))| {
+                        let body = &self.world.bodies[ball];
+                        let radius = f64::from(SIZE_RATIOS[i] * (PITCH - GAP) / 2.0);
+                        body.is_enabled()
+                            && f64::from((body.translation().x - post.translation().x).abs())
+                                <= reach_x + radius + ball_reach
+                            && f64::from(body.translation().y) - radius - ball_reach <= top
+                    })
+                    .then_some(speed)
+            })
+            .fold(resize_speed, f64::max);
         let min_radius =
             SIZE_RATIOS.iter().copied().fold(f32::INFINITY, f32::min) * (PITCH - GAP) / 2.0;
         // Bound relative travel, including equal opposing balls and bar contacts.
@@ -478,11 +512,19 @@ impl Simulation {
                     (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32,
                     0.0,
                 );
-                if (body.translation().x - position.x).abs() > WIDTH {
-                    // Both endpoints lie outside the closed enclosure. Teleport only
-                    // this inactive copy; never sweep a collider through the balls.
+                // The other two copies are bookkeeping, not active physics.
+                // Enable a full pitch before reaching the enclosure so contact
+                // prediction is ready before any part of the post crosses a wall.
+                let active = (-PITCH..=WIDTH + PITCH).contains(&position.x);
+                if !body.is_enabled()
+                    || !active
+                    || (body.translation().x - position.x).abs() > WIDTH
+                {
+                    // Recycling and activation happen outside the closed enclosure.
+                    // Never sweep a recycled collider through the balls.
                     body.set_translation(position, false);
                 }
+                body.set_enabled(active);
                 body.set_next_kinematic_translation(position);
             }
             for &(handle, _) in &self.balls {
@@ -522,9 +564,9 @@ impl Simulation {
                 .integration_parameters
                 .num_internal_stabilization_iterations = if roof_contact { 8 } else { 1 };
             self.world.step();
-            let mut supported = [false; COUNT];
-            let mut driven = [false; COUNT];
-            let mut supports = [[false; COUNT]; COUNT];
+            let mut supported = 0_u32;
+            let mut driven = 0_u32;
+            let mut supports = [0_u32; COUNT];
             for (i, &(_, collider)) in self.balls.iter().enumerate() {
                 let mut touching = [false; COUNT];
                 for pair in self.world.narrow_phase.contact_pairs_with(collider) {
@@ -544,15 +586,17 @@ impl Simulation {
                             };
                             m.data.normal.y * sign > 0.1
                         });
-                    if upward
-                        && let Some(j) = self.balls.iter().position(|&(_, ball)| ball == other)
-                    {
-                        supports[i][j] = true;
+                    // Collider tags identify the source directly, including wrapped
+                    // copies. Walls use zero, balls 1..=COUNT, bars COUNT+1..=2*COUNT.
+                    let tag = self.world.colliders[other].user_data as usize;
+                    if upward && (1..=COUNT).contains(&tag) {
+                        supports[i] |= 1 << (tag - 1);
                     }
-                    if let Some(copy) = self.bars.iter().position(|&(_, bar)| bar == other) {
-                        let j = copy % COUNT;
-                        supported[i] |= upward;
-                        driven[i] |= upward && impulse > 0.0 && self.bar_velocities[j] > 0.0;
+                    if tag > COUNT {
+                        let j = tag - COUNT - 1;
+                        supported |= u32::from(upward) << i;
+                        driven |=
+                            u32::from(upward && impulse > 0.0 && self.bar_velocities[j] > 0.0) << i;
                         touching[j] =
                             pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
@@ -569,20 +613,24 @@ impl Simulation {
                 }
                 self.touching[i] = touching;
             }
+            let previous_driven = self
+                .driven
+                .iter()
+                .enumerate()
+                .fold(0_u32, |mask, (i, &value)| mask | (u32::from(value) << i));
             for _ in 0..COUNT {
                 let before = (supported, driven);
-                for i in 0..COUNT {
-                    for j in 0..COUNT {
-                        if supports[i][j] {
-                            supported[i] |= before.0[j];
-                            driven[i] |= before.1[j] || (before.0[j] && self.driven[j]);
-                        }
-                    }
+                for (i, &support) in supports.iter().enumerate() {
+                    supported |= u32::from(support & before.0 != 0) << i;
+                    driven |=
+                        u32::from(support & (before.1 | (before.0 & previous_driven)) != 0) << i;
                 }
                 if before == (supported, driven) {
                     break;
                 }
             }
+            let supported: [bool; COUNT] = std::array::from_fn(|i| supported & (1 << i) != 0);
+            let driven: [bool; COUNT] = std::array::from_fn(|i| driven & (1 << i) != 0);
             let release_speed =
                 (2.0 * self.config.gravity * self.config.hop_height(self.input.reduced_motion))
                     .sqrt();
