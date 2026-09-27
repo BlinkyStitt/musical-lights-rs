@@ -263,7 +263,9 @@ for (const colorScheme of ['light', 'dark']) {
           .map(node => luminance(getComputedStyle(node).backgroundColor));
         const meters = [...document.querySelectorAll('.bark-group')].map(node => {
           const color = getComputedStyle(node).getPropertyValue('--band-color').trim();
-          return { color, ratio: contrast(luminance(color), surfaces[2]) };
+          // The fill or its permanent black canvas outline must delimit
+          // each bar against the plot; bright fills need that outline in light mode.
+          return { color, ratio: Math.max(contrast(luminance(color), surfaces[2]), contrast(0, surfaces[2])) };
         });
         return { text, surfaces, meters };
       });

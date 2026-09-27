@@ -190,7 +190,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 5 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 6 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
@@ -248,8 +248,12 @@ export class PhysicsView {
           float distance = radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
           distance = min(distance, world.y);
           // fwidth is one device pixel. Scale to one CSS pixel at the capped pixel ratio.
-          float inner = 1.0 - smoothstep((PIXEL_RATIO - 0.5) * fwidth(distance), (PIXEL_RATIO + 0.5) * fwidth(distance), distance);
-          gl_FragColor = vec4(mix(tint, vec3(1.0), inner * glow), 1.0);
+          float pixel = PIXEL_RATIO * fwidth(distance);
+          float outline = 1.0 - smoothstep(0.5 * pixel, 1.5 * pixel, distance);
+          float inner = 1.0 - smoothstep(1.5 * pixel, 2.5 * pixel, distance);
+          // A permanent dark boundary keeps bright yellows/greens legible on
+          // the light surface. The one-pixel attack flash sits just inside it.
+          gl_FragColor = vec4(mix(mix(tint, vec3(1.0), inner * glow), vec3(0.0), outline), 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -271,8 +275,8 @@ export class PhysicsView {
     const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
     const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
     const phaseOffset = this.layout[20];
-    const phaseDelta = (current[phaseOffset] - previous[phaseOffset] + count) % count;
-    const phase = (previous[phaseOffset] + phaseDelta * alpha) % count;
+    const phaseDelta = ((current[phaseOffset] - previous[phaseOffset] + count * 1.5) % count) - count / 2;
+    const phase = (previous[phaseOffset] + phaseDelta * alpha + count) % count;
     this.renderedPhase = phase;
     this.positionMeters(phase);
     for (let i = 0; i < this.layout[21]; i++) {
@@ -311,7 +315,7 @@ export class PhysicsView {
     if (wrapped !== this.wrappedLabels) {
       this.wrappedLabels = wrapped;
       const labels = this.card.querySelectorAll('.spectrum-labels span');
-      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? (i === 1 ? 'SCROLLING →' : '') : text; });
+      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? (i === 1 ? 'SCROLLING ↔' : '') : text; });
     }
     // One accessible node per source; only the pointer surface is copied at
     // the seam. Stationary frames do not repeat layout/style writes.

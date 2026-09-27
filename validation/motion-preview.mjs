@@ -53,7 +53,7 @@ for(const [name,directory] of [['before',`${baseline}/musical-lights-physics/pkg
   const wasm=await api.default({module_or_path:await readFile(`${directory}/physics_bg.wasm`)});
   engineHashes[name] = createHash('sha256').update(await readFile(`${directory}/physics_bg.wasm`)).digest('hex');
   const layout=api.PhysicsSimulation.layout();
-  assert.equal(layout[18], name === 'before' ? 3 : 5);
+  assert.equal(layout[18], name === 'before' ? 3 : 6);
   for(const scrolling of [false,true]) {
     const config=api.PhysicsSimulation.defaults(),sim=new api.PhysicsSimulation(config,new Float32Array(palette));
     const input=new Float32Array(34);input[32]=config[0];

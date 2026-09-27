@@ -67,7 +67,8 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
             }
         }
     }
-    let expected = (110.0 - SCROLL_EASE / 2.0) * SCROLL_SPEED;
+    let expected =
+        SCROLL_SPEED * 4.0 * ((110.0 - SCROLL_EASE / 2.0) * std::f64::consts::TAU / 16.0).sin();
     assert!((sim.scroll_phase - expected.rem_euclid(72.0)).abs() < 0.001);
     sim.apply(SimulationInput {
         tick: sim.tick,
@@ -311,7 +312,7 @@ fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
 }
 
 #[test]
-fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
+fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
     for height in [0.4, 0.6, 2.0] {
         let mut sim = world(SimulationConfig {
             height,
@@ -321,7 +322,7 @@ fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
         for level in [1.0, 0.0, 1.0, 0.0] {
             input(&mut sim, [level; COUNT]);
             let (max_speed, acceleration) = sim.config.motion_limits(false);
-            for _ in 0..6 {
+            for _ in 0..if level > 0.0 { 6 } else { 160 } {
                 let previous = sim.bar_velocities[0];
                 sim.step();
                 assert!(sim.bar_velocities[0].abs() <= max_speed + 1e-5);
@@ -354,7 +355,7 @@ fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
             "height {height}: reversal begins after {} ms",
             ticks as f32 * DT * 1000.0
         );
-        for _ in 0..12 {
+        for _ in 0..160 {
             sim.step();
         }
         assert!((sim.snapshot.values[BAR_OFFSET] - BASELINE).abs() < height * 0.01);
@@ -372,7 +373,7 @@ fn tiny_corrections_move_gently_and_settle_exactly_within_150_ms() {
                 if tick == 0 {
                     assert!(sim.bar_velocities[0].abs() > 0.0);
                 }
-                if tick == 5 {
+                if tick == 5 && level > 0.0 {
                     assert_ne!(sim.motions[0].state.position, f64::from(level));
                 }
             }
@@ -1203,4 +1204,34 @@ fn rapid_reversals_with_scrolling_keep_balls_inside_the_enclosure() {
             assert!(p.x >= radius(i) - 0.005 && p.x <= WIDTH - radius(i) + 0.005);
         }
     }
+}
+
+#[test]
+fn balanced_scroll_keeps_balls_from_accumulating_at_the_right_wall() {
+    let mut sim = world(SimulationConfig::default());
+    input(&mut sim, [0.3; COUNT]);
+    for _ in 0..HZ * 2 {
+        sim.step();
+    }
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        scrolling: true,
+        ..sim.input
+    })
+    .unwrap();
+    let mut min_speed = 0.0_f64;
+    let mut max_speed = 0.0_f64;
+    let mut worst_center = 0.0_f32;
+    for tick in 0..HZ * 64 {
+        sim.step();
+        min_speed = min_speed.min(sim.scroll_speed);
+        max_speed = max_speed.max(sim.scroll_speed);
+        let center = (0..BALL_COUNT).map(|i| position(&sim, i).x).sum::<f32>() / BALL_COUNT as f32;
+        worst_center = worst_center.max(center);
+        if tick > HZ * 16 {
+            assert!(center < WIDTH * 0.75, "balls accumulate on right: {center}");
+        }
+    }
+    eprintln!("64-second balanced scroll: rightmost mean ball position {worst_center} m");
+    assert!(min_speed < -0.5 && max_speed > 0.5);
 }

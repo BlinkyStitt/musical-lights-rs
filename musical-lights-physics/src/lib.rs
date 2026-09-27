@@ -31,6 +31,10 @@ pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 4;
 pub const SNAPSHOT_LEN: usize = SCROLL_OFFSET + 1;
 pub const SCROLL_SPEED: f64 = 55.5 / (4.0 * 20.0);
 pub const SCROLL_EASE: f64 = 0.120;
+// Equal travel in both directions removes the conveyor's permanent right bias.
+// The sinusoid reverses gently every eight seconds of enabled simulation time.
+pub const SCROLL_PERIOD: f64 = 16.0;
+pub const SCROLL_PEAK_SPEED: f64 = SCROLL_SPEED * std::f64::consts::FRAC_PI_2;
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -167,6 +171,8 @@ pub struct Simulation {
     scroll_from: f64,
     scroll_elapsed: f64,
     scroll_enabled: bool,
+    scroll_clock: f64,
+    scroll_weight: f64,
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; BALL_COUNT],
     touching: [[bool; COUNT]; BALL_COUNT],
@@ -328,6 +334,8 @@ impl Simulation {
             scroll_from: 0.0,
             scroll_elapsed: SCROLL_EASE,
             scroll_enabled: false,
+            scroll_clock: 0.0,
+            scroll_weight: 0.0,
             touching: [[false; COUNT]; BALL_COUNT],
             ceiling,
             ceiling_height: config.height,
@@ -396,7 +404,7 @@ impl Simulation {
         }
         let enabled = self.input.scrolling && !self.input.reduced_motion;
         if enabled != self.scroll_enabled {
-            self.scroll_from = self.scroll_speed;
+            self.scroll_from = self.scroll_weight;
             self.scroll_elapsed = 0.0;
             self.scroll_enabled = enabled;
         }
@@ -413,7 +421,7 @@ impl Simulation {
                 })
                 .fold(0.0_f64, f64::max)
                 + resize_speed
-                + SCROLL_SPEED * f64::from(PITCH)
+                + SCROLL_PEAK_SPEED * f64::from(PITCH)
         });
         let ball_speed = self
             .balls
@@ -442,7 +450,7 @@ impl Simulation {
             .filter_map(|(copy, &(h, _))| {
                 let post = &self.world.bodies[h];
                 let speed = bar_speeds[copy % COUNT];
-                let reach_x = f64::from(PITCH / 2.0) + SCROLL_SPEED * f64::from(PITCH * DT);
+                let reach_x = f64::from(PITCH / 2.0) + SCROLL_PEAK_SPEED * f64::from(PITCH * DT);
                 let top = self.bar_positions[copy % COUNT] + speed * f64::from(DT);
                 self.balls
                     .iter()
@@ -478,16 +486,16 @@ impl Simulation {
             self.resize_ceiling();
             self.scroll_elapsed = (self.scroll_elapsed + f64::from(dt)).min(SCROLL_EASE);
             let t = self.scroll_elapsed / SCROLL_EASE;
-            let desired = if self.scroll_enabled {
-                SCROLL_SPEED
-            } else {
-                0.0
-            };
-            let speed = self.scroll_from + (desired - self.scroll_from) * t * t * (3.0 - 2.0 * t);
-            self.scroll_phase += (self.scroll_speed + speed) * 0.5 * f64::from(dt);
-            self.scroll_speed = speed;
-            // Keep the phase bounded; each physical copy only recycles beyond a wall.
-            self.scroll_phase %= (COUNT * 3) as f64;
+            let desired = if self.scroll_enabled { 1.0 } else { 0.0 };
+            let weight = self.scroll_from + (desired - self.scroll_from) * t * t * (3.0 - 2.0 * t);
+            let before = self.scroll_clock;
+            self.scroll_clock += (self.scroll_weight + weight) * 0.5 * f64::from(dt);
+            self.scroll_weight = weight;
+            let omega = std::f64::consts::TAU / SCROLL_PERIOD;
+            let distance = SCROLL_PEAK_SPEED / omega
+                * ((omega * self.scroll_clock).sin() - (omega * before).sin());
+            self.scroll_speed = SCROLL_PEAK_SPEED * (omega * self.scroll_clock).cos() * weight;
+            self.scroll_phase = (self.scroll_phase + distance).rem_euclid((COUNT * 3) as f64);
             let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
             for i in 0..COUNT {
                 self.motions[i].advance(f64::from(dt));
@@ -748,7 +756,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            5.0, // independent ball and source-band counts
+            6.0, // gravity release and balanced bidirectional scrolling
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,

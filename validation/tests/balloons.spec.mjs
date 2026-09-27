@@ -41,7 +41,10 @@ test('continuous scrolling carries source identity and stops in place', async ({
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBe(phase);
   expect(phase).toBeGreaterThan(.3);
   await page.locator('.scroll-lights').check();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(phase + .1);
+  await expect.poll(() => page.evaluate(stopped => {
+    const phase = document.querySelector('#dancinglights').physics.renderedPhase;
+    return Math.abs(((phase - stopped + 36) % 24) - 12);
+  }, phase)).toBeGreaterThan(.1);
   await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
 });
 
@@ -374,4 +377,25 @@ test('wrapped pointer surfaces and keyboard focus retain the source frequency', 
   await expect(page.getByRole('meter').last()).toBeFocused();
   await expect(page.getByRole('meter').last()).toHaveAttribute('aria-label', before);
   await expect(page.getByRole('meter')).toHaveCount(24);
+});
+
+test('leftward scrolling interpolates through the seam without sweeping the pattern right', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  const samples = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    cancelAnimationFrame(v.raf);
+    const previous = v.previous, current = v.current, received = v.received;
+    try {
+      return [[.1, .08, .5], [.01, 23.99, .75], [23.99, .01, .75]].map(([from, to, alpha]) => {
+        v.previous = new Float32Array(previous ?? current); v.current = new Float32Array(current);
+        v.previous[0] = 1; v.current[0] = 1.02;
+        v.previous[v.layout[20]] = from; v.current[v.layout[20]] = to;
+        v.received = performance.now(); v.draw(v.received + 20 * alpha);
+        return v.renderedPhase;
+      });
+    } finally { v.previous = previous; v.current = current; v.received = received; v.raf = requestAnimationFrame(v.animate); }
+  });
+  expect(samples[0]).toBeCloseTo(.09, 4);
+  expect(samples[1]).toBeCloseTo(23.995, 4);
+  expect(samples[2]).toBeCloseTo(.005, 4);
 });

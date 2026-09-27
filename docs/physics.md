@@ -21,7 +21,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Gravity | 9.81 m/s² |
 | Ball, bar, floor and ceiling restitution / friction | 0.15 / 0.20 |
 | Vertical wall restitution / friction | 0.55 minimum / 0 |
-| Full-height rest-to-rest stroke | 40 ms in either direction; 320 ms Reduced Motion |
+| Full-height attack / release | 40 ms attack; approximately 1.13 s gravity release; slower Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved upper space | Largest sphere diameter + hop allowance + 4 mm |
 | Minimum enclosure height | 0.40 m |
@@ -43,24 +43,33 @@ energy. This is a visual tuning choice, not a measured material. Rapier's
 predictive soft contacts can return less than the ideal 55%. A ball at rest
 does not receive an artificial kick away from a wall.
 
-Bars use position-based kinematic bodies driven by piecewise quintic Hermite
-splines in normalized bar coordinates. Position, velocity and acceleration are
-continuous when retargeted. From rest, 70% of the duration accelerates and the
-last 30% brakes to exactly zero velocity and acceleration. Corrections of 1%
-or less take 140 ms; smoothstep interpolation reduces that to 40 ms at 12.5%
-(one of eight hat LEDs) or more. Reduced Motion takes at least 320 ms. Reversal
-adds a braking segment; repeated identical packets do not restart a stroke.
+Bars use position-based kinematic bodies in normalized bar coordinates.
+Rises use piecewise quintic Hermite splines: 70% acceleration and 30% braking,
+with position, velocity and acceleration preserved on retargeting. Upward
+corrections of 1% or less take 140 ms; smoothstep interpolation reduces this to
+40 ms at 12.5% or more. Reduced Motion attacks take at least 320 ms.
+
+Releases accelerate downward at 2 bar heights/s², capped at 1.2 bar heights/s.
+A full-height fall from rest takes about 1.13 s regardless of screen size. The
+latest audio target is a hard floor: lower packets keep downward momentum,
+raised floors stop the fall exactly, and identical packets never restart it.
+An upward-moving bar brakes before falling. Reduced Motion uses one quarter
+of the release acceleration and half the terminal speed. Reaching the floor
+ends velocity and acceleration immediately, like the hat's falling envelope.
 The shared loudness measurements, gain, filtering and 180 ms flash are unchanged.
 
 Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess upward release velocity is dissipated to limit extra hops to `min(0.08 * enclosure_height, 0.05 m)`, halved for Reduced Motion. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle top is 3 mm above the floor.
 
-Large strokes from rest must arrive within 1% of a stable target within 50 ms
+Large attacks from rest must arrive within 1% of a stable target within 50 ms
 of physics receipt. Stable corrections up to 1% must settle within 150 ms.
 Retarget reversals include braking and are tested separately.
 
-The full pattern travels right at 55.5 / 80 columns per second, with a 120 ms
-smoothstep speed transition. Stop, disabling scrolling, and Reduced Motion
-stop in place; enabling scrolling resumes there. Hidden pages pause simulation.
+The full pattern scrolls in both directions on a 16-second sinusoidal cycle,
+reversing gently every eight seconds. Average absolute travel remains 55.5 / 80
+columns per second; peak speed is π/2 times that rate. Equal travel left and
+right removes the conveyor's permanent rightward push. An enabled-time clock
+preserves the cycle when stopped, with a 120 ms smoothstep start/stop transition.
+Stop, disabling scrolling, and Reduced Motion stop in place; enabling scrolling resumes there. Hidden pages pause simulation.
 Each source has three physical copies; only copies beyond the closed side walls
 recycle. Copies farther than one column outside either wall are disabled in
 the solver and re-enabled before they can contact a ball. Rendering clips
@@ -130,7 +139,7 @@ the existing velocity and overlap limits.
 are independent of browser types. Snapshots contain sphere position, rotation,
 radius, mass, linear/angular velocity and color, actual bar tops, 8×24 bar
 contact impulses, and each sphere's total normal contact impulse in N·s.
-The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 5 separates the 24 source bands in `layout[0]` from the 8 balls in `layout[21]`, with compact body and contact arrays. The ball count stays constant across normal and fullscreen views, so resizing never removes or respawns bodies. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 6 changes the engine to gravity release and balanced scrolling; historical replays require their matching engine. Protocol 5 separates the 24 source bands in `layout[0]` from the 8 balls in `layout[21]`, with compact body and contact arrays. The ball count stays constant across normal and fullscreen views, so resizing never removes or respawns bodies. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
 
 The worker clock runs independently of render frames. Each batch processes at
 most eight fixed steps. Overdue batches yield through MessageChannel without a
@@ -244,3 +253,14 @@ allows 60 seconds for its 24 hover checks, audio checks, screenshots, and theme
 changes; individual state assertions retain their five-second deadline.
 
 Phone acceptance requires an actively playing, repeating 24-tone exercise with diagnostics off. A session replacement, pause, natural end, interruption, cleanup, or repeat-off invalidates warmup and measurement immediately. Resume does not remove invalid reasons. The generated exercise is normalized to unit peak before applying the selected amplitude; its changing pattern is preserved.
+
+## Rainbow
+
+The browser keeps the established red-to-purple HSLuv hue anchors, uses full
+saturation, and scales each linear RGB fill until its brightest channel reaches
+one. This uses the full display gamut instead of holding every hue at the same
+muted lightness. A permanent one-pixel dark outline separates bright fills
+from the light background; the one-pixel white attack flash sits just inside it.
+Bar height remains the loudness measure. Source labels, numeric
+meters, keyboard focus and pointer readouts remain available independently of
+color. LED palettes and acoustic analysis are unchanged.

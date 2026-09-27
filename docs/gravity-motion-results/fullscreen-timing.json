@@ -1,0 +1,119 @@
+{
+  "physicsWasmSha256": "2bf92ba00206d0dd23208df06052a87291a001ffdfd8c9df0202aea7214ce351",
+  "browsers": [
+    {
+      "browser": "chromium",
+      "version": "154.0.8037.0",
+      "physicalPhone": false,
+      "build": "e2ef01ec36edeec4e49dda9473ab197dbb520762-dirty",
+      "windows": [
+        {
+          "event": "enter",
+          "fps": 60.00300015000751,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.800000000000182,
+          "over25Fraction": 0,
+          "maxDebt": 6.099853515624758,
+          "maxSnapshotAge": 11.399999997019677,
+          "overloadTicks": 0,
+          "fromHeight": 0.9278030395507812,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "landscape",
+          "fps": 60.00300015000749,
+          "p95": 16.799999999999272,
+          "maxFrame": 16.800000000000182,
+          "over25Fraction": 0,
+          "maxDebt": 6.199951171874542,
+          "maxSnapshotAge": 10.100000005960283,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.5545023679733276
+        },
+        {
+          "event": "portrait",
+          "fps": 60.00300015000749,
+          "p95": 16.799999999999272,
+          "maxFrame": 16.800000000000182,
+          "over25Fraction": 0,
+          "maxDebt": 6.266520182291082,
+          "maxSnapshotAge": 10.200000002980232,
+          "overloadTicks": 0,
+          "fromHeight": 0.5545023679733276,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "exit",
+          "fps": 60.00300015000746,
+          "p95": 16.700000000000728,
+          "maxFrame": 16.80000000000109,
+          "over25Fraction": 0,
+          "maxDebt": 6.333333333332639,
+          "maxSnapshotAge": 11.3000000059601,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.9278030395507812
+        }
+      ],
+      "discardedSimulationMs": 0
+    },
+    {
+      "browser": "webkit",
+      "version": "26.6",
+      "physicalPhone": false,
+      "build": "e2ef01ec36edeec4e49dda9473ab197dbb520762-dirty",
+      "windows": [
+        {
+          "event": "enter",
+          "fps": 60.96951524237881,
+          "p95": 18,
+          "maxFrame": 19,
+          "over25Fraction": 0,
+          "maxDebt": 6.666666666666469,
+          "maxSnapshotAge": 22,
+          "overloadTicks": 0,
+          "fromHeight": 0.9278030395507812,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "landscape",
+          "fps": 60.06006006006006,
+          "p95": 18,
+          "maxFrame": 19,
+          "over25Fraction": 0,
+          "maxDebt": 6.666666666666259,
+          "maxSnapshotAge": 20,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.5545023679733276
+        },
+        {
+          "event": "portrait",
+          "fps": 59.979838709677416,
+          "p95": 18,
+          "maxFrame": 19,
+          "over25Fraction": 0,
+          "maxDebt": 7.333333333332796,
+          "maxSnapshotAge": 22,
+          "overloadTicks": 1,
+          "fromHeight": 0.5545023679733276,
+          "toHeight": 2.5969231128692627
+        },
+        {
+          "event": "exit",
+          "fps": 61,
+          "p95": 18,
+          "maxFrame": 19,
+          "over25Fraction": 0,
+          "maxDebt": 6.666666666665908,
+          "maxSnapshotAge": 21,
+          "overloadTicks": 0,
+          "fromHeight": 2.5969231128692627,
+          "toHeight": 0.9278030395507812
+        }
+      ],
+      "discardedSimulationMs": 0
+    }
+  ]
+}

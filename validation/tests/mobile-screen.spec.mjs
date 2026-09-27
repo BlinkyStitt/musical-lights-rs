@@ -44,7 +44,16 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
   }, { once: true }));
-  await stop.tap();
+  // Stop in the same browser turn that observes an elevated ball. A separate
+  // protocol round trip/tap can arrive after that transient has already ended.
+  await page.waitForFunction(button => {
+    const { current, layout } = document.querySelector('#dancinglights').physics;
+    const elevated = Array.from({ length: layout[21] }, (_, i) => 3 + i * layout[8])
+      .some(offset => current[offset + 1] > current[offset + 7] + .1);
+    if (!elevated) return false;
+    button.click();
+    return true;
+  }, await stop.elementHandle(), { timeout: 5000 });
   const stopped = await page.evaluate(() => window.physicsAtStop);
   expect(stopped.balls.some(ball => ball.y > ball.radius + .1)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
