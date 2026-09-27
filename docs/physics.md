@@ -17,7 +17,8 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Sphere diameter | Original 24 size ratios × 48 mm |
 | Density | 1,100 kg/m³ |
 | Gravity | 9.81 m/s² |
-| Restitution / friction | 0.15 / 0.20 |
+| Ball, bar, floor and ceiling restitution / friction | 0.15 / 0.20 |
+| Vertical wall restitution / friction | 0.55 minimum / 0 |
 | Full-height rest-to-rest stroke | 40 ms in either direction; 320 ms Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved upper space | Largest sphere diameter + hop allowance + 4 mm |
@@ -32,23 +33,66 @@ height is 2.25% of the drop height, down from 30.25% at the previous 0.55.
 This reduces repeated bouncing while retaining the 40 ms bar stroke. Moving
 bars still transfer their motion through physical contacts.
 
-Bars use position-based kinematic bodies. For usable height `H` and stroke time `T`, their controller derives full-height limits `v = 2H/T` and `a = 4H/T²`. Each new target scales both limits by the larger of its remaining-travel fraction and current-speed fraction, capped at one. Small corrections from rest therefore take the same 40 ms with proportionally gentler motion, instead of applying full acceleration to tiny fluctuations. Exact constant-acceleration segments accelerate and brake to a stable target. Retargeting preserves velocity and brakes before reversing. Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess upward release velocity is dissipated to limit extra hops to `min(0.08 * enclosure_height, 0.05 m)`, halved for Reduced Motion. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle top is 3 mm above the floor.
+The four vertical walls have a separate material: zero friction lets balls
+slide down even while a shake presses them against a side, front, or back wall.
+Their restitution is 0.55, combined with the ball's value using the maximum;
+the wall therefore returns more of an impact's normal speed without adding
+energy. This is a visual tuning choice, not a measured material. Rapier's
+predictive soft contacts can return less than the ideal 55%. A ball at rest
+does not receive an artificial kick away from a wall.
 
-Strokes from rest must arrive within 1% of a stable target within 50 ms of
-physics receipt. The production WASM arrives in 41.67 ms at the 120 Hz sampling
-grid in all tested world heights and directions. Reversal latency includes
-braking and is reported separately: the near-peak retarget trace arrives in
-58.33 ms. See [current stroke traces](partial-loudness-results/contained-display/strokes.json).
-The minimum configurable normal stroke is 0.040 s; Reduced Motion stays 0.320 s.
+Bars use position-based kinematic bodies driven by piecewise quintic Hermite
+splines in normalized bar coordinates. Position, velocity and acceleration are
+continuous when retargeted. From rest, 70% of the duration accelerates and the
+last 30% brakes to exactly zero velocity and acceleration. Corrections of 1%
+or less take 140 ms; smoothstep interpolation reduces that to 40 ms at 12.5%
+(one of eight hat LEDs) or more. Reduced Motion takes at least 320 ms. Reversal
+adds a braking segment; repeated identical packets do not restart a stroke.
+The shared loudness measurements, gain, filtering and 180 ms flash are unchanged.
 
+Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess upward release velocity is dissipated to limit extra hops to `min(0.08 * enclosure_height, 0.05 m)`, halved for Reduced Motion. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle top is 3 mm above the floor.
 
-The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m below its top. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and retargets bars through the same controller. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
+Large strokes from rest must arrive within 1% of a stable target within 50 ms
+of physics receipt. Stable corrections up to 1% must settle within 150 ms.
+Retarget reversals include braking and are tested separately.
+
+The full pattern travels right at 55.5 / 80 columns per second, with a 120 ms
+smoothstep speed transition. Stop, disabling scrolling, and Reduced Motion
+stop in place; enabling scrolling resumes there. Hidden pages pause simulation.
+Each source has three physical copies; only copies beyond the closed side walls
+recycle. Copies farther than one column outside either wall are disabled in
+the solver and re-enabled before they can contact a ball. Rendering clips
+copies to the enclosure. The 24 accessible meters keep
+source identity while their pointer regions and keyboard focus follow the bars.
+
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m below its top. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
-m/s²; screen rotation maps its axes. Tilt adds an acceleration field of up to
+m/s²; all three axes contribute, including shaking into or out of the screen.
+Screen rotation maps the two in-plane axes; the opposite acceleration is
+applied to the balls, as if shaking their enclosure. Tilt adds a field of up to
 2 m/s² per axis. The simulation applies force as mass × acceleration each tick.
 Reduced Motion scales external acceleration to 10% and uses the configured slower stroke time.
+
+Motion and tilt permissions are requested from the Start listening click and
+enabled independently, so a pending tilt request cannot block granted motion
+access. Stop and route cleanup invalidate both requests and remove listeners.
+When linear acceleration is unavailable, a 250 ms exponential baseline removes
+the slow gravity component from gravity-inclusive readings. This fallback is
+an approximation: fast rotations can also appear as shakes. Its first reading,
+restart, and gaps of at least 500 ms establish a fresh baseline without a kick.
+Shake forces expire 150 ms after the last usable reading. Sensor semantics
+follow the [Device Orientation and Motion specification](https://www.w3.org/TR/orientation-event/).
+
+Physical-phone motion acceptance remains a separate check: after Start listening
+and allowing motion access, try left/right, up/down, and toward/away shakes in
+portrait and landscape. Repeat with music driving the bars; both sources must
+move the balls together. Hold still to check that shaking stops, then press Stop
+to check that sensor forces stop while gravity continues. Side impacts should
+rebound, and balls pressed against vertical walls should still fall when they
+have no support underneath. Synthetic browser events do not verify the phone's
+actual sensors or permission prompts.
 
 ## Engine selection and limits
 
@@ -58,6 +102,17 @@ reproduced tunneling. The single active dependency is therefore pinned to
 Rapier 0.34.0 with enhanced determinism and CCD on every sphere.
 
 Sphere CCD uses one internal CCD step. Each 120 Hz outer tick adds deterministic contact substeps based on sphere and bar travel, bounded at 128. Every contact substep retains eight solver iterations and its own kinematic target. Contact impulses accumulate over the whole outer tick. The controller uses no wall-clock feedback, so replay is independent of render rate.
+
+Post speeds contribute to this bound only where their swept region can reach
+a sphere during the tick. The region includes lateral travel, vertical travel,
+sphere velocity, applied acceleration and contact prediction distance. Empty
+space strokes still advance on every tick. Collider source tags and bit masks
+propagate stack support without scanning every collider or a 24×24 matrix for
+each contact substep. Worker timing artifacts retain each batch's total and
+maximum substeps alongside execution time and scheduling delay.
+Worker batches yield after eight ticks or one tick's worth of execution time,
+whichever comes first. An individual tick remains indivisible, and overdue
+work continues immediately after yielding without dropping simulation time.
 
 Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and ordinary contact natural frequency 60 Hz. While a sphere is predictively near the ceiling, contact natural frequency is 240 Hz with eight positional stabilization passes per force-solver iteration, instead of one. There are still eight force-solver iterations. This prevents visible ceiling compression without changing ordinary elastic collisions. The CCD minimum interval is scaled below the smallest contact substep.
 
@@ -73,10 +128,11 @@ the existing velocity and overlap limits.
 are independent of browser types. Snapshots contain sphere position, rotation,
 radius, mass, linear/angular velocity and color, actual bar tops, 24×24 bar
 contact impulses, and each sphere's total normal contact impulse in N·s.
-The WASM wrapper exposes numeric arrays and the snapshot memory location. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
 
-The worker clock runs independently of render frames. Each timer processes at
-most eight fixed steps. It retains elapsed time and reports outstanding delay;
+The worker clock runs independently of render frames. Each batch processes at
+most eight fixed steps. Overdue batches yield through MessageChannel without a
+nested timer delay. It retains elapsed time and reports outstanding delay;
 it never discards simulation time to improve the FPS display. The page permits
 one outstanding snapshot request, uses a three-buffer transfer pool, and limits
 queued inputs to 256. Input recording preserves the source timestamp and the
@@ -86,6 +142,21 @@ same WASM build at 30, 60, and 120 render FPS.
 The renderer owns the complete transfer pool and returns both snapshots on
 reset. Phone acceptance also checks snapshot age and displayed tick progress;
 a running worker with a frozen renderer cannot pass on frame rate alone.
+
+The browser's **Scroll lights** setting rotates complete source bands to the
+right at the hat's approximately 1.44-second column cadence. Fixed bar colliders
+receive the newly assigned height through their existing motion controller;
+balls remain in the same enclosure and collide with those real bar positions.
+The input's source offset also selects the visible bar color for impact blends.
+Scroll changes do not create attacks or modify measured loudness. The clock
+pauses while hidden and resets when listening stops; Reduced Motion and the
+unchecked toggle use the original fixed source order.
+
+Physics layout version 3 retains the geometry offsets and adds a 34th input
+value: the whole-column source offset (0–23). Replay records this alongside the
+physical target heights. Older reports require their matching engine. Tone
+diagnostics retain canonical source-band measurements and identify the requested
+offset beside each physical target sample.
 
 One animation loop interpolates snapshots and updates the accessible audio
 meters. ResizeObserver caches layout measurements. The renderer caps pixel
@@ -156,10 +227,11 @@ python3 validation/validate.py browser
 ```
 
 On macOS, use host access for browser checks and keep the serial startup guard.
-The final local run passed 16 native physics tests, native/WASM Clippy, pinned
-Leptos validation, and 105 browser checks plus three startup harness checks.
-Core and AudioWorklet validation also passed. These results do not establish
-CI, physical-phone acceptance, or production deployment.
+The scrolling and flash update passed 50 core tests in each of four feature
+configurations, 31 native physics tests, native/WASM Clippy, pinned worklet and
+Leptos validation, and 190 browser checks plus 10 harness checks.
+These results do not establish CI, physical-phone acceptance, or production
+deployment.
 
 Seven Chromium layout and keyboard checks also passed in a Linux container
 limited to one CPU and 3 GB RAM, with three test workers. Each layout case

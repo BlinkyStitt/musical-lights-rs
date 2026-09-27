@@ -1,3 +1,5 @@
+import { assertBrowserEnvironment } from '../browser-environment.mjs';
+assertBrowserEnvironment();
 // Usage: node validation/partial/audit-preview.mjs ORIGIN EXPECTED_BUILD [REPORT]
 import { chromium, webkit, expect } from '../node_modules/@playwright/test/index.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -6,7 +8,8 @@ import startup from '../browser-startup.mjs';
 const [origin, build, output = '.cache/audio-audit/preview.json'] = process.argv.slice(2);
 if (!origin || !build) throw new Error('Origin and exact expected build are required');
 const expected = JSON.parse(await readFile('docs/audio-audit-results/audit.json', 'utf8'));
-await startup({ filteredProjects: ['chromium', 'webkit'].map(browserName => ({ name: browserName, use: { browserName } })) });
+const finishBrowserAudit = await startup({ filteredProjects: ['chromium', 'webkit'].map(browserName => ({ name: browserName, use: { browserName } })) });
+try {
 const results = [];
 for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
   const browser = await engine.launch();
@@ -47,3 +50,4 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
 }
 await writeFile(output, JSON.stringify({ origin, results }, null, 2) + '\n');
 console.log(JSON.stringify(results, null, 2));
+} finally { await finishBrowserAudit(); }

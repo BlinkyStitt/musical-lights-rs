@@ -22,6 +22,7 @@ export class PhoneReport {
     ];
     this.host.innerHTML = `<summary>Physics prototype and phone test</summary>
       <p>These values are starting assumptions. Apply physical settings with Reset. Camera changes keep the simulation.</p>
+      <p>Vertical walls have no friction and at least 0.55 restitution. The controls below set the other surfaces and balls.</p>
       <div class="physics-fields">${fields.map(([name, index, min, max, step]) => `<label>${name}<input data-config="${index}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(view.config[index].toPrecision(6))}"></label>`).join('')}</div>
       <label>Camera rotation (degrees)<input class="camera-rotation" type="range" min="-40" max="40" value="0"></label>
       <button type="button" class="physics-reset">Apply settings and reset</button>
@@ -68,7 +69,7 @@ export class PhoneReport {
           currentTick: view.current[2], previousTick: view.previous?.[2],
           tops: Array.from(view.current.slice(view.layout[9], view.layout[10])),
           velocities: Array.from(view.current.slice(view.layout[14], view.layout[15])),
-          targets: Array.from(view.input.slice(0, 24)), debtMs: view.metrics.debt,
+          targets: Array.from(view.input.slice(0, 24)), scrollingEnabled: view.input[33] === 1, scrollPhase: view.current[view.layout[20]], renderedPhase: view.renderedPhase, debtMs: view.metrics.debt,
           renderedTops: Array.from({ length: 24 }, (_, i) => view.bars.instanceMatrix.array[i * 16 + 13] + view.layout[6] / 2) });
       }
       this.query('.tone-export').disabled = false;
@@ -90,10 +91,10 @@ export class PhoneReport {
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v5', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v6', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
         rowLayout: 'ISO sample index, ISO total sones, 240 ISO specific values, 24 ISO integrals, partial window end sample, 24 instantaneous partial sones, 24 short-term partial sones, shared gain, 24 spectral novelty values, 24 log-magnitude sums, 99-value browser presentation transport, 24 acoustic event timestamps, 24 visual suppression counts',
-        displayMapping: 'Unweighted partial loudness; one shared gain and headroom scale. Browser motion: shared One Euro coefficient, minimum/derivative cutoff 1 Hz, beta 0.8. White: pressure-scaled spectral novelty, rising partial loudness above 0.1 sone, acoustic prominence and a bounded rise crest within 60 ms; independent of display gain. Acoustic events are separate from the 160 ms visual interval and 60 ms quiet rearming. 120 ms linear pulse. Filtered targets and flashes are presentation, not sones.',
+        displayMapping: 'Unweighted partial loudness; one shared gain and headroom scale. Browser motion: shared One Euro coefficient, minimum/derivative cutoff 1 Hz, beta 0.8. White: pressure-scaled spectral novelty, rising partial loudness above 0.1 sone, acoustic prominence and a bounded rise crest within 60 ms; independent of display gain. Acoustic events are separate from the 160 ms visual interval and 60 ms quiet rearming. 180 ms linear pulse. Filtered targets and flashes are presentation, not sones.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead. Partial: causal 2048-sample Hann at 48 kHz, 96-sample hop; window center 21.33 ms before end; GM2002 short-term attack/release. Transport, physics and render timestamps are separate.',
         tone: this.toneMetadata };
       const parts = [JSON.stringify(header).slice(0, -1), ',"chunks":['];
@@ -148,7 +149,7 @@ export class PhoneReport {
     this.metadata = { build, sessionId: this.audioState.sessionId, workload: { ...this.audioState }, userAgent: navigator.userAgent, ios: this.query('.ios-version').value.trim(),
       device: 'iPhone 16e (user test)', lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
-      cameraDegrees: this.view.rotation, warmupSeconds: 15, measurementSeconds: 300,
+      cameraDegrees: this.view.rotation, scrolling: this.view.card.querySelector('.scroll-lights').checked, warmupSeconds: 15, measurementSeconds: 300,
       audioSource: 'generated → MediaStream → AudioWorklet → loudness WASM',
       startedAt: new Date().toISOString(), config, layout: this.view.layout, palette: Array.from(this.view.palette) };
     this.query('.phone-start').disabled = true; this.query('.phone-finish').disabled = false;
@@ -161,6 +162,7 @@ export class PhoneReport {
   }
   frame(now, cost) {
     if (!this.active) return;
+    if (this.view.card.querySelector('.scroll-lights').checked !== this.metadata.scrolling) this.invalidate('Scrolling changed during test');
     if (!this.acceptanceWorkload() || this.audioState.sessionId !== this.metadata.sessionId)
       this.invalidate('Audio workload changed during test');
     if (this.startMs == null) return;

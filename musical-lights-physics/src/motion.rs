@@ -1,0 +1,267 @@
+//! C² trajectories in normalized loudness coordinates, independent of enclosure size.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct State {
+    pub position: f64,
+    pub velocity: f64,
+    pub acceleration: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct Segment {
+    coefficients: [f64; 6],
+    duration: f64,
+}
+impl Segment {
+    fn new(from: State, to: State, duration: f64) -> Self {
+        let p = to.position - from.position;
+        let v = from.velocity * duration;
+        let a = from.acceleration * duration * duration;
+        let w = to.velocity * duration;
+        let b = to.acceleration * duration * duration;
+        Self {
+            duration,
+            coefficients: [
+                from.position,
+                v,
+                a / 2.0,
+                10.0 * p - 6.0 * v - 4.0 * w - 1.5 * a + 0.5 * b,
+                -15.0 * p + 8.0 * v + 7.0 * w + 1.5 * a - b,
+                6.0 * p - 3.0 * v - 3.0 * w - 0.5 * a + 0.5 * b,
+            ],
+        }
+    }
+    fn sample(self, time: f64) -> State {
+        let t = (time / self.duration).clamp(0.0, 1.0);
+        let c = self.coefficients;
+        State {
+            position: c[0] + t * (c[1] + t * (c[2] + t * (c[3] + t * (c[4] + t * c[5])))),
+            velocity: (c[1]
+                + t * (2.0 * c[2] + t * (3.0 * c[3] + t * (4.0 * c[4] + t * 5.0 * c[5]))))
+                / self.duration,
+            acceleration: (2.0 * c[2] + t * (6.0 * c[3] + t * (12.0 * c[4] + t * 20.0 * c[5])))
+                / self.duration.powi(2),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Motion {
+    pub state: State,
+    pub target: f64,
+    segments: [Segment; 3],
+    elapsed: f64,
+    duration: f64,
+    reduced: bool,
+}
+impl Motion {
+    pub fn retarget(&mut self, target: f64, fast: f64, reduced: bool, slow: f64) {
+        if target == self.target && reduced == self.reduced {
+            return;
+        }
+        self.target = target;
+        self.reduced = reduced;
+        let mut start = self.state;
+        let delta = target - start.position;
+        let blend = ((delta.abs() - 0.01) / (0.125 - 0.01)).clamp(0.0, 1.0);
+        let duration = if reduced {
+            slow.max(0.320)
+        } else {
+            0.140 + (fast - 0.140) * blend * blend * (3.0 - 2.0 * blend)
+        };
+        let brake = if start.velocity * delta < 0.0
+            || start.velocity.abs() * duration * 0.5 > delta.abs()
+        {
+            if reduced { 0.080 } else { 0.020 }
+        } else {
+            0.0
+        };
+        self.segments = [Segment::default(); 3];
+        if brake > 0.0 {
+            // Integral of the cubic Hermite velocity with zero final velocity/acceleration.
+            let stop = State {
+                position: start.position
+                    + start.velocity * brake / 2.0
+                    + start.acceleration * brake * brake / 12.0,
+                ..State::default()
+            };
+            self.segments[0] = Segment::new(start, stop, brake);
+            start = stop;
+        }
+        let distance = target - start.position;
+        let peak = State {
+            position: start.position + 0.7 * distance,
+            velocity: 2.0 * distance / duration,
+            acceleration: 0.0,
+        };
+        self.segments[1] = Segment::new(start, peak, duration * 0.7);
+        self.segments[2] = Segment::new(
+            peak,
+            State {
+                position: target,
+                ..State::default()
+            },
+            duration * 0.3,
+        );
+        self.elapsed = 0.0;
+        self.duration = brake + duration;
+    }
+    pub fn sample(&self, after: f64) -> State {
+        let mut time = self.elapsed + after;
+        if time >= self.duration {
+            return State {
+                position: self.target,
+                ..State::default()
+            };
+        }
+        for segment in self.segments {
+            if segment.duration > 0.0 && time < segment.duration {
+                return segment.sample(time);
+            }
+            time -= segment.duration;
+        }
+        State {
+            position: self.target,
+            ..State::default()
+        }
+    }
+    pub fn advance(&mut self, dt: f64) {
+        self.state = self.sample(dt);
+        self.elapsed += dt;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn spline_joins_are_continuous_and_retarget_preserves_all_derivatives() {
+        let mut motion = Motion::default();
+        motion.retarget(1.0, 0.040, false, 0.320);
+        let before = motion.sample(0.028 - 1e-9);
+        let after = motion.sample(0.028 + 1e-9);
+        assert!((before.position - after.position).abs() < 1e-6);
+        assert!((before.velocity - after.velocity).abs() < 1e-4);
+        assert!((before.acceleration - after.acceleration).abs() < 0.01);
+        motion.advance(0.020);
+        let state = motion.state;
+        motion.retarget(0.0, 0.040, false, 0.320);
+        let now = motion.sample(0.0);
+        assert_eq!(now.position, state.position);
+        assert_eq!(now.velocity, state.velocity);
+        assert!((now.acceleration - state.acceleration).abs() < 1e-9);
+        motion.advance(0.008);
+        assert!(motion.state.velocity > 0.0);
+        motion.advance(0.060);
+        assert_eq!(motion.state.position, 0.0);
+        assert_eq!(motion.state.velocity, 0.0);
+        assert_eq!(motion.state.acceleration, 0.0);
+    }
+    #[test]
+    fn identical_packets_do_not_restart_and_resize_does_not_enter_the_controller() {
+        let mut motion = Motion::default();
+        for _ in 0..18 {
+            motion.retarget(0.005, 0.040, false, 0.320);
+            motion.advance(1.0 / 120.0);
+        }
+        assert_eq!(motion.state.position, 0.005);
+        assert_eq!(motion.state.velocity, 0.0);
+    }
+    #[test]
+    fn noise_travel_and_speed_are_lower_than_the_previous_controller() {
+        let mut motion = Motion {
+            state: State {
+                position: 0.4,
+                ..State::default()
+            },
+            target: 0.4,
+            ..Motion::default()
+        };
+        let (mut old, mut velocity, mut old_target, mut scale) =
+            (0.4_f64, 0.0_f64, 0.4_f64, 1.0_f64);
+        let (mut travel, mut old_travel, mut peak, mut old_peak) =
+            (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+        for tick in 0..1200 {
+            let target = 0.4 + 0.005 * (tick as f64 / 120.0 * 8.0 * std::f64::consts::TAU).sin();
+            let previous = motion.state.position;
+            motion.retarget(target, 0.040, false, 0.320);
+            motion.advance(1.0 / 120.0);
+            travel += (motion.state.position - previous).abs();
+            peak = peak.max(motion.state.velocity.abs());
+            if target != old_target {
+                scale = (target - old).abs().max(velocity.abs() / 50.0).min(1.0);
+                old_target = target;
+            }
+            let previous = old;
+            stroke(
+                &mut old,
+                &mut velocity,
+                target,
+                1.0 / 120.0,
+                50.0 * scale,
+                2500.0 * scale,
+            );
+            old_travel += (old - previous).abs();
+            old_peak = old_peak.max(velocity.abs());
+        }
+        eprintln!("noise travel: {old_travel} -> {travel}; peak speed: {old_peak} -> {peak}");
+        assert!(travel < old_travel);
+        assert!(peak < old_peak);
+        // Slow sustained swells still arrive at the true final level.
+        for tick in 0..240 {
+            motion.retarget(0.4 + 0.2 * tick as f64 / 239.0, 0.040, false, 0.320);
+            motion.advance(1.0 / 120.0);
+        }
+        motion.advance(0.150);
+        assert!((motion.state.position - 0.6).abs() < 1e-12);
+    }
+    /// Exact constant-acceleration segments of the shortest rest-to-rest stroke.
+    /// Retargeting preserves velocity, including the braking segment before reversal.
+    fn stroke(
+        position: &mut f64,
+        velocity: &mut f64,
+        target: f64,
+        mut dt: f64,
+        max_speed: f64,
+        acceleration: f64,
+    ) {
+        for _ in 0..8 {
+            if dt <= 1e-12 {
+                break;
+            }
+            let delta = target - *position;
+            if delta.abs() < 1e-10 && velocity.abs() < 1e-8 {
+                *position = target;
+                *velocity = 0.0;
+                break;
+            }
+            let direction = if delta >= 0.0 { 1.0 } else { -1.0 };
+            let speed = *velocity * direction;
+            let distance = delta.abs();
+            let stopping = speed * speed / (2.0 * acceleration);
+            let (a, duration) = if speed < -1e-9 || stopping >= distance - 1e-10 && speed > 1e-9 {
+                (
+                    -velocity.signum() * acceleration,
+                    velocity.abs() / acceleration,
+                )
+            } else {
+                let peak = (acceleration * distance + speed * speed / 2.0)
+                    .sqrt()
+                    .min(max_speed);
+                if speed < peak - 1e-9 {
+                    (direction * acceleration, (peak - speed) / acceleration)
+                } else if speed > max_speed + 1e-9 {
+                    (
+                        -direction * acceleration,
+                        (speed - max_speed) / acceleration,
+                    )
+                } else {
+                    (0.0, ((distance - stopping) / speed).max(1e-12))
+                }
+            };
+            let elapsed = dt.min(duration);
+            *position += *velocity * elapsed + 0.5 * a * elapsed * elapsed;
+            *velocity += a * elapsed;
+            dt -= elapsed;
+        }
+    }
+}

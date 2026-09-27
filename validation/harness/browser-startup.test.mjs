@@ -33,11 +33,12 @@ for (const selected of [undefined, 'chromium', 'webkit']) {
           },
         },
       }));
+      await writeFile(path.join(directory, 'setup.mjs'), `import startup from ${JSON.stringify(pathToFileURL(path.join(validation, 'browser-startup.mjs')).href)}; export default config => startup(config, { platform: 'linux' });`);
       await writeFile(path.join(directory, 'playwright.config.mjs'), `
         import base from ${JSON.stringify(pathToFileURL(path.join(validation, 'playwright.config.mjs')).href)};
         export default {
           ...base,
-          globalSetup: base.globalSetup && ${JSON.stringify(validation)} + base.globalSetup,
+          globalSetup: ${JSON.stringify(path.join(directory, 'setup.mjs'))},
           webServer: undefined,
           testDir: ${JSON.stringify(directory)},
           outputDir: ${JSON.stringify(path.join(directory, 'results'))},

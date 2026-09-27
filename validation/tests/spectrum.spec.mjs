@@ -75,10 +75,35 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
   await page.evaluate(async () => {
     await window.transportContext.suspend();
+    // Establish a raised support before the invalid packet removes it. A slow
+    // runner may otherwise observe balls already resting on the floor.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const state = new Float64Array(99);
+    state.set([window.transportContext.currentTime + .1, 0, 4]);
+    for (let i = 0; i < 24; i++) state.set([1, 1, -1, 0], 3 + i * 4);
+    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
+  });
+  await expect.poll(async () => {
+    const state = await physicsState(page);
+    return Math.min(...state.bars) / state.barMax;
+  }).toBeGreaterThan(.99);
+  const falling = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics;
+    const before = Array.from({ length: 24 }, (_, i) => view.current[4 + i * view.layout[8]]);
     const state = new Float64Array(99);
     state[0] = window.transportContext.currentTime;
     state[2] = NaN;
     window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
+    // Observe in-page while shutdown occurs, independent of driver round trips.
+    return new Promise(resolve => {
+      const start = performance.now();
+      const sample = now => {
+        if (before.some((y, i) => view.current[4 + i * view.layout[8]] < y - .005)) resolve(true);
+        else if (now - start > 3000) resolve(false);
+        else requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
   });
   await expect(page.getByRole('alert')).toContainText('Invalid audio display state');
   await expect.poll(() => page.evaluate(() => window.transportContext.state)).toBe('closed');
@@ -86,6 +111,6 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await physicsReady(page);
   const before = await physicsState(page);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 10);
-  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => Math.abs(ball.position[1] - before.balls[i].position[1]) > .005)).toBe(true);
+  expect(falling).toBe(true);
   expect(errors).toEqual([]);
 });

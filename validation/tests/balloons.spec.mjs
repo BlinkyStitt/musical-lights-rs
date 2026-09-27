@@ -3,6 +3,61 @@ import { replayReport } from '../replay-physics.mjs';
 import { physicsReady, physicsState, syntheticAudio, startFrozen } from '../physics-state.mjs';
 
 const url = 'http://127.0.0.1:8101';
+
+test('continuous scrolling carries source identity and stops in place', async ({ page }, info) => {
+  await syntheticAudio(page); await page.goto(url); await physicsReady(page);
+  await expect(page.locator('.scroll-lights')).toBeChecked();
+  await startFrozen(page);
+  await page.evaluate(() => {
+    const levels = Array(24).fill(0); levels[0] = .6; levels[23] = .2;
+    window.sendBars(levels);
+    const state = new Float64Array(99); state.set([window.audioNow, 0, 4]);
+    for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], i === 0 ? window.audioNow : -1, 0], 3 + i * 4);
+    window.testNode.port.dispatchEvent(new MessageEvent('message', { data: {
+      type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
+    } }));
+  });
+  const sourceLabel = await page.getByRole('meter').first().getAttribute('aria-label');
+  await page.locator('.scroll-lights').check();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.3);
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', sourceLabel);
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '60');
+  const moved = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { edges: Array.from(v.edges), colors: Array.from(v.bars.instanceColor.array), palette: Array.from(v.palette),
+      phase: v.renderedPhase, x: v.bars.instanceMatrix.array[12], top: v.current[v.layout[9]], max: v.current[v.layout[17] + 1] };
+  });
+  expect(moved.edges[0]).toBe(1); expect(moved.edges[1]).toBe(0);
+  expect(moved.colors.slice(0, 3)).toEqual(moved.palette.slice(0, 3));
+  expect(moved.x).toBeCloseTo((.5 + moved.phase) * .05, 5);
+  expect(moved.top).toBeCloseTo(.003 + .6 * (moved.max - .003), 4);
+  await page.screenshot({ path: info.outputPath('scrolling-bands.png') });
+  await page.evaluate(() => { window.audioNow += .181; });
+  await expect.poll(async () => Math.max(...(await physicsState(page)).edges)).toBe(0);
+  await page.locator('.scroll-lights').uncheck();
+  await page.waitForTimeout(350);
+  const phase = await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBe(phase);
+  expect(phase).toBeGreaterThan(.3);
+  await page.locator('.scroll-lights').check();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(phase + .1);
+  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+});
+
+test('Reduced Motion suppresses scrolling and Stop retains source identity', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  await page.locator('.scroll-lights').check();
+  await page.waitForTimeout(1700);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(1);
+  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(0);
+  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', '≈ 0–100 Hz');
+});
+
 for (const width of [375, 1440]) {
   test(`24 rigid spheres use a single WebGL2 canvas and physical bar positions at ${width}px`, async ({ page }, info) => {
     test.setTimeout(60000);
@@ -110,6 +165,42 @@ test('physical controls require reset while camera rotation preserves the runnin
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(20);
 });
 
+test('depth shakes and audio bars both move balls while tilt permission is still pending', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(url);
+  await page.evaluate(() => {
+    Object.defineProperty(DeviceOrientationEvent, 'requestPermission', { value: () => new Promise(() => {}) });
+  });
+  await startFrozen(page);
+  // Let gravity settle first so a depth velocity cannot be attributed to spawn.
+  await page.waitForTimeout(2000);
+  const before = await physicsState(page);
+  const samples = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics;
+    window.sendBars(Array(24).fill(.5));
+    const samples = [];
+    const until = performance.now() + 700;
+    while (performance.now() < until) {
+      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: null, y: null, z: 8 } }));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const { current: state, layout } = view;
+      samples.push({ input: view.input[26], bars: Array.from(state.slice(layout[9], layout[10])),
+        balls: Array.from({ length: layout[0] }, (_, i) => {
+          const o = 3 + i * layout[8];
+          return { y: state[o + 1], vz: state[o + 11] };
+        }) });
+    }
+    return samples;
+  });
+  expect(samples.some(s => s.input === -8)).toBe(true);
+  expect(samples.some(s => s.balls.some(b => b.vz < -.1))).toBe(true);
+  expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
+  expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[26])).toBe(0);
+  await page.getByRole('button', { name: 'Stop listening' }).click();
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 5, z: 5 } })));
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+});
+
 for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
   test(`late sensor permission cannot restore listeners after ${end}`, async ({ page }) => {
     await syntheticAudio(page, 'pending'); await page.goto(url); await physicsReady(page);
@@ -182,6 +273,30 @@ test('a delayed worker reports debt and catches up without discarding simulation
   expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
 });
 
+test('expensive physics ticks yield snapshots between steps and retain their debt', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  await page.evaluate(() => { document.querySelector('#dancinglights').physics.timing.snapshots = []; });
+  const worker = page.workers().find(worker => worker.url().endsWith('/physics/worker.js'));
+  const before = await physicsState(page);
+  await worker.evaluate(async () => {
+    const { PhysicsSimulation } = await import('/physics/physics.js');
+    const step = PhysicsSimulation.prototype.step;
+    let remaining = 8;
+    PhysicsSimulation.prototype.step = function () {
+      step.call(this);
+      const end = performance.now() + 20;
+      while (performance.now() < end) { /* Reproduce expensive indivisible contact steps. */ }
+      if (--remaining === 0) PhysicsSimulation.prototype.step = step;
+    };
+  });
+  await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 60);
+  const costly = await page.evaluate(() => document.querySelector('#dancinglights').physics.timing.snapshots.filter(sample => sample.batchMs >= 20));
+  expect(costly.length).toBeGreaterThanOrEqual(3);
+  expect(costly.every(sample => sample.ticks === 1)).toBe(true);
+  await expect.poll(async () => (await physicsState(page)).metrics.debt).toBeLessThan(17);
+  expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
+});
+
 test('phone acceptance rejects frozen snapshots despite 60 FPS and a current worker', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   const results = await page.evaluate(() => {
@@ -202,4 +317,31 @@ test('phone acceptance rejects frozen snapshots despite 60 FPS and a current wor
     return { moving, frozen, stale };
   });
   expect(results).toEqual({ moving: true, frozen: false, stale: false });
+});
+
+test('wrapped pointer surfaces and keyboard focus retain the source frequency', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  const last = await page.getByRole('meter').last().getAttribute('aria-label');
+  await page.locator('.scroll-lights').check();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.4);
+  await page.locator('.scroll-lights').uncheck(); await page.waitForTimeout(350);
+  // Host speed can carry more than one band past the seam before Stop arrives.
+  // Select the actual clipped copy, retaining its immutable source identity.
+  const wrapped = await page.locator('.bark-copy').evaluateAll(nodes =>
+    nodes.filter(node => node.getBoundingClientRect().width > 0)
+      .sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0].dataset.sourceBand);
+  const wrappedLabel = await page.getByRole('meter').nth(Number(wrapped)).getAttribute('aria-label');
+  await page.locator(`.bark-copy[data-source-band="${wrapped}"]`).hover();
+  await expect(page.locator('.frequency-tooltip')).toContainText(wrappedLabel);
+  await page.getByRole('meter').first().focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('meter').last()).toBeFocused();
+  await expect(page.locator('.frequency-tooltip')).toContainText(last);
+  await page.locator('.scroll-lights').check();
+  await page.getByRole('meter').last().focus();
+  const before = await page.getByRole('meter').last().getAttribute('aria-label');
+  await page.waitForTimeout(1600);
+  await expect(page.getByRole('meter').last()).toBeFocused();
+  await expect(page.getByRole('meter').last()).toHaveAttribute('aria-label', before);
+  await expect(page.getByRole('meter')).toHaveCount(24);
 });

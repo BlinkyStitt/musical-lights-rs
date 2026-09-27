@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 import { physicsReady, physicsState } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
@@ -266,4 +267,16 @@ test('fullscreen transitions keep live audio and bounded simulation delay', asyn
   expect(Math.max(...data.frames.map(f=>f.age))).toBeLessThan(100);
   // Changing music can still reach the contact limit; isolated resize overloads
   // are covered by the native constant-input regression, not hidden here.
+});
+
+// Always retain worker execution, scheduling, collision work and resize evidence,
+// including when an assertion above fails.
+test.afterEach(async ({ page }, info) => {
+  const timing = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights')?.physics;
+    return { timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames };
+  }).catch(error => ({ error: String(error) }));
+  const path = info.outputPath('physics-timing.json');
+  await writeFile(path, JSON.stringify(timing));
+  await info.attach('physics-timing', { path, contentType: 'application/json' });
 });

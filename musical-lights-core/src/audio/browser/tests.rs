@@ -73,9 +73,10 @@ fn pulses_expire_exactly_and_transport_rejects_corruption() {
     let mut s = BrowserSnapshot::new(1.0);
     s.attacks[4] = Some(1.0);
     assert_eq!(s.frame(1.0).edges[4], 1.0);
-    assert!((s.frame(1.06).edges[4] - 0.5).abs() < 1e-6);
-    assert!(s.frame(1.119).edges[4] > 0.0);
-    assert_eq!(s.frame(1.12).edges[4], 0.0);
+    assert!((s.frame(1.09).edges[4] - 0.5).abs() < 1e-6);
+    assert!(s.frame(1.15).edges[4] > 0.0);
+    assert!(s.frame(1.179).edges[4] > 0.0);
+    assert_eq!(s.frame(1.181).edges[4], 0.0);
     s.reduced = true;
     assert_eq!(s.frame(1.0).edges[4], 0.5);
     let mut transport = [0.0; BrowserSnapshot::TRANSPORT_LEN];
@@ -104,16 +105,16 @@ fn linear_pulses_remain_visible_at_each_frame_rate_without_packet_renewal() {
                 s.write_transport(&mut packet);
                 let received = BrowserSnapshot::from_transport(&packet).unwrap();
                 let edge = received.frame(at).edges[4];
-                let expected = ((1.0 - at / 0.120).max(0.0) * intensity) as f32;
+                let expected = ((1.0 - at / 0.180).max(0.0) * intensity) as f32;
                 assert!((edge - expected).abs() < 1e-6);
                 if at <= 1.0 / fps as f64 {
                     assert!(edge >= 0.7 * intensity as f32);
                 }
-                if at >= 0.120 {
+                if at >= 0.180 {
                     assert_eq!(edge, 0.0);
                 }
             }
-            assert_eq!(s.frame(0.120).edges[4], 0.0);
+            assert_eq!(s.frame(0.180).edges[4], 0.0);
         }
     }
 }

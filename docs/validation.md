@@ -424,3 +424,18 @@ iPhone measurements. The 80 ms rest-to-rest controller reaches within 1% in
 75 ms; its prescribed acceleration cannot also guarantee every reversal within
 100 ms from receipt. This boundary is reported explicitly rather than counted
 as a passing universal latency guarantee.
+
+## Continuous motion and browser preflight
+
+The macOS preflight rejects `CODEX_SANDBOX=seatbelt` before browser selection or
+launch. It covers global setup (full, focused and preview suites) and standalone
+measurement scripts. Fake-launcher harness tests exercise this without native
+browsers. Keep host access, the serial startup guard, one worker, zero retries,
+and the pinned Playwright version.
+
+Browser validation retains failure traces/screenshots, worker scheduling gaps,
+execution costs, collision substeps, resize events, browser process logs, and a
+before/after macOS crash-report inventory (including a three-second delayed
+check). CI uploads `validation/test-results/` even after failure. The fullscreen
+regression retains both 100 ms limits, and Pages still requires every validation
+job. ESP installation receives the read-only contents token with its pinned compiler.

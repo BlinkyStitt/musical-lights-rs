@@ -39,12 +39,14 @@ struct AnimationResources {
     session: AudioSession,
     motion: bool,
     frame_rate: FrameRate,
-    on_frame: Box<dyn FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>)>,
+    scrolling_enabled: Box<dyn Fn() -> bool>,
+    on_frame: Box<dyn FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>, bool)>,
 }
 impl DisplayAnimation {
     pub fn new(
         session: AudioSession,
-        on_frame: impl FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>) + 'static,
+        scrolling_enabled: impl Fn() -> bool + 'static,
+        on_frame: impl FnMut(DisplayFrame<DISPLAY_BANDS>, Option<f64>, bool) + 'static,
     ) -> Result<Self, JsValue> {
         let window =
             web_sys::window().ok_or_else(|| JsValue::from_str("Browser window is unavailable"))?;
@@ -57,6 +59,7 @@ impl DisplayAnimation {
             session,
             motion,
             frame_rate: FrameRate::default(),
+            scrolling_enabled: Box::new(scrolling_enabled),
             on_frame: Box::new(on_frame),
         })))))
     }
@@ -70,7 +73,9 @@ impl DisplayAnimation {
                 r.session.set_reduced_motion(motion);
                 r.motion = motion;
             }
-            (r.on_frame)(r.display.frame(r.session.time()), r.frame_rate.tick(now_ms));
+            let frame = r.display.frame(r.session.time());
+            let enabled = (r.scrolling_enabled)() && !motion;
+            (r.on_frame)(frame, r.frame_rate.tick(now_ms), enabled);
         }
     }
     pub fn reset_clock(&self) {

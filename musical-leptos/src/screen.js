@@ -68,9 +68,9 @@ export class VisualizerScreen {
       if ((this.expanded || touch) && event.isPrimary && event.button === 0
           && this.element.contains(event.target)
           && !event.target.closest('button, input, summary')) {
-        const band = event.target.closest('[role="meter"]');
+        const band = event.target.closest('[data-source-band], [role="meter"]');
         if (!this.expanded && !band) return;
-        const index = band ? [...this.element.querySelectorAll('[role="meter"]')].indexOf(band) : -1;
+        const index = band ? Number(band.dataset.sourceBand ?? [...this.element.querySelectorAll('[role="meter"]')].indexOf(band)) : -1;
         this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY, touch, band: index, moved: false };
         if (touch) this.onBand(null);
         // Retain the gesture when the finger crosses a band or its animated fill.

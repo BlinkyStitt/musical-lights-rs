@@ -1,12 +1,12 @@
 // Optional sensor permission must begin in the Start listening click stack.
 // Closing also invalidates pending permission promises before Rust drops callbacks.
-class PhysicsInput {
+export class PhysicsInput {
   constructor(layer, onPointer, onTilt, onShake) {
     this.window = layer.ownerDocument.defaultView;
     this.closed = false;
     this.listeners = [];
     this.motion = null;
-    const angle = () => this.window.screen.orientation?.angle ?? 0;
+    const angle = () => this.window.screen.orientation?.angle ?? this.window.orientation ?? 0;
     const clearPointer = () => onPointer(0, 0, false);
     this.listen('pointermove', event => {
       if (event.pointerType !== 'mouse') return;
@@ -24,11 +24,26 @@ class PhysicsInput {
       }
     };
     this.acceleration = event => {
-      // Gravity is not a shake. If linear acceleration is unavailable, skip it.
-      const acceleration = event.acceleration;
-      if (Number.isFinite(acceleration?.x) && Number.isFinite(acceleration?.y)) {
-        onShake(acceleration.x, acceleration.y, angle());
+      const axes = ['x', 'y', 'z'];
+      const linear = axes.map(axis => event.acceleration?.[axis]);
+      if (linear.some(Number.isFinite)) {
+        this.gravity = null;
+        onShake(...linear.map(value => Number.isFinite(value) ? value : 0), angle());
+        return;
       }
+      // Some devices expose only gravity-inclusive readings. Estimate the slow
+      // baseline, then remove it; a stationary phone must not become a shake.
+      const raw = axes.map(axis => event.accelerationIncludingGravity?.[axis]);
+      if (!raw.every(Number.isFinite)) return;
+      const dt = (event.timeStamp - this.gravityAt) / 1000;
+      if (!this.gravity || !(dt > 0 && dt < .5)) this.gravity = raw.slice();
+      const alpha = Math.exp(-Math.max(0, dt || 0) / .25);
+      const shake = raw.map((value, i) => {
+        this.gravity[i] += (1 - alpha) * (value - this.gravity[i]);
+        return value - this.gravity[i];
+      });
+      this.gravityAt = event.timeStamp;
+      onShake(...shake, angle());
     };
   }
 
@@ -44,15 +59,16 @@ class PhysicsInput {
           : Promise.resolve(true);
       } catch { return Promise.resolve(false); }
     };
-    // Issue both requests before awaiting either. A rejection leaves mouse input.
-    Promise.all([
-      permission(this.window.DeviceOrientationEvent),
-      permission(this.window.DeviceMotionEvent),
-    ]).then(([tilt, shake]) => {
-      if (this.motion !== session) return;
-      if (tilt) this.listen('deviceorientation', this.orientation, session);
-      if (shake) this.listen('devicemotion', this.acceleration, session);
-    }).catch(() => { /* Sensors are optional. */ });
+    // Request both in the click stack, but enable each independently. A pending
+    // tilt request must not hold up already-authorized shake input (or vice versa).
+    for (const [Interface, type, handler] of [
+      [this.window.DeviceOrientationEvent, 'deviceorientation', this.orientation],
+      [this.window.DeviceMotionEvent, 'devicemotion', this.acceleration],
+    ]) {
+      permission(Interface).then(granted => {
+        if (granted && this.motion === session) this.listen(type, handler, session);
+      });
+    }
   }
 
   listen(type, listener, listeners = this.listeners) {
@@ -63,6 +79,8 @@ class PhysicsInput {
   stopMotion() {
     for (const [type, listener] of this.motion ?? []) this.window.removeEventListener(type, listener);
     this.motion = null;
+    this.gravity = null;
+    this.gravityAt = undefined;
   }
 
   close() {
@@ -89,7 +107,7 @@ export class Scene {
       if (!this.closed) layer.closest('.audio-card').querySelector('.physics-status').textContent = `Cannot start 3D physics: ${error}`;
     });
   }
-  push(levels, edges) { this.view?.push(levels, edges); }
+  push(levels, edges, scrolling) { this.view?.push(levels, edges, scrolling); }
   startMotion() { this.input.startMotion(); }
   stopMotion() { this.input.stopMotion(); this.view?.stopMotion(); }
   close() { this.closed = true; this.input.close(); this.view?.close(); this.view = null; }
