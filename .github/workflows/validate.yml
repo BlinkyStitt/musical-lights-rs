@@ -35,6 +35,14 @@ jobs:
       - run: python3 validation/install_tools.py web
       - run: python3 validation/validate.py physics worklet leptos dioxus wasm
       - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium webkit && npm test
+        env:
+          DEBUG: pw:browser
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: browser-validation
+          path: validation/test-results/
+          if-no-files-found: ignore
   loudness-reference:
     runs-on: ubuntu-latest
     steps:
@@ -48,6 +56,8 @@ jobs:
         run: rustup toolchain install nightly-2026-09-10 --profile minimal
       - run: python3 validation/validate.py reference
   esp:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -63,6 +73,8 @@ jobs:
           rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
           python3 validation/install_tools.py esp
       - name: Install exact Xtensa toolchain
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: .tools/bin/espup install --toolchain-version 1.98.1.0 --name esp-1.98.1.0 --targets esp32 --export-file "$RUNNER_TEMP/export-esp.sh"
       - name: Validate firmware
         run: |

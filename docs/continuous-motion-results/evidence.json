@@ -1,0 +1,15 @@
+{
+  "baseline": "feea54ddad4d8131aa45d3457377bee65675333b",
+  "engineHashes": {
+    "before": "e469d161480debf785723149bc99b53c64f9bf1a7cbb1566af975bcaed4c2448",
+    "after": "ff86ca6fb6672446a1cb1806b02ba814398750e67ef151c7dc94d95ba2ec10d3"
+  },
+  "physicalPhone": false,
+  "pcmSha256": "85c830a782c0fb5a8da5f2dc6d843396b208369ea5a604223300d5384816f264",
+  "traceRows": 4000,
+  "traceColumns": 511,
+  "allAcousticAndFilteredValuesBitIdentical": true,
+  "workletBytesIdentical": false,
+  "physicsHz": 120,
+  "previewHz": 60
+}

@@ -1,6 +1,8 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
+mod motion;
+use motion::Motion;
 
 pub const COUNT: usize = 24;
 pub const HZ: u32 = 120;
@@ -27,7 +29,10 @@ pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + COUNT * COUNT;
 pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + COUNT;
 pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
 pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
-pub const SNAPSHOT_LEN: usize = GEOMETRY_OFFSET + 4;
+pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 4;
+pub const SNAPSHOT_LEN: usize = SCROLL_OFFSET + 1;
+pub const SCROLL_SPEED: f64 = 55.5 / (4.0 * 20.0);
+pub const SCROLL_EASE: f64 = 0.120;
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -73,7 +78,7 @@ impl SimulationConfig {
         } else {
             self.stroke_seconds
         });
-        (2.0 * height / time, 4.0 * height / (time * time))
+        (2.2 * height / time, 12.0 * height / (time * time))
     }
     pub fn values(self) -> [f32; 8] {
         [
@@ -126,7 +131,7 @@ pub struct SimulationInput {
     pub pointer: Option<[f32; 3]>,
     pub reduced_motion: bool,
     pub height: f32,
-    pub band_offset: usize,
+    pub scrolling: bool,
 }
 impl Default for SimulationInput {
     fn default() -> Self {
@@ -137,7 +142,7 @@ impl Default for SimulationInput {
             pointer: None,
             reduced_motion: false,
             height: SimulationConfig::default().height,
-            band_offset: 0,
+            scrolling: false,
         }
     }
 }
@@ -155,11 +160,15 @@ pub struct Simulation {
     pub tick: u64,
     world: PhysicsWorld,
     balls: [(RigidBodyHandle, ColliderHandle); COUNT],
-    bars: [(RigidBodyHandle, ColliderHandle); COUNT],
+    bars: [(RigidBodyHandle, ColliderHandle); COUNT * 3],
     bar_positions: [f64; COUNT],
     bar_velocities: [f64; COUNT],
-    bar_targets: [f64; COUNT],
-    bar_motion_scales: [f64; COUNT],
+    motions: [Motion; COUNT],
+    scroll_phase: f64,
+    scroll_speed: f64,
+    scroll_from: f64,
+    scroll_elapsed: f64,
+    scroll_enabled: bool,
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; COUNT],
     touching: [[bool; COUNT]; COUNT],
@@ -245,7 +254,8 @@ impl Simulation {
         let bars = std::array::from_fn(|i| {
             world.insert(
                 RigidBodyBuilder::kinematic_position_based().translation(Vector::new(
-                    (i as f32 + 0.5) * PITCH,
+                    ((i % COUNT) as f32 + 0.5) * PITCH + ((i / COUNT + 1) % 3) as f32 * WIDTH
+                        - WIDTH,
                     BASELINE - POST_HEIGHT / 2.0,
                     0.0,
                 )),
@@ -256,6 +266,7 @@ impl Simulation {
                     config.depth / 2.0 - CORNER,
                     CORNER,
                 )
+                .user_data((COUNT + 1 + i % COUNT) as u128)
                 .friction(config.friction)
                 .restitution(config.restitution),
             )
@@ -297,6 +308,7 @@ impl Simulation {
                     .translation(spawn[i])
                     .ccd_enabled(true),
                 ColliderBuilder::ball(radius)
+                    .user_data((i + 1) as u128)
                     .density(config.density)
                     .friction(config.friction)
                     .restitution(config.restitution),
@@ -312,8 +324,12 @@ impl Simulation {
             colors: palette,
             bar_positions: [f64::from(BASELINE); COUNT],
             bar_velocities: [0.0; COUNT],
-            bar_targets: [f64::from(BASELINE); COUNT],
-            bar_motion_scales: [1.0; COUNT],
+            motions: [Motion::default(); COUNT],
+            scroll_phase: 0.0,
+            scroll_speed: 0.0,
+            scroll_from: 0.0,
+            scroll_elapsed: SCROLL_EASE,
+            scroll_enabled: false,
             touching: [[false; COUNT]; COUNT],
             ceiling,
             ceiling_height: config.height,
@@ -347,7 +363,6 @@ impl Simulation {
                 .is_some_and(|p| p.iter().any(|v| !v.is_finite()))
             || !input.height.is_finite()
             || !(MIN_HEIGHT..=20.0).contains(&input.height)
-            || input.band_offset >= COUNT
         {
             return Err("Invalid or late simulation input");
         }
@@ -361,6 +376,7 @@ impl Simulation {
         Ok(())
     }
     pub fn step(&mut self) {
+        let old_travel = f64::from(self.config.bar_max() - BASELINE);
         if self.resize_tick < RESIZE_TICKS {
             self.resize_tick += 1;
             let t = self.resize_tick as f32 / RESIZE_TICKS as f32;
@@ -371,34 +387,36 @@ impl Simulation {
             };
         }
         let (max_speed, acceleration) = self.config.motion_limits(self.input.reduced_motion);
-        let targets: [f64; COUNT] = std::array::from_fn(|i| {
-            f64::from(BASELINE)
-                + f64::from(self.input.levels[i]) * f64::from(self.config.bar_max() - BASELINE)
-        });
         let travel = f64::from(self.config.bar_max() - BASELINE);
-        for (i, &target) in targets.iter().enumerate() {
-            if target != self.bar_targets[i] {
-                // A small correction takes the same stroke time as a full rise,
-                // with proportionally smaller speed and acceleration. Previously
-                // 1% fluctuations used full acceleration and completed in 4 ms.
-                // Include existing speed so retargeting never deletes momentum.
-                self.bar_motion_scales[i] = ((target - self.bar_positions[i]).abs() / travel)
-                    .max(self.bar_velocities[i].abs() / max_speed)
-                    .min(1.0);
-                self.bar_targets[i] = target;
-            }
+        for (i, motion) in self.motions.iter_mut().enumerate() {
+            motion.retarget(
+                f64::from(self.input.levels[i]),
+                f64::from(self.config.stroke_seconds),
+                self.input.reduced_motion,
+                f64::from(self.config.reduced_stroke_seconds),
+            );
         }
-        let bar_speed = (0..COUNT)
-            .map(|i| {
-                let speed = self.bar_velocities[i].abs();
-                if (targets[i] - self.bar_positions[i]).abs() > 1e-9 {
-                    let scale = self.bar_motion_scales[i];
-                    speed.max((speed + acceleration * scale * f64::from(DT)).min(max_speed * scale))
-                } else {
-                    speed
-                }
-            })
-            .fold(0.0_f64, f64::max);
+        let enabled = self.input.scrolling && !self.input.reduced_motion;
+        if enabled != self.scroll_enabled {
+            self.scroll_from = self.scroll_speed;
+            self.scroll_elapsed = 0.0;
+            self.scroll_enabled = enabled;
+        }
+        let resize_speed = (travel - old_travel).abs() / f64::from(DT);
+        let bar_speeds: [f64; COUNT] = std::array::from_fn(|i| {
+            let motion = &self.motions[i];
+            (0..=32)
+                .map(|j| {
+                    motion
+                        .sample(f64::from(DT) * j as f64 / 32.0)
+                        .velocity
+                        .abs()
+                        * travel
+                })
+                .fold(0.0_f64, f64::max)
+                + resize_speed
+                + SCROLL_SPEED * f64::from(PITCH)
+        });
         let ball_speed = self
             .balls
             .iter()
@@ -407,6 +425,41 @@ impl Simulation {
                 b.is_enabled().then_some(f64::from(b.linvel().length()))
             })
             .fold(0.0_f64, f64::max);
+        // A fast post in empty space does not require every contact in the room
+        // to be solved at its speed. Conservative swept bounds include a whole
+        // tick of both bodies' travel plus force/contact prediction margins.
+        let force_bound = self.config.gravity
+            + Vector::from_array(self.input.acceleration).length()
+            + if self.input.pointer.is_some() {
+                15.0
+            } else {
+                0.0
+            };
+        let margin = 0.002 + f64::from(force_bound) * f64::from(DT).powi(2);
+        let ball_reach = ball_speed * f64::from(DT) + margin;
+        let bar_speed = self
+            .bars
+            .iter()
+            .enumerate()
+            .filter_map(|(copy, &(h, _))| {
+                let post = &self.world.bodies[h];
+                let speed = bar_speeds[copy % COUNT];
+                let reach_x = f64::from(PITCH / 2.0) + SCROLL_SPEED * f64::from(PITCH * DT);
+                let top = self.bar_positions[copy % COUNT] + speed * f64::from(DT);
+                self.balls
+                    .iter()
+                    .enumerate()
+                    .any(|(i, &(ball, _))| {
+                        let body = &self.world.bodies[ball];
+                        let radius = f64::from(SIZE_RATIOS[i] * (PITCH - GAP) / 2.0);
+                        body.is_enabled()
+                            && f64::from((body.translation().x - post.translation().x).abs())
+                                <= reach_x + radius + ball_reach
+                            && f64::from(body.translation().y) - radius - ball_reach <= top
+                    })
+                    .then_some(speed)
+            })
+            .fold(resize_speed, f64::max);
         let min_radius =
             SIZE_RATIOS.iter().copied().fold(f32::INFINITY, f32::min) * (PITCH - GAP) / 2.0;
         // Bound relative travel, including equal opposing balls and bar contacts.
@@ -423,20 +476,55 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 1] = required.saturating_sub(MAX_SUBSTEPS) as f32;
         self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
-        for _ in 0..substeps {
+        for substep in 0..substeps {
             self.resize_ceiling();
-            for (i, &(handle, _)) in self.bars.iter().enumerate() {
-                stroke(
-                    &mut self.bar_positions[i],
-                    &mut self.bar_velocities[i],
-                    targets[i],
-                    f64::from(dt),
-                    max_speed * self.bar_motion_scales[i],
-                    acceleration * self.bar_motion_scales[i],
-                );
+            self.scroll_elapsed = (self.scroll_elapsed + f64::from(dt)).min(SCROLL_EASE);
+            let t = self.scroll_elapsed / SCROLL_EASE;
+            let desired = if self.scroll_enabled {
+                SCROLL_SPEED
+            } else {
+                0.0
+            };
+            let speed = self.scroll_from + (desired - self.scroll_from) * t * t * (3.0 - 2.0 * t);
+            self.scroll_phase += (self.scroll_speed + speed) * 0.5 * f64::from(dt);
+            self.scroll_speed = speed;
+            // Keep the phase bounded; each physical copy only recycles beyond a wall.
+            self.scroll_phase %= (COUNT * 3) as f64;
+            let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
+            for i in 0..COUNT {
+                self.motions[i].advance(f64::from(dt));
+                let next = f64::from(BASELINE) + self.motions[i].state.position * scale;
+                self.bar_velocities[i] = (next - self.bar_positions[i]) / f64::from(dt);
+                self.bar_positions[i] = next;
+            }
+            for (copy, &(handle, _)) in self.bars.iter().enumerate() {
+                let i = copy % COUNT;
+                let x = ((i as f64
+                    + 0.5
+                    + self.scroll_phase
+                    + (copy / COUNT + 1) as f64 * COUNT as f64)
+                    .rem_euclid((COUNT * 3) as f64)
+                    - COUNT as f64)
+                    * f64::from(PITCH);
                 let body = &mut self.world.bodies[handle];
-                let mut position = body.translation();
-                position.y = (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32;
+                let position = Vector::new(
+                    x as f32,
+                    (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32,
+                    0.0,
+                );
+                // The other two copies are bookkeeping, not active physics.
+                // Enable a full pitch before reaching the enclosure so contact
+                // prediction is ready before any part of the post crosses a wall.
+                let active = (-PITCH..=WIDTH + PITCH).contains(&position.x);
+                if !body.is_enabled()
+                    || !active
+                    || (body.translation().x - position.x).abs() > WIDTH
+                {
+                    // Recycling and activation happen outside the closed enclosure.
+                    // Never sweep a recycled collider through the balls.
+                    body.set_translation(position, false);
+                }
+                body.set_enabled(active);
                 body.set_next_kinematic_translation(position);
             }
             for &(handle, _) in &self.balls {
@@ -476,9 +564,9 @@ impl Simulation {
                 .integration_parameters
                 .num_internal_stabilization_iterations = if roof_contact { 8 } else { 1 };
             self.world.step();
-            let mut supported = [false; COUNT];
-            let mut driven = [false; COUNT];
-            let mut supports = [[false; COUNT]; COUNT];
+            let mut supported = 0_u32;
+            let mut driven = 0_u32;
+            let mut supports = [0_u32; COUNT];
             for (i, &(_, collider)) in self.balls.iter().enumerate() {
                 let mut touching = [false; COUNT];
                 for pair in self.world.narrow_phase.contact_pairs_with(collider) {
@@ -498,14 +586,17 @@ impl Simulation {
                             };
                             m.data.normal.y * sign > 0.1
                         });
-                    if upward
-                        && let Some(j) = self.balls.iter().position(|&(_, ball)| ball == other)
-                    {
-                        supports[i][j] = true;
+                    // Collider tags identify the source directly, including wrapped
+                    // copies. Walls use zero, balls 1..=COUNT, bars COUNT+1..=2*COUNT.
+                    let tag = self.world.colliders[other].user_data as usize;
+                    if upward && (1..=COUNT).contains(&tag) {
+                        supports[i] |= 1 << (tag - 1);
                     }
-                    if let Some(j) = self.bars.iter().position(|&(_, bar)| bar == other) {
-                        supported[i] |= upward;
-                        driven[i] |= upward && impulse > 0.0 && self.bar_velocities[j] > 0.0;
+                    if tag > COUNT {
+                        let j = tag - COUNT - 1;
+                        supported |= u32::from(upward) << i;
+                        driven |=
+                            u32::from(upward && impulse > 0.0 && self.bar_velocities[j] > 0.0) << i;
                         touching[j] =
                             pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
@@ -514,30 +605,32 @@ impl Simulation {
                             let mass = self.world.bodies[self.balls[i].0].mass();
                             let blend = (impulse / mass * 0.15).clamp(0.0, 0.5);
                             for c in 0..3 {
-                                self.colors[i][c] += (self.palette
-                                    [(j + COUNT - self.input.band_offset) % COUNT][c]
-                                    - self.colors[i][c])
-                                    * blend;
+                                self.colors[i][c] +=
+                                    (self.palette[j][c] - self.colors[i][c]) * blend;
                             }
                         }
                     }
                 }
                 self.touching[i] = touching;
             }
+            let previous_driven = self
+                .driven
+                .iter()
+                .enumerate()
+                .fold(0_u32, |mask, (i, &value)| mask | (u32::from(value) << i));
             for _ in 0..COUNT {
                 let before = (supported, driven);
-                for i in 0..COUNT {
-                    for j in 0..COUNT {
-                        if supports[i][j] {
-                            supported[i] |= before.0[j];
-                            driven[i] |= before.1[j] || (before.0[j] && self.driven[j]);
-                        }
-                    }
+                for (i, &support) in supports.iter().enumerate() {
+                    supported |= u32::from(support & before.0 != 0) << i;
+                    driven |=
+                        u32::from(support & (before.1 | (before.0 & previous_driven)) != 0) << i;
                 }
                 if before == (supported, driven) {
                     break;
                 }
             }
+            let supported: [bool; COUNT] = std::array::from_fn(|i| supported & (1 << i) != 0);
+            let driven: [bool; COUNT] = std::array::from_fn(|i| driven & (1 << i) != 0);
             let release_speed =
                 (2.0 * self.config.gravity * self.config.hop_height(self.input.reduced_motion))
                     .sqrt();
@@ -589,7 +682,8 @@ impl Simulation {
         values[0] = self.tick as f32 / HZ as f32;
         values[1] = self.config.height;
         values[2] = self.tick as f32;
-        values[GEOMETRY_OFFSET..].copy_from_slice(&[
+        values[SCROLL_OFFSET] = (self.scroll_phase % COUNT as f64) as f32;
+        values[GEOMETRY_OFFSET..SCROLL_OFFSET].copy_from_slice(&[
             self.ceiling_height,
             self.config.bar_max(),
             self.config.hop_height(self.input.reduced_motion),
@@ -606,64 +700,13 @@ impl Simulation {
             out[12..15].copy_from_slice(&body.angvel().to_array());
             out[15..18].copy_from_slice(&self.colors[i]);
         }
-        for (i, &(handle, _)) in self.bars.iter().enumerate() {
+        for i in 0..COUNT {
             values[VELOCITY_OFFSET + i] = self.bar_velocities[i] as f32;
-            values[BAR_OFFSET + i] = self.world.bodies[handle].translation().y + POST_HEIGHT / 2.0;
+            values[BAR_OFFSET + i] = self.bar_positions[i] as f32;
         }
     }
     pub fn snapshot(&self) -> &SimulationSnapshot {
         &self.snapshot
-    }
-}
-
-/// Exact constant-acceleration segments of the shortest rest-to-rest stroke.
-/// Retargeting preserves velocity, including the braking segment before reversal.
-fn stroke(
-    position: &mut f64,
-    velocity: &mut f64,
-    target: f64,
-    mut dt: f64,
-    max_speed: f64,
-    acceleration: f64,
-) {
-    for _ in 0..8 {
-        if dt <= 1e-12 {
-            break;
-        }
-        let delta = target - *position;
-        if delta.abs() < 1e-10 && velocity.abs() < 1e-8 {
-            *position = target;
-            *velocity = 0.0;
-            break;
-        }
-        let direction = if delta >= 0.0 { 1.0 } else { -1.0 };
-        let speed = *velocity * direction;
-        let distance = delta.abs();
-        let stopping = speed * speed / (2.0 * acceleration);
-        let (a, duration) = if speed < -1e-9 || stopping >= distance - 1e-10 && speed > 1e-9 {
-            (
-                -velocity.signum() * acceleration,
-                velocity.abs() / acceleration,
-            )
-        } else {
-            let peak = (acceleration * distance + speed * speed / 2.0)
-                .sqrt()
-                .min(max_speed);
-            if speed < peak - 1e-9 {
-                (direction * acceleration, (peak - speed) / acceleration)
-            } else if speed > max_speed + 1e-9 {
-                (
-                    -direction * acceleration,
-                    (speed - max_speed) / acceleration,
-                )
-            } else {
-                (0.0, ((distance - stopping) / speed).max(1e-12))
-            }
-        };
-        let elapsed = dt.min(duration);
-        *position += *velocity * elapsed + 0.5 * a * elapsed * elapsed;
-        *velocity += a * elapsed;
-        dt -= elapsed;
     }
 }
 
@@ -707,22 +750,21 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            3.0, // scrolling source identity included in recorded inputs
+            4.0, // normalized trajectories and continuous scrolling
             MIN_HEIGHT,
+            SCROLL_OFFSET as f32,
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
-        // 24 levels, 3 acceleration values, pointer active + xyz, reduced, height, source offset.
+        // 24 levels, 3 acceleration values, pointer active + xyz, reduced, height, scrolling enabled.
         if values.len() != 34
             || values.iter().any(|v| !v.is_finite())
             || ![0.0, 1.0].contains(&values[27])
             || ![0.0, 1.0].contains(&values[31])
-            || values[33] < 0.0
-            || values[33] >= COUNT as f32
-            || values[33].fract() != 0.0
+            || ![0.0, 1.0].contains(&values[33])
         {
             return Err(JsError::new(
-                "Expected 34 simulation inputs with a whole-column offset",
+                "Expected 34 simulation inputs with scrolling enablement",
             ));
         }
         let input = SimulationInput {
@@ -732,7 +774,7 @@ impl PhysicsSimulation {
             pointer: (values[27] == 1.0).then_some([values[28], values[29], values[30]]),
             reduced_motion: values[31] == 1.0,
             height: values[32],
-            band_offset: values[33] as usize,
+            scrolling: values[33] == 1.0,
         };
         self.0.apply(input).map_err(JsError::new)
     }

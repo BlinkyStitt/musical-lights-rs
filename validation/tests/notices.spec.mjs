@@ -9,7 +9,9 @@ test('physics incidents expire, rearm after recovery, and keep stopped state', a
     document.querySelector('#dancinglights').physics.close();
     window.notice=new PhysicsNotice(document.querySelector('.physics-status'));
   });
-  await page.clock.install();
+  const clockStart = new Date('2026-01-01T00:00:00Z');
+  await page.clock.install({ time: clockStart });
+  await page.clock.pauseAt(clockStart);
   const status=page.locator('.physics-status');
   await page.evaluate(()=>notice.sample({overloadTicks:1,debt:0,snapshotAgeMs:0},0,1000/120));
   await expect(status).toContainText('physics work limit');

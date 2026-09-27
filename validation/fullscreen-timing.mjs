@@ -1,3 +1,5 @@
+import { assertBrowserEnvironment } from './browser-environment.mjs';
+assertBrowserEnvironment();
 // Measure the transition itself, not just the warmed-up fullscreen view.
 // Host browser measurements are not physical-phone acceptance.
 import { chromium, webkit, devices } from '@playwright/test';
@@ -7,7 +9,8 @@ import startup from './browser-startup.mjs';
 import { staticPreview } from './static-preview.mjs';
 const [origin, output, clean] = process.argv.slice(2);
 if (!origin || !output) throw new Error('Usage: node validation/fullscreen-timing.mjs ORIGIN OUTPUT [--expect-clean]');
-await startup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
+const finishBrowserAudit = await startup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
+try {
 const results=[];
 for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,devices['iPhone 13']]]) {
   const browser=await engine.launch();
@@ -63,3 +66,4 @@ if(clean==='--expect-clean')for(const result of results){
     assert(window.maxSnapshotAge<100&&window.maxDebt<2*1000/120,`${result.browser} ${window.event} lost timely updates`);
   }
 }
+} finally { await finishBrowserAudit(); }

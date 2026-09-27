@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Musical Lights — motion comparison</title>
+<style>body{font:16px system-ui;margin:2rem auto;max-width:1100px;padding:0 1rem;color:#222;background:#fafafa}main{display:flex;gap:1rem}section{flex:1;min-width:0}canvas{width:100%;background:#fff;border:1px solid #777}button,select,input{font:inherit;margin:.5rem}input{width:70%}p{line-height:1.5}audio{width:100%}@media(max-width:650px){main{display:block}}</style>
+<h1>Musical Lights: before and after</h1>
+<p>Identical audio and filtered loudness targets, replayed through the actual production physics engines. This is a front-view rendering of exported solver positions, not a recording of browser performance or a physical phone.</p>
+<label>Scrolling <select id="scroll"><option value="false">Off</option><option value="true">On</option></select></label>
+<button id="play">Play from start</button><button id="pause">Pause</button>
+<audio id="audio" controls src="identical-audio.wav"></audio>
+<label>Time <input id="time" type="range" min="0" max="7.99" step=".016667" value="0"><output id="at">0.00 s</output></label>
+<main><section><h2>Before: main (feea54d)</h2><canvas id="before" width="720" height="360"></canvas></section><section><h2>After: continuous motion</h2><canvas id="after" width="720" height="360"></canvas></section></main>
+<p>0–2 s: bass attacks · 2–4 s: a wavering sustained tone · 4–6 s: treble swell · 6–8 s: treble attacks. The 180 ms white flash, shared gain and acoustic model are unchanged. Scrolling-on uses the same source data; the old engine changes whole columns while the new engine moves their collision surfaces continuously.</p>
+<script src="trajectories.js"></script><script>
+const data=window.motionPreview,audio=document.querySelector('#audio'),time=document.querySelector('#time'),scroll=document.querySelector('#scroll');
+const color=rgb=>`rgb(${rgb.map(c=>255*(c<=.0031308?12.92*c:1.055*Math.pow(c,1/2.4)-.055)).join(',')})`;
+function draw(){const t=audio.paused?Number(time.value):audio.currentTime;time.value=t;document.querySelector('#at').value=t.toFixed(2)+' s';
+for(const name of ['before','after']){const f=data.cases[`${name}-${scroll.value}`][Math.min(479,Math.floor(t*60))],c=document.querySelector('#'+name).getContext('2d');c.clearRect(0,0,720,360);
+for(let i=0;i<24;i++){const source=name==='before'?(i+24-f.phase)%24:i,x=name==='before'?i:(i+f.phase)%24;c.fillStyle=color(data.palette.slice(source*3,source*3+3));
+for(const shift of [-24,0,24]){const left=(x+shift)*30+1,top=360-f.bars[i]*600;c.beginPath();c.roundRect(left,top,28,370-top,[7,7,0,0]);c.fill();if(f.edges[i]>0){c.save();c.globalAlpha=f.edges[i];c.strokeStyle='#fff';c.lineWidth=1;c.stroke();c.restore();}}}
+for(const [x,y,r,...rgb] of f.balls){c.fillStyle=color(rgb);c.beginPath();c.arc(x*600,360-y*600,r*600,0,Math.PI*2);c.fill();c.strokeStyle='#444';c.lineWidth=.5;c.stroke();}}
+requestAnimationFrame(draw);}
+document.querySelector('#play').onclick=()=>{time.value=0;audio.currentTime=0;audio.play()};document.querySelector('#pause').onclick=()=>{audio.pause();time.value=audio.currentTime};time.oninput=()=>{audio.pause();audio.currentTime=Number(time.value)};audio.onseeked=()=>{time.value=audio.currentTime};draw();
+</script>

@@ -33,42 +33,114 @@ fn input(sim: &mut Simulation, levels: [f32; COUNT]) {
     .unwrap();
 }
 #[test]
-fn scrolling_uses_the_visible_source_color_for_contacts_without_changing_motion() {
-    let mut fixed = world(SimulationConfig::default());
-    let mut scrolled = world(SimulationConfig::default());
-    for sim in [&mut fixed, &mut scrolled] {
-        isolate(sim, &[0]);
-        place(sim, 0, Vector::new(0.625, 0.2, 0.0), Vector::ZERO);
+fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[]);
+    sim.apply(SimulationInput {
+        scrolling: true,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    for _ in 0..HZ * 110 {
+        let before: Vec<_> = sim
+            .bars
+            .iter()
+            .map(|(h, _)| sim.world.bodies[*h].translation().x)
+            .collect();
+        sim.step();
+        assert!(
+            sim.bars
+                .iter()
+                .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
+                .count()
+                <= COUNT + 2
+        );
+        for (i, (h, _)) in sim.bars.iter().enumerate() {
+            let x = sim.world.bodies[*h].translation().x;
+            assert_eq!(
+                sim.world.bodies[*h].is_enabled(),
+                (-PITCH..=WIDTH + PITCH).contains(&x)
+            );
+            if (x - before[i]).abs() > PITCH {
+                assert!(x < -PITCH || x > WIDTH + PITCH);
+                assert!(before[i] < -PITCH || before[i] > WIDTH + PITCH);
+            }
+        }
     }
-    let offset = 5;
-    scrolled
-        .apply(SimulationInput {
-            band_offset: offset,
-            ..SimulationInput::default()
-        })
-        .unwrap();
-    let initial = fixed.colors[0];
+    let expected = (110.0 - SCROLL_EASE / 2.0) * SCROLL_SPEED;
+    assert!((sim.scroll_phase - expected.rem_euclid(72.0)).abs() < 0.001);
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        scrolling: false,
+        ..sim.input
+    })
+    .unwrap();
+    for _ in 0..20 {
+        sim.step();
+    }
+    let stopped = sim.scroll_phase;
     for _ in 0..HZ {
-        fixed.step();
-        scrolled.step();
-        assert_eq!(position(&fixed, 0), position(&scrolled, 0));
-        assert_eq!(velocity(&fixed, 0), velocity(&scrolled, 0));
+        sim.step();
     }
-    assert!(fixed.colors[0][0] > initial[0]);
-    let blend = (fixed.colors[0][0] - initial[0]) / (fixed.palette[12][0] - initial[0]);
-    let expected = initial[0] + (scrolled.palette[12 - offset][0] - initial[0]) * blend;
-    assert!((scrolled.colors[0][0] - expected).abs() < 1e-6);
-    let before = scrolled.input;
-    assert!(
-        scrolled
-            .apply(SimulationInput {
-                tick: scrolled.tick,
-                band_offset: COUNT,
-                ..before
-            })
-            .is_err()
-    );
-    assert_eq!(scrolled.input, before);
+    assert_eq!(sim.scroll_phase, stopped);
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        scrolling: true,
+        ..sim.input
+    })
+    .unwrap();
+    sim.step();
+    assert!(sim.scroll_phase > stopped);
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        reduced_motion: true,
+        ..sim.input
+    })
+    .unwrap();
+    for _ in 0..20 {
+        sim.step();
+    }
+    let reduced = sim.scroll_phase;
+    for _ in 0..HZ {
+        sim.step();
+    }
+    assert_eq!(sim.scroll_phase, reduced);
+}
+
+#[test]
+fn empty_space_strokes_skip_contact_work_but_nearby_strokes_keep_it() {
+    let mut quiet = world(SimulationConfig::default());
+    let mut distant = world(SimulationConfig::default());
+    for sim in [&mut quiet, &mut distant] {
+        isolate(sim, &[0]);
+        place(sim, 0, Vector::new(PITCH / 2.0, 0.15, 0.0), Vector::ZERO);
+    }
+    let mut levels = [0.0; COUNT];
+    levels[23] = 1.0;
+    input(&mut distant, levels);
+    let mut quiet_cost = 0.0_f32;
+    for _ in 0..6 {
+        quiet.step();
+        distant.step();
+        assert_eq!(
+            quiet.snapshot.values[COST_OFFSET],
+            distant.snapshot.values[COST_OFFSET]
+        );
+        assert_eq!(position(&quiet, 0), position(&distant, 0));
+        quiet_cost = quiet_cost.max(quiet.snapshot.values[COST_OFFSET]);
+    }
+    levels[0] = 1.0;
+    input(&mut distant, levels);
+    let mut contact_cost = 0.0_f32;
+    let mut impulse = 0.0;
+    for _ in 0..6 {
+        distant.step();
+        contact_cost = contact_cost.max(distant.snapshot.values[COST_OFFSET]);
+        impulse += distant.snapshot.values[IMPULSE_OFFSET];
+        assert!(position(&distant, 0).y >= distant.bar_positions[0] as f32 + radius(0) - 0.002);
+    }
+    assert!(contact_cost > quiet_cost);
+    assert!(impulse > 0.0);
 }
 
 #[test]
@@ -289,31 +361,24 @@ fn full_strokes_arrive_within_50_ms_and_preserve_velocity_on_reversal() {
     }
 }
 #[test]
-fn small_corrections_keep_the_stroke_time_without_full_height_kicks() {
-    let mut sim = world(SimulationConfig::default());
-    isolate(&mut sim, &[]);
-    let (full_speed, full_acceleration) = sim.config.motion_limits(false);
-    for amplitude in [0.001, 0.01, 0.1] {
+fn tiny_corrections_move_gently_and_settle_exactly_within_150_ms() {
+    for amplitude in [0.001, 0.01] {
+        let mut sim = world(SimulationConfig::default());
+        isolate(&mut sim, &[]);
         for level in [amplitude, 0.0] {
             input(&mut sim, [level; COUNT]);
-            for tick in 0..6 {
-                let before = sim.bar_velocities[0];
+            for tick in 0..18 {
                 sim.step();
-                assert!(sim.bar_velocities[0].abs() <= full_speed * f64::from(amplitude) + 1e-5);
-                assert!(
-                    (sim.bar_velocities[0] - before).abs()
-                        <= full_acceleration * f64::from(amplitude) * f64::from(DT) + 1e-5
-                );
                 if tick == 0 {
-                    assert!(
-                        sim.bar_velocities[0].abs() > 0.0,
-                        "small sounds must still move"
-                    );
+                    assert!(sim.bar_velocities[0].abs() > 0.0);
+                }
+                if tick == 5 {
+                    assert_ne!(sim.motions[0].state.position, f64::from(level));
                 }
             }
-            let target = BASELINE + level * (sim.config.bar_max() - BASELINE);
-            assert!((sim.snapshot.values[BAR_OFFSET] - target).abs() < 1e-5);
-            assert!(sim.bar_velocities[0].abs() < 1e-6);
+            assert_eq!(sim.motions[0].state.position, f64::from(level));
+            assert_eq!(sim.motions[0].state.velocity, 0.0);
+            assert_eq!(sim.motions[0].state.acceleration, 0.0);
         }
     }
 }
@@ -597,7 +662,7 @@ fn recorded_inputs_replay_identically_at_all_render_rates() {
             tick,
             levels: std::array::from_fn(|i| ((tick as usize / 5 + i) % 11) as f32 / 10.0),
             acceleration: [((tick / 5) % 3) as f32 - 1.0, 0.0, 0.0],
-            band_offset: (tick as usize / 50) % COUNT,
+            scrolling: (tick / 50) % 3 != 0,
             ..SimulationInput::default()
         })
         .collect();
@@ -729,6 +794,8 @@ fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
     let mut levels = [0.0; COUNT];
     levels[12] = (top - BASELINE) / (sim.config.bar_max() - BASELINE);
     input(&mut sim, levels);
+    sim.motions[12].state.position = f64::from(levels[12]);
+    sim.motions[12].target = f64::from(levels[12]);
     place(
         &mut sim,
         0,
@@ -1061,4 +1128,74 @@ fn resize_reversal_starts_at_applied_height_and_replays_at_all_frame_rates() {
     };
     assert_eq!(replay(30), replay(60));
     assert_eq!(replay(60), replay(120));
+}
+
+#[test]
+fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    // Source 23 is now across the left seam; the collider copy at x=.025
+    // must retain source 23's impulse column and palette entry.
+    sim.scroll_phase = 1.0;
+    sim.step();
+    place(
+        &mut sim,
+        0,
+        Vector::new(PITCH / 2.0, 0.15, 0.0),
+        Vector::ZERO,
+    );
+    let initial = sim.colors[0];
+    let mut impulse = 0.0;
+    for _ in 0..HZ {
+        sim.step();
+        impulse += sim.snapshot.values[IMPULSE_OFFSET + 23];
+        assert!(position(&sim, 0).x >= radius(0) - 0.002);
+        assert!(position(&sim, 0).x <= WIDTH - radius(0) + 0.002);
+    }
+    assert!(impulse > 0.0);
+    assert!(sim.colors[0][0] > initial[0]);
+    assert!(sim.colors[0][0] < sim.palette[23][0]);
+    // Enable actual lateral motion and phone force while maintaining enclosure bounds.
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        scrolling: true,
+        acceleration: [-2.0, 0.0, 1.0],
+        ..sim.input
+    })
+    .unwrap();
+    for _ in 0..HZ * 3 {
+        sim.step();
+        let p = position(&sim, 0);
+        assert!(p.x >= radius(0) - 0.002 && p.x <= WIDTH - radius(0) + 0.002);
+        assert!(p.y >= radius(0) - 0.002 && p.y + radius(0) <= sim.ceiling_height + 0.002);
+    }
+}
+
+#[test]
+fn rapid_reversals_with_scrolling_keep_balls_inside_the_enclosure() {
+    let mut sim = world(SimulationConfig {
+        height: MIN_HEIGHT,
+        ..SimulationConfig::default()
+    });
+    for tick in 0..HZ {
+        if tick % 3 == 0 {
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels: [if tick % 6 == 0 { 1.0 } else { 0.0 }; COUNT],
+                scrolling: true,
+                height: MIN_HEIGHT,
+                ..sim.input
+            })
+            .unwrap();
+        }
+        sim.step();
+        for i in 0..COUNT {
+            let p = position(&sim, i);
+            assert!(
+                p.y + radius(i) <= sim.ceiling_height + 0.005,
+                "ball {i} escaped roof at tick {tick}"
+            );
+            assert!(p.x >= radius(i) - 0.005 && p.x <= WIDTH - radius(i) + 0.005);
+        }
+    }
 }

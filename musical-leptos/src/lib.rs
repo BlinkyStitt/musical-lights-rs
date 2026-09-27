@@ -22,7 +22,7 @@ pub fn App() -> impl IntoView {
         <div class="site-shell">
             <Router>
                 <header class="site-header">
-                    <span class="wordmark"><span aria-hidden="true" class="brand-mark">"▂▅▃▆"</span>" STITT HAPPENS"</span>
+                    <span class="wordmark"><span aria-hidden="true" class="brand-mark">"▂▅▃▆"</span>" Musical Lights"</span>
                     <nav aria-label="Main navigation">
                         <A href="/" exact=true>"Home"</A><A href="/about">"About"</A>
                     </nav>

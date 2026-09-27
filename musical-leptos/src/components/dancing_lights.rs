@@ -149,9 +149,7 @@ pub fn DancingLights() -> impl IntoView {
     };
     let (audio, set_audio) = signal(DisplayFrame::<DISPLAY_BANDS>::default());
     let (scrolling, set_scrolling) = signal(true);
-    let (scroll_offset, set_scroll_offset) = signal(0usize);
-    let source_band =
-        move |slot: usize| (slot + DISPLAY_BANDS - scroll_offset.get()) % DISPLAY_BANDS;
+    let source_band = |band: usize| band;
     let (listening, set_listening) = signal(false);
     let (generated, set_generated) = signal(false);
     let (capture_status, set_capture_status) =
@@ -252,15 +250,12 @@ pub fn DancingLights() -> impl IntoView {
         let animation = match DisplayAnimation::new(
             session.clone(),
             move || scrolling.get_untracked() && listening.get_untracked(),
-            move |values, fps, offset| {
+            move |values, fps, enabled| {
                 if !alive.get() {
                     return;
                 }
                 if let Some(physics) = physics.borrow().as_ref() {
-                    physics.push(values, offset);
-                }
-                if scroll_offset.get_untracked() != offset {
-                    set_scroll_offset.set(offset);
+                    physics.push(values, enabled);
                 }
                 if audio.get_untracked() != values {
                     set_audio.set(values);
@@ -309,7 +304,6 @@ pub fn DancingLights() -> impl IntoView {
                                 set_listening.set(false);
                                 set_starting.set(false);
                                 set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
-                                set_scroll_offset.set(0);
                                 set_frame_rate.set(None);
                                 let owner = failure_owner.clone();
                                 // Release the message closure after it returns.
@@ -356,7 +350,6 @@ pub fn DancingLights() -> impl IntoView {
                             set_error.set(None);
                             set_audio_stopped.set(false);
                             set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
-                            set_scroll_offset.set(0);
                         }>"Stop listening"</button>
                     }>
                         <button class="primary" on:click=start disabled=move || starting.get()>
@@ -389,7 +382,7 @@ pub fn DancingLights() -> impl IntoView {
                     <span class="frequency-swatch" aria-hidden="true"></span>
                     <span>{move || selected_band.get().map(|index| format!("≈ {}–{} Hz", frequency_edges[source_band(index)], frequency_edges[source_band(index) + 1]))}</span>
                 </div>
-                <div id="dancinglights" role="group" aria-label=move || if scroll_offset.get() == 0 { "Audio spectrum, bass to treble" } else { "Audio spectrum, wrapped frequency bands" } on:keydown=navigate_sample>
+                <div id="dancinglights" role="group" aria-label="Audio spectrum, source frequency bands" on:keydown=navigate_sample>
                     {(0..DISPLAY_BANDS).map(|group| {
                         let style = move || {
                             let color = screen_color(palette.colors[source_band(group)]);
@@ -420,7 +413,7 @@ pub fn DancingLights() -> impl IntoView {
                     <span class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></span>
                     <span class="balloon-layer" aria-hidden="true" node_ref=canvas_layer></span>
                 </div>
-                <div class="spectrum-labels" aria-hidden="true"><span>{move || if scroll_offset.get() == 0 { "BASS" } else { "" }}</span><span>{move || if scroll_offset.get() == 0 { "MIDRANGE" } else { "SCROLLING →" }}</span><span>{move || if scroll_offset.get() == 0 { "TREBLE" } else { "" }}</span></div>
+                <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
             <div class="display-note">
                 <p class="control-note">{move || if listening.get() {
