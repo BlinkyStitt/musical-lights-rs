@@ -301,8 +301,14 @@ test('wrapped pointer surfaces and keyboard focus retain the source frequency', 
   await page.locator('.scroll-lights').check();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.4);
   await page.locator('.scroll-lights').uncheck(); await page.waitForTimeout(350);
-  await page.locator('.bark-copy[data-source-band="23"]').hover();
-  await expect(page.locator('.frequency-tooltip')).toContainText(last);
+  // Host speed can carry more than one band past the seam before Stop arrives.
+  // Select the actual clipped copy, retaining its immutable source identity.
+  const wrapped = await page.locator('.bark-copy').evaluateAll(nodes =>
+    nodes.filter(node => node.getBoundingClientRect().width > 0)
+      .sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0].dataset.sourceBand);
+  const wrappedLabel = await page.getByRole('meter').nth(Number(wrapped)).getAttribute('aria-label');
+  await page.locator(`.bark-copy[data-source-band="${wrapped}"]`).hover();
+  await expect(page.locator('.frequency-tooltip')).toContainText(wrappedLabel);
   await page.getByRole('meter').first().focus();
   await page.keyboard.press('End');
   await expect(page.getByRole('meter').last()).toBeFocused();
