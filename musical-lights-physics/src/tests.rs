@@ -767,7 +767,7 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
         }
     }
     eprintln!(
-        "20-second stress: maximum transient penetration {worst_penetration} m, {worst_fraction} of radius; all 24 balls settled within 1 mm"
+        "20-second stress: maximum transient penetration {worst_penetration} m, {worst_fraction} of radius; all {BALL_COUNT} balls settled within 1 mm"
     );
 }
 #[test]
