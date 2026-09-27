@@ -51,11 +51,11 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     const pascalsPerUnit = Number.isFinite(pressure) && pressure > 0 ? pressure : undefined;
     Object.assign(session, { channel, pascalsPerUnit: pascalsPerUnit ?? 2, calibrated: pascalsPerUnit !== undefined });
     session.publish(session.state, 'processor ready');
-    const moduleUrl = new URL('loudness/loudness.wasm', document.baseURI);
+    const moduleUrl = new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/loudness.wasm', document.baseURI);
     const response = await fetch(moduleUrl);
     if (!response.ok) throw new Error(`Cannot load audio analysis: HTTP ${response.status}`);
     const module = await WebAssembly.compile(await response.arrayBuffer());
-    await context.audioWorklet.addModule(new URL('loudness/processor.js', document.baseURI));
+    await context.audioWorklet.addModule(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/processor.js', document.baseURI));
     if (session.closed) throw new Error('Audio session has closed');
     const node = new AudioWorkletNode(context, 'loudness-processor', {
         channelCountMode: 'max', channelInterpretation: 'discrete',
@@ -138,7 +138,7 @@ export async function acquireInput(context) {
             sessions.set(stream, session);
             return stream;
         }
-        const { tonePCM, toneCases, toneState } = await import(new URL('physics/tones.js', document.baseURI));
+        const { tonePCM, toneCases, toneState } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/tones.js', document.baseURI));
         const query = selector => card.querySelector(selector);
         const kind = query('.tone-kind')?.value ?? 'exercise';
         const frequency = Number(query('.tone-frequency')?.value ?? 1000);

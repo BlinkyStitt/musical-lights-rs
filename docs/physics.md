@@ -81,14 +81,24 @@ The enclosure uses six half-spaces, including a real downward-facing ceiling. Ea
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
 m/s²; all three axes contribute, including shaking into or out of the screen.
+The renderer scales translation by 8: the 1.2 m virtual enclosure represents a
+roughly 15 cm handheld box. A modest 2 m/s² shake therefore applies 16 m/s²,
+enough to lift settled balls against 9.81 m/s² gravity. This is a visual scale
+choice, not a calibration of a specific handset. Combined inputs remain bounded
+to ±100 m/s² per axis.
 Screen rotation maps the two in-plane axes; the opposite acceleration is
 applied to the balls, as if shaking their enclosure. Tilt adds a field of up to
 2 m/s² per axis. The simulation applies force as mass × acceleration each tick.
 Reduced Motion scales external acceleration to 10% and uses the configured slower stroke time.
 
-Motion and tilt permissions are requested from the Start listening click and
+Motion and tilt permissions are requested from either Enable motion or the Start listening click and
 enabled independently, so a pending tilt request cannot block granted motion
-access. Stop and route cleanup invalidate both requests and remove listeners.
+access. Enable motion works without starting the microphone; its status distinguishes
+denied access, permission granted without readings, and active sensor readings.
+Disable motion clears sensor forces without changing musical targets. Stop listening
+and route cleanup invalidate both requests and remove listeners. Display rotation
+lock never gates accelerometer delivery: a fixed screen angle still maps shakes
+into that fixed viewport, even with no orientation events.
 When linear acceleration is unavailable, a 250 ms exponential baseline removes
 the slow gravity component from gravity-inclusive readings. This fallback is
 an approximation: fast rotations can also appear as shakes. Its first reading,

@@ -139,9 +139,11 @@ export class PhysicsView {
     this.input[28] = this.pointerPoint.x; this.input[29] = this.pointerPoint.y; this.input[30] = 0;
   }
   orientation(beta, gamma, angle) { this.tilt = this.rotate(Math.sin(gamma * Math.PI / 180) * 2, -Math.sin(beta * Math.PI / 180) * 2, angle); }
+  // The 1.2 m virtual enclosure represents a roughly 15 cm handheld box.
+  // Scale translation equally on all axes; inertia acts opposite phone motion.
   deviceAcceleration(x, y, z, angle) {
-    this.acceleration = this.rotate(-x, -y, angle);
-    this.acceleration[2] = -z;
+    this.acceleration = this.rotate(-x * 8, -y * 8, angle);
+    this.acceleration[2] = -z * 8;
     this.accelerationAt = performance.now();
   }
   rotate(x, y, angle) { const a = angle * Math.PI / 180; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), 0]; }
@@ -332,7 +334,8 @@ export class PhysicsView {
     for (let copy = 0; copy < 3; copy++) this.meshEdges.set(edges, copy * 24);
     this.input[33] = scrolling ? 1 : 0;
   }
-  stopMotion() { this.motion.stopMotion(); this.tilt = [0, 0, 0]; this.acceleration = [0, 0, 0]; this.input.fill(0, 0, 27); this.push(new Float32Array(24), new Float32Array(24), 0); }
+  clearMotion() { this.tilt = [0, 0, 0]; this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); }
+  stopMotion() { this.motion.stopMotion(); this.clearMotion(); this.input.fill(0, 0, 24); this.push(new Float32Array(24), new Float32Array(24), 0); }
   pause() {
     if (this.request != null) cancelAnimationFrame(this.request);
     this.request = null;

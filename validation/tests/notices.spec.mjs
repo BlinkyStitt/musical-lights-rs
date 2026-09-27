@@ -5,7 +5,7 @@ test('physics incidents expire, rearm after recovery, and keep stopped state', a
   await page.goto(origin);await physicsReady(page);
   // Only the isolated notice uses this clock; no WASM timer handles are involved.
   await page.evaluate(async () => {
-    const {PhysicsNotice}=await import('/physics/view.js');
+    const {PhysicsNotice}=await import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/view.js');
     document.querySelector('#dancinglights').physics.close();
     window.notice=new PhysicsNotice(document.querySelector('.physics-status'));
   });

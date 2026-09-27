@@ -60,3 +60,57 @@ for (const route of ['/', '/about/', '/phone/']) {
     expect(brand.x + brand.width).toBeLessThanOrEqual(nav.x);
   });
 }
+
+test('a stale cached entry navigates to the current deployment before loading the app', async ({ page, request }) => {
+  const html = await (await request.get(origin)).text();
+  const { version } = await (await request.get(`${origin}/build.json`)).json();
+  const old = '0'.repeat(24);
+  let entries = 0;
+  await page.route(`${origin}/phone/**`, async route => {
+    if (!route.request().isNavigationRequest()) return route.continue();
+    entries++;
+    await route.fulfill({ contentType: 'text/html', body: entries === 1 ? html.replaceAll(version, old) : html });
+  });
+  await page.goto(`${origin}/phone/?source=bookmark#test`);
+  await expect(page.getByRole('meter')).toHaveCount(24);
+  await expect(page).toHaveURL(`${origin}/phone/?source=bookmark#test`);
+  expect(entries).toBe(2);
+  await expect(page.locator('meta[name="musical-lights-assets"]')).toHaveAttribute('content', `/assets/${version}/`);
+  await expect.poll(() => page.workers().some(worker => worker.url().includes(`/assets/${version}/physics/worker.js`))).toBe(true);
+});
+
+test('runtime requests use one version, including audio and transitive worker WASM', async ({ page }) => {
+  const { syntheticAudio, startFrozen } = await import('../physics-state.mjs');
+  await syntheticAudio(page);
+  const requests = [];
+  page.context().on('request', request => requests.push(new URL(request.url()).pathname));
+  // AudioWorklet fetches are not surfaced in Playwright's network events.
+  // Observe its real module URL while leaving native loading/execution intact.
+  await page.addInitScript(() => {
+    const add = AudioWorklet.prototype.addModule;
+    AudioWorklet.prototype.addModule = function(url, options) {
+      window.workletURL = new URL(url, document.baseURI).pathname;
+      return add.call(this, url, options);
+    };
+  });
+  // Old stable URLs must never participate in a new app, even when they could
+  // return cached modules. Fail closed here to catch an overlooked dependency.
+  await page.route(/\/(?:physics|loudness|snippets)\//, route => {
+    if (new URL(route.request().url()).pathname.startsWith('/assets/')) return route.continue();
+    return route.abort();
+  });
+  await page.goto(origin); await startFrozen(page);
+  const assets = await page.locator('meta[name="musical-lights-assets"]').getAttribute('content');
+  for (const suffix of ['physics/view.js', 'physics/worker.js', 'physics/physics.js', 'physics/physics_bg.wasm', 'loudness/loudness.wasm']) {
+    await expect.poll(() => requests.includes(assets + suffix)).toBe(true);
+  }
+  expect(await page.evaluate(() => window.workletURL)).toBe(assets + 'loudness/processor.js');
+  expect(requests.filter(path => /\.(js|wasm)$/.test(path)).every(path => path.startsWith(assets))).toBe(true);
+  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+});
+
+test('an unavailable deployment check still boots the coherent cached runtime', async ({ page }) => {
+  await page.route('**/build.json?*', route => route.abort());
+  await page.goto(origin);
+  await expect(page.getByRole('meter')).toHaveCount(24);
+});

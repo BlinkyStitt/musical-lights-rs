@@ -80,7 +80,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .button-row { display: flex; flex-wrap: wrap; gap: .65rem; }
 button { border: 1px solid var(--primary); border-radius: 9px; padding: .75rem 1.1rem; font-size: .85rem; cursor: pointer; min-height: 44px; }
 button.primary { background: var(--primary); color: white; }
-button.fullscreen-button { background: var(--surface); color: var(--ink); border-color: var(--line); }
+button.fullscreen-button, button.motion-button { background: var(--surface); color: var(--ink); border-color: var(--line); }
 button:disabled { cursor: default; color: var(--muted); background: var(--disabled); border-color: var(--line); }
 button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
 .display-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; display: flex; justify-content: space-between; gap: 1rem; }
@@ -150,3 +150,8 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .calibration-controls summary { cursor: pointer; }
 .calibration-controls label { display: block; margin: .5rem 0; }
 .calibration-controls input { width: 6rem; margin-left: .25rem; font: inherit; }
+
+.motion-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin: .75rem 0; }
+.motion-status { margin: 0; font-size: .82rem; }
+.motion-status:empty { display: none; }
+.audio-card[data-expanded] .motion-controls { display: none; }

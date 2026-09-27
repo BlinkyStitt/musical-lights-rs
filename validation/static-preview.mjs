@@ -1,3 +1,4 @@
+import { runtimeRoot } from './runtime-assets.mjs';
 // Optional in-process static origin for timing when host TCP ports are exhausted.
 // Browser execution, workers, AudioWorklet, and WASM remain the actual build.
 import { readFile, stat } from 'node:fs/promises';
@@ -10,11 +11,11 @@ export async function staticPreview(context, url) {
   await context.addInitScript(source => {
     const prototype=AudioWorklet.prototype, add=prototype.addModule;
     prototype.addModule=async function(url,options) {
-      if(new URL(url,document.baseURI).pathname!=='/loudness/processor.js') return add.call(this,url,options);
+      if(new URL(url,document.baseURI).pathname.endsWith('/loudness/processor.js') === false) return add.call(this,url,options);
       const local=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
       try {return await add.call(this,local,options);} finally {URL.revokeObjectURL(local);}
     };
-  }, await readFile(resolve(root,'loudness/processor.js'),'utf8'));
+  }, await readFile(resolve(await runtimeRoot(root),'loudness/processor.js'),'utf8'));
   const types={'.html':'text/html','.js':'text/javascript','.wasm':'application/wasm','.css':'text/css','.png':'image/png','.ico':'image/x-icon'};
   await context.route('https://musical-lights.test/**',async route=>{
     let path=resolve(root,`.${decodeURIComponent(new URL(route.request().url()).pathname)}`);

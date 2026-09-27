@@ -62,3 +62,37 @@ test('gravity fallback ignores rest and resumes without a gravity kick, but resp
   assert.deepEqual(f.shakes.at(-1), [0, 0, 0, 0]);
   f.input.close();
 });
+
+
+test('rotation lock and absent orientation events do not gate motion readings', async () => {
+  const f = await fixture(() => Promise.resolve('denied'));
+  assert.equal(f.input.state, 'waiting');
+  // Portrait remains locked at zero while only accelerometer events arrive.
+  f.send({ accelerationIncludingGravity: { x: 0, y: 9.81, z: 0 } }, 0);
+  f.send({ accelerationIncludingGravity: { x: -3, y: 9.81, z: 0 } }, 16);
+  assert.equal(f.input.state, 'active');
+  assert.equal(f.tilts.length, 0);
+  assert.ok(f.shakes.at(-1)[0] < -2.8);
+  assert.equal(f.shakes.at(-1)[3], 0);
+  f.input.stopMotion();
+  assert.equal(f.input.state, 'off');
+  f.input.close();
+});
+
+test('denied permission is observable and can be requested again after a new gesture', async () => {
+  const f = await fixture();
+  f.input.stopMotion();
+  f.window.DeviceMotionEvent.requestPermission = () => Promise.resolve('denied');
+  f.input.startMotion();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.input.state, 'denied');
+  f.send({ acceleration: { x: 2, y: 0, z: 0 } });
+  assert.equal(f.shakes.length, 0);
+  f.input.stopMotion();
+  f.window.DeviceMotionEvent.requestPermission = () => Promise.resolve('granted');
+  f.input.startMotion();
+  await new Promise(resolve => setImmediate(resolve));
+  f.send({ acceleration: { x: 2, y: 0, z: 0 } });
+  assert.equal(f.input.state, 'active');
+  f.input.close();
+});

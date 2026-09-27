@@ -472,3 +472,39 @@ before/after macOS crash-report inventory (including a three-second delayed
 check). CI uploads `validation/test-results/` even after failure. The fullscreen
 regression retains both 100 ms limits. At that revision Pages required every
 validation job; the current website-only dependency gate is described above. ESP installation receives the read-only contents token with its pinned compiler.
+
+### Deployment asset consistency
+
+The Trunk post-build hook publishes all runtime files under one
+`assets/<content-hash>/` directory, including main JS/WASM, wasm-bindgen snippets,
+Three.js imports, the physics worker and WASM, and the audio processor and WASM.
+The entry HTML and bootstrap participate in the hash too. Absolute entry URLs
+are rewritten; relative module imports remain within that version. Home, About,
+Phone, and the 404 entry all name the same runtime. Share images retain their
+public URL. `build.json` records the version for startup and offline tooling.
+
+Before importing the app, startup fetches `build.json` with a cache-busting query,
+`no-store`, and a three-second timeout. A stale entry navigates once to the same
+route with the new version in its query, preserving existing query/hash state;
+a successful current entry removes the temporary parameter. Network failures
+still allow a coherent cached runtime to start. No polling or automatic refresh
+interrupts an active microphone session. Already-open pages keep their existing
+version; reloading gets the latest entry. Pre-fix cached HTML cannot run this
+new bootstrap until it refreshes. This avoids mixed runtime versions without
+introducing a service worker or clearing the user's calibration data.
+
+`validation/tooling/test_publish_routes.py` checks dependency hashing and route
+publication. The browser route tests exercise stale-entry recovery, unavailable
+version checks, and the actual main-thread, worker, and audio asset requests.
+Phone-shake tests measure visible ball travel from rest on all axes and in
+landscape; these synthetic events do not substitute for physical-phone checks.
+
+Local validation for this change: pinned Leptos formatting, Clippy, and release
+build; 222 browser tests with one worker and zero retries; 15 Node harness
+tests; six Python tooling tests; Ruff and Python type checks. Host-access
+Chromium/WebKit validation produced no new macOS crash reports, including the
+delayed inventory. The original low-force vertical-shake regression failed with
+zero of eight settled balls reaching 8 cm of upward travel; the updated build
+passes the travel threshold in both browsers. Rotation-lock coverage fixes the
+screen angle, denies orientation access, and supplies only gravity-inclusive
+accelerometer events. Physical iPhone Safari behavior remains unverified.

@@ -1,3 +1,4 @@
+import { runtimeRoot } from '../runtime-assets.mjs';
 import { assertBrowserEnvironment } from '../browser-environment.mjs';
 assertBrowserEnvironment();
 // Render the actual before/after Leptos builds from their production PCM traces.
@@ -16,7 +17,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'applic
 try {
   for (const [version, directory] of [['before', process.argv[2]], ['after', 'musical-leptos/dist']]) {
     const root = resolve(directory);
-    const module = new WebAssembly.Module(await readFile(resolve(root, 'loudness/loudness.wasm')));
+    const module = new WebAssembly.Module(await readFile(resolve(await runtimeRoot(root), 'loudness/loudness.wasm')));
     for (const [name, frequency] of [['bass', 150], ['treble', 8600]]) {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, colorScheme: 'dark' });
       await context.addInitScript(source => {
@@ -26,7 +27,7 @@ try {
           const blob = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
           try { return await add.call(this, blob, options); } finally { URL.revokeObjectURL(blob); }
         };
-      }, await readFile(resolve(root, 'loudness/processor.js'), 'utf8'));
+      }, await readFile(resolve(await runtimeRoot(root), 'loudness/processor.js'), 'utf8'));
       await context.route('https://musical-lights.test/**', async route => {
         let file = resolve(root, `.${new URL(route.request().url()).pathname}`);
         if (file !== root && !file.startsWith(root + sep)) return route.fulfill({ status: 403, body: '' });
