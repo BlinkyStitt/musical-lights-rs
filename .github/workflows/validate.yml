@@ -6,15 +6,21 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 jobs:
+  core:
+    name: rust (core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
+      - run: python3 validation/validate.py core
   rust:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        package: [core, terminal, feather, stm32]
+        package: [terminal, feather, stm32]
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Install Rust
@@ -30,9 +36,20 @@ jobs:
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '26.8.2'
+          cache: npm
+          cache-dependency-path: validation/package-lock.json
       - name: Install Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown
+      - name: Check tool download handling
+        run: python3 -m unittest discover -s validation/tooling -v
+      - name: Cache pinned web tools
+        id: web-tools
+        uses: actions/cache@v6.1.0
+        with:
+          path: .tools
+          key: web-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
       - run: python3 validation/install_tools.py web
+        if: steps.web-tools.outputs.cache-hit != 'true'
       - run: python3 validation/validate.py physics worklet leptos dioxus wasm
       - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium webkit && npm test
         env:
@@ -43,6 +60,13 @@ jobs:
           name: browser-validation
           path: validation/test-results/
           if-no-files-found: ignore
+      # Package the exact directory exercised by the browser suite. PRs also
+      # produce the artifact so packaging is checked before a main deployment.
+      - name: Package validated website
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: ./musical-leptos/dist
+          include-hidden-files: true
   loudness-reference:
     runs-on: ubuntu-latest
     steps:
@@ -82,23 +106,33 @@ jobs:
           python3 validation/validate.py ${{ matrix.package }}
   pages:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [rust, web, loudness-reference, esp]
+    needs: [core, web, loudness-reference]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Install pinned Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: '26.8.2'
-      - run: python3 validation/install_tools.py web
-      - run: python3 validation/validate.py leptos
+      - name: Check that this is still main
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$GITHUB_SHA" = "$latest" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipping superseded revision $GITHUB_SHA"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/configure-pages@v6.0.0
-      - uses: actions/upload-pages-artifact@v5.0.0
-        with:
-          path: ./musical-leptos/dist
+        if: steps.current.outputs.deploy == 'true'
       - uses: actions/deploy-pages@v5.0.1
+        if: steps.current.outputs.deploy == 'true'
         id: deployment

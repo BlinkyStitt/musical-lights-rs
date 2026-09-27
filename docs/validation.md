@@ -1,5 +1,38 @@
 # Validation record
 
+## Website deployment
+
+Pages deploys only from `main` after `core`, `web`, and `loudness-reference`
+succeed. The core check retains its `rust (core)` check name. The web job still
+checks physics, worklet, Leptos, Dioxus, standalone WASM, and the full serial
+Chromium/WebKit suite with zero retries. A failure in any of these website
+checks blocks deployment.
+
+ESP32, Feather, STM32, and terminal checks still run and still fail visibly,
+but Pages does not depend on them. A failed firmware job can make the overall
+workflow red while the independently validated website deploys successfully.
+
+The web job packages the exact `musical-leptos/dist` directory used by passing
+browser tests as `github-pages`, including on PRs to validate packaging. The
+Pages job deploys that same-run artifact without another checkout, tool install,
+or build. Only Pages receives deployment permissions. Deployments are serialized,
+and a queued job skips publishing if its commit is no longer the tip of main.
+This follows GitHub's [separate build/deploy artifact workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+Pinned web tools are cached by OS, architecture, and installer content; npm's
+download cache is keyed by the validation lockfile. Cache misses run the normal
+pinned installer. Downloads retry transient network errors, HTTP 408/429, and
+5xx responses at most three times after the first attempt, with 1/2/4-second
+backoff and a 30-second socket timeout. Permanent HTTP errors fail immediately.
+Downloads use a temporary file and check Content-Length when provided before
+replacing the destination. Browser/test failures are never retried or ignored.
+
+Validate workflow changes with `actionlint .github/workflows/validate.yml`.
+Run installer regressions with `python3 -m unittest discover -s validation/tooling -v`.
+The `reference` target includes installer and test lint/type checks.
+
+## Earlier validation records
+
 The 2026-09-25 source-band update and 40 ms strokes are documented in the
 [current measurement and performance report](partial-loudness-results/README.md).
 It retains the ISO/MoSQiTo checks and adds the pinned MGB1997/GM2002 oracle,
@@ -437,5 +470,5 @@ Browser validation retains failure traces/screenshots, worker scheduling gaps,
 execution costs, collision substeps, resize events, browser process logs, and a
 before/after macOS crash-report inventory (including a three-second delayed
 check). CI uploads `validation/test-results/` even after failure. The fullscreen
-regression retains both 100 ms limits, and Pages still requires every validation
-job. ESP installation receives the read-only contents token with its pinned compiler.
+regression retains both 100 ms limits. At that revision Pages required every
+validation job; the current website-only dependency gate is described above. ESP installation receives the read-only contents token with its pinned compiler.
