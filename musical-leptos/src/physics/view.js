@@ -77,7 +77,7 @@ export class PhysicsView {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.localClippingEnabled = true;
     this.layer.append(this.renderer.domElement);
-    this.renderer.domElement.setAttribute('aria-label', '12 rigid balls and 24 audio bars');
+    this.renderer.domElement.setAttribute('aria-label', '8 rigid balls and 24 audio bars');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
       event.preventDefault(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
@@ -190,7 +190,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 5 || data.layout[21] !== 12 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 5 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;

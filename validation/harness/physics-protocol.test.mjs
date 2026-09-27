@@ -8,9 +8,9 @@ test('the built WASM accepts protocol 5 scrolling and stops at its published pha
   const layout = PhysicsSimulation.layout();
   assert.equal(layout[18], 5, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
   assert.equal(layout[0], 24);
-  assert.equal(layout[21], 12);
-  assert.equal(layout[9], 3 + 12 * layout[8]);
-  assert.equal(layout[11] - layout[10], 12 * 24);
+  assert.equal(layout[21], 8);
+  assert.equal(layout[9], 3 + 8 * layout[8]);
+  assert.equal(layout[11] - layout[10], 8 * 24);
   const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), new Float32Array(72).fill(.5));
   try {
     const input = new Float32Array(34); input[32] = .6; input[33] = 1;

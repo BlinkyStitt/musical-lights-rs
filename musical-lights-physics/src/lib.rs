@@ -5,7 +5,7 @@ mod motion;
 use motion::Motion;
 
 pub const COUNT: usize = 24;
-pub const BALL_COUNT: usize = 12;
+pub const BALL_COUNT: usize = 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
 pub const WIDTH: f32 = 1.2;
@@ -19,8 +19,7 @@ pub const RESIZE_TICKS: u32 = HZ * 3 / 10;
 pub const CLEARANCE: f32 = 0.004;
 pub const BASELINE: f32 = 0.003;
 pub const WALL_RESTITUTION: f32 = 0.55;
-pub const SIZE_RATIOS: [f32; BALL_COUNT] =
-    [0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5];
+pub const SIZE_RATIOS: [f32; BALL_COUNT] = [0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8];
 pub const BODY_STRIDE: usize = 18;
 pub const BAR_OFFSET: usize = 3 + BALL_COUNT * BODY_STRIDE;
 pub const IMPULSE_OFFSET: usize = BAR_OFFSET + COUNT;
@@ -146,9 +145,9 @@ impl Default for SimulationInput {
     }
 }
 
-/// Packed snapshot: time/height/tick, then 12 bodies (position, quaternion, radius,
+/// Packed snapshot: time/height/tick, then 8 bodies (position, quaternion, radius,
 /// mass, linear velocity, angular velocity, linear-sRGB), 24 actual bar tops,
-/// 12×24 normal bar impulses in N·s, and each ball's total normal contact impulse.
+/// 8×24 normal bar impulses in N·s, and each ball's total normal contact impulse.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SimulationSnapshot {
     pub values: [f32; SNAPSHOT_LEN],

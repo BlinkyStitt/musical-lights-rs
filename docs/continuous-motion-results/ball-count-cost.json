@@ -37,34 +37,34 @@
     "node": "v26.8.2",
     "platform": "darwin",
     "cpu": "Apple M4 Max",
-    "physicsSha256": "4f15ebea431d5e4ae06574c2d54e8ade1a84d6927997d79637417beaa04c56bc",
+    "physicsSha256": "aba1bed4a5da6153b2fd7662f5eadc388df5e1b621b40f487d1fcdc3840fc046",
     "pcmSha256": "d16367d07889a3ec7c5abcbdd3f7b82a1a542ba50f8a533e8b2d30b0554d9989",
     "protocol": 5,
     "bands": 24,
-    "balls": 12,
+    "balls": 8,
     "durationSeconds": 12,
     "physicsHz": 120,
     "runs": [
       {
-        "totalMs": 1129.8449729999938,
-        "maxTickMs": 5.161458000000039,
-        "substeps": 28367,
+        "totalMs": 719.516960000004,
+        "maxTickMs": 3.6057499999997162,
+        "substeps": 22019,
         "ticks": 1440
       },
       {
-        "totalMs": 1113.6697160000153,
-        "maxTickMs": 5.138500000000022,
-        "substeps": 28367,
+        "totalMs": 707.818115999999,
+        "maxTickMs": 3.0281669999999394,
+        "substeps": 22019,
         "ticks": 1440
       },
       {
-        "totalMs": 1128.710412999988,
-        "maxTickMs": 5.1354169999995065,
-        "substeps": 28367,
+        "totalMs": 707.5944700000209,
+        "maxTickMs": 3.0850829999999405,
+        "substeps": 22019,
         "ticks": 1440
       }
     ],
-    "medianCpuMs": 1128.710412999988
+    "medianCpuMs": 707.818115999999
   },
-  "cpuReductionPercent": 55.781088679604515
+  "cpuReductionPercent": 72.27017121319524
 }

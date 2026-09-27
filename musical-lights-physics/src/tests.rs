@@ -504,7 +504,7 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
         height: 1.2,
         ..SimulationConfig::default()
     });
-    let indices = [0, 3, 5, 8, 10, 1];
+    let indices = [0, 3, 5, 1, 2, 7];
     isolate(&mut sim, &indices);
     let mut y = BASELINE;
     for i in indices {
