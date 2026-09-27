@@ -5,6 +5,7 @@ mod motion;
 use motion::Motion;
 
 pub const COUNT: usize = 24;
+pub const BALL_COUNT: usize = 12;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
 pub const WIDTH: f32 = 1.2;
@@ -18,15 +19,13 @@ pub const RESIZE_TICKS: u32 = HZ * 3 / 10;
 pub const CLEARANCE: f32 = 0.004;
 pub const BASELINE: f32 = 0.003;
 pub const WALL_RESTITUTION: f32 = 0.55;
-pub const SIZE_RATIOS: [f32; COUNT] = [
-    0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5, 0.65, 1.0, 1.2, 0.8, 1.4, 0.55,
-    0.7, 1.1, 1.6, 0.9, 1.3, 0.6,
-];
+pub const SIZE_RATIOS: [f32; BALL_COUNT] =
+    [0.55, 1.4, 2.2, 0.8, 3.1, 1.0, 4.0, 1.8, 0.65, 2.6, 1.2, 3.5];
 pub const BODY_STRIDE: usize = 18;
-pub const BAR_OFFSET: usize = 3 + COUNT * BODY_STRIDE;
+pub const BAR_OFFSET: usize = 3 + BALL_COUNT * BODY_STRIDE;
 pub const IMPULSE_OFFSET: usize = BAR_OFFSET + COUNT;
-pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + COUNT * COUNT;
-pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + COUNT;
+pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + BALL_COUNT * COUNT;
+pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + BALL_COUNT;
 pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
 pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
 pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 4;
@@ -147,9 +146,9 @@ impl Default for SimulationInput {
     }
 }
 
-/// Packed snapshot: time/height/tick, then 24 bodies (position, quaternion, radius,
+/// Packed snapshot: time/height/tick, then 12 bodies (position, quaternion, radius,
 /// mass, linear velocity, angular velocity, linear-sRGB), 24 actual bar tops,
-/// 24×24 normal bar impulses in N·s, and each ball's total normal contact impulse.
+/// 12×24 normal bar impulses in N·s, and each ball's total normal contact impulse.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SimulationSnapshot {
     pub values: [f32; SNAPSHOT_LEN],
@@ -159,7 +158,7 @@ pub struct Simulation {
     pub config: SimulationConfig,
     pub tick: u64,
     world: PhysicsWorld,
-    balls: [(RigidBodyHandle, ColliderHandle); COUNT],
+    balls: [(RigidBodyHandle, ColliderHandle); BALL_COUNT],
     bars: [(RigidBodyHandle, ColliderHandle); COUNT * 3],
     bar_positions: [f64; COUNT],
     bar_velocities: [f64; COUNT],
@@ -170,14 +169,14 @@ pub struct Simulation {
     scroll_elapsed: f64,
     scroll_enabled: bool,
     palette: [[f32; 3]; COUNT],
-    colors: [[f32; 3]; COUNT],
-    touching: [[bool; COUNT]; COUNT],
+    colors: [[f32; 3]; BALL_COUNT],
+    touching: [[bool; COUNT]; BALL_COUNT],
     ceiling: RigidBodyHandle,
     ceiling_height: f32,
     resize_from: f32,
     resize_tick: u32,
-    supported: [bool; COUNT],
-    driven: [bool; COUNT],
+    supported: [bool; BALL_COUNT],
+    driven: [bool; BALL_COUNT],
     input: SimulationInput,
     snapshot: SimulationSnapshot,
 }
@@ -271,9 +270,9 @@ impl Simulation {
                 .restitution(config.restitution),
             )
         });
-        let mut order: [usize; COUNT] = std::array::from_fn(|i| i);
+        let mut order: [usize; BALL_COUNT] = std::array::from_fn(|i| i);
         order.sort_by(|&a, &b| SIZE_RATIOS[b].total_cmp(&SIZE_RATIOS[a]).then(a.cmp(&b)));
-        let mut spawn = [Vector::ZERO; COUNT];
+        let mut spawn = [Vector::ZERO; BALL_COUNT];
         let mut bottom = BASELINE + 0.002;
         for (row_index, row) in order.chunks(6).enumerate() {
             let diameter = SIZE_RATIOS[row[0]] * (PITCH - GAP);
@@ -321,7 +320,7 @@ impl Simulation {
             balls,
             bars,
             palette,
-            colors: palette,
+            colors: std::array::from_fn(|i| palette[i * COUNT / BALL_COUNT]),
             bar_positions: [f64::from(BASELINE); COUNT],
             bar_velocities: [0.0; COUNT],
             motions: [Motion::default(); COUNT],
@@ -330,13 +329,13 @@ impl Simulation {
             scroll_from: 0.0,
             scroll_elapsed: SCROLL_EASE,
             scroll_enabled: false,
-            touching: [[false; COUNT]; COUNT],
+            touching: [[false; COUNT]; BALL_COUNT],
             ceiling,
             ceiling_height: config.height,
             resize_from: config.height,
             resize_tick: RESIZE_TICKS,
-            supported: [false; COUNT],
-            driven: [false; COUNT],
+            supported: [false; BALL_COUNT],
+            driven: [false; BALL_COUNT],
             input: SimulationInput {
                 height: config.height,
                 ..SimulationInput::default()
@@ -566,7 +565,7 @@ impl Simulation {
             self.world.step();
             let mut supported = 0_u32;
             let mut driven = 0_u32;
-            let mut supports = [0_u32; COUNT];
+            let mut supports = [0_u32; BALL_COUNT];
             for (i, &(_, collider)) in self.balls.iter().enumerate() {
                 let mut touching = [false; COUNT];
                 for pair in self.world.narrow_phase.contact_pairs_with(collider) {
@@ -587,9 +586,9 @@ impl Simulation {
                             m.data.normal.y * sign > 0.1
                         });
                     // Collider tags identify the source directly, including wrapped
-                    // copies. Walls use zero, balls 1..=COUNT, bars COUNT+1..=2*COUNT.
+                    // copies. Walls use zero, balls 1..=BALL_COUNT, bars COUNT+1..=2*COUNT.
                     let tag = self.world.colliders[other].user_data as usize;
-                    if upward && (1..=COUNT).contains(&tag) {
+                    if upward && (1..=BALL_COUNT).contains(&tag) {
                         supports[i] |= 1 << (tag - 1);
                     }
                     if tag > COUNT {
@@ -618,7 +617,7 @@ impl Simulation {
                 .iter()
                 .enumerate()
                 .fold(0_u32, |mask, (i, &value)| mask | (u32::from(value) << i));
-            for _ in 0..COUNT {
+            for _ in 0..BALL_COUNT {
                 let before = (supported, driven);
                 for (i, &support) in supports.iter().enumerate() {
                     supported |= u32::from(support & before.0 != 0) << i;
@@ -629,12 +628,12 @@ impl Simulation {
                     break;
                 }
             }
-            let supported: [bool; COUNT] = std::array::from_fn(|i| supported & (1 << i) != 0);
-            let driven: [bool; COUNT] = std::array::from_fn(|i| driven & (1 << i) != 0);
+            let supported: [bool; BALL_COUNT] = std::array::from_fn(|i| supported & (1 << i) != 0);
+            let driven: [bool; BALL_COUNT] = std::array::from_fn(|i| driven & (1 << i) != 0);
             let release_speed =
                 (2.0 * self.config.gravity * self.config.hop_height(self.input.reduced_motion))
                     .sqrt();
-            for i in 0..COUNT {
+            for i in 0..BALL_COUNT {
                 // Remove excess launch energy only after bar support ends. Clamping
                 // a carried ball would drive its supporting collider through it.
                 if self.supported[i] && !supported[i] && self.driven[i] {
@@ -750,9 +749,10 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            4.0, // normalized trajectories and continuous scrolling
+            5.0, // independent ball and source-band counts
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
+            BALL_COUNT as f32,
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {

@@ -39,7 +39,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
     // Capture at the actual Stop event so protocol latency cannot consume the
     // fall before its starting height is measured.
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    window.physicsAtStop = { tick: current[2], balls: Array.from({ length: layout[0] }, (_, i) => {
+    window.physicsAtStop = { tick: current[2], balls: Array.from({ length: layout[21] }, (_, i) => {
       const offset = 3 + i * layout[8];
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
@@ -274,7 +274,7 @@ test('fullscreen transitions keep live audio and bounded simulation delay', asyn
 test.afterEach(async ({ page }, info) => {
   const timing = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights')?.physics;
-    return { timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames };
+    return { layout: v?.layout, timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames };
   }).catch(error => ({ error: String(error) }));
   const path = info.outputPath('physics-timing.json');
   await writeFile(path, JSON.stringify(timing));

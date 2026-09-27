@@ -163,7 +163,7 @@ fn gravity_matches_ballistic_position_and_velocity() {
 #[test]
 fn density_sets_sphere_mass_and_rotational_inertia() {
     let sim = world(SimulationConfig::default());
-    for i in 0..COUNT {
+    for i in 0..BALL_COUNT {
         let body = &sim.world.bodies[sim.balls[i].0];
         let expected = 4.0 / 3.0 * std::f32::consts::PI * radius(i).powi(3) * sim.config.density;
         assert!((body.mass() - expected).abs() < expected * 1e-5);
@@ -504,7 +504,7 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
         height: 1.2,
         ..SimulationConfig::default()
     });
-    let indices = [0, 3, 5, 12, 15, 17];
+    let indices = [0, 3, 5, 8, 10, 1];
     isolate(&mut sim, &indices);
     let mut y = BASELINE;
     for i in indices {
@@ -686,7 +686,7 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
     let mut sim = world(SimulationConfig::default());
     let mut worst_penetration = 0.0_f32;
     let mut worst_fraction = 0.0_f32;
-    let mut impulses = [0.0; COUNT];
+    let mut impulses = [0.0; BALL_COUNT];
     for tick in 0..HZ as usize * 20 {
         if tick % (HZ as usize / 6) == 0 {
             input(
@@ -723,12 +723,12 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
     }
     // Resting stacks are valid. Require a contact path down to the floor or
     // lowered bar tops instead of requiring every sphere to touch the floor.
-    let mut supported: [bool; COUNT] =
+    let mut supported: [bool; BALL_COUNT] =
         std::array::from_fn(|i| position(&sim, i).y <= radius(i) + BASELINE + 0.001);
-    for _ in 0..COUNT {
+    for _ in 0..BALL_COUNT {
         let previous = supported;
         for (i, supported) in supported.iter_mut().enumerate() {
-            *supported |= (0..COUNT).any(|j| {
+            *supported |= (0..BALL_COUNT).any(|j| {
                 previous[j]
                     && position(&sim, j).y < position(&sim, i).y
                     && sim
@@ -858,7 +858,12 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
         friction: 0.0,
         ..SimulationConfig::default()
     });
-    isolate(&mut sim, &[0, 17]);
+    // Make the second fixture sphere identical to the first; the production
+    // palette no longer needs duplicate sizes just to exercise equal-mass CCD.
+    let (body, collider) = sim.balls[1];
+    sim.world.colliders[collider].set_shape(SharedShape::ball(radius(0)));
+    sim.world.bodies[body].recompute_mass_properties_from_colliders(&sim.world.colliders);
+    isolate(&mut sim, &[0, 1]);
     place(
         &mut sim,
         0,
@@ -867,14 +872,14 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
     );
     place(
         &mut sim,
-        17,
+        1,
         Vector::new(0.65, 1.0, 0.0),
         Vector::new(-20.0, 0.0, 0.0),
     );
     for _ in 0..3 {
         sim.step();
         assert!(
-            position(&sim, 0).x <= position(&sim, 17).x,
+            position(&sim, 0).x <= position(&sim, 1).x,
             "spheres passed through each other"
         );
         if velocity(&sim, 0).x < 0.0 {
@@ -882,7 +887,7 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
         }
     }
     assert!(velocity(&sim, 0).x < -19.0);
-    assert!(velocity(&sim, 17).x > 19.0);
+    assert!(velocity(&sim, 1).x > 19.0);
 }
 
 #[test]
@@ -957,7 +962,7 @@ fn initial_placement_fits_the_minimum_closed_enclosure_without_overlap() {
         height: MIN_HEIGHT,
         ..SimulationConfig::default()
     });
-    for i in 0..COUNT {
+    for i in 0..BALL_COUNT {
         let p = position(&sim, i);
         assert!(p.y - radius(i) >= BASELINE && p.y + radius(i) < MIN_HEIGHT);
         assert!(p.x >= radius(i) && p.x + radius(i) <= WIDTH);
@@ -982,7 +987,7 @@ fn simultaneous_full_strokes_do_not_push_stacks_through_the_ceiling() {
             let mut worst = 0.0_f32;
             for _ in 0..HZ {
                 sim.step();
-                for i in 0..COUNT {
+                for i in 0..BALL_COUNT {
                     worst = worst.max(position(&sim, i).y + radius(i) - sim.ceiling_height);
                 }
             }
@@ -1092,7 +1097,7 @@ fn fullscreen_resize_is_bounded_and_repeated_packets_do_not_restart_it() {
                 if tick == RESIZE_TICKS / 2 {
                     assert!((sim.config.height - (before + height) / 2.0).abs() < 1e-6);
                 }
-                for i in 0..COUNT {
+                for i in 0..BALL_COUNT {
                     assert!(position(&sim, i).y + radius(i) <= sim.ceiling_height + 0.002);
                 }
             }
@@ -1189,7 +1194,7 @@ fn rapid_reversals_with_scrolling_keep_balls_inside_the_enclosure() {
             .unwrap();
         }
         sim.step();
-        for i in 0..COUNT {
+        for i in 0..BALL_COUNT {
             let p = position(&sim, i);
             assert!(
                 p.y + radius(i) <= sim.ceiling_height + 0.005,

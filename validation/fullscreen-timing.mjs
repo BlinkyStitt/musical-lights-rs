@@ -42,7 +42,7 @@ for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,d
     }
     const data=await page.evaluate(()=>{
       profiling=false;const v=document.querySelector('#dancinglights').physics;
-      return{samples,marks,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
+      return{layout:v.layout,samples,marks,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
     });
     const windows=data.marks.map(({event,t})=>{
       const points=data.samples.filter(p=>p.t>=t&&p.t<t+2000),before=data.samples.findLast(p=>p.t<t);

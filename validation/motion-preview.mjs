@@ -53,7 +53,7 @@ for(const [name,directory] of [['before',`${baseline}/musical-lights-physics/pkg
   const wasm=await api.default({module_or_path:await readFile(`${directory}/physics_bg.wasm`)});
   engineHashes[name] = createHash('sha256').update(await readFile(`${directory}/physics_bg.wasm`)).digest('hex');
   const layout=api.PhysicsSimulation.layout();
-  assert.equal(layout[18], name === 'before' ? 3 : 4);
+  assert.equal(layout[18], name === 'before' ? 3 : 5);
   for(const scrolling of [false,true]) {
     const config=api.PhysicsSimulation.defaults(),sim=new api.PhysicsSimulation(config,new Float32Array(palette));
     const input=new Float32Array(34);input[32]=config[0];
@@ -74,7 +74,7 @@ for(const [name,directory] of [['before',`${baseline}/musical-lights-physics/pkg
         frames.push({phase:name==='before'?offset:state[layout[20]],
           bars:Array.from(state.subarray(layout[9],layout[10]),round),
           edges:Array.from({length:24},(_,i)=>{const source=name==='before'?(i+24-offset)%24:i;const attack=held[369+4*source];return attack<0?0:Math.max(0,1-(t-attack)/.180)}),
-          balls:Array.from({length:24},(_,i)=>{const at=3+i*layout[8];return [state[at],state[at+1],state[at+7],...state.subarray(at+15,at+18)].map(round)})});
+          balls:Array.from({length:layout[21] ?? layout[0]},(_,i)=>{const at=3+i*layout[8];return [state[at],state[at+1],state[at+7],...state.subarray(at+15,at+18)].map(round)})});
       }
     }
     data.cases[`${name}-${scrolling}`]=frames;sim.free();

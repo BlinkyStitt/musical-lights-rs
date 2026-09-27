@@ -1,0 +1,70 @@
+{
+  "beforeRevision": "7c4ad6951fce0e5e42ec10c3dd08636766744c2d",
+  "before": {
+    "node": "v26.8.2",
+    "platform": "darwin",
+    "cpu": "Apple M4 Max",
+    "physicsSha256": "8a53f5a570d38c2669aa6484a89a275e8a4c760b8440fa4ac3518088a3761800",
+    "pcmSha256": "d16367d07889a3ec7c5abcbdd3f7b82a1a542ba50f8a533e8b2d30b0554d9989",
+    "protocol": 4,
+    "bands": 24,
+    "balls": 24,
+    "durationSeconds": 12,
+    "physicsHz": 120,
+    "runs": [
+      {
+        "totalMs": 2573.2915429999935,
+        "maxTickMs": 10.609750000000076,
+        "substeps": 33874,
+        "ticks": 1440
+      },
+      {
+        "totalMs": 2552.551339000024,
+        "maxTickMs": 10.203083999999762,
+        "substeps": 33874,
+        "ticks": 1440
+      },
+      {
+        "totalMs": 2549.525667999993,
+        "maxTickMs": 10.193084000000454,
+        "substeps": 33874,
+        "ticks": 1440
+      }
+    ],
+    "medianCpuMs": 2552.551339000024
+  },
+  "after": {
+    "node": "v26.8.2",
+    "platform": "darwin",
+    "cpu": "Apple M4 Max",
+    "physicsSha256": "4f15ebea431d5e4ae06574c2d54e8ade1a84d6927997d79637417beaa04c56bc",
+    "pcmSha256": "d16367d07889a3ec7c5abcbdd3f7b82a1a542ba50f8a533e8b2d30b0554d9989",
+    "protocol": 5,
+    "bands": 24,
+    "balls": 12,
+    "durationSeconds": 12,
+    "physicsHz": 120,
+    "runs": [
+      {
+        "totalMs": 1129.8449729999938,
+        "maxTickMs": 5.161458000000039,
+        "substeps": 28367,
+        "ticks": 1440
+      },
+      {
+        "totalMs": 1113.6697160000153,
+        "maxTickMs": 5.138500000000022,
+        "substeps": 28367,
+        "ticks": 1440
+      },
+      {
+        "totalMs": 1128.710412999988,
+        "maxTickMs": 5.1354169999995065,
+        "substeps": 28367,
+        "ticks": 1440
+      }
+    ],
+    "medianCpuMs": 1128.710412999988
+  },
+  "cpuReductionPercent": 55.781088679604515
+}
