@@ -1,5 +1,9 @@
 # Continuous motion comparison
 
+These are the recorded PR #20 results at `3020a71b44be9f0f7fd995e310a7be91dd9055e4`.
+Use that revision to reproduce the protocol-5 after side exactly. The later
+gravity-release and balanced-scroll behavior is documented in [physics](../physics.md).
+
 Open [the before/after preview](index.html) locally. It has one shared audio
 track, a timeline scrubber, and scrolling on/off. Both panes draw exported
 positions from their actual production physics WASM. The front projection is

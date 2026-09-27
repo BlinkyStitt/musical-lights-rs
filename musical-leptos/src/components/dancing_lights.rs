@@ -79,7 +79,15 @@ fn transient_notice(
 
 #[component]
 pub fn DancingLights() -> impl IntoView {
-    let palette = Gradient::<DISPLAY_BANDS>::new_rainbow(90.0, 58.0);
+    let mut palette = Gradient::<DISPLAY_BANDS>::new_rainbow(100.0, 58.0);
+    // Keep the established hue order, but use the full display gamut rather
+    // than equal-lightness, muted fills. Height alone represents loudness.
+    for color in &mut palette.colors {
+        let peak = color.red.max(color.green).max(color.blue);
+        color.red /= peak;
+        color.green /= peak;
+        color.blue /= peak;
+    }
     let colors = palette.colors;
     let frequency_edges = BARK_EDGES;
     let (active_sample, set_active_sample) = signal(0usize);

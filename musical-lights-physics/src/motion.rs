@@ -1,4 +1,6 @@
-//! C² trajectories in normalized loudness coordinates, independent of enclosure size.
+//! Smooth attacks and gravity-limited releases in normalized bar coordinates.
+const FALL_GRAVITY: f64 = 2.0; // bar heights / second²
+const FALL_SPEED: f64 = 1.2; // terminal bar heights / second
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct State {
     pub position: f64,
@@ -52,6 +54,9 @@ pub(crate) struct Motion {
     elapsed: f64,
     duration: f64,
     reduced: bool,
+    falling: bool,
+    fall_start: State,
+    brake_duration: f64,
 }
 impl Motion {
     pub fn retarget(&mut self, target: f64, fast: f64, reduced: bool, slow: f64) {
@@ -62,6 +67,30 @@ impl Motion {
         self.reduced = reduced;
         let mut start = self.state;
         let delta = target - start.position;
+        self.falling = delta < 0.0;
+        if self.falling {
+            // Lower targets change only the floor. Preserve downward momentum;
+            // an upward attack first brakes before gravity takes over.
+            self.brake_duration = if start.velocity > 0.0 {
+                if reduced { 0.080 } else { 0.020 }
+            } else {
+                0.0
+            };
+            if self.brake_duration > 0.0 {
+                let t = self.brake_duration;
+                let stop = State {
+                    position: start.position
+                        + start.velocity * t / 2.0
+                        + start.acceleration * t * t / 12.0,
+                    ..State::default()
+                };
+                self.segments[0] = Segment::new(start, stop, t);
+                start = stop;
+            }
+            self.fall_start = start;
+            self.elapsed = 0.0;
+            return;
+        }
         let blend = ((delta.abs() - 0.01) / (0.125 - 0.01)).clamp(0.0, 1.0);
         let duration = if reduced {
             slow.max(0.320)
@@ -107,6 +136,36 @@ impl Motion {
     }
     pub fn sample(&self, after: f64) -> State {
         let mut time = self.elapsed + after;
+        if self.falling {
+            if time < self.brake_duration {
+                return self.segments[0].sample(time);
+            }
+            time -= self.brake_duration;
+            let scale = if self.reduced { 0.25 } else { 1.0 };
+            let gravity = FALL_GRAVITY * scale;
+            let terminal = FALL_SPEED * scale.sqrt();
+            let speed = (-self.fall_start.velocity).clamp(0.0, terminal);
+            let accelerating = time.min((terminal - speed) / gravity);
+            let distance = speed * accelerating
+                + gravity * accelerating * accelerating / 2.0
+                + terminal * (time - accelerating);
+            let position = self.fall_start.position - distance;
+            if position <= self.target {
+                return State {
+                    position: self.target,
+                    ..State::default()
+                };
+            }
+            return State {
+                position,
+                velocity: -(speed + gravity * accelerating),
+                acceleration: if time < (terminal - speed) / gravity {
+                    -gravity
+                } else {
+                    0.0
+                },
+            };
+        }
         if time >= self.duration {
             return State {
                 position: self.target,
@@ -151,7 +210,7 @@ mod tests {
         assert!((now.acceleration - state.acceleration).abs() < 1e-9);
         motion.advance(0.008);
         assert!(motion.state.velocity > 0.0);
-        motion.advance(0.060);
+        motion.advance(1.5);
         assert_eq!(motion.state.position, 0.0);
         assert_eq!(motion.state.velocity, 0.0);
         assert_eq!(motion.state.acceleration, 0.0);
@@ -213,6 +272,51 @@ mod tests {
         }
         motion.advance(0.150);
         assert!((motion.state.position - 0.6).abs() < 1e-12);
+    }
+    #[test]
+    fn gravity_drop_has_a_fixed_rate_and_stops_at_the_live_floor() {
+        let mut motion = Motion::default();
+        motion.retarget(1.0, 0.040, false, 0.320);
+        motion.advance(0.05);
+        motion.retarget(0.2, 0.040, false, 0.320);
+        motion.advance(0.1);
+        assert!((motion.state.position - 0.99).abs() < 1e-12);
+        assert!((motion.state.velocity + 0.2).abs() < 1e-12);
+        // A lower floor does not restart the fall or change its acceleration.
+        motion.retarget(0.0, 0.040, false, 0.320);
+        motion.advance(0.1);
+        assert!((motion.state.position - 0.96).abs() < 1e-12);
+        assert!((motion.state.velocity + 0.4).abs() < 1e-12);
+        // Raising the floor while still below the bar stops precisely there.
+        motion.retarget(0.9, 0.040, false, 0.320);
+        for _ in 0..120 {
+            motion.retarget(0.9, 0.040, false, 0.320);
+            motion.advance(1.0 / 120.0);
+            assert!(motion.state.position >= 0.9);
+            assert!(motion.state.velocity >= -1.2);
+        }
+        assert_eq!(motion.state.position, 0.9);
+        assert_eq!(motion.state.velocity, 0.0);
+        motion.retarget(1.0, 0.040, false, 0.320);
+        motion.advance(0.15);
+        assert_eq!(motion.state.position, 1.0);
+    }
+    #[test]
+    fn reduced_motion_slows_gravity_and_drops_ignore_sampling_rate() {
+        let run = |fps: u32, reduced| {
+            let mut motion = Motion::default();
+            motion.retarget(1.0, 0.040, reduced, 0.320);
+            motion.advance(0.4);
+            motion.retarget(0.0, 0.040, reduced, 0.320);
+            for _ in 0..fps / 2 {
+                motion.advance(1.0 / f64::from(fps));
+            }
+            motion.state.position
+        };
+        for fps in [30, 60, 120] {
+            assert!((run(fps, false) - 0.75).abs() < 1e-12);
+            assert!((run(fps, true) - 0.9375).abs() < 1e-12);
+        }
     }
     /// Exact constant-acceleration segments of the shortest rest-to-rest stroke.
     /// Retargeting preserves velocity, including the braking segment before reversal.

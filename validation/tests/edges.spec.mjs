@@ -62,13 +62,18 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       const edge = pixels.side + (i + .02) * pixels.plotWidth / 24;
       const left = Math.floor(edge + .5);
       const middle = rgb(center);
-      // Multisample edge coverage differs between engines. Inspect the first two
-      // inside pixels; an outside sample can contain transparent antialiasing.
-      const border = [rgb(left), rgb(left + 1)].sort((a, b) => Math.min(...b) - Math.min(...a))[0];
-      expect(Math.max(...middle) - Math.min(...middle)).toBeGreaterThan(30);
+      // Multisample edge coverage differs between engines. Inspect the outline
+      // and inner flash together; outside samples can contain antialiasing.
+      const border = Array.from({ length: Math.ceil(3 * pixels.ratio) }, (_, offset) => rgb(left + offset))
+        .sort((a, b) => Math.min(...b) - Math.min(...a))[0];
+      // Every hue reaches full value with at least 50% encoded-RGB saturation.
+      expect(Math.max(...middle)).toBeGreaterThan(250);
+      expect(Math.max(...middle) - Math.min(...middle)).toBeGreaterThanOrEqual(128);
+      // The dark outer boundary is visible even on a white page.
+      expect(Math.max(...rgb(left))).toBeLessThan(Math.max(...middle));
       // White is confined to the inside edge; the next pixels return to the fill.
       expect(Math.min(...border)).toBeGreaterThan(Math.min(...middle));
-      expect(Math.min(...rgb(left + Math.ceil(2 * pixels.ratio)))).toBeLessThan(245);
+      expect(Math.min(...rgb(left + Math.ceil(3 * pixels.ratio)))).toBeLessThan(245);
     }
     await page.screenshot({ path: info.outputPath('white-inner-edge.png'), fullPage: true });
     await page.evaluate(() => { window.audioNow += .090; });
