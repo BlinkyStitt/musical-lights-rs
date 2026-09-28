@@ -73,15 +73,20 @@ export class PhysicsInput {
       permission(Interface).then(granted => {
         if (this.motion !== session) return;
         if (granted) this.listen(type, handler, session);
-        if (type === 'devicemotion') this.setStatus(granted ? 'waiting' : Interface ? 'denied' : 'unavailable');
+        this.setStatus(type === 'devicemotion' ? (granted ? 'waiting' : Interface ? 'denied' : 'unavailable') : this.state);
       });
     }
   }
 
+  // The listener list is authoritative: tilt may work even when shaking does not.
+  get enabled() { return Boolean(this.motion?.length); }
+
   setStatus(state) {
-    if (this.state === state) return;
+    const enabled = this.enabled;
+    if (this.state === state && this.statusEnabled === enabled) return;
     this.state = state;
-    this.onStatus(state);
+    this.statusEnabled = enabled;
+    this.onStatus(state, enabled);
   }
 
   listen(type, listener, listeners = this.listeners) {
@@ -128,13 +133,14 @@ export class Scene {
       (...args) => this.view?.pointer(...args),
       (...args) => this.view?.orientation(...args),
       (...args) => this.view?.deviceAcceleration(...args),
-      state => {
-        const on = state === 'active' || state === 'waiting';
+      (state, on) => {
         this.motionButton.textContent = on ? 'Disable motion' : 'Enable motion';
-        this.motionButton.disabled = state === 'requesting';
+        this.motionButton.disabled = state === 'requesting' && !on;
         this.motionButton.setAttribute('aria-pressed', String(on));
         this.motionStatus.dataset.state = state;
-        this.motionStatus.textContent = {
+        this.motionStatus.textContent = on && ['requesting', 'denied', 'unavailable'].includes(state)
+          ? `Tilt on · ${state === 'requesting' ? 'waiting for shaking permission.' : state === 'denied' ? 'shaking access denied.' : 'shaking unavailable.'}`
+          : {
           off: '', requesting: 'Allow Motion & Orientation to shake the balls.',
           waiting: 'Motion allowed. Waiting for sensor readings…',
           active: matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -147,7 +153,7 @@ export class Scene {
     // A dedicated gesture allows shaking without microphone access and makes
     // permission retry explicit. Display rotation lock is never consulted.
     this.motionButton.onclick = () => {
-      if (['active', 'waiting'].includes(this.input.state)) {
+      if (this.input.enabled) {
         this.input.stopMotion(); this.view?.clearMotion();
       }
       else { this.input.stopMotion(); this.input.startMotion(); }

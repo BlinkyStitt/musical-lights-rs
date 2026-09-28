@@ -155,3 +155,5 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .motion-status { margin: 0; font-size: .82rem; }
 .motion-status:empty { display: none; }
 .audio-card[data-expanded] .motion-controls { display: none; }
+.runtime-update { display: block; width: fit-content; min-height: 44px; padding: .6rem 0; }
+.audio-card[data-expanded] .runtime-update { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; z-index: 3; padding: .6rem; background: var(--surface); }

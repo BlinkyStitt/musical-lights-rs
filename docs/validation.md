@@ -489,7 +489,14 @@ route with the new version in its query, preserving existing query/hash state;
 a successful current entry removes the temporary parameter. Network failures
 still allow a coherent cached runtime to start. No polling or automatic refresh
 interrupts an active microphone session. Already-open pages keep their existing
-version; reloading gets the latest entry. Pre-fix cached HTML cannot run this
+version. Before a new microphone or generated-tone session, a fresh build check
+can offer **Reload updated app** before opening capture or loading retired assets.
+The link bypasses SPA routing and loads the current document, preserving the
+route, query, and fragment. A deployment between this check and the WASM/worklet
+loads triggers the same recovery; failed startup closes its audio context and
+stops acquired tracks. An unavailable version check still permits cached modules
+to load. Reloading does not automatically restart capture: the user starts the
+new session explicitly. Pre-fix cached HTML cannot run this
 new bootstrap until it refreshes. This avoids mixed runtime versions without
 introducing a service worker or clearing the user's calibration data.
 
@@ -508,3 +515,10 @@ zero of eight settled balls reaching 8 cm of upward travel; the updated build
 passes the travel threshold in both browsers. Rotation-lock coverage fixes the
 screen angle, denies orientation access, and supplies only gravity-inclusive
 accelerometer events. Physical iPhone Safari behavior remains unverified.
+
+The cross-deployment browser fixture serves real HTTP for both the page and
+AudioWorklet: it changes the current namespace and returns 404 for retired files.
+It covers first microphone and generated-tone starts after deployment, retirement
+during WASM/worklet loads, and an existing session surviving deployment until the
+next Start. Tilt-only regressions exercise the actual control and force path
+with shaking denied, absent, and pending, including late permission completion.

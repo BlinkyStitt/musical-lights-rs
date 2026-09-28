@@ -95,7 +95,10 @@ Motion and tilt permissions are requested from either Enable motion or the Start
 enabled independently, so a pending tilt request cannot block granted motion
 access. Enable motion works without starting the microphone; its status distinguishes
 denied access, permission granted without readings, and active sensor readings.
-Disable motion clears sensor forces without changing musical targets. Stop listening
+The button tracks enabled listeners separately from shaking permission: tilt-only
+sessions still show Disable motion, even when shaking is denied, unavailable, or
+pending. Disabling removes both listeners, invalidates pending grants, and clears
+sensor forces without changing musical targets. Stop listening
 and route cleanup invalidate both requests and remove listeners. Display rotation
 lock never gates accelerometer delivery: a fixed screen angle still maps shakes
 into that fixed viewport, even with no orientation events.

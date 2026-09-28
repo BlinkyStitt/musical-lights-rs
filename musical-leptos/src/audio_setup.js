@@ -32,6 +32,35 @@ function beginSession(context, card, source) {
     return session;
 }
 
+// A tab can outlive the Pages artifact it booted from. Check only at session
+// start (or a failed module load), never interrupt a running audio graph.
+async function requireCurrentRuntime(context) {
+    const card = document.querySelector('.audio-card');
+    const assets = document.querySelector('meta[name="musical-lights-assets"]').content;
+    let version;
+    try {
+        const check = new URL('build.json', document.baseURI);
+        check.searchParams.set('check', Date.now());
+        const response = await fetch(check, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+        if (response.ok) ({ version } = await response.json());
+    } catch { /* Cached modules may still work when the version check is offline. */ }
+    if (context.state === 'closed' || !card?.isConnected) throw new Error('Audio session has closed');
+    if (!/^[a-f0-9]{24}$/.test(version) || assets.endsWith(`/assets/${version}/`)) return;
+    const reload = new URL(location.href);
+    reload.searchParams.set('__ml_build', version);
+    let link = card.querySelector('.runtime-update');
+    if (!link) {
+        link = document.createElement('a');
+        link.className = 'runtime-update';
+        // Bypass the Leptos router: this must load a new document and runtime.
+        link.rel = 'external';
+        link.textContent = 'Reload updated app';
+        card.querySelector('.audio-error').insertAdjacentElement('afterend', link);
+    }
+    link.href = reload.href;
+    throw new Error('An updated app is available. Reload it, then start listening again.');
+}
+
 export async function prepareProcessor(context, stream, channel, reducedMotion) {
     const session = sessions.get(stream);
     if (!session || session.closed) throw new Error('Audio session has closed');
@@ -51,11 +80,18 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     const pascalsPerUnit = Number.isFinite(pressure) && pressure > 0 ? pressure : undefined;
     Object.assign(session, { channel, pascalsPerUnit: pascalsPerUnit ?? 2, calibrated: pascalsPerUnit !== undefined });
     session.publish(session.state, 'processor ready');
-    const moduleUrl = new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/loudness.wasm', document.baseURI);
-    const response = await fetch(moduleUrl);
-    if (!response.ok) throw new Error(`Cannot load audio analysis: HTTP ${response.status}`);
-    const module = await WebAssembly.compile(await response.arrayBuffer());
-    await context.audioWorklet.addModule(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/processor.js', document.baseURI));
+    let module;
+    try {
+        const moduleUrl = new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/loudness.wasm', document.baseURI);
+        const response = await fetch(moduleUrl);
+        if (!response.ok) throw new Error(`Cannot load audio analysis: HTTP ${response.status}`);
+        module = await WebAssembly.compile(await response.arrayBuffer());
+        await context.audioWorklet.addModule(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/processor.js', document.baseURI));
+    } catch (error) {
+        // Cover a deployment after the session preflight but before either load.
+        await requireCurrentRuntime(context);
+        throw error;
+    }
     if (session.closed) throw new Error('Audio session has closed');
     const node = new AudioWorkletNode(context, 'loudness-processor', {
         channelCountMode: 'max', channelInterpretation: 'discrete',
@@ -131,6 +167,7 @@ export async function acquireInput(context) {
     const generated = card.querySelector('.generated-audio')?.checked === true;
     const session = beginSession(context, card, generated ? 'generated' : 'microphone');
     try {
+        await requireCurrentRuntime(context);
         if (!generated) {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: {
                 autoGainControl: false, echoCancellation: false, noiseSuppression: false,
@@ -138,7 +175,10 @@ export async function acquireInput(context) {
             sessions.set(stream, session);
             return stream;
         }
-        const { tonePCM, toneCases, toneState } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/tones.js', document.baseURI));
+        const { tonePCM, toneCases, toneState } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/tones.js', document.baseURI)).catch(async error => {
+            await requireCurrentRuntime(context);
+            throw error;
+        });
         const query = selector => card.querySelector(selector);
         const kind = query('.tone-kind')?.value ?? 'exercise';
         const frequency = Number(query('.tone-frequency')?.value ?? 1000);

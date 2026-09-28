@@ -47,6 +47,9 @@ test('calibration is optional, measures a known reference, and binds to actual i
   await expect.poll(()=>page.evaluate(()=>window.inputTrack.readyState)).toBe('ended');
   await expect.poll(()=>page.evaluate(()=>window.sourceContext.state)).toBe('closed');
   await page.getByRole('button', {name:'Start listening'}).click();
+  // The previous calibration label persists while the new session checks its
+  // runtime and opens capture. Wait for this session before changing settings.
+  await expect(page.getByRole('button', {name:'Stop listening'})).toBeVisible();
   await expect(page.locator('.calibration-status')).toHaveText('Calibrated for this input');
   // Changing capture settings invalidates the running session, even with no new user action.
   await page.evaluate(()=>{window.captureSettings.sampleRate=44100;});
@@ -55,6 +58,7 @@ test('calibration is optional, measures a known reference, and binds to actual i
   await expect.poll(()=>page.evaluate(()=>window.inputTrack.readyState)).toBe('ended');
   await expect.poll(()=>page.evaluate(()=>window.sourceContext.state)).toBe('closed');
   await page.getByRole('button', {name:'Start listening'}).click();
+  await expect(page.getByRole('button', {name:'Stop listening'})).toBeVisible();
   await expect(page.locator('.calibration-status')).toContainText('Uncalibrated');
   expect(errors).toEqual([]);
 });

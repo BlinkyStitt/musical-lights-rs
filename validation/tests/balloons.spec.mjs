@@ -493,3 +493,32 @@ test('motion denial is visible and a new gesture can retry without stopping musi
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toEqual(Array(24).fill(.5));
   await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
 });
+
+for (const acceleration of ['denied', 'unavailable', 'pending']) {
+  test(`tilt-only motion can be disabled when acceleration is ${acceleration}`, async ({ page }) => {
+    await syntheticAudio(page); await page.goto(url); await physicsReady(page);
+    await page.evaluate(acceleration => {
+      if (acceleration === 'unavailable') Object.defineProperty(window, 'DeviceMotionEvent', { configurable: true, value: undefined });
+      else Object.defineProperty(DeviceMotionEvent, 'requestPermission', { configurable: true,
+        value: () => acceleration === 'pending' ? new Promise(resolve => { window.finishShakePermission = resolve; }) : Promise.resolve('denied'),
+      });
+    }, acceleration);
+    await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+    const disable = page.getByRole('button', { name: 'Disable motion', exact: true });
+    await expect(disable).toBeEnabled();
+    await expect(disable).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.motion-status')).toContainText('Tilt on');
+    await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 20, gamma: 45 })));
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[24])).toBeGreaterThan(1);
+    expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
+    await disable.click();
+    await expect(page.getByRole('button', { name: 'Enable motion', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await page.evaluate(() => {
+      window.finishShakePermission?.('granted');
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 60, gamma: 60 }));
+      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 8, y: 0, z: 0 } }));
+    });
+    await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.motion.motion)).toBeNull();
+  });
+}
