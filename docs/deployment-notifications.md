@@ -7,7 +7,7 @@ another validation job failed, the notification describes both results.
 
 Repository configuration:
 
-- Variable `NTFY_URL`: `https://tank.shorthair-fir.ts.net:8443`
+- Variable `NTFY_URL`: `https://ntfy.stytt.com`
 - Variable `NTFY_TOPIC`: `deploy`
 - Secret `NTFY_TOKEN`: the dedicated `musical-lights` publisher token
 
