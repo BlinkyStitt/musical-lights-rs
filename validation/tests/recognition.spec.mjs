@@ -5,7 +5,7 @@ import { syntheticAudio, physicsReady } from '../physics-state.mjs';
 const base = 'http://127.0.0.1:8101';
 const song = { artist: 'Artist, with "quotes"', title: 'A very long song title that keeps going across the narrow phone display and should scroll smoothly', album: 'Album' };
 
-async function setup(page, { realRecorder = false, status = 200, result = song } = {}) {
+async function setup(page, { realRecorder = false, allowUnavailable = false, status = 200, result = song } = {}) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     MediaDevices.prototype.getUserMedia = async () => {
@@ -54,12 +54,27 @@ async function setup(page, { realRecorder = false, status = 200, result = song }
   await page.goto(base); await physicsReady(page);
   await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeEnabled();
+  if (allowUnavailable && await page.evaluate(() => typeof MediaRecorder === 'undefined')) {
+    await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+    await expect(page.locator('.recognition-status')).toHaveText('Song recognition is unavailable in this browser.');
+    await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeEnabled();
+  }
   return uploads;
 }
 
-test('recognition records once only after a click, with real browser audio, and exports all timestamps', async ({ page }) => {
-  const uploads = await setup(page, { realRecorder: true });
+test('native recording identifies on demand and exports timestamps, or reports an unavailable platform API', async ({ page, browserName }) => {
+  // The pinned Linux WebKit build omits MediaRecorder. macOS WebKit and
+  // Chromium must still exercise native encoding; all platforms test the UI.
+  const allowUnavailable = process.platform === 'linux' && browserName === 'webkit';
+  const uploads = await setup(page, { realRecorder: true, allowUnavailable });
+  if (allowUnavailable && await page.evaluate(() => typeof MediaRecorder === 'undefined')) {
+    await page.waitForTimeout(600);
+    expect(uploads).toHaveLength(0);
+    await expect(page.getByText('Song history (0)', { exact: true })).toBeVisible();
+    return;
+  }
   await page.waitForTimeout(600);
   expect(uploads).toHaveLength(0);
   await page.getByRole('button', { name: 'Identify song', exact: true }).click();
@@ -164,4 +179,13 @@ test('hiding the page cancels capture without a lookup', async ({ page }) => {
   expect(uploads).toHaveLength(0);
   expect(await page.evaluate(() => window.recorder.state)).toBe('inactive');
   await expect(page.locator('.recognition-status')).toContainText('canceled');
+});
+
+
+test('a missing recorder disables recognition without disabling listening or history', async ({ page }) => {
+  await page.addInitScript(() => { window.MediaRecorder = undefined; });
+  const uploads = await setup(page, { realRecorder: true, allowUnavailable: true });
+  expect(uploads).toHaveLength(0);
+  await expect(page.getByText('Song history (0)', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
 });

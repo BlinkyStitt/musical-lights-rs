@@ -75,4 +75,7 @@ Use the pinned tools and macOS host access described in [validation.md](validati
 Worker integration tests execute the compiled WASM with fake AudD responses.
 Chromium/WebKit tests exercise real audio encoding plus controlled recognition
 responses, cancellation, history, exports, fullscreen and Reduced Motion.
-These do not establish real AudD recognition quality or physical iPhone behavior.
+The pinned Linux WebKit build omits MediaRecorder, so it verifies the unavailable
+state and uses the controlled recorder for UI tests. Native encoding is checked
+in Chromium and macOS WebKit. These checks do not establish real AudD recognition
+quality or physical iPhone behavior.
