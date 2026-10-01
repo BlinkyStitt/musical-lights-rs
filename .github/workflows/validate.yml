@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Check deployment notification behavior
+        run: python3 -m unittest discover -s validation/notification_tests -v
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
       - run: python3 validation/validate.py core
@@ -107,6 +109,9 @@ jobs:
   pages:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [core, web, loudness-reference]
+    outputs:
+      deployed: ${{ steps.deployment.outcome == 'success' }}
+      page_url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       contents: read
       pages: write
@@ -136,3 +141,29 @@ jobs:
       - uses: actions/deploy-pages@v5.0.1
         if: steps.current.outputs.deploy == 'true'
         id: deployment
+  notify:
+    name: Notify deployment result
+    if: >-
+      ${{ always() && !cancelled() && github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: [core, rust, web, loudness-reference, esp, pages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Publish deployment notification
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
+          NTFY_URL: ${{ vars.NTFY_URL }}
+          NTFY_TOPIC: ${{ vars.NTFY_TOPIC }}
+          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+        run: |
+          if ! LATEST_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha); then
+            echo '::warning::Could not check current main; notification was skipped.'
+            echo 'Notification skipped: could not check current main.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          export LATEST_SHA
+          python3 validation/deploy_notification.py
