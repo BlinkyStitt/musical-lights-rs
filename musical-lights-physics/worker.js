@@ -8,7 +8,7 @@ const ready = init().then(instance => {
 const capacity = 50000;
 let simulation, config, palette, buffer, timer, lastTime, origin;
 let paused = true, debt = 0, maxDebt = 0, pending = [], publishedTick = -2;
-let input = new Float32Array(34), recording = null, recordingOverflow = false;
+let input = new Float32Array(38), recording = null, recordingOverflow = false;
 let costs = new Float32Array(capacity), costCount = 0, totalCost = 0, steps = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
 let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
@@ -93,7 +93,7 @@ function reset(values) {
   simulation?.free();
   config = values ?? PhysicsSimulation.defaults();
   simulation = new PhysicsSimulation(config, palette);
-  input = new Float32Array(34); input[32] = config[0];
+  input = new Float32Array(38); input[32] = config[0];
   simulation.input(input);
   pending = []; publishedTick = -2; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
   schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;

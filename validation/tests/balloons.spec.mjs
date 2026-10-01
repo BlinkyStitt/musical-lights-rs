@@ -201,7 +201,7 @@ test('depth shakes and audio bars both move balls while tilt permission is still
     }
     return samples;
   });
-  expect(samples.some(s => s.input === -64)).toBe(true);
+  expect(samples.some(s => s.input === -8)).toBe(true);
   expect(samples.some(s => s.balls.some(b => b.vz < -.1))).toBe(true);
   expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
   expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
@@ -401,10 +401,12 @@ test('leftward scrolling interpolates through the seam without sweeping the patt
 });
 
 for (const scenario of [
-  { name: 'portrait sideways', angle: 0, acceleration: { x: -2, y: 0, z: 0 }, axis: 0, travel: .08 },
-  { name: 'portrait lift', angle: 0, acceleration: { x: 0, y: -2, z: 0 }, axis: 1, travel: .08 },
-  { name: 'landscape lift', angle: 90, acceleration: { x: -2, y: 0, z: 0 }, axis: 1, travel: .08 },
-  { name: 'depth', angle: 0, acceleration: { x: 0, y: 0, z: -2 }, axis: 2, travel: .035 },
+  // A 16 m/s² device acceleration exceeds gravity for upward lift. At 1x SI
+  // scale a 2 m/s² lift cannot overcome gravity; do not rely on a hidden gain.
+  { name: 'portrait sideways', angle: 0, acceleration: { x: -16, y: 0, z: 0 }, axis: 0, travel: .08 },
+  { name: 'portrait lift', angle: 0, acceleration: { x: 0, y: -16, z: 0 }, axis: 1, travel: .08 },
+  { name: 'landscape lift', angle: 90, acceleration: { x: -16, y: 0, z: 0 }, axis: 1, travel: .08 },
+  { name: 'depth', angle: 0, acceleration: { x: 0, y: 0, z: -16 }, axis: 2, travel: .035 },
 ]) {
   test(`handheld box shake produces visible ${scenario.name} travel from rest`, async ({ page }, info) => {
     await syntheticAudio(page); await page.goto(url); await startFrozen(page);
@@ -464,7 +466,7 @@ test('rotation-locked phone can enable shaking without starting the microphone',
     await new Promise(resolve => setTimeout(resolve, 16));
     const until = performance.now() + 240;
     while (performance.now() < until) {
-      send(-3);
+      send(-16);
       await new Promise(resolve => requestAnimationFrame(resolve));
       for (let i = 0; i < count; i++) distances[i] = Math.max(distances[i], view.current[3 + i * stride] - initial[i]);
     }
@@ -509,7 +511,7 @@ for (const acceleration of ['denied', 'unavailable', 'pending']) {
     await expect(disable).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.motion-status')).toContainText('Tilt on');
     await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 20, gamma: 45 })));
-    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[24])).toBeGreaterThan(1);
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[34])).toBeGreaterThan(1);
     expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
     await disable.click();
     await expect(page.getByRole('button', { name: 'Enable motion', exact: true })).toHaveAttribute('aria-pressed', 'false');
@@ -520,5 +522,6 @@ for (const acceleration of ['denied', 'unavailable', 'pending']) {
     });
     await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
     expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.motion.motion)).toBeNull();
+    expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(34, 38)))).toEqual([0, 0, 0, 0]);
   });
 }

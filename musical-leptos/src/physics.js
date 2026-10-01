@@ -54,10 +54,18 @@ export class PermissionStatus {
   }
 }
 
+// Device axes are x right, y toward the phone's top, z out of its screen.
+// Rotate Earth gravity into that frame using the standard Z-X-Y Euler angles.
+// Compass heading is irrelevant to gravity; do not normalize its screen projection.
+export function orientationGravity(beta, gamma, magnitude = 9.81) {
+  const b = beta * Math.PI / 180, g = gamma * Math.PI / 180;
+  return [magnitude * Math.cos(b) * Math.sin(g), -magnitude * Math.sin(b), -magnitude * Math.cos(b) * Math.cos(g)];
+}
+
 // Optional sensor permission must begin in the Start listening click stack.
 // Closing also invalidates pending permission promises before Rust drops callbacks.
 export class PhysicsInput {
-  constructor(layer, onPointer, onTilt, onShake, onStatus = () => {}, onPermission = () => {}) {
+  constructor(layer, onPointer, onGravity, onShake, onStatus = () => {}, onPermission = () => {}) {
     this.window = layer.ownerDocument.defaultView;
     this.closed = false;
     this.listeners = [];
@@ -65,6 +73,7 @@ export class PhysicsInput {
     this.onStatus = onStatus;
     this.onPermission = onPermission;
     this.state = 'off';
+    this.motionGravityAt = -Infinity;
     const angle = () => this.window.screen.orientation?.angle ?? this.window.orientation ?? 0;
     const clearPointer = () => onPointer(0, 0, false);
     this.listen('pointermove', event => {
@@ -78,13 +87,21 @@ export class PhysicsInput {
     this.listen('pointerout', event => { if (!event.relatedTarget) clearPointer(); });
     this.listen('blur', clearPointer);
     this.orientation = event => {
-      if (Number.isFinite(event.beta) && Number.isFinite(event.gamma)) {
-        onTilt(event.beta, event.gamma, angle());
+      if (Number.isFinite(event.beta) && Number.isFinite(event.gamma)
+        && performance.now() - this.motionGravityAt > 500) {
+        onGravity(...orientationGravity(event.beta, event.gamma), angle());
       }
     };
     this.acceleration = event => {
       const axes = ['x', 'y', 'z'];
       const linear = axes.map(axis => event.acceleration?.[axis]);
+      const raw = axes.map(axis => event.accelerationIncludingGravity?.[axis]);
+      if (linear.every(Number.isFinite) && raw.every(Number.isFinite)) {
+        // IncludingGravity reports support acceleration: its difference from
+        // linear acceleration points opposite gravitational attraction.
+        onGravity(...raw.map((value, i) => linear[i] - value), angle());
+        this.motionGravityAt = performance.now();
+      }
       if (linear.some(Number.isFinite)) {
         if (this.state !== 'active') this.onPermission();
         this.setStatus('active');
@@ -94,7 +111,6 @@ export class PhysicsInput {
       }
       // Some devices expose only gravity-inclusive readings. Estimate the slow
       // baseline, then remove it; a stationary phone must not become a shake.
-      const raw = axes.map(axis => event.accelerationIncludingGravity?.[axis]);
       if (!raw.every(Number.isFinite)) return;
       if (this.state !== 'active') this.onPermission();
       this.setStatus('active');
@@ -106,6 +122,8 @@ export class PhysicsInput {
         return value - this.gravity[i];
       });
       this.gravityAt = event.timeStamp;
+      onGravity(...this.gravity.map(value => -value), angle());
+      this.motionGravityAt = performance.now();
       onShake(...shake, angle());
     };
   }
@@ -159,6 +177,7 @@ export class PhysicsInput {
     this.motion = null;
     this.gravity = null;
     this.gravityAt = undefined;
+    this.motionGravityAt = -Infinity;
     this.setStatus('off');
   }
 
@@ -253,7 +272,7 @@ export class Scene {
     };
     this.input = new PhysicsInput(layer,
       (...args) => this.view?.pointer(...args),
-      (...args) => this.view?.orientation(...args),
+      (...args) => this.view?.deviceGravity(...args),
       (...args) => this.view?.deviceAcceleration(...args),
       (state, on) => {
         this.motionButton.textContent = on ? 'Disable motion' : 'Enable motion';

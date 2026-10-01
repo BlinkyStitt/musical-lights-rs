@@ -81,15 +81,23 @@ The enclosure uses six half-spaces, including a real downward-facing ceiling. Ea
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
 m/s²; all three axes contribute, including shaking into or out of the screen.
-The renderer scales translation by 8: the 1.2 m virtual enclosure represents a
-roughly 15 cm handheld box. A modest 2 m/s² shake therefore applies 16 m/s²,
-enough to lift settled balls against 9.81 m/s² gravity. This is a visual scale
-choice, not a calibration of a specific handset. Combined inputs remain bounded
-to ±100 m/s² per axis.
+The renderer preserves measured acceleration at 1:1, without an amplification
+factor or a per-axis magnitude clamp. Non-finite readings are rejected. A
+2 m/s² shake applies 2 m/s²; an upward shake must overcome real gravity to lift
+a resting ball.
 Screen rotation maps the two in-plane axes; the opposite acceleration is
-applied to the balls, as if shaking their enclosure. Tilt adds a field of up to
-2 m/s² per axis. The simulation applies force as mass × acceleration each tick.
-Reduced Motion scales external acceleration to 10% and uses the configured slower stroke time.
+applied to the balls, as if shaking their enclosure. Gravity is a separate 3D
+vector: linear acceleration minus gravity-inclusive acceleration, preserving
+the measured magnitude. Orientation-only devices use the full beta/gamma
+rotation of 9.81 m/s² gravity. Upside down reverses the screen's vertical pull;
+flat face-up pulls into the back of the box, and face-down toward the front.
+The screen-plane projection is never normalized, so near-flat sensor noise
+cannot turn into a full-strength sideways pull. Measured gravity takes priority
+over orientation while motion readings are fresh (500 ms).
+The simulation applies force as mass × acceleration each tick. Reduced Motion
+scales shake/pointer acceleration to 10% and uses the configured slower stroke
+time, while gravity keeps its physical magnitude. Disabling motion restores
+the default downward gravity.
 
 Motion and tilt permissions are requested from either Enable motion or the Start listening click and
 enabled independently, so a pending tilt request cannot block granted motion
@@ -103,7 +111,8 @@ and route cleanup invalidate both requests and remove listeners. Display rotatio
 lock never gates accelerometer delivery: a fixed screen angle still maps shakes
 into that fixed viewport, even with no orientation events.
 When linear acceleration is unavailable, a 250 ms exponential baseline removes
-the slow gravity component from gravity-inclusive readings. This fallback is
+the slow gravity component from gravity-inclusive readings; the negative
+baseline also supplies gravity. This fallback is
 an approximation: fast rotations can also appear as shakes. Its first reading,
 restart, and gaps of at least 500 ms establish a fresh baseline without a kick.
 Shake forces expire 150 ms after the last usable reading. Sensor semantics
@@ -144,6 +153,12 @@ Rapier 0.34.0 with enhanced determinism and CCD on every sphere.
 
 Sphere CCD uses one internal CCD step. Each 120 Hz outer tick adds deterministic contact substeps based on sphere and bar travel, bounded at 128. Every contact substep retains eight solver iterations and its own kinematic target. Contact impulses accumulate over the whole outer tick. The controller uses no wall-clock feedback, so replay is independent of render rate.
 
+The travel bound uses the larger of two opposing spheres' speed and a sphere
+plus a nearby post's speed, rather than adding three bodies' speeds for a
+two-body contact. This reduces redundant solves without changing bar targets,
+40 ms full-stroke travel, contact iterations, or the work cap. Extreme fullscreen
+attacks can still reach the cap; their warning remains visible.
+
 Post speeds contribute to this bound only where their swept region can reach
 a sphere during the tick. The region includes lateral travel, vertical travel,
 sphere velocity, applied acceleration and contact prediction distance. Empty
@@ -158,6 +173,8 @@ work continues immediately after yielding without dropping simulation time.
 Substep count, excess requested substeps, maximum speed, acceleration limit, and all 24 bar velocities are included in snapshots. Worker reports include per-tick substeps and CPU cost, maximum substeps, overload ticks, and retained simulation delay. Hitting the cap is visible; no elapsed time is dropped. Contact prediction remains 2 mm, allowed resting error 0.2 mm, and ordinary contact natural frequency 60 Hz. While a sphere is predictively near the ceiling, contact natural frequency is 240 Hz with eight positional stabilization passes per force-solver iteration, instead of one. There are still eight force-solver iterations. This prevents visible ceiling compression without changing ordinary elastic collisions. The CCD minimum interval is scaled below the smallest contact substep.
 
 The [current source-band and stroke report](partial-loudness-results/README.md) records the current stress and timing results. Tests cover ceiling rebound, full-stroke stack compression, release hops, and persistent overlap after settling. The ceiling replaces the former open top.
+The [device gravity and fullscreen work report](device-gravity-results/README.md)
+records the protocol 7 sensor checks and before/after solver measurements.
 
 Settled spheres can rest on other spheres. The stress test requires an active
 contact path down to the floor or lowered bars for each sphere, as well as
@@ -169,6 +186,9 @@ the existing velocity and overlap limits.
 are independent of browser types. Snapshots contain sphere position, rotation,
 radius, mass, linear/angular velocity and color, actual bar tops, 8×24 bar
 contact impulses, and each sphere's total normal contact impulse in N·s.
+Protocol 7 adds independent device gravity at input[34..36], enabled by
+input[37], and publishes the 38-value input length at layout[22]. It also
+preserves SI shake magnitudes and uses the separate contact speed bounds above.
 The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 6 changes the engine to gravity release and balanced scrolling; historical replays require their matching engine. Protocol 5 separates the 24 source bands in `layout[0]` from the 8 balls in `layout[21]`, with compact body and contact arrays. The ball count stays constant across normal and fullscreen views, so resizing never removes or respawns bodies. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
 
 The worker clock runs independently of render frames. Each batch processes at

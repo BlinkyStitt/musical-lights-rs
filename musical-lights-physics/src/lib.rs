@@ -130,6 +130,7 @@ pub struct SimulationInput {
     pub tick: u64,
     pub levels: [f32; COUNT],
     pub acceleration: [f32; 3],
+    pub gravity: Option<[f32; 3]>,
     pub pointer: Option<[f32; 3]>,
     pub reduced_motion: bool,
     pub height: f32,
@@ -141,6 +142,7 @@ impl Default for SimulationInput {
             tick: 0,
             levels: [0.0; COUNT],
             acceleration: [0.0; 3],
+            gravity: None,
             pointer: None,
             reduced_motion: false,
             height: SimulationConfig::default().height,
@@ -360,10 +362,10 @@ impl Simulation {
                 .levels
                 .iter()
                 .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+            || input.acceleration.iter().any(|v| !v.is_finite())
             || input
-                .acceleration
-                .iter()
-                .any(|v| !v.is_finite() || v.abs() > 100.0)
+                .gravity
+                .is_some_and(|g| g.iter().any(|v| !v.is_finite()))
             || input
                 .pointer
                 .is_some_and(|p| p.iter().any(|v| !v.is_finite()))
@@ -382,6 +384,17 @@ impl Simulation {
         Ok(())
     }
     pub fn step(&mut self) {
+        let gravity = self.input.gravity.map_or(
+            Vector::new(0.0, -self.config.gravity, 0.0),
+            Vector::from_array,
+        );
+        if gravity != self.world.gravity {
+            self.world.gravity = gravity;
+            // A resting body must respond when the phone turns over.
+            for &(handle, _) in &self.balls {
+                self.world.bodies[handle].wake_up(true);
+            }
+        }
         let old_travel = f64::from(self.config.bar_max() - BASELINE);
         if self.resize_tick < RESIZE_TICKS {
             self.resize_tick += 1;
@@ -434,7 +447,7 @@ impl Simulation {
         // A fast post in empty space does not require every contact in the room
         // to be solved at its speed. Conservative swept bounds include a whole
         // tick of both bodies' travel plus force/contact prediction margins.
-        let force_bound = self.config.gravity
+        let force_bound = self.world.gravity.length()
             + Vector::from_array(self.input.acceleration).length()
             + if self.input.pointer.is_some() {
                 15.0
@@ -468,11 +481,13 @@ impl Simulation {
             .fold(resize_speed, f64::max);
         let min_radius =
             SIZE_RATIOS.iter().copied().fold(f32::INFINITY, f32::min) * (PITCH - GAP) / 2.0;
-        // Bound relative travel, including equal opposing balls and bar contacts.
+        // Bound each kind of contact: two opposing balls, or a ball and a post.
+        // Adding all three speeds double-counts the ball for post contacts and
+        // makes unrelated ball-ball contacts pay for the fastest nearby post.
         // Recompute deterministically each outer tick, never from wall-clock cost.
-        let required = (((2.0 * ball_speed + bar_speed + 1.0) * f64::from(DT)
-            / f64::from(min_radius * 0.5))
-        .ceil() as usize)
+        let relative_speed = (2.0 * ball_speed).max(ball_speed + bar_speed);
+        let required = (((relative_speed + 1.0) * f64::from(DT) / f64::from(min_radius * 0.5))
+            .ceil() as usize)
             .max(1);
         let substeps = required.min(MAX_SUBSTEPS);
         let dt = DT / substeps as f32;
@@ -756,28 +771,31 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            6.0, // gravity release and balanced bidirectional scrolling
+            7.0, // separate measured gravity and linear acceleration
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
+            38.0, // input length including gravity xyz and its enabled flag
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
-        // 24 levels, 3 acceleration values, pointer active + xyz, reduced, height, scrolling enabled.
-        if values.len() != 34
+        // 24 levels, acceleration xyz, pointer active + xyz, reduced, height, scrolling, gravity xyz + active.
+        if values.len() != 38
             || values.iter().any(|v| !v.is_finite())
             || ![0.0, 1.0].contains(&values[27])
             || ![0.0, 1.0].contains(&values[31])
             || ![0.0, 1.0].contains(&values[33])
+            || ![0.0, 1.0].contains(&values[37])
         {
             return Err(JsError::new(
-                "Expected 34 simulation inputs with scrolling enablement",
+                "Expected 38 simulation inputs with scrolling and gravity enablement",
             ));
         }
         let input = SimulationInput {
             tick: self.0.tick,
             levels: std::array::from_fn(|i| values[i]),
             acceleration: [values[24], values[25], values[26]],
+            gravity: (values[37] == 1.0).then_some([values[34], values[35], values[36]]),
             pointer: (values[27] == 1.0).then_some([values[28], values[29], values[30]]),
             reduced_motion: values[31] == 1.0,
             height: values[32],

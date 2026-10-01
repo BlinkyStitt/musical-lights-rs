@@ -48,7 +48,7 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(34);
+    this.input = new Float32Array(38);
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(72);
     this.timing = { snapshots: [], resizes: [] };
@@ -65,7 +65,6 @@ export class PhysicsView {
       this.graph.append(copy); return copy;
     });
     this.acceleration = [0, 0, 0];
-    this.tilt = [0, 0, 0];
     this.accelerationAt = 0;
     this.metrics = { frames: 0, renderMs: 0, debt: 0, maxDebt: 0, physicsSteps: 0, physicsMs: 0, discardedSimulationMs: 0 };
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -108,8 +107,7 @@ export class PhysicsView {
       if (this.resizePending) { this.resizePending = false; this.measure(); }
       this.onFrame(now, false);
       this.input[31] = this.reduced.matches ? 1 : 0;
-      for (let i = 0; i < 3; i++) this.input[24 + i] = Math.max(-100, Math.min(100,
-        this.tilt[i] + (now - this.accelerationAt < 150 ? this.acceleration[i] : 0)));
+      for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
           sequence: ++this.sequence, input: this.input });
@@ -138,12 +136,16 @@ export class PhysicsView {
     this.pointerPoint.addScaledVector(this.pointerDirection, -this.pointerPoint.z / this.pointerDirection.z);
     this.input[28] = this.pointerPoint.x; this.input[29] = this.pointerPoint.y; this.input[30] = 0;
   }
-  orientation(beta, gamma, angle) { this.tilt = this.rotate(Math.sin(gamma * Math.PI / 180) * 2, -Math.sin(beta * Math.PI / 180) * 2, angle); }
-  // The 1.2 m virtual enclosure represents a roughly 15 cm handheld box.
-  // Scale translation equally on all axes; inertia acts opposite phone motion.
+  deviceGravity(x, y, z, angle) {
+    this.input.set(this.rotate(x, y, angle), 34);
+    this.input[36] = z;
+    this.input[37] = 1;
+  }
+  // Device acceleration and gravity are both SI m/s². Inertia acts opposite
+  // the phone's linear acceleration, with no visual gain or per-axis clipping.
   deviceAcceleration(x, y, z, angle) {
-    this.acceleration = this.rotate(-x * 8, -y * 8, angle);
-    this.acceleration[2] = -z * 8;
+    this.acceleration = this.rotate(-x, -y, angle);
+    this.acceleration[2] = -z;
     this.accelerationAt = performance.now();
   }
   rotate(x, y, angle) { const a = angle * Math.PI / 180; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), 0]; }
@@ -192,7 +194,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 6 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 7 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
@@ -334,7 +336,7 @@ export class PhysicsView {
     for (let copy = 0; copy < 3; copy++) this.meshEdges.set(edges, copy * 24);
     this.input[33] = scrolling ? 1 : 0;
   }
-  clearMotion() { this.tilt = [0, 0, 0]; this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); }
+  clearMotion() { this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38); }
   stopMotion() { this.motion.stopMotion(); this.clearMotion(); this.input.fill(0, 0, 24); this.push(new Float32Array(24), new Float32Array(24), 0); }
   pause() {
     if (this.request != null) cancelAnimationFrame(this.request);
