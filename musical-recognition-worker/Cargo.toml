@@ -1,0 +1,23 @@
+[package]
+name = "musical-recognition-worker"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+worker = "=0.8.7"
+web-sys = { version = "=0.3.106", features = ["FormData", "File"] }
+js-sys = "=0.3.106"
+futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
+
+[profile.release]
+lto = true
+opt-level = "s"
+# wasm-bindgen needs the externref symbols (workers-rs #1014).
+strip = "debuginfo"

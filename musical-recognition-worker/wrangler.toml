@@ -1,0 +1,25 @@
+name = "musical-lights-recognition"
+main = "build/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+preview_urls = false
+
+[build]
+command = "../.tools/worker/bin/worker-build --release --locked"
+
+[vars]
+ALLOWED_ORIGINS = "https://blink.stitthappens.com"
+
+# Cloudflare's limits are per location, not a global billing cap.
+[[ratelimits]]
+name = "PER_IP"
+namespace_id = "1001"
+simple = { limit = 2, period = 60 }
+
+[[ratelimits]]
+name = "TOTAL"
+namespace_id = "1002"
+simple = { limit = 20, period = 60 }
+
+[observability]
+enabled = false

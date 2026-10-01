@@ -1,0 +1,48 @@
+name: Song recognition Worker
+on:
+  push:
+    branches: [main]
+    paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
+  pull_request:
+    paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: recognition-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '26.8.2'
+          cache: npm
+          cache-dependency-path: musical-recognition-worker/package-lock.json
+      - name: Install Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            musical-recognition-worker/target
+            .tools/worker
+          key: recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}
+      - name: Install pinned Worker tools
+        run: |
+          if [ ! -x .tools/worker/bin/worker-build ]; then
+            cargo install worker-build --version 0.8.7 --locked --root .tools/worker
+          fi
+          npm ci --prefix musical-recognition-worker
+      - name: Check Rust
+        run: |
+          cargo fmt --manifest-path musical-recognition-worker/Cargo.toml --check
+          cargo test --locked --manifest-path musical-recognition-worker/Cargo.toml
+          cargo clippy --locked --manifest-path musical-recognition-worker/Cargo.toml --target wasm32-unknown-unknown -- -D warnings
+      - name: Build deployment bundle without credentials
+        run: npm --prefix musical-recognition-worker run deploy -- --dry-run
+      - name: Test compiled Worker with fake AudD
+        run: npm --prefix musical-recognition-worker test

@@ -160,4 +160,21 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .audio-card[data-expanded] :is(.microphone-permission, .permission-help) { display: none; }
 .audio-card[data-expanded] .motion-controls { display: none; }
 .runtime-update { display: block; width: fit-content; min-height: 44px; padding: .6rem 0; }
+.song-tools { margin: 1rem 0; font-size: .82rem; }
+.song-tools p { max-width: 70ch; }
+.song-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.song-actions [hidden], .recognized-song[hidden] { display: none; }
+.song-history summary { cursor: pointer; min-height: 44px; padding: .7rem 0; }
+.song-history li { padding: .3rem 0; overflow-wrap: anywhere; }
+.recognized-song { display: flex; gap: .75rem; align-items: center; min-width: 0; padding: .5rem; margin-bottom: .5rem; font-size: .85rem; background: var(--surface); color: var(--ink); border-radius: 6px; }
+.song-caption { flex: none; font-size: .7rem; color: var(--muted); }
+.song-window { min-width: 0; overflow: hidden; }
+.song-title { display: block; width: max-content; white-space: nowrap; }
+.song-overflow .song-title { animation: song-scroll var(--song-duration) linear infinite alternate; }
+@keyframes song-scroll { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(var(--song-travel)); } }
+@media (prefers-reduced-motion: reduce) {
+  .song-overflow .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
+}
+.audio-card[data-expanded] .song-tools { display: none; }
+.audio-card[data-expanded] .recognized-song { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: .75rem; right: .75rem; z-index: 2; margin: 0; pointer-events: none; }
 .audio-card[data-expanded] .runtime-update { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; z-index: 3; padding: .6rem; background: var(--surface); }

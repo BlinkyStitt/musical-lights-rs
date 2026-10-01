@@ -12,3 +12,8 @@
 **/.venv/
 
 /musical-leptos/node_modules/
+/musical-recognition-worker/node_modules/
+/musical-recognition-worker/build/
+/musical-recognition-worker/.wrangler/
+/.wrangler/
+**/.dev.vars*

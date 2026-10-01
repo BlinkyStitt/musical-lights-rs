@@ -186,6 +186,7 @@ export async function acquireInput(context) {
                 throw error;
             }
             sessions.set(stream, session);
+            card.dispatchEvent(new CustomEvent('recognition-input', { detail: { stream } }));
             return stream;
         }
         const { tonePCM, toneCases, toneState } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/tones.js', document.baseURI)).catch(async error => {
