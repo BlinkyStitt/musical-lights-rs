@@ -20,7 +20,7 @@ export default defineConfig({
         '--no-proxy-server',
       ] },
     } },
-    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs'], use: { browserName: 'webkit' } },
+    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs'], use: { browserName: 'webkit' } },
     { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/permissions.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
   ],
   webServer: {
