@@ -39,16 +39,25 @@ test('late queries cannot overwrite an actual access result or a newer refresh',
 });
 
 test('revocation remains observable after acquisition, and cleanup removes all observers', async () => {
-  const status = Object.assign(new EventTarget(), { state: 'prompt' });
+  const states = { microphone: 'prompt', accelerometer: 'prompt', gyroscope: 'prompt' };
+  const statuses = [];
   let subscriptions = 0, calls = 0;
-  const add = status.addEventListener.bind(status), remove = status.removeEventListener.bind(status);
-  status.addEventListener = (...args) => { subscriptions++; add(...args); };
-  status.removeEventListener = (...args) => { subscriptions--; remove(...args); };
-  const { window, permissions, updates } = fixture(async () => { calls++; return status; });
+  const { window, permissions, updates } = fixture(async ({ name }) => {
+    assert.ok(Object.hasOwn(states, name));
+    calls++;
+    const status = new EventTarget();
+    Object.defineProperties(status, { name: { value: name }, state: { get: () => states[name] } });
+    const add = status.addEventListener.bind(status), remove = status.removeEventListener.bind(status);
+    status.addEventListener = (...args) => { subscriptions++; add(...args); };
+    status.removeEventListener = (...args) => { subscriptions--; remove(...args); };
+    statuses.push(status);
+    return status;
+  });
   await flush();
   permissions.set('microphone', 'granted');
-  status.state = 'denied'; status.dispatchEvent(new Event('change'));
-  assert.equal(permissions.states.microphone, 'denied');
+  states.microphone = 'denied';
+  statuses.find(status => status.name === 'microphone').dispatchEvent(new Event('change'));
+  assert.deepEqual(permissions.states, { microphone: 'denied', accelerometer: 'prompt', gyroscope: 'prompt' });
   window.document.hidden = true;
   window.dispatchEvent(new Event('focus'));
   assert.equal(calls, 3);
@@ -63,20 +72,21 @@ test('revocation remains observable after acquisition, and cleanup removes all o
   window.dispatchEvent(new Event('focus'));
   window.dispatchEvent(new Event('pageshow'));
   window.document.dispatchEvent(new Event('visibilitychange'));
-  status.dispatchEvent(new Event('change'));
+  for (const status of statuses) status.dispatchEvent(new Event('change'));
   await flush();
   assert.equal(calls, 6);
   assert.equal(updates.length, count);
 });
 
 test('closing during a query cannot install an observer or publish a status', async () => {
-  let resolve;
+  const pending = [];
   const status = Object.assign(new EventTarget(), { state: 'granted' });
   status.addEventListener = () => assert.fail('late subscription');
-  const { permissions, updates } = fixture(() => new Promise(done => { resolve = done; }));
+  const { permissions, updates } = fixture(() => new Promise(done => { pending.push(done); }));
   permissions.close();
   const count = updates.length;
-  resolve(status);
+  assert.equal(pending.length, 3);
+  for (const resolve of pending) resolve(status);
   await flush();
   assert.equal(updates.length, count);
 });

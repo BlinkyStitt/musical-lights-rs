@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-async function input(page) {
-  await page.addInitScript(() => {
+async function input(page, pending = false) {
+  await page.addInitScript(({ pending }) => {
     const NativeContext = AudioContext;
     const NativeNode = AudioWorkletNode;
     // Keep the reference generator on the capture clock. Independent realtime
@@ -9,10 +9,17 @@ async function input(page) {
     window.AudioContext = class extends NativeContext {
       constructor(...args) { super(...args); window.sourceContext = this; }
     };
-    window.AudioWorkletNode = class extends NativeNode { constructor(...args) { super(...args); window.analysisNode = this; } };
+    window.AudioWorkletNode = class extends NativeNode {
+      constructor(...args) {
+        super(...args); window.analysisNode = this;
+        window.initialMotion = args[2].processorOptions.reducedMotion;
+        this.port.addEventListener('message', ({ data }) => { if (data.type === 'frame') window.producerMotion = data.state[1]; });
+      }
+    };
     window.captureSettings = { deviceId: 'calibration-fixture', channelCount: 2, sampleRate: 48000, autoGainControl: false, echoCancellation: false, noiseSuppression: false };
-    navigator.mediaDevices.getUserMedia = async constraints => {
+    MediaDevices.prototype.getUserMedia = async constraints => {
       window.requestedConstraints = constraints;
+      if (pending) await new Promise(resolve => { window.allowMicrophone = resolve; });
       const context = window.sourceContext;
       const oscillator = context.createOscillator(); oscillator.frequency.value = 1000;
       const gain = context.createGain(); gain.gain.value = .1;
@@ -25,10 +32,10 @@ async function input(page) {
       window.inputTrack.getSettings = () => ({ ...window.captureSettings });
       return destination.stream;
     };
-  });
+  }, { pending });
 }
 
-test('calibration is optional, measures a known reference, and binds to actual input settings', async ({ page }) => {
+test('calibration is optional, measures a known reference, and binds to reported input settings', async ({ page }) => {
   const errors=[]; page.on('pageerror', e=>errors.push(e.message));
   await input(page);
   await page.goto('http://127.0.0.1:8101');
@@ -79,21 +86,7 @@ for(const fault of ['mute','processorerror']) {
 
 test('Reduced Motion survives pending permission and updates the audio producer', async ({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});
-  await input(page);
-  await page.addInitScript(()=>{
-    const acquire=navigator.mediaDevices.getUserMedia;
-    navigator.mediaDevices.getUserMedia=async options=>{
-      await new Promise(resolve=>{window.allowMicrophone=resolve;});
-      return acquire(options);
-    };
-    const NativeNode=AudioWorkletNode;
-    window.AudioWorkletNode=class extends NativeNode {
-      constructor(...args){
-        super(...args); window.initialMotion=args[2].processorOptions.reducedMotion;
-        this.port.addEventListener('message',({data})=>{if(data.type==='frame')window.producerMotion=data.state[1];});
-      }
-    };
-  });
+  await input(page, true);
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button',{name:'Start listening'}).click();
   await expect.poll(()=>page.evaluate(()=>typeof window.allowMicrophone)).toBe('function');

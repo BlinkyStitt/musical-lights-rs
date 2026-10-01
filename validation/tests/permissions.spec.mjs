@@ -2,24 +2,36 @@ import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio } from '../physics-state.mjs';
 const url = 'http://127.0.0.1:8101/phone/';
 
-async function permissions(page, state = 'granted', standalone = false) {
-  await page.addInitScript(({ state, standalone }) => {
+async function permissions(page, state = 'granted') {
+  await page.addInitScript(({ state }) => {
     window.permissionRequests = [];
     window.permissionQueries = [];
-    window.permissionStates = {};
-    Object.defineProperty(navigator, 'standalone', { configurable: true, value: standalone });
+    // Each query returns its own read-only status backed by a per-descriptor state.
+    const names = ['microphone', 'accelerometer', 'gyroscope'];
+    const states = Object.fromEntries(names.map(name => [name, state]));
+    const observers = Object.fromEntries(names.map(name => [name, []]));
+    window.setPermission = (name, value, notify = true) => {
+      if (!names.includes(name) || !['granted', 'denied', 'prompt'].includes(value)) throw new TypeError('Invalid permission');
+      states[name] = value;
+      if (notify) for (const status of observers[name]) status.dispatchEvent(new Event('change'));
+    };
     // Storage is optional, including for private browsing and Home Screen entries.
     Storage.prototype.setItem = () => { throw new Error('Storage unavailable'); };
     Object.defineProperty(navigator, 'permissions', { configurable: true, value: {
       query: async ({ name }) => {
         window.permissionQueries.push(name);
         if (window.permissionQueryUnsupported) throw new TypeError('Unsupported permission');
-        return window.permissionStates[name] ??= Object.assign(new EventTarget(), { state });
+        if (!names.includes(name)) throw new TypeError(`Unsupported permission: ${name}`);
+        const status = new EventTarget();
+        Object.defineProperties(status, { state: { get: () => states[name] }, name: { value: name } });
+        observers[name].push(status);
+        return status;
       },
     } });
     for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
       if (!window[name]) window[name] = class {};
       Object.defineProperty(window[name], 'requestPermission', { configurable: true, value: async () => {
+        if (!navigator.userActivation.isActive) throw new DOMException('A gesture is required', 'NotAllowedError');
         window.permissionRequests.push(name);
         return window.motionPermission ?? 'granted';
       } });
@@ -29,13 +41,13 @@ async function permissions(page, state = 'granted', standalone = false) {
       if (window.microphoneMode === 'pending') return new Promise(() => {});
       throw new DOMException('User did not grant access', 'NotAllowedError');
     };
-  }, { state, standalone });
+  }, { state });
 }
 
-for (const standalone of [false, true]) {
-  test(`permission status checks saved access without prompting in ${standalone ? 'Home Screen' : 'bookmark'} entry`, async ({ page }, info) => {
-    await permissions(page, 'granted', standalone);
-    await page.goto(url);
+for (const path of ['/', '/phone/?source=bookmark#permissions']) {
+  test(`queried access is displayed without requesting capture on direct entry ${path}`, async ({ page }, info) => {
+    await permissions(page, 'granted');
+    await page.goto(`http://127.0.0.1:8101${path}`);
     await expect(page.locator('.microphone-permission')).toHaveText('Microphone access allowed.');
     await expect(page.locator('.mic-status')).toHaveText('Microphone off');
     await expect(page.locator('.motion-status')).toHaveText('Motion access allowed · motion off.');
@@ -53,12 +65,11 @@ test('permission status follows revocation, return from settings, and route clea
   await permissions(page, 'prompt'); await page.goto(url);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'prompt');
   await page.evaluate(() => {
-    permissionStates.microphone.state = 'denied';
-    permissionStates.microphone.dispatchEvent(new Event('change'));
+    setPermission('microphone', 'denied');
   });
   await expect(page.locator('.microphone-permission')).toContainText('access blocked');
   await page.evaluate(() => {
-    for (const status of Object.values(permissionStates)) status.state = 'granted';
+    for (const name of ['microphone', 'accelerometer', 'gyroscope']) setPermission(name, 'granted', false);
     window.dispatchEvent(new Event('focus'));
   });
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
@@ -66,13 +77,11 @@ test('permission status follows revocation, return from settings, and route clea
   await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
   await page.evaluate(() => {
-    permissionStates.accelerometer.state = 'denied';
-    permissionStates.accelerometer.dispatchEvent(new Event('change'));
+    setPermission('accelerometer', 'denied');
   });
   await expect(page.locator('.motion-status')).toContainText('Motion access blocked');
   await page.evaluate(() => {
-    permissionStates.accelerometer.state = 'granted';
-    permissionStates.accelerometer.dispatchEvent(new Event('change'));
+    setPermission('accelerometer', 'granted');
   });
   await expect(page.locator('.motion-status')).toContainText(/waiting for sensor readings/i);
   await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
@@ -87,7 +96,7 @@ test('permission status follows revocation, return from settings, and route clea
   expect(await page.evaluate(() => permissionRequests)).toEqual(['DeviceMotionEvent', 'DeviceOrientationEvent']);
 });
 
-test('pending access is distinct from permission and missing secure context explains HTTPS', async ({ page }) => {
+test('pending access is distinct from permission and route cleanup removes its display', async ({ page }) => {
   await permissions(page, 'prompt');
   await page.goto(url); await physicsReady(page);
   await page.evaluate(() => {
@@ -98,10 +107,6 @@ test('pending access is distinct from permission and missing secure context expl
   await expect(page.locator('.microphone-permission')).toContainText('respond to your browser if it asks');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.locator('.microphone-permission')).toHaveCount(0);
-  await page.addInitScript(() => Object.defineProperty(window, 'isSecureContext', { configurable: true, value: false }));
-  await page.goto(url);
-  await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'insecure');
-  await expect(page.locator('.motion-status')).toHaveText('Motion access requires a secure HTTPS page.');
 });
 
 test('unsupported permission queries still allow microphone and motion access from a gesture', async ({ page }) => {
@@ -131,8 +136,7 @@ test('dismissed microphone access has persistent guidance without claiming a per
   await expect(page.locator('.audio-error')).toBeEmpty({ timeout: 6000 });
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'not-allowed');
   await page.evaluate(() => {
-    permissionStates.microphone.state = 'granted';
-    permissionStates.microphone.dispatchEvent(new Event('change'));
+    setPermission('microphone', 'granted');
   });
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
 });

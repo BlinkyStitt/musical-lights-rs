@@ -528,9 +528,10 @@ with shaking denied, absent, and pending, including late permission completion.
 Permission notices query supported descriptors without requesting capture or
 sensor access. Tests cover granted/prompt/denied states, unavailable and insecure
 contexts, rejected/absent/pending query APIs, actual acquisition results,
-revocation, returning from settings, stale queries, and route cleanup. Bookmark
-and simulated Home Screen entries reload with fresh browser state even when
-storage is unavailable. The microphone and sensor start/stop regressions continue
+revocation, returning from settings, stale queries, and route cleanup. Direct
+root and phone-route entries reload and re-query permission state even when
+storage writes are unavailable. These are direct URL tests, not installed
+Home Screen app tests. The microphone and sensor start/stop regressions continue
 to check actual capture cleanup and force delivery.
 
 Pinned `python3 validation/validate.py leptos` passed formatting, Clippy, host
@@ -541,6 +542,9 @@ WebKit, and the iPhone WebKit profile, using host access, the serial startup gua
 one worker, and zero retries. The saved-access display regression failed against
 the previous build before implementation. An additional ad hoc JavaScript type
 check retained existing baseline diagnostics and introduced no new diagnostic
-messages. These synthetic permission and standalone fixtures do not establish
+messages. These synthetic permission fixtures do not establish
 real iPhone/Safari or installed Home Screen permission persistence; Firefox was
 not run locally.
+
+See [the mock audit](mock-audit.md) for corrected fixture contracts, native-browser
+permission checks, and the remaining physical-device verification boundaries.

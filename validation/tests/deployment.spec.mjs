@@ -47,11 +47,11 @@ async function deploymentFixture() {
 
 async function trackMicrophone(page) {
   await page.evaluate(() => {
-    const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    const capture = MediaDevices.prototype.getUserMedia;
     window.microphoneRequests = 0;
-    navigator.mediaDevices.getUserMedia = async (...args) => {
+    MediaDevices.prototype.getUserMedia = async function (...args) {
       window.microphoneRequests++;
-      const stream = await capture(...args);
+      const stream = await Reflect.apply(capture, this, args);
       window.capturedTracks = stream.getTracks();
       return stream;
     };

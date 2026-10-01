@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PhysicsInput } from '../../musical-leptos/src/physics.js';
 
+// These EventTarget tests isolate lifecycle and input math, not browser sensor
+// permission gates or trusted device events. See permissions-native.spec.mjs.
 async function fixture(orientation = () => Promise.resolve('granted')) {
   const window = new EventTarget();
   Object.assign(window, {
@@ -79,7 +81,7 @@ test('rotation lock and absent orientation events do not gate motion readings', 
   f.input.close();
 });
 
-test('denied permission is observable and can be requested again after a new gesture', async () => {
+test('denied permission is observable and a later granted result can start a session', async () => {
   const f = await fixture();
   f.input.stopMotion();
   f.window.DeviceMotionEvent.requestPermission = () => Promise.resolve('denied');
