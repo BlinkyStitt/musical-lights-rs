@@ -1,9 +1,9 @@
 # Deployment notifications
 
 Main pushes and manual main runs publish their result to authenticated ntfy after
-validation and GitHub Pages finish. Successful deployment alerts link to the site;
-failures link to the workflow and identify failed jobs. If Pages deployed while
-another validation job failed, the notification describes both results.
+website validation and GitHub Pages finish. Successful deployment alerts link to
+the site; failures link to the workflow and identify failed jobs. Firmware and
+other applications run in independent workflows and do not delay website alerts.
 
 Repository configuration:
 

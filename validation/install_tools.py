@@ -43,7 +43,7 @@ def download(url: str, destination: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("group", choices=["web", "esp"])
+    parser.add_argument("group", choices=["web", "site", "demos", "esp"])
     args = parser.parse_args()
     machine = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64"}[
         platform.machine()
@@ -106,6 +106,16 @@ def main():
                 ["wasm-bindgen", "wasm-bindgen-test-runner"],
             ),
         ]
+        # Keep `web` as the complete local toolchain, but production website
+        # CI must not depend on downloading the separate Dioxus CLI.
+        if args.group == "site":
+            releases = [
+                release for release in releases if release[0] != "DioxusLabs/dioxus"
+            ]
+        elif args.group == "demos":
+            releases = [
+                release for release in releases if release[0] != "trunk-rs/trunk"
+            ]
         for repository, tag, asset, binaries in releases:
             with tempfile.TemporaryDirectory() as directory:
                 archive = Path(directory) / asset

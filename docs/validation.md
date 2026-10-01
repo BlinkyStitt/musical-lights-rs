@@ -2,32 +2,42 @@
 
 ## Website deployment
 
-Pages deploys only from `main` after `core`, `web`, and `loudness-reference`
-succeed. The core check retains its `rust (core)` check name. The web job still
-checks physics, worklet, Leptos, Dioxus, standalone WASM, and the full serial
-Chromium/WebKit suite with zero retries. A failure in any of these website
-checks blocks deployment.
+The workflows separate deployment from independent applications and firmware:
 
-ESP32, Feather, STM32, and terminal checks still run and still fail visibly,
-but Pages does not depend on them. A failed firmware job can make the overall
-workflow red while the independently validated website deploys successfully.
+- `validate.yml` (Website validation and deployment): core, physics, audio
+  worklet, Leptos, loudness references, and the production browser suite. Pages
+  waits only for `core`, `web`, and `loudness-reference` on current `main`.
+- `other-apps.yml`: terminal, Dioxus, and standalone WASM validation. The two
+  demo browser checks run separately, retaining their assertions and using a
+  demo artifact for server readiness.
+- `firmware.yml`: Feather, STM32, ESP Embassy, and ESP-IDF validation. Failures
+  remain visible in this workflow and do not gate website deployment.
 
-The web job packages the exact `musical-leptos/dist` directory used by passing
-browser tests as `github-pages`, including on PRs to validate packaging. The
-Pages job deploys that same-run artifact without another checkout, tool install,
-or build. Only Pages receives deployment permissions. Deployments are serialized,
-and a queued job skips publishing if its commit is no longer the tip of main.
-This follows GitHub's [separate build/deploy artifact workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+Path filters cover each workflow's packages and shared dependencies/tooling.
+Shared core changes run all three workflows. Workflow changes also run all
+three; each supports manual dispatch for a complete check of its targets.
+Superseded PR runs cancel within their workflow, while main validation runs
+remain independent. Only the Pages job receives deployment permissions.
 
-Pinned web tools are cached by OS, architecture, and installer content; npm's
-download cache is keyed by the validation lockfile. Cache misses run the normal
-pinned installer. Downloads retry transient network errors, HTTP 408/429, and
-5xx responses at most three times after the first attempt, with 1/2/4-second
-backoff and a 30-second socket timeout. Permanent HTTP errors fail immediately.
-Downloads use a temporary file and check Content-Length when provided before
-replacing the destination. Browser/test failures are never retried or ignored.
+The web job packages the exact `musical-leptos/dist` used by passing browser
+checks as `github-pages`, including on PRs. Pages deploys the same-run artifact
+without rebuilding. Deployments remain serialized, and queued stale revisions
+skip publishing after checking the current main SHA. See GitHub's
+[build/deploy artifact workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-Validate workflow changes with `actionlint .github/workflows/validate.yml`.
+Pinned tool caches are separated by site, demos, and ESP installers. The site's
+installer excludes Dioxus, so its downloads cannot block deployment. The `web`
+installer group remains the complete local browser toolchain. Rust dependency
+and build caches are scoped by job/target, platform, toolchain, lockfiles and
+revision; npm downloads use the validation lockfile. Missing caches take the
+normal pinned build path. Browser/test failures are never retried or ignored.
+
+`python3 validation/validate.py browser` still runs all browser projects locally.
+For the workflow subsets, run `npm run test:site` or `npm run test:demos` from
+`validation` (with repository-pinned tools and macOS host access). All projects
+retain the serial startup guard, one worker, and zero retries.
+
+Validate workflow changes with `actionlint .github/workflows/*.yml`.
 Run installer regressions with `python3 -m unittest discover -s validation/tooling -v`.
 The `reference` target includes installer and test lint/type checks.
 
