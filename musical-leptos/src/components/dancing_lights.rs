@@ -426,7 +426,7 @@ pub fn DancingLights() -> impl IntoView {
             <div class="display-note">
                 <p class="control-note">{move || if listening.get() {
                     format!("Sample rate: {} Hz", sample_rate.get())
-                } else { "Allow microphone access to begin. No recording.".into() }}</p>
+                } else { "Tap Start listening to begin. No recording.".into() }}</p>
                 <p class="display-status">
                 <label class="scroll-control" title="Move the colored bands right. Automatic scrolling is off with Reduced Motion."><input class="scroll-lights" type="checkbox" tabindex="0" prop:checked=move || scrolling.get()
                     on:change=move |event| set_scrolling.set(event_target_checked(&event))/>

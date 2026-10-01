@@ -109,6 +109,23 @@ restart, and gaps of at least 500 ms establish a fresh baseline without a kick.
 Shake forces expire 150 ms after the last usable reading. Sensor semantics
 follow the [Device Orientation and Motion specification](https://www.w3.org/TR/orientation-event/).
 
+The microphone permission notice and idle motion status query browser permissions
+without requesting access. They distinguish allowed, prompt, blocked, unknown,
+unavailable APIs, and insecure pages. Unsupported or rejected permission queries
+remain unknown and do not prevent a user-initiated start. Microphone acquisition
+and granted motion requests update the current visit's status; usable sensor
+readings also confirm motion access. Permission status stays separate from the
+microphone on/off indicator and enabled motion listeners. A dismissed microphone
+prompt reports that access was not granted, without claiming a permanent denial.
+
+Permission changes, window focus, visible-page returns, and `pageshow` refresh the
+display. Route cleanup removes permission observers and ignores late query or
+capture results. No permission is persisted in storage or inferred from a bookmark
+or Home Screen launch: the browser remains authoritative. The expandable access
+help explains site settings and potentially separate browser/Home Screen grants.
+These checks follow the [Permissions API](https://w3c.github.io/permissions/)
+and [media capture permission semantics](https://w3c.github.io/mediacapture-main/#permissions-integration).
+
 Physical-phone motion acceptance remains a separate check: after Start listening
 and allowing motion access, try left/right, up/down, and toward/away shakes in
 portrait and landscape. Repeat with music driving the bars; both sources must

@@ -473,7 +473,7 @@ test('rotation-locked phone can enable shaking without starting the microphone',
   expect(travel.filter(distance => distance > .08).length).toBeGreaterThanOrEqual(before.balls.length / 2);
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
   await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
-  await expect(page.locator('.motion-status')).toBeEmpty();
+  await expect(page.locator('.motion-status')).toHaveText('Motion access allowed · motion off.');
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
   expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
 });
