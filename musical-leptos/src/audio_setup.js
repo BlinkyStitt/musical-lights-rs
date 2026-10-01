@@ -163,15 +163,28 @@ export function isCurrentProcessorMessage(node, data) {
 
 const generatedSources = new WeakMap();
 export async function acquireInput(context) {
-    const card = document.querySelector('.audio-card');
+    const card = /** @type {HTMLElement} */ (document.querySelector('.audio-card'));
     const generated = card.querySelector('.generated-audio')?.checked === true;
     const session = beginSession(context, card, generated ? 'generated' : 'microphone');
     try {
         await requireCurrentRuntime(context);
         if (!generated) {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: {
-                autoGainControl: false, echoCancellation: false, noiseSuppression: false,
-            }});
+            const permission = state => {
+                if (!session.closed && card.isConnected && card.dataset.audioSession === String(session.sessionId))
+                    card.dispatchEvent(new CustomEvent('microphone-access', { detail: state }));
+            };
+            permission('requesting');
+            let stream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: {
+                    autoGainControl: false, echoCancellation: false, noiseSuppression: false,
+                }});
+                permission('granted');
+            } catch (error) {
+                // NotAllowedError also covers dismissed prompts and OS restrictions.
+                permission(error.name === 'NotAllowedError' ? 'not-allowed' : 'unknown');
+                throw error;
+            }
             sessions.set(stream, session);
             return stream;
         }
