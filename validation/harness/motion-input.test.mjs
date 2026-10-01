@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PhysicsInput } from '../../musical-leptos/src/physics.js';
+import { PhysicsInput, orientationGravity } from '../../musical-leptos/src/physics.js';
 
 // These EventTarget tests isolate lifecycle and input math, not browser sensor
 // permission gates or trusted device events. See permissions-native.spec.mjs.
@@ -73,7 +73,8 @@ test('rotation lock and absent orientation events do not gate motion readings', 
   f.send({ accelerationIncludingGravity: { x: 0, y: 9.81, z: 0 } }, 0);
   f.send({ accelerationIncludingGravity: { x: -3, y: 9.81, z: 0 } }, 16);
   assert.equal(f.input.state, 'active');
-  assert.equal(f.tilts.length, 0);
+  assert.equal(f.tilts.length, 2, 'gravity-inclusive motion supplies gravity without orientation permission');
+  assert.equal(f.tilts[0][1], -9.81);
   assert.ok(f.shakes.at(-1)[0] < -2.8);
   assert.equal(f.shakes.at(-1)[3], 0);
   f.input.stopMotion();
@@ -127,3 +128,29 @@ for (const motion of ['denied', 'unavailable', 'pending']) {
     f.input.close();
   });
 }
+
+
+test('orientation fallback gives Earth gravity in all three phone axes without a flat-screen singularity', () => {
+  for (const [beta, gamma, expected] of [
+    [90, 0, [0, -9.81, 0]], [-90, 0, [0, 9.81, 0]],
+    [0, 90, [9.81, 0, 0]], [0, -90, [-9.81, 0, 0]],
+    [0, 0, [0, 0, -9.81]], [180, 0, [0, 0, 9.81]],
+    [45, 45, [4.905, -6.93671752344, -4.905]],
+  ]) {
+    const actual = orientationGravity(beta, gamma);
+    actual.forEach((value, i) => assert.ok(Math.abs(value - expected[i]) < 1e-9));
+    assert.ok(Math.abs(Math.hypot(...actual) - 9.81) < 1e-9);
+  }
+  assert.ok(Math.hypot(...orientationGravity(.001, -.001).slice(0, 2)) < .001);
+});
+
+test('measured gravity and linear acceleration stay separate and retain their SI magnitudes', async () => {
+  const f = await fixture();
+  f.send({ acceleration: { x: 3, y: -2, z: 4 }, accelerationIncludingGravity: { x: 3, y: 7.81, z: 4 } });
+  assert.deepEqual(f.shakes.at(-1), [3, -2, 4, 0]);
+  f.tilts.at(-1).forEach((value, i) => assert.ok(Math.abs(value - [0, -9.81, 0, 0][i]) < 1e-9));
+  const count = f.tilts.length;
+  f.window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: -90, gamma: 0 }));
+  assert.equal(f.tilts.length, count, 'orientation cannot override a fresh measured gravity vector');
+  f.input.close();
+});

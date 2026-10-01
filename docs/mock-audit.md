@@ -44,6 +44,16 @@ Home Screen storage. Full Chromium is required here: the headless shell's media
 request delegate reported “Not supported” even when query state was granted.
 The serial startup guard still checks this project before test workers start.
 
+The subsequent 3D gravity change also makes the virtual sensor inputs physically
+coherent: accelerometer readings equal linear acceleration plus support against
+gravity. Chromium exposes these readings at 0.1 m/s² precision, so the native
+fixtures use 9.8 m/s² and assert that delivered value, rather than assuming a
+9.81 input survives browser rounding. Native checks now verify upside-down and
+flat-phone ball movement. Synthetic shake fixtures use explicit 16 m/s² inputs
+for lift; their previous 2 m/s² input depended on the removed production 8× gain.
+The requested travel assertions remain unchanged. See the
+[gravity and computation report](device-gravity-results/README.md).
+
 ## Retained fixture boundaries
 
 | Fixture family | What it establishes | What it cannot establish |

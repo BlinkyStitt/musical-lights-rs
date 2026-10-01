@@ -975,7 +975,7 @@ fn initial_placement_fits_the_minimum_closed_enclosure_without_overlap() {
 
 #[test]
 fn simultaneous_full_strokes_do_not_push_stacks_through_the_ceiling() {
-    for height in [MIN_HEIGHT, 0.415, 0.6, 1.2] {
+    for height in [MIN_HEIGHT, 0.415, 0.6, 1.2, 2.596923] {
         for warmup in [0, HZ / 8, HZ / 4, HZ] {
             let mut sim = world(SimulationConfig {
                 height,
@@ -1234,4 +1234,54 @@ fn balanced_scroll_keeps_balls_from_accumulating_at_the_right_wall() {
     }
     eprintln!("64-second balanced scroll: rightmost mean ball position {worst_center} m");
     assert!(min_speed < -0.5 && max_speed > 0.5);
+}
+
+#[test]
+fn measured_gravity_can_point_up_or_through_the_screen_and_is_not_reduced() {
+    for gravity in [[0.0, 9.81, 0.0], [0.0, 0.0, -9.81], [0.0, 0.0, 9.81]] {
+        for reduced_motion in [false, true] {
+            let mut sim = world(SimulationConfig::default());
+            isolate(&mut sim, &[0]);
+            place(&mut sim, 0, Vector::new(0.6, 0.3, 0.0), Vector::ZERO);
+            sim.apply(SimulationInput {
+                gravity: Some(gravity),
+                reduced_motion,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            for _ in 0..6 {
+                sim.step();
+            }
+            let expected = Vector::from_array(gravity) * 0.05;
+            assert!((velocity(&sim, 0) - expected).length() < 0.003);
+        }
+    }
+}
+
+#[test]
+fn turning_over_wakes_settled_balls_and_stopping_restores_default_gravity() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    for _ in 0..HZ * 4 {
+        sim.step();
+    }
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        gravity: Some([0.0, 9.81, 0.0]),
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    for _ in 0..HZ / 5 {
+        sim.step();
+    }
+    assert!(velocity(&sim, 0).y > 1.8);
+    assert!(position(&sim, 0).y > 0.15);
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    let before = velocity(&sim, 0).y;
+    sim.step();
+    assert!((velocity(&sim, 0).y - before + 9.81 * DT).abs() < 0.003);
 }
