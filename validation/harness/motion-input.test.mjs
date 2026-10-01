@@ -4,9 +4,10 @@ import { PhysicsInput, orientationGravity } from '../../musical-leptos/src/physi
 
 // These EventTarget tests isolate lifecycle and input math, not browser sensor
 // permission gates or trusted device events. See permissions-native.spec.mjs.
-async function fixture(orientation = () => Promise.resolve('granted')) {
+async function fixture(orientation = () => Promise.resolve('granted'), navigator = {}) {
   const window = new EventTarget();
   Object.assign(window, {
+    navigator,
     screen: { orientation: { angle: 0 } },
     DeviceMotionEvent: { requestPermission: () => Promise.resolve('granted') },
     DeviceOrientationEvent: { requestPermission: orientation },
@@ -154,3 +155,30 @@ test('measured gravity and linear acceleration stay separate and retain their SI
   assert.equal(f.tilts.length, count, 'orientation cannot override a fresh measured gravity vector');
   f.input.close();
 });
+
+// iOS WebKit forwards CoreMotion userAcceleration + gravity, whereas
+// Chromium reports support acceleration with gravity's opposite sign.
+for (const [sign, navigator] of [
+  [1, { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', platform: 'iPhone' }],
+  [1, { userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)', platform: 'iPad' }],
+  [1, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)', platform: 'MacIntel', maxTouchPoints: 5 }],
+  [-1, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)', platform: 'MacIntel', maxTouchPoints: 0 }],
+  [-1, { userAgent: 'Mozilla/5.0 (Linux; Android 15) Chrome/140.0', platform: 'Linux armv8l', maxTouchPoints: 5 }],
+]) {
+  for (const fallback of [false, true]) {
+    test(`gravity retains physical direction with ${fallback ? 'gravity-only' : 'linear'} readings on ${navigator.platform}/${navigator.maxTouchPoints ?? 0}`, async () => {
+      const f = await fixture(undefined, navigator);
+      const linear = fallback ? [0, 0, 0] : [3, -2, 4];
+      // Upright portrait, upside down, right edge up, face up, and face down.
+      for (const gravity of [[0, -9.81, 0], [0, 9.81, 0], [-9.81, 0, 0], [0, 0, -9.81], [0, 0, 9.81]]) {
+        f.send({
+          acceleration: fallback ? null : Object.fromEntries(['x', 'y', 'z'].map((axis, i) => [axis, linear[i]])),
+          accelerationIncludingGravity: Object.fromEntries(['x', 'y', 'z'].map((axis, i) => [axis, sign * gravity[i] + linear[i]])),
+        }, 1000 * (f.tilts.length + 1));
+        f.tilts.at(-1).forEach((value, i) => assert.ok(Math.abs(value - [...gravity, 0][i]) < 1e-9, `gravity axis ${i}: expected ${[...gravity, 0][i]}, got ${value}`));
+        assert.deepEqual(f.shakes.at(-1), [...linear, 0], 'gravity correction must not change shake readings');
+      }
+      f.input.close();
+    });
+  }
+}

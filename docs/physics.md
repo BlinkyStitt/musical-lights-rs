@@ -87,8 +87,13 @@ factor or a per-axis magnitude clamp. Non-finite readings are rejected. A
 a resting ball.
 Screen rotation maps the two in-plane axes; the opposite acceleration is
 applied to the balls, as if shaking their enclosure. Gravity is a separate 3D
-vector: linear acceleration minus gravity-inclusive acceleration, preserving
-the measured magnitude. Orientation-only devices use the full beta/gamma
+vector, preserving the measured magnitude. iOS WebKit exposes
+[CoreMotion's user acceleration plus gravity](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/platform/ios/WebCoreMotionManager.mm),
+so gravity is the gravity-inclusive reading
+minus linear acceleration. Other browsers expose support acceleration and
+use the opposite difference. iPhone/iPad detection includes iPadOS desktop
+mode. This sign correction applies only to gravity; shake readings retain
+their existing inertial mapping. Orientation-only devices use the full beta/gamma
 rotation of 9.81 m/s² gravity. Upside down reverses the screen's vertical pull;
 flat face-up pulls into the back of the box, and face-down toward the front.
 The screen-plane projection is never normalized, so near-flat sensor noise
@@ -111,8 +116,8 @@ and route cleanup invalidate both requests and remove listeners. Display rotatio
 lock never gates accelerometer delivery: a fixed screen angle still maps shakes
 into that fixed viewport, even with no orientation events.
 When linear acceleration is unavailable, a 250 ms exponential baseline removes
-the slow gravity component from gravity-inclusive readings; the negative
-baseline also supplies gravity. This fallback is
+the slow gravity component from gravity-inclusive readings; the baseline
+also supplies gravity with the same platform sign correction. This fallback is
 an approximation: fast rotations can also appear as shakes. Its first reading,
 restart, and gaps of at least 500 ms establish a fresh baseline without a kick.
 Shake forces expire 150 ms after the last usable reading. Sensor semantics
