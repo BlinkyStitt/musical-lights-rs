@@ -74,6 +74,12 @@ export class PhysicsInput {
     this.onPermission = onPermission;
     this.state = 'off';
     this.motionGravityAt = -Infinity;
+    // iOS WebKit forwards CoreMotion's userAcceleration + gravity. Other
+    // browsers report support acceleration, whose gravity component is reversed.
+    // iPadOS can identify itself as a touch-capable Mac in desktop mode.
+    const navigator = this.window.navigator;
+    const appleMotion = /iPad|iPhone|iPod/.test(navigator?.userAgent ?? '')
+      || (navigator?.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const angle = () => this.window.screen.orientation?.angle ?? this.window.orientation ?? 0;
     const clearPointer = () => onPointer(0, 0, false);
     this.listen('pointermove', event => {
@@ -97,9 +103,8 @@ export class PhysicsInput {
       const linear = axes.map(axis => event.acceleration?.[axis]);
       const raw = axes.map(axis => event.accelerationIncludingGravity?.[axis]);
       if (linear.every(Number.isFinite) && raw.every(Number.isFinite)) {
-        // IncludingGravity reports support acceleration: its difference from
-        // linear acceleration points opposite gravitational attraction.
-        onGravity(...raw.map((value, i) => linear[i] - value), angle());
+        // Remove user acceleration before applying the platform's gravity sign.
+        onGravity(...raw.map((value, i) => appleMotion ? value - linear[i] : linear[i] - value), angle());
         this.motionGravityAt = performance.now();
       }
       if (linear.some(Number.isFinite)) {
@@ -122,7 +127,7 @@ export class PhysicsInput {
         return value - this.gravity[i];
       });
       this.gravityAt = event.timeStamp;
-      onGravity(...this.gravity.map(value => -value), angle());
+      onGravity(...this.gravity.map(value => appleMotion ? value : -value), angle());
       this.motionGravityAt = performance.now();
       onShake(...shake, angle());
     };
