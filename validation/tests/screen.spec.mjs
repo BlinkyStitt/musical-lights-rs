@@ -236,7 +236,7 @@ test('the mounted view owns its wake lock independently of microphone permission
       lock.release = async () => { lock.released = true; lock.dispatchEvent(new Event('release')); };
       window.screenLocks.push(lock); return lock;
     } } });
-    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); };
+    MediaDevices.prototype.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); };
   });
   await page.goto('http://127.0.0.1:8101');
   await expect(page.locator('.wake-status')).toHaveText('Screen stays awake');
@@ -281,7 +281,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await page.setViewportSize(viewport);
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.addInitScript(() => {
-      navigator.mediaDevices.getUserMedia = async () => {
+      MediaDevices.prototype.getUserMedia = async () => {
         const context = new AudioContext(); const oscillator = context.createOscillator();
         const destination = context.createMediaStreamDestination();
         oscillator.connect(destination); oscillator.start(); await context.resume();

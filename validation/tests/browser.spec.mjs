@@ -72,7 +72,7 @@ async function expectOnlySphereAnimation(page) {
 test('microphone denial displays an error and closes the audio context', async ({ page }) => {
   await trackContexts(page);
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); };
+    MediaDevices.prototype.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); };
   });
   await page.goto(leptos);
   await page.getByRole('button', { name: 'Start listening' }).click();
@@ -102,7 +102,7 @@ for (const rate of [44100, 48000]) {
           });
         }
       };
-      navigator.mediaDevices.getUserMedia = async () => {
+      MediaDevices.prototype.getUserMedia = async () => {
         const context = new NativeContext({ sampleRate: rate });
         const oscillator = context.createOscillator();
         oscillator.frequency.value = 1000;
@@ -151,7 +151,7 @@ for (const rate of [44100, 48000]) {
 test('leaving the view while permission is pending releases the late stream', async ({ page }) => {
   await trackContexts(page);
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { window.resolveInput = resolve; });
+    MediaDevices.prototype.getUserMedia = () => new Promise(resolve => { window.resolveInput = resolve; });
   });
   await page.goto(leptos);
   await page.getByRole('button', { name: 'Start listening' }).click();
@@ -161,13 +161,15 @@ test('leaving the view while permission is pending releases the late stream', as
   // Cancel drawing before the still-pending permission promise resolves.
   await expectAnimationStopped(page);
   await page.evaluate(async () => {
-    const context = new AudioContext();
-    const stream = context.createMediaStreamDestination().stream;
+    window.lateSource = new AudioContext();
+    const stream = lateSource.createMediaStreamDestination().stream;
     window.lateStream = stream;
     window.resolveInput(stream);
-    await context.close();
   });
   await expect.poll(() => page.evaluate(() => window.lateStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
+  // Keep the independent source alive until the application has stopped its track.
+  expect(await page.evaluate(() => lateSource.state)).not.toBe('closed');
+  await page.evaluate(() => lateSource.close());
   await expect.poll(() => page.evaluate(() => window.audioContexts.every(c => c.state === 'closed'))).toBe(true);
 });
 

@@ -11,7 +11,12 @@ const source = await readFile(new URL('../../musical-lights-worklet/processor.js
 function processor(channel = 0) {
   const messages = [];
   const scope = { currentFrame: 0, sampleRate: 48000, WebAssembly, Float32Array, Float64Array,
-    AudioWorkletProcessor: class { port = { postMessage: (data, transfer) => messages.push({ data, transfer }) }; },
+    AudioWorkletProcessor: class { port = { postMessage(data, transfer = []) {
+      // Real MessagePort delivery clones the packet and detaches transferred
+      // buffers. Keeping the original object can conceal buffer reuse bugs.
+      messages.push({ data: structuredClone(data, { transfer }) });
+      for (const buffer of transfer) assert.equal(buffer.byteLength, 0);
+    } }; },
     registerProcessor: (_, value) => { scope.Processor = value; },
   };
   vm.runInNewContext(source, scope);
@@ -61,7 +66,7 @@ test('production WASM rejects sustain modulation, swells, masked notes, offsets 
   }
 });
 
-test('browser preserves the measured balance of a weaker high tone', () => {
+test('production WASM preserves the measured balance of a weaker high tone', () => {
   const p = processor();
   const samples = tone(48000, 1000, .02);
   const treble = tone(48000, 8000, .01);

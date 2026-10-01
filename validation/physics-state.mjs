@@ -42,7 +42,12 @@ export async function syntheticAudio(page, permission = 'granted') {
     for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
       if (!window[name]) window[name] = class {};
       Object.defineProperty(window[name], 'requestPermission', { configurable: true,
-        value: () => permission === 'pending' ? new Promise(resolve => window.resolveMotion.push(resolve)) : Promise.resolve(permission) });
+        value: () => {
+          // Model the initial Safari prompt's gesture requirement. Synthetic
+          // sensor dispatch below still does not exercise the browser's gate.
+          if (!navigator.userActivation.isActive) return Promise.reject(new DOMException('A gesture is required', 'NotAllowedError'));
+          return permission === 'pending' ? new Promise(resolve => window.resolveMotion.push(resolve)) : Promise.resolve(permission);
+        } });
     }
     MediaDevices.prototype.getUserMedia = async () => window.testContext.createMediaStreamDestination().stream;
     window.sendBars = (levels, edge = 0) => {

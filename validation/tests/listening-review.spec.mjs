@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const origin='http://127.0.0.1:8101';
-test('audible review uses output time for flashes, buffered completion, fallback labels and export', async ({page}) => {
+test('review UI uses simulated output time for flashes, buffered completion, fallback labels and export', async ({page}) => {
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/audio-audit/**', async route=>{
     const name=new URL(route.request().url()).pathname.split('/').at(-1)||'index.html';

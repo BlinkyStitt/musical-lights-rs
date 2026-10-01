@@ -11,9 +11,16 @@ export default defineConfig({
   reporter: [['list'], ['./browser-process-reporter.mjs']],
   use: { headless: true, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   projects: [
-    { name: 'chromium', testIgnore: '**/mobile-screen.spec.mjs', use: { browserName: 'chromium' } },
-    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/listening-review.spec.mjs'], use: { browserName: 'webkit' } },
-    { name: 'iphone-webkit', testMatch: '**/mobile-screen.spec.mjs', use: { ...devices['iPhone 13'], browserName: 'webkit' } },
+    { name: 'chromium', testIgnore: ['**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs'], use: { browserName: 'chromium' } },
+    { name: 'chromium-permissions', testMatch: '**/permissions-native.spec.mjs', use: {
+      browserName: 'chromium', channel: 'chromium', launchOptions: { args: [
+        '--use-fake-device-for-media-stream',
+        '--host-resolver-rules=MAP musical-lights-insecure.test 127.0.0.1',
+        '--no-proxy-server',
+      ] },
+    } },
+    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs'], use: { browserName: 'webkit' } },
+    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/permissions.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
   ],
   webServer: {
     command: 'node server.mjs',
