@@ -11,7 +11,8 @@ export default defineConfig({
   reporter: [['list'], ['./browser-process-reporter.mjs']],
   use: { headless: true, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   projects: [
-    { name: 'chromium', testIgnore: ['**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs'], use: { browserName: 'chromium' } },
+    { name: 'chromium', testIgnore: ['**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: { browserName: 'chromium' } },
+    { name: 'other-apps', testMatch: '**/other-apps.spec.mjs', use: { browserName: 'chromium' } },
     { name: 'chromium-permissions', testMatch: '**/permissions-native.spec.mjs', use: {
       browserName: 'chromium', channel: 'chromium', launchOptions: { args: [
         '--use-fake-device-for-media-stream',

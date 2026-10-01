@@ -1,38 +1,69 @@
-name: Validate all package roots
+name: Website validation and deployment
 on:
   push:
     branches: [main]
+    paths:
+      - 'musical-lights-core/**'
+      - 'validation/**'
+      - '.github/workflows/**'
+      - '**/.cargo/**'
+      - '**/rust-toolchain*'
+      - 'musical-leptos/**'
+      - 'musical-lights-worklet/**'
+      - 'musical-lights-physics/**'
+      - 'docs/audio-audit-results/**'
   pull_request:
+    paths:
+      - 'musical-lights-core/**'
+      - 'validation/**'
+      - '.github/workflows/**'
+      - '**/.cargo/**'
+      - '**/rust-toolchain*'
+      - 'musical-leptos/**'
+      - 'musical-lights-worklet/**'
+      - 'musical-lights-physics/**'
+      - 'docs/audio-audit-results/**'
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   core:
     name: rust (core)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Cache Rust dependencies and builds
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            musical-lights-core/target
+          key: core-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            core-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
       - run: python3 validation/validate.py core
-  rust:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [terminal, feather, stm32]
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Install Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown,thumbv6m-none-eabi,thumbv7em-none-eabihf
-      - name: Install terminal libraries
-        if: matrix.package == 'terminal'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsdl2-dev
-      - run: python3 validation/validate.py ${{ matrix.package }}
   web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Cache Rust dependencies and builds
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            musical-lights-physics/target
+            musical-lights-worklet/target
+            musical-leptos/target
+          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '26.8.2'
@@ -47,11 +78,11 @@ jobs:
         uses: actions/cache@v6.1.0
         with:
           path: .tools
-          key: web-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
-      - run: python3 validation/install_tools.py web
+          key: site-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
+      - run: python3 validation/install_tools.py site
         if: steps.web-tools.outputs.cache-hit != 'true'
-      - run: python3 validation/validate.py physics worklet leptos dioxus wasm
-      - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium webkit && npm test
+      - run: python3 validation/validate.py physics worklet leptos
+      - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium webkit && npm run test:site
         env:
           DEBUG: pw:browser
       - uses: actions/upload-artifact@v7.0.1
@@ -71,6 +102,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Cache Rust dependencies and builds
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            musical-lights-core/target
+          key: reference-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            reference-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.14.7'
@@ -79,31 +120,6 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal
       - run: python3 validation/validate.py reference
-  esp:
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [esp-embassy, esp-idf]
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
-        with:
-          python-version: '3.14.7'
-      - name: Install host Rust and linker
-        run: |
-          rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
-          python3 validation/install_tools.py esp
-      - name: Install exact Xtensa toolchain
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: .tools/bin/espup install --toolchain-version 1.98.1.0 --name esp-1.98.1.0 --targets esp32 --export-file "$RUNNER_TEMP/export-esp.sh"
-      - name: Validate firmware
-        run: |
-          . "$RUNNER_TEMP/export-esp.sh"
-          python3 validation/validate.py ${{ matrix.package }}
   pages:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [core, web, loudness-reference]

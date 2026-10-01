@@ -1,0 +1,101 @@
+name: Firmware validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'musical-lights-core/**'
+      - 'validation/validate.py'
+      - 'validation/install_tools.py'
+      - 'validation/tooling/**'
+      - '.github/workflows/**'
+      - '**/.cargo/**'
+      - '**/rust-toolchain*'
+      - 'musical-feather-m0/**'
+      - 'musical-stm32/**'
+      - 'musical-adafruit-sparkle-embassy/**'
+      - 'musical-adafruit-sparkle-idf/**'
+  pull_request:
+    paths:
+      - 'musical-lights-core/**'
+      - 'validation/validate.py'
+      - 'validation/install_tools.py'
+      - 'validation/tooling/**'
+      - '.github/workflows/**'
+      - '**/.cargo/**'
+      - '**/rust-toolchain*'
+      - 'musical-feather-m0/**'
+      - 'musical-stm32/**'
+      - 'musical-adafruit-sparkle-embassy/**'
+      - 'musical-adafruit-sparkle-idf/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [feather, stm32]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Cache Rust dependencies and builds
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            musical-feather-m0/target
+            musical-stm32/target
+          key: firmware-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-feather-m0/Cargo.lock', 'musical-stm32/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            firmware-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-feather-m0/Cargo.lock', 'musical-stm32/Cargo.lock') }}-
+      - name: Install Rust
+        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target thumbv6m-none-eabi,thumbv7em-none-eabihf
+      - run: python3 validation/validate.py ${{ matrix.package }}
+  esp:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [esp-embassy, esp-idf]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Cache Rust dependencies and builds
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            musical-adafruit-sparkle-embassy/target
+            musical-adafruit-sparkle-idf/target
+          key: esp-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles('musical-adafruit-sparkle-embassy/Cargo.lock', 'musical-adafruit-sparkle-idf/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            esp-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles('musical-adafruit-sparkle-embassy/Cargo.lock', 'musical-adafruit-sparkle-idf/Cargo.lock') }}-
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14.7'
+      - name: Install host Rust and linker
+        run: |
+          rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
+      - name: Cache pinned ESP installers
+        id: esp-tools
+        uses: actions/cache@v6.1.0
+        with:
+          path: .tools
+          key: esp-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
+      - run: python3 validation/install_tools.py esp
+        if: steps.esp-tools.outputs.cache-hit != 'true'
+      - name: Install exact Xtensa toolchain
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: .tools/bin/espup install --toolchain-version 1.98.1.0 --name esp-1.98.1.0 --targets esp32 --export-file "$RUNNER_TEMP/export-esp.sh"
+      - name: Validate firmware
+        run: |
+          . "$RUNNER_TEMP/export-esp.sh"
+          python3 validation/validate.py ${{ matrix.package }}
