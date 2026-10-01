@@ -62,3 +62,66 @@ test('gravity fallback ignores rest and resumes without a gravity kick, but resp
   assert.deepEqual(f.shakes.at(-1), [0, 0, 0, 0]);
   f.input.close();
 });
+
+
+test('rotation lock and absent orientation events do not gate motion readings', async () => {
+  const f = await fixture(() => Promise.resolve('denied'));
+  assert.equal(f.input.state, 'waiting');
+  // Portrait remains locked at zero while only accelerometer events arrive.
+  f.send({ accelerationIncludingGravity: { x: 0, y: 9.81, z: 0 } }, 0);
+  f.send({ accelerationIncludingGravity: { x: -3, y: 9.81, z: 0 } }, 16);
+  assert.equal(f.input.state, 'active');
+  assert.equal(f.tilts.length, 0);
+  assert.ok(f.shakes.at(-1)[0] < -2.8);
+  assert.equal(f.shakes.at(-1)[3], 0);
+  f.input.stopMotion();
+  assert.equal(f.input.state, 'off');
+  f.input.close();
+});
+
+test('denied permission is observable and can be requested again after a new gesture', async () => {
+  const f = await fixture();
+  f.input.stopMotion();
+  f.window.DeviceMotionEvent.requestPermission = () => Promise.resolve('denied');
+  f.input.startMotion();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.input.state, 'denied');
+  f.send({ acceleration: { x: 2, y: 0, z: 0 } });
+  assert.equal(f.shakes.length, 0);
+  f.input.stopMotion();
+  f.window.DeviceMotionEvent.requestPermission = () => Promise.resolve('granted');
+  f.input.startMotion();
+  await new Promise(resolve => setImmediate(resolve));
+  f.send({ acceleration: { x: 2, y: 0, z: 0 } });
+  assert.equal(f.input.state, 'active');
+  f.input.close();
+});
+
+for (const motion of ['denied', 'unavailable', 'pending']) {
+  test(`tilt-only session remains controllable when acceleration is ${motion}`, async () => {
+    const f = await fixture();
+    f.input.stopMotion();
+    let resolveMotion;
+    f.window.DeviceMotionEvent = motion === 'unavailable' ? undefined : {
+      requestPermission: () => motion === 'pending' ? new Promise(resolve => { resolveMotion = resolve; }) : Promise.resolve('denied'),
+    };
+    const statuses = [];
+    f.input.onStatus = (state, enabled) => statuses.push({ state, enabled });
+    f.input.startMotion();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.input.enabled, true);
+    assert.equal(statuses.at(-1).enabled, true);
+    f.window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 20, gamma: 30 }));
+    assert.equal(f.tilts.length, 1);
+    f.input.stopMotion();
+    assert.deepEqual(statuses.at(-1), { state: 'off', enabled: false });
+    resolveMotion?.('granted');
+    await new Promise(resolve => setImmediate(resolve));
+    f.window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 60, gamma: 60 }));
+    f.send({ acceleration: { x: 8, y: 0, z: 0 } });
+    assert.equal(f.tilts.length, 1);
+    assert.equal(f.shakes.length, 0);
+    assert.equal(f.input.enabled, false);
+    f.input.close();
+  });
+}

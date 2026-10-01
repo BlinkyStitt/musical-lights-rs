@@ -51,7 +51,7 @@ for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,d
         over25Fraction:frames.filter(x=>x>25).length/frames.length,maxDebt:Math.max(...points.map(p=>p.debt)),maxSnapshotAge:Math.max(...points.map(p=>p.age)),
         overloadTicks:points.at(-1).overload-before.overload,fromHeight:before.height,toHeight:points.at(-1).height};
     });
-    const build=await page.evaluate(()=>import('/physics/build.js').then(module=>module.build));
+    const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
     const result={browser:name,version:browser.version(),physicalPhone:false,origin,build,errors,windows,...data};
     results.push(result);console.log(JSON.stringify({browser:name,windows,errors}));
     await context.close();

@@ -1,3 +1,4 @@
+import { runtimeRoot } from './runtime-assets.mjs';
 import { assertBrowserEnvironment } from './browser-environment.mjs';
 assertBrowserEnvironment();
 // Measure served release artifacts through real AudioWorklet transfer/ACK and DOM paths.
@@ -16,8 +17,8 @@ const [rootArgument, label, outputArgument, profileFilter] = process.argv.slice(
 if (!rootArgument || !label || !outputArgument) throw new Error('Expected ROOT LABEL OUTPUT.json');
 const root = resolve(rootArgument), output = resolve(outputArgument);
 const dist = resolve(root, 'musical-leptos/dist');
-const bytes = await readFile(resolve(dist, 'loudness/loudness.wasm'));
-const processorSource = await readFile(resolve(dist, 'loudness/processor.js'), 'utf8');
+const bytes = await readFile(resolve(await runtimeRoot(dist), 'loudness/loudness.wasm'));
+const processorSource = await readFile(resolve(await runtimeRoot(dist), 'loudness/processor.js'), 'utf8');
 const summary = values => {
   const sorted = values.toSorted((a, b) => a - b);
   return { count: values.length, mean: values.reduce((a, b) => a + b, 0) / values.length,

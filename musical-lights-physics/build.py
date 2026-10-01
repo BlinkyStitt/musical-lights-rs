@@ -23,7 +23,9 @@ def main() -> None:
         check=True,
     )
     output = root / "pkg"
-    output.mkdir(exist_ok=True)
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir()
     subprocess.run(
         [
             "wasm-bindgen",

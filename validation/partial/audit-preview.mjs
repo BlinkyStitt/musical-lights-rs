@@ -39,9 +39,9 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     expect((await page.goto(`${origin}/phone/`)).status()).toBe(200);
     await expect(page.getByRole('meter')).toHaveCount(24);
     await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
-    const actualBuild = await page.evaluate(() => fetch('/physics/build.js').then(r => r.text()));
+    const actualBuild = await page.evaluate(() => fetch(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(r => r.text()));
     expect(actualBuild.trim()).toBe(`export const build = '${build}';`);
-    const wasm = await page.request.get(`${origin}/loudness/loudness.wasm`);
+    const wasm = await page.request.get(new URL(await page.locator('meta[name="musical-lights-assets"]').getAttribute('content') + 'loudness/loudness.wasm', origin).href);
     expect(createHash('sha256').update(await wasm.body()).digest('hex')).toBe(expected.wasmSha256);
     expect(errors).toEqual([]);
     results.push({ browser: name, version: browser.version(), build, wasmSha256: expected.wasmSha256,

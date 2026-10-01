@@ -201,7 +201,7 @@ test('depth shakes and audio bars both move balls while tilt permission is still
     }
     return samples;
   });
-  expect(samples.some(s => s.input === -8)).toBe(true);
+  expect(samples.some(s => s.input === -64)).toBe(true);
   expect(samples.some(s => s.balls.some(b => b.vz < -.1))).toBe(true);
   expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
   expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
@@ -312,7 +312,7 @@ test('expensive physics ticks yield snapshots between steps and retain their deb
   const worker = page.workers().find(worker => worker.url().endsWith('/physics/worker.js'));
   const before = await physicsState(page);
   await worker.evaluate(async () => {
-    const { PhysicsSimulation } = await import('/physics/physics.js');
+    const { PhysicsSimulation } = await import(new URL('./physics.js', self.location.href));
     const step = PhysicsSimulation.prototype.step;
     let remaining = 8;
     PhysicsSimulation.prototype.step = function () {
@@ -399,3 +399,126 @@ test('leftward scrolling interpolates through the seam without sweeping the patt
   expect(samples[1]).toBeCloseTo(23.995, 4);
   expect(samples[2]).toBeCloseTo(.005, 4);
 });
+
+for (const scenario of [
+  { name: 'portrait sideways', angle: 0, acceleration: { x: -2, y: 0, z: 0 }, axis: 0, travel: .08 },
+  { name: 'portrait lift', angle: 0, acceleration: { x: 0, y: -2, z: 0 }, axis: 1, travel: .08 },
+  { name: 'landscape lift', angle: 90, acceleration: { x: -2, y: 0, z: 0 }, axis: 1, travel: .08 },
+  { name: 'depth', angle: 0, acceleration: { x: 0, y: 0, z: -2 }, axis: 2, travel: .035 },
+]) {
+  test(`handheld box shake produces visible ${scenario.name} travel from rest`, async ({ page }, info) => {
+    await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+    await page.evaluate(angle => Object.defineProperty(screen.orientation, 'angle', { configurable: true, value: angle }), scenario.angle);
+    await page.waitForTimeout(2000);
+    const before = await physicsState(page);
+    const result = await page.evaluate(async ({ acceleration, axis }) => {
+      const view = document.querySelector('#dancinglights').physics;
+      const first = Array.from({ length: view.layout[21] }, (_, i) => view.current[3 + i * view.layout[8] + axis]);
+      const travel = first.map(() => 0);
+      const end = performance.now() + 240;
+      while (performance.now() < end) {
+        window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration }));
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], view.current[3 + i * view.layout[8] + axis] - first[i]);
+      }
+      return { travel, input: Array.from(view.input.slice(24, 27)) };
+    }, scenario);
+    await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
+    expect(result.travel.filter(distance => distance > scenario.travel).length).toBeGreaterThanOrEqual(before.balls.length / 2);
+    expect(result.input[scenario.axis]).toBeCloseTo(16, 5);
+    // Lost events do not leave a continuous force; gravity/collisions continue.
+    await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+    const after = await physicsState(page);
+    for (const b of after.balls) {
+      expect(b.position[0]).toBeGreaterThanOrEqual(b.radius - .006);
+      expect(b.position[0]).toBeLessThanOrEqual(1.2 - b.radius + .006);
+      expect(b.position[1]).toBeGreaterThanOrEqual(b.radius - .006);
+      expect(b.position[1]).toBeLessThanOrEqual(after.ceiling - b.radius + .006);
+      expect(Math.abs(b.position[2])).toBeLessThanOrEqual(after.config[5] / 2 - b.radius + .006);
+    }
+  });
+}
+
+test('rotation-locked phone can enable shaking without starting the microphone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await syntheticAudio(page); await page.goto(url); await physicsReady(page);
+  await page.locator('.scroll-lights').uncheck();
+  await page.evaluate(() => {
+    Object.defineProperty(screen.orientation, 'angle', { configurable: true, value: 0 });
+    Object.defineProperty(DeviceOrientationEvent, 'requestPermission', { configurable: true, value: () => Promise.resolve('denied') });
+  });
+  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
+  expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
+  await page.waitForTimeout(2000);
+  const before = await physicsState(page);
+  const travel = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics;
+    const count = view.layout[21], stride = view.layout[8];
+    const initial = Array.from({ length: count }, (_, i) => view.current[3 + i * stride]);
+    const distances = initial.map(() => 0);
+    const send = x => window.dispatchEvent(Object.assign(new Event('devicemotion'), {
+      acceleration: { x: null, y: null, z: null }, accelerationIncludingGravity: { x, y: 9.81, z: 0 },
+    }));
+    send(0);
+    await new Promise(resolve => setTimeout(resolve, 16));
+    const until = performance.now() + 240;
+    while (performance.now() < until) {
+      send(-3);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      for (let i = 0; i < count; i++) distances[i] = Math.max(distances[i], view.current[3 + i * stride] - initial[i]);
+    }
+    return distances;
+  });
+  expect(travel.filter(distance => distance > .08).length).toBeGreaterThanOrEqual(before.balls.length / 2);
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
+  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  await expect(page.locator('.motion-status')).toBeEmpty();
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+  expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
+});
+
+test('motion denial is visible and a new gesture can retry without stopping music', async ({ page }) => {
+  await syntheticAudio(page, 'denied'); await page.goto(url); await startFrozen(page);
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'denied');
+  await page.evaluate(() => { Object.defineProperty(DeviceMotionEvent, 'requestPermission', { configurable: true, value: () => Promise.resolve('granted') }); });
+  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
+  await page.evaluate(() => {
+    window.sendBars(Array(24).fill(.5));
+    window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 0, z: 0 } }));
+  });
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
+  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toEqual(Array(24).fill(.5));
+  await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+});
+
+for (const acceleration of ['denied', 'unavailable', 'pending']) {
+  test(`tilt-only motion can be disabled when acceleration is ${acceleration}`, async ({ page }) => {
+    await syntheticAudio(page); await page.goto(url); await physicsReady(page);
+    await page.evaluate(acceleration => {
+      if (acceleration === 'unavailable') Object.defineProperty(window, 'DeviceMotionEvent', { configurable: true, value: undefined });
+      else Object.defineProperty(DeviceMotionEvent, 'requestPermission', { configurable: true,
+        value: () => acceleration === 'pending' ? new Promise(resolve => { window.finishShakePermission = resolve; }) : Promise.resolve('denied'),
+      });
+    }, acceleration);
+    await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+    const disable = page.getByRole('button', { name: 'Disable motion', exact: true });
+    await expect(disable).toBeEnabled();
+    await expect(disable).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.motion-status')).toContainText('Tilt on');
+    await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 20, gamma: 45 })));
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[24])).toBeGreaterThan(1);
+    expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
+    await disable.click();
+    await expect(page.getByRole('button', { name: 'Enable motion', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await page.evaluate(() => {
+      window.finishShakePermission?.('granted');
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 60, gamma: 60 }));
+      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 8, y: 0, z: 0 } }));
+    });
+    await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.motion.motion)).toBeNull();
+  });
+}

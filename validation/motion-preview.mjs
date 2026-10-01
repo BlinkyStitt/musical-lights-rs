@@ -1,3 +1,4 @@
+import { runtimeRoot } from './runtime-assets.mjs';
 // Export actual production-WASM trajectories, driven by identical PCM and held targets.
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -41,8 +42,8 @@ wave.writeUInt32LE(48000,24);wave.writeUInt32LE(96000,28);wave.writeUInt16LE(2,3
 wave.write('data',36);wave.writeUInt32LE(pcm.length*2,40);
 for(let i=0;i<pcm.length;i++)wave.writeInt16LE(Math.round(pcm[i]*32768),44+i*2);
 await writeFile(`${output}/identical-audio.wav`, wave);
-const beforeBytes=await readFile(`${baseline}/musical-leptos/dist/loudness/loudness.wasm`);
-const afterBytes=await readFile('musical-leptos/dist/loudness/loudness.wasm');
+const beforeBytes=await readFile(`${await runtimeRoot(`${baseline}/musical-leptos/dist`)}/loudness/loudness.wasm`);
+const afterBytes=await readFile(`${await runtimeRoot('musical-leptos/dist')}/loudness/loudness.wasm`);
 const before=flashTrace(new WebAssembly.Module(beforeBytes),pcm);
 const after=flashTrace(new WebAssembly.Module(afterBytes),pcm);
 assert.equal(before.length,after.length);
