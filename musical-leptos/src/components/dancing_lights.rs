@@ -391,9 +391,12 @@ pub fn DancingLights(
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
                         title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; click Exit fullscreen to return" }
-                        on:click=move |_| screen.with_value(|session| {
-                            if let Some(session) = session { session.toggle_fullscreen(); }
-                        })>
+                        on:click=move |_| {
+                            if !fullscreen.get_untracked() { start(); }
+                            screen.with_value(|session| {
+                                if let Some(session) = session { session.toggle_fullscreen(); }
+                            });
+                        }>
                         {move || if fullscreen.get() { "Exit fullscreen" } else { "Fullscreen" }}
                     </button>
                 </div>
@@ -450,7 +453,7 @@ pub fn DancingLights(
                 </p>
                 <p class="control-note">{move || if listening.get() {
                     format!("Sample rate: {} Hz", sample_rate.get())
-                } else { "Turn on Listening to begin.".into() }}</p>
+                } else { "Turn on Listening or enter Fullscreen to begin.".into() }}</p>
                 <p class="display-status">
                 <Show when=move || !advanced>
                     <SettingSwitch label="Scroll lights" class="scroll-lights"

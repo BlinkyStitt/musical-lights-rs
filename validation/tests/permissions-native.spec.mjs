@@ -18,6 +18,28 @@ async function observeCapture(page) {
   });
 }
 
+for (const action of ['Listening', 'Fullscreen']) {
+  test(`${action} keeps native microphone capture running beyond startup and replaces preview input`, async ({ page, context }) => {
+    await context.grantPermissions(['microphone'], { origin });
+    await observeCapture(page);
+    await page.goto(origin); await physicsReady(page);
+    if (action === 'Listening') await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    else await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'false');
+    await page.waitForTimeout(2500);
+    await expect(page.locator('.listening-toggle')).toBeChecked();
+    expect(await page.evaluate(() => [captureRequests, captures.at(-1).getAudioTracks()[0].readyState])).toEqual([1, 'live']);
+    // Native virtual-device PCM, with no synthetic worklet frames or targets.
+    await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.01);
+    await expect(page.locator('.audio-error')).toBeEmpty();
+    if (action === 'Fullscreen') await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+    await expect.poll(() => page.evaluate(() => captures.at(-1).getAudioTracks()[0].readyState)).toBe('ended');
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
+  });
+}
+
 test('browser-managed grant survives reload and native capture stops on Stop and route close', async ({ page, context }) => {
   await context.grantPermissions(['microphone'], { origin });
   await observeCapture(page);
