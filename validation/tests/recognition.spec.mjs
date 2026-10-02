@@ -148,6 +148,13 @@ test('song title fits a phone, appears in fullscreen, and respects Reduced Motio
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
+  // Also cover native fullscreen, without changing OS window dimensions.
+  await expect.poll(() => page.evaluate(() => {
+    const status = document.querySelector('.recognition-status').getBoundingClientRect();
+    const fps = document.querySelector('.frame-rate').getBoundingClientRect();
+    const strip = document.querySelector('.recognized-song').getBoundingClientRect();
+    return status.bottom <= fps.top && fps.bottom <= strip.top;
+  })).toBe(true);
 });
 
 test('canceling an upload ignores late recognition and leaves listening active', async ({ page }) => {
@@ -237,3 +244,100 @@ test.describe('song controls with touch input', () => {
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
   });
 });
+
+test('fullscreen overlays stay above wrapped song titles with Reduced Motion', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Model phone Safari's expanded page view while rotating the viewport.
+  // Chromium cannot resize its OS window while in native fullscreen.
+  await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+  await setup(page);
+  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }, { width: 320, height: 720 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
+    await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
+    await expect.poll(() => page.evaluate(() => {
+      const status = document.querySelector('.recognition-status').getBoundingClientRect();
+      const fps = document.querySelector('.frame-rate').getBoundingClientRect();
+      const strip = document.querySelector('.recognized-song').getBoundingClientRect();
+      const title = document.querySelector('.song-title').getBoundingClientRect();
+      return { statusAboveFPS: status.bottom <= fps.top, fpsAboveSong: fps.bottom <= strip.top,
+        titleInsideStrip: title.top >= strip.top && title.bottom <= strip.bottom,
+        titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
+    })).toEqual({ statusAboveFPS: true, fpsAboveSong: true, titleInsideStrip: true, titleInsideViewport: true });
+    for (const selector of ['.recognition-status', '.frame-rate', '.recognized-song']) {
+      await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  expect(await page.locator('.song-title').evaluate(title => {
+    const lines = document.createRange(); lines.selectNodeContents(title);
+    return lines.getClientRects().length >= 3;
+  })).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('fullscreen-wrapped-song.png') });
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await expect(page.locator('.recognized-song')).toBeVisible();
+  expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
+});
+
+for (const reducedMotion of ['no-preference', 'reduce']) {
+  test(`fullscreen microphone recovery stays readable over a song with motion ${reducedMotion}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.emulateMedia({ reducedMotion });
+    await setup(page);
+    await page.getByRole('button', { name: 'Identify song', exact: true }).click();
+    await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    const strip = page.locator('.recognized-song');
+    await expect(strip).toBeVisible();
+    const clockStart = new Date('2026-01-01T00:00:00Z');
+    await page.clock.install({ time: clockStart });
+    // The installed clock runs between protocol calls. Pause in its future
+    // before creating the notice, rather than racing the installation instant.
+    await page.clock.pauseAt(new Date(clockStart.getTime() + 1000));
+    await page.evaluate(() => {
+      const track = window.recorder.stream.getAudioTracks()[0];
+      track.stop();
+      // stop() alone does not emit ended; model external microphone loss.
+      track.dispatchEvent(new Event('ended'));
+    });
+
+    async function expectUncoveredNotice(selector, imageName) {
+      const notice = page.locator(selector);
+      await expect(notice).toBeInViewport({ ratio: 1 });
+      const bounds = await notice.boundingBox(), songBounds = await strip.boundingBox();
+      // This fixture actually overlaps the opaque song footer. Visibility
+      // assertions alone would pass even if the footer covered the notice.
+      expect(Math.min(bounds.y + bounds.height, songBounds.y + songBounds.height)
+        - Math.max(bounds.y, songBounds.y)).toBeGreaterThan(0);
+      const clip = { x: Math.ceil(bounds.x + 10), y: Math.ceil(bounds.y + 10),
+        width: Math.floor(bounds.width - 20), height: Math.floor(bounds.height - 20) };
+      const covered = await page.screenshot({ clip, animations: 'disabled', path: testInfo.outputPath(`${imageName}-with-song.png`) });
+      // Preserve layout while removing only the footer's paint. A properly
+      // stacked opaque recovery notice renders identically in both images.
+      await strip.evaluate(element => { element.style.visibility = 'hidden'; });
+      let uncovered;
+      try {
+        uncovered = await page.screenshot({ clip, animations: 'disabled', path: testInfo.outputPath(`${imageName}-without-song.png`) });
+      } finally {
+        await strip.evaluate(element => { element.style.removeProperty('visibility'); });
+      }
+      expect(covered.equals(uncovered), `${selector} must paint above the recognized song`).toBe(true);
+    }
+
+    await expect(page.locator('.audio-error')).toHaveText('Microphone input ended. Restart listening.');
+    await expectUncoveredNotice('.audio-error', 'microphone-failure');
+    await page.clock.runFor(4000);
+    await expect(page.locator('.audio-error')).toBeEmpty();
+    await expect(page.locator('.audio-stopped')).toHaveText('Audio stopped. Exit fullscreen to restart.');
+    await expectUncoveredNotice('.audio-stopped', 'microphone-restart');
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+    await expect(page.locator('.audio-stopped')).toBeEmpty();
+    await expect(strip).toBeVisible();
+  });
+}
