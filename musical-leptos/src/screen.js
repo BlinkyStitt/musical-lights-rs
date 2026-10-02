@@ -58,7 +58,8 @@ export class VisualizerScreen {
         return;
       }
       if (this.expanded && event.isPrimary && event.button === 0
-          && event.clientY <= this.topTapHeight) {
+          && event.clientY <= this.topTapHeight
+          && !event.target?.closest?.('button, input, summary')) {
         // iOS may not deliver a complete captured drag after a viewport
         // gesture. Keep a direct, reliable touch target for leaving the view.
         event.preventDefault();
@@ -98,6 +99,10 @@ export class VisualizerScreen {
     this.onPointerCancel = () => this.clearGesture();
     this.onTouchStart = event => {
       if (!this.expanded || event.touches.length !== 1) return;
+      // Recognition controls share the top tap area with Exit fullscreen.
+      // Preserve their native touch/click activation instead of closing it.
+      if (event.target?.closest?.('button, input, summary')
+          && !event.target.closest('.fullscreen-button')) return;
       const touch = event.touches[0];
       if (touch.clientY <= this.topTapHeight) {
         // Safari can omit the matching pointer stream during viewport changes.

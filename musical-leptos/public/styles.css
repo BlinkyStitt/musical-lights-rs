@@ -98,7 +98,7 @@ html:has(.audio-card[data-expanded]), body:has(.audio-card[data-expanded]) { ove
 .audio-card[data-expanded] .audio-controls { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: 0; }
 .audio-card[data-expanded] .fullscreen-button { position: fixed; top: max(.75rem, env(safe-area-inset-top)); left: max(.75rem, env(safe-area-inset-left)); z-index: 101; width: auto; height: auto; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid var(--line); overflow: visible; clip-path: none; white-space: nowrap; pointer-events: auto; }
 .audio-card[data-expanded] :is(.mic-status, .primary, .scroll-control, .meter-guide, .spectrum-labels, .control-note, .wake-status, .calibration-status, .calibration-controls) { display: none; }
-.audio-card[data-expanded] .display-note { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; margin: 0; pointer-events: none; }
+.audio-card[data-expanded] .display-note { position: absolute; bottom: max(3.5rem, env(safe-area-inset-bottom)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; margin: 0; pointer-events: none; }
 .audio-card[data-expanded] .frame-rate { padding: .2rem .35rem; border-radius: 4px; color: var(--ink); background: var(--surface); }
 .audio-card[data-expanded] :is(.audio-error, .screen-error, .audio-stopped):not(:empty) { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: .75rem; background: var(--surface); border-radius: 9px; }
 .audio-card::backdrop { background: var(--paper); }
@@ -128,9 +128,10 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   .audio-card { padding: .75rem; }
   .mic-status { font-size: .6rem; padding: .35rem .5rem; }
   .audio-controls { flex-wrap: wrap; gap: .5rem; }
-  .button-row { gap: .5rem; }
-  button { font-size: .75rem; padding: .65rem .7rem; }
+  .button-row { gap: .35rem; }
+  button { font-size: .75rem; padding: .65rem .6rem; }
   .display-note { flex-direction: column; gap: .15rem; }
+  .display-note .mic-status { align-self: flex-start; }
   .spectrum-panel { padding-right: .65rem; padding-left: 3rem; }
   .meter-guide { left: calc(var(--plot-side-inset) - 2.55rem); }
   .how-it-works { grid-template-columns: 1fr; gap: 1rem; }
@@ -162,6 +163,9 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .runtime-update { display: block; width: fit-content; min-height: 44px; padding: .6rem 0; }
 .song-tools { margin: 1rem 0; font-size: .82rem; }
 .song-tools p { max-width: 70ch; }
+.identify-song { font-weight: 700; white-space: nowrap; }
+.identify-song:not(:disabled) { background: var(--primary); color: white; }
+.audio-controls .cancel-recognition[hidden] { display: none; }
 .song-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .song-actions [hidden], .recognized-song[hidden] { display: none; }
 .song-history summary { cursor: pointer; min-height: 44px; padding: .7rem 0; }
@@ -175,6 +179,9 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 @media (prefers-reduced-motion: reduce) {
   .song-overflow .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
 }
-.audio-card[data-expanded] .song-tools { display: none; }
+.audio-card[data-expanded] .song-tools { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; right: .75rem; z-index: 3; margin: 0; pointer-events: none; }
+.audio-card[data-expanded] .song-tools > :not(.recognition-status) { display: none; }
+.audio-card[data-expanded] .recognition-status { width: fit-content; margin: 0; padding: .4rem .6rem; border-radius: 6px; background: var(--surface); }
+.audio-card[data-expanded] .button-row { max-width: calc(100vw - 10.5rem); justify-content: flex-end; }
 .audio-card[data-expanded] .recognized-song { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: .75rem; right: .75rem; z-index: 2; margin: 0; pointer-events: none; }
 .audio-card[data-expanded] .runtime-update { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; z-index: 3; padding: .6rem; background: var(--surface); }

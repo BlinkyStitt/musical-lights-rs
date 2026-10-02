@@ -5,7 +5,7 @@ import { syntheticAudio, physicsReady } from '../physics-state.mjs';
 const base = 'http://127.0.0.1:8101';
 const song = { artist: 'Artist, with "quotes"', title: 'A very long song title that keeps going across the narrow phone display and should scroll smoothly', album: 'Album' };
 
-async function setup(page, { realRecorder = false, allowUnavailable = false, status = 200, result = song } = {}) {
+async function setup(page, { realRecorder = false, allowUnavailable = false, captureMs = 300, status = 200, result = song } = {}) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     MediaDevices.prototype.getUserMedia = async () => {
@@ -31,7 +31,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, sta
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace(/name="musical-lights-recognition" content="[^"]*"/, 'name="musical-lights-recognition" content="/recognize"') });
   });
-  if (!realRecorder) await page.addInitScript(() => {
+  if (!realRecorder) await page.addInitScript(captureMs => {
     window.captureStarts = 0;
     window.MediaRecorder = class {
       static isTypeSupported(type) { return type === 'audio/mp4'; }
@@ -44,8 +44,8 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, sta
       }
     };
     const timeout = window.setTimeout;
-    window.setTimeout = (callback, ms, ...args) => timeout(callback, ms === 10_000 ? 300 : ms, ...args);
-  });
+    window.setTimeout = (callback, ms, ...args) => timeout(callback, ms === 10_000 ? captureMs : ms, ...args);
+  }, captureMs);
   const uploads = [];
   await page.route(base + '/recognize', async route => {
     uploads.push({ type: route.request().headers()['content-type'], data: route.request().postDataBuffer() });
@@ -188,4 +188,52 @@ test('a missing recorder disables recognition without disabling listening or his
   expect(uploads).toHaveLength(0);
   await expect(page.getByText('Song history (0)', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+});
+
+test('the song button is prominent above the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  // Keep the real capture window while checking layout and clicking Cancel.
+  // Slow CI can outlast the shortened recording used by successful matches.
+  const uploads = await setup(page, { captureMs: 10_000 });
+  const identify = page.locator('.audio-controls').getByRole('button', { name: 'Identify song', exact: true });
+  await expect(identify).toBeInViewport();
+  expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
+  await expect(identify).toHaveCSS('font-weight', '700');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(identify).toBeInViewport();
+  await expect(identify).toBeEnabled();
+  const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+  expect(await identify.evaluate(button => button.getBoundingClientRect().left >= document.querySelector('.fullscreen-button').getBoundingClientRect().right)).toBe(true);
+  expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.frame-rate').getBoundingClientRect().top)).toBe(true);
+  await identify.click();
+  await expect(page.locator('.recognition-status')).toHaveText('Listening for 10 seconds…');
+  await expect(page.locator('.recognition-status')).toBeInViewport();
+  await page.getByRole('button', { name: 'Cancel identification', exact: true }).click();
+  await expect(page.locator('.recognition-status')).toHaveText('Identification canceled.');
+  await expect(page.locator('.recognition-status')).toBeInViewport();
+  await expect(identify).toBeEnabled();
+  expect(uploads).toHaveLength(0);
+  // The top-area exit gesture defers closing for 300 ms. A control click must
+  // still leave fullscreen intact after that deferred gesture would complete.
+  await page.waitForTimeout(350);
+  await expect(exit).toBeVisible();
+  await exit.click();
+  await page.screenshot({ path: testInfo.outputPath('prominent-song-button-phone.png') });
+});
+
+test.describe('song controls with touch input', () => {
+  test.use({ hasTouch: true });
+  test('a top-area song-button tap identifies without closing fullscreen', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    const uploads = await setup(page);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
+    await page.getByRole('button', { name: 'Identify song', exact: true }).tap();
+    await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+    await page.waitForTimeout(350);
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+    expect(uploads).toHaveLength(1);
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
+    await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
+  });
 });
