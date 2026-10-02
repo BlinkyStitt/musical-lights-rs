@@ -148,6 +148,13 @@ test('song title fits a phone, appears in fullscreen, and respects Reduced Motio
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
+  // Also cover native fullscreen, without changing OS window dimensions.
+  await expect.poll(() => page.evaluate(() => {
+    const status = document.querySelector('.recognition-status').getBoundingClientRect();
+    const fps = document.querySelector('.frame-rate').getBoundingClientRect();
+    const strip = document.querySelector('.recognized-song').getBoundingClientRect();
+    return status.bottom <= fps.top && fps.bottom <= strip.top;
+  })).toBe(true);
 });
 
 test('canceling an upload ignores late recognition and leaves listening active', async ({ page }) => {
@@ -236,4 +243,42 @@ test.describe('song controls with touch input', () => {
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
   });
+});
+
+test('fullscreen overlays stay above wrapped song titles with Reduced Motion', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Model phone Safari's expanded page view while rotating the viewport.
+  // Chromium cannot resize its OS window while in native fullscreen.
+  await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+  await setup(page);
+  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }, { width: 320, height: 720 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
+    await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
+    await expect.poll(() => page.evaluate(() => {
+      const status = document.querySelector('.recognition-status').getBoundingClientRect();
+      const fps = document.querySelector('.frame-rate').getBoundingClientRect();
+      const strip = document.querySelector('.recognized-song').getBoundingClientRect();
+      const title = document.querySelector('.song-title').getBoundingClientRect();
+      return { statusAboveFPS: status.bottom <= fps.top, fpsAboveSong: fps.bottom <= strip.top,
+        titleInsideStrip: title.top >= strip.top && title.bottom <= strip.bottom,
+        titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
+    })).toEqual({ statusAboveFPS: true, fpsAboveSong: true, titleInsideStrip: true, titleInsideViewport: true });
+    for (const selector of ['.recognition-status', '.frame-rate', '.recognized-song']) {
+      await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  expect(await page.locator('.song-title').evaluate(title => {
+    const lines = document.createRange(); lines.selectNodeContents(title);
+    return lines.getClientRects().length >= 3;
+  })).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('fullscreen-wrapped-song.png') });
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await expect(page.locator('.recognized-song')).toBeVisible();
+  expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
 });
