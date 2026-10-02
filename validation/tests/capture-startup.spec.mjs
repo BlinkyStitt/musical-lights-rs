@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { physicsReady } from '../physics-state.mjs';
-const origin = 'http://127.0.0.1:8101';
+const origin = (process.env.MUSICAL_LIGHTS_CAPTURE_URL ?? 'http://127.0.0.1:8101').replace(/\/$/, '');
 const listening = page => page.getByRole('checkbox', { name: 'Listening', exact: true });
 
 for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Fullscreen']) {
@@ -64,4 +64,3 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     expect(await page.evaluate(() => [testContext.state, captureTrack.readyState])).toEqual(['closed', 'ended']);
   });
 }
-
