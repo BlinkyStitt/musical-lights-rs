@@ -106,6 +106,10 @@ export class PhysicsView {
       const start = performance.now();
       if (this.resizePending) { this.resizePending = false; this.measure(); }
       this.onFrame(now, false);
+      if (this.idle && this.preview && !this.previewPending && now - (this.previewAt ?? -Infinity) >= 1000 / 60) {
+        this.previewAt = now; this.previewPending = true;
+        this.preview.postMessage({ type: 'pulse', reduced: this.reduced.matches });
+      }
       this.input[31] = this.reduced.matches ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
@@ -126,8 +130,37 @@ export class PhysicsView {
       }
       this.request = requestAnimationFrame(this.animate);
     };
+    this.previewLevels = new Float32Array(24); this.previewEdges = new Float32Array(24);
+    this.idle = !this.card.dataset.audioSession || this.card.dataset.audioState === 'stopped';
+    this.listen(this.card, 'audio-session', ({ detail }) => {
+      this.idle = detail.state === 'stopped';
+      this.card.dataset.preview = String(this.idle);
+      if (this.idle) this.startPreview(); else this.stopPreview();
+    });
+    if (this.idle) this.startPreview();
     this.pause();
   }
+  startPreview() {
+    if (this.preview || this.closed) return;
+    this.card.dataset.preview = 'true';
+    this.preview = new Worker(new URL('./demo-worker.js', import.meta.url), { type: 'module', name: 'silent-sine-preview' });
+    this.previewPending = true;
+    this.preview.postMessage({ type: 'init', reduced: this.reduced.matches,
+      wasm: new URL('../loudness/loudness.wasm', import.meta.url).href });
+    this.preview.onmessage = ({ data }) => {
+      this.previewPending = false;
+      if (!this.idle || this.closed || data.type !== 'frame') return;
+      for (let i = 0; i < 24; i++) {
+        this.previewLevels[i] = data.state[4 + i * 4];
+        const elapsed = data.state[0] - data.state[5 + i * 4];
+        this.previewEdges[i] = data.state[5 + i * 4] >= 0 && elapsed >= 0 ? Math.max(0, 1 - elapsed / .12) * (this.reduced.matches ? .5 : 1) : 0;
+        this.meters[i].setAttribute('aria-valuenow', String(Math.round(this.previewLevels[i] * 100)));
+      }
+      this.push(this.previewLevels, this.previewEdges, this.card.querySelector('.scroll-lights').checked && !this.reduced.matches);
+    };
+    this.preview.onerror = event => { this.stopPreview(); this.notice.show(`Silent preview unavailable: ${event.message}`); };
+  }
+  stopPreview() { this.preview?.terminate(); this.preview = null; this.previewPending = false; }
   listen(target, name, callback, options) { target.addEventListener(name, callback, options); this.listeners.push(() => target.removeEventListener(name, callback, options)); }
   pointer(x, y, inside) {
     this.input[27] = inside ? 1 : 0;
@@ -199,7 +232,7 @@ export class PhysicsView {
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
       this.measure();
-      this.report = new PhoneReport(this);
+      if (this.card.dataset.mode === 'advanced') this.report = new PhoneReport(this);
       this.requestSnapshot();
     } else if (data.type === 'snapshot') {
       if (this.previous) this.buffers.push(this.previous.buffer);
@@ -213,7 +246,7 @@ export class PhysicsView {
       // even when a worker message arrives between animation frames.
       this.fitEnclosure();
       this.metrics.maxSchedulingGap = data.maxSchedulingGap; this.metrics.maxStepMs = data.maxStepMs;
-      if (this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
+      if ((this.report?.active || this.card.dataset.toneDiagnostics === 'true' || this.recordTiming) && this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
       this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
@@ -337,7 +370,7 @@ export class PhysicsView {
     this.input[33] = scrolling ? 1 : 0;
   }
   clearMotion() { this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38); }
-  stopMotion() { this.motion.stopMotion(); this.clearMotion(); this.input.fill(0, 0, 24); this.push(new Float32Array(24), new Float32Array(24), 0); }
+  clearAudio() { this.push(new Float32Array(24), new Float32Array(24), false); }
   pause() {
     if (this.request != null) cancelAnimationFrame(this.request);
     this.request = null;
@@ -349,7 +382,7 @@ export class PhysicsView {
   fail(message) { this.notice.show(`Physics stopped: ${message}`, 'Motion stopped. Reload to restart.'); this.report?.invalidate(message); this.lost = true; this.pause(); }
   disposeMeshes() { for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
-    this.closed = true; cancelAnimationFrame(this.request); this.notice.close();
+    this.closed = true; this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
     this.observer.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();

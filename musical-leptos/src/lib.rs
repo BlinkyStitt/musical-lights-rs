@@ -10,6 +10,7 @@ mod wasm_audio;
 
 // Top-Level pages
 use crate::pages::about::About;
+use crate::pages::advanced::Advanced;
 use crate::pages::home::Home;
 use crate::pages::not_found::NotFound;
 
@@ -24,14 +25,14 @@ pub fn App() -> impl IntoView {
                 <header class="site-header">
                     <span class="wordmark"><span aria-hidden="true" class="brand-mark">"▂▅▃▆"</span>" Musical Lights"</span>
                     <nav aria-label="Main navigation">
-                        <A href="/" exact=true>"Home"</A><A href="/about">"About"</A>
+                        <A href="/" exact=true>"Home"</A><A href="/about">"About"</A><A href="/advanced">"Advanced"</A>
                     </nav>
                 </header>
                 <main>
                     <Routes fallback=NotFound>
                         <Route path=path!("/") view=Home />
                         <Route path=path!("/about") view=About />
-                        <Route path=path!("/phone") view=Home />
+                        <Route path=path!("/advanced") view=Advanced />
                     </Routes>
                 </main>
                 <footer><a href="https://github.com/BlinkyStitt/musical-lights-rs">"View the source ↗"</a></footer>

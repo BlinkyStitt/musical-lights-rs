@@ -188,3 +188,35 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .audio-card[data-expanded] .button-row { max-width: calc(100vw - 10.5rem); justify-content: flex-end; }
 .audio-card[data-expanded] .recognized-song { position: relative; order: 3; flex: none; z-index: 3; margin: 0; pointer-events: none; }
 .audio-card[data-expanded] .runtime-update { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; z-index: 3; padding: .6rem; background: var(--surface); }
+
+/* Shared native controls, used by Rust and JavaScript. */
+.site-header { flex-wrap: wrap; padding-block: .5rem; }
+nav { flex-wrap: wrap; }
+.setting-switch { display: inline-flex; align-items: center; gap: .65rem; min-height: 44px; padding: .35rem; cursor: pointer; font-size: .85rem; color: var(--ink); }
+.setting-switch input { appearance: none; -webkit-appearance: none; flex: none; width: 2.6rem; height: 1.5rem; border: 2px solid var(--muted); border-radius: 1rem; background: var(--surface); margin: 0; position: relative; cursor: pointer; }
+.setting-switch input::after { content: ''; position: absolute; top: .15rem; left: .15rem; width: .95rem; height: .95rem; border-radius: 50%; background: var(--muted); }
+.setting-switch input:checked { background: var(--primary); border-color: var(--primary); }
+.setting-switch input:checked::after { left: 1.2rem; background: white; }
+.setting-switch:has(input:disabled) { opacity: .65; cursor: default; }
+.motion-controls { margin: 0; }
+.settings-section { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: .75rem; font-size: .875rem; }
+.settings-section > summary { min-height: 44px; cursor: pointer; font-weight: bold; }
+.control-row, .settings-section label:not(.setting-switch) { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 44px; margin: .5rem 0; }
+.settings-section :is(input:not([type=checkbox]), select, textarea) { min-height: 44px; max-width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--muted); border-radius: .4rem; padding: .35rem; }
+.physics-fields { display: block; }
+.settings-section input:not([type=checkbox]) { width: 10rem; }
+.settings-section input[type=range] { width: min(18rem, 50%); }
+.advanced-page { padding-block: 1rem; }
+.reduced-motion-note { display: none; }
+@media (prefers-reduced-motion: reduce) { .reduced-motion-note { display: block; } }
+.audio-card[data-expanded] :is(.setting-switch, .settings-section, .motion-status) { display: none; }
+.audio-card[data-expanded] .physics-status:not(:empty) { z-index: 4; }
+@media (max-width: 600px) {
+  .control-row, .settings-section label:not(.setting-switch) { align-items: flex-start; flex-direction: column; gap: .35rem; }
+  .settings-section :is(input:not([type=checkbox]), select, textarea) { width: 100%; }
+  .settings-section input[type=range] { width: 100%; }
+}
+.listening-review { margin-top: 1rem; }
+.review-plot { display: block; width: 100%; height: auto; background: var(--plot); border: 1px solid var(--line); border-radius: .5rem; }
+.settings-section .review-notes { width: min(100%, 30rem); }
+.review-plot-key { font-size: .75rem; }

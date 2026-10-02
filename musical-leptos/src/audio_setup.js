@@ -11,6 +11,7 @@ function beginSession(context, card, source) {
     session.publish = (state, reason) => {
         if (card.dataset.audioSession !== String(session.sessionId) || session.closed) return;
         session.state = state;
+        card.dataset.audioState = state;
         const { publish, close, ...detail } = session;
         card.dispatchEvent(new CustomEvent('audio-session', { detail: { ...detail, reason } }));
     };
@@ -116,6 +117,12 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     const ended = () => fail('Microphone input ended. Restart listening.');
     const muted = () => fail('Microphone input was interrupted. Restart listening.');
     const crashed = () => fail('Audio processor failed. Restart listening.');
+    let running = context.state === 'running';
+    const contextChanged = () => {
+      if (context.state === 'running') running = true;
+      else if (running && context.state !== 'closed') fail('Audio playback was interrupted. Turn on Listening to restart.');
+    };
+    context.addEventListener('statechange', contextChanged);
     track.addEventListener('ended', ended);
     track.addEventListener('mute', muted);
     node.addEventListener('processorerror', crashed);
@@ -125,7 +132,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
         }
     }, 500);
     profiles.set(node, { key, settings, track, raw, session, calibrated: pascalsPerUnit !== undefined,
-        release: () => { node.port.removeEventListener('message', trace); clearInterval(monitor); track.removeEventListener('ended', ended); track.removeEventListener('mute', muted); node.removeEventListener('processorerror', crashed); },
+        release: () => { context.removeEventListener('statechange', contextChanged); node.port.removeEventListener('message', trace); clearInterval(monitor); track.removeEventListener('ended', ended); track.removeEventListener('mute', muted); node.removeEventListener('processorerror', crashed); },
     });
     return node;
 }
@@ -153,6 +160,12 @@ export function saveCalibration(node, pascalsPerUnit) {
         try { localStorage.setItem(`musical-lights-calibration:${profile.key}`, JSON.stringify({ pascalsPerUnit })); } catch { /* Valid for this session only. */ }
     }
 }
+export function forgetCalibration(node) {
+    const profile = profiles.get(node);
+    if (!profile || profile.session.source !== 'microphone') return;
+    try { localStorage.removeItem(`musical-lights-calibration:${profile.key}`); } catch { /* Nothing else is removed. */ }
+    profile.calibrated = false;
+}
 export function canCalibrate(node) { return profiles.get(node)?.raw ?? false; }
 export function releaseProcessor(node) { profiles.get(node)?.release(); profiles.delete(node); }
 export function isCurrentProcessorMessage(node, data) {
@@ -164,7 +177,7 @@ export function isCurrentProcessorMessage(node, data) {
 const generatedSources = new WeakMap();
 export async function acquireInput(context) {
     const card = /** @type {HTMLElement} */ (document.querySelector('.audio-card'));
-    const generated = card.querySelector('.generated-audio')?.checked === true;
+    const generated = card.querySelector('.input-source')?.value === 'generated';
     const session = beginSession(context, card, generated ? 'generated' : 'microphone');
     try {
         await requireCurrentRuntime(context);
@@ -215,7 +228,7 @@ export async function acquireInput(context) {
                 if (session.closed || source !== current || token !== generation) return;
                 ended = true; offset = buffer.duration;
                 session.publish('ended', 'natural end');
-                query('.tone-pause').textContent = 'Restart tone';
+                query('.tone-pause').textContent = 'Replay';
             };
         };
         const start = () => {
@@ -250,7 +263,7 @@ export async function acquireInput(context) {
                 source.playbackRate.value = 0; playback.gain.value = 0;
                 session.publish('paused', 'pause');
             }
-            query('.tone-pause').textContent = paused ? 'Resume tone' : 'Pause tone';
+            query('.tone-pause').textContent = paused ? 'Resume playback' : 'Pause playback';
         });
         listen('.tone-repeat', 'change', () => {
             session.repeat = query('.tone-repeat').checked; source.loop = session.repeat;
@@ -273,7 +286,7 @@ export async function acquireInput(context) {
             source.onended = null; if (!ended) source.stop();
             source.disconnect(); playback.disconnect(); monitor.disconnect(); destination.disconnect();
             if (card.dataset.audioSession === String(session.sessionId) && query('.tone-pause')) {
-                query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause tone';
+                query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause playback';
             }
         });
         return stream;
