@@ -62,6 +62,8 @@ Run these commands from the named package directory.
 
 The Leptos build includes the shared Rust rigid-body simulation and locally
 bundled Three.js renderer. See [physics and phone acceptance](docs/physics.md).
+Optional [song recognition](docs/song-recognition.md) uses a Rust Cloudflare
+Worker and a server-side AudD token, with manual capture and local history export.
 
 On macOS, install SDL2 for terminal examples and set its library search path:
 

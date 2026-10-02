@@ -32,7 +32,7 @@ pub fn Home() -> impl IntoView {
                 </section>
                 <section class="how-it-works" aria-label="About the display">
                     <div><h3>"An easier pace"</h3><p>"Meters rise with each beat, then fall gently. Tap, hover, or focus the spectrum to see approximate frequency labels."</p></div>
-                    <div><h3>"Your sound stays here"</h3><p>"Audio is processed in this browser. This page does not record or upload it."</p></div>
+                    <div><h3>"You control your audio"</h3><p>"The lights process audio in this browser. Only when you press Identify song, a 10-second recording is sent to AudD. Song history stays on this device."</p></div>
                 </section>
                 <section class="learning-topics" aria-labelledby="learning-title">
                     <h2 id="learning-title">"Things I learned along the way"</h2>
