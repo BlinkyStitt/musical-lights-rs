@@ -431,7 +431,7 @@ pub fn DancingLights(
                                     }
                                     on:blur=move |_| hide_band(group)
                                     aria-valuemin="0" aria-valuemax="100"
-                                    aria-valuenow=move || audio.with(|frame| (frame.levels[group] * 100.0).round() as u32)>
+                                    aria-valuenow="0">
                                     <div class="meter-track"></div>
                                 </div>
                             </div>

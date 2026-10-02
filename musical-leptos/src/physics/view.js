@@ -53,6 +53,7 @@ export class PhysicsView {
     this.meshEdges = new Float32Array(72);
     this.timing = { snapshots: [], resizes: [] };
     this.meters = [...this.graph.querySelectorAll('[role="meter"]')];
+    this.meterValues = new Uint8Array(24);
     this.groups = this.meters.map((meter, i) => {
       const group = meter.parentElement; group.dataset.sourceBand = i;
       Object.assign(group.style, { position: 'absolute', top: '0', bottom: '0' });
@@ -154,7 +155,6 @@ export class PhysicsView {
         this.previewLevels[i] = data.state[4 + i * 4];
         const elapsed = data.state[0] - data.state[5 + i * 4];
         this.previewEdges[i] = data.state[5 + i * 4] >= 0 && elapsed >= 0 ? Math.max(0, 1 - elapsed / .18) * (this.reduced.matches ? .5 : 1) : 0;
-        this.meters[i].setAttribute('aria-valuenow', String(Math.round(this.previewLevels[i] * 100)));
       }
       this.push(this.previewLevels, this.previewEdges, this.card.querySelector('.scroll-lights').checked && !this.reduced.matches);
     };
@@ -365,6 +365,15 @@ export class PhysicsView {
     }
   }
   push(levels, edges, scrolling = false) {
+    // One owner updates accessible values for both live audio and idle PCM.
+    // Mixing JS preview writes with cached Rust attributes left stale values.
+    for (let i = 0; i < 24; i++) {
+      const value = Math.round(levels[i] * 100);
+      if (value !== this.meterValues[i]) {
+        this.meterValues[i] = value;
+        this.meters[i].setAttribute('aria-valuenow', String(value));
+      }
+    }
     this.input.set(levels, 0); this.edges.set(edges);
     for (let copy = 0; copy < 3; copy++) this.meshEdges.set(edges, copy * 24);
     this.input[33] = scrolling ? 1 : 0;

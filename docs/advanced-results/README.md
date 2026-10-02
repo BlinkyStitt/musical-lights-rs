@@ -73,6 +73,9 @@ compares all 511 values of every row in 38 full traces against main, bit for bit
 The [isolated geometry/source audit](../audio-audit-results/current-windows.json)
 retains separate controls and expanded signal coverage. Historical results remain
 in their original files.
+The independent reference CI job validates native production output and records
+its executable/source hashes. It reports a WASM hash only when that build is
+present; the separate web job builds and tests the actual worklet.
 
 The live local-file test compares 200 raw/filtered frames exactly against an
 offline run of the identical decoded selected-channel PCM in both Chromium and

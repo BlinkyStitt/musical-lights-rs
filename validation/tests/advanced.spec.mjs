@@ -39,6 +39,16 @@ test('Home has silent sine motion without audio access, and switches support key
   expect(errors).toEqual([]);
 });
 
+test('idle-to-listening transition clears preview meter values for microphone silence', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(origin); await physicsReady(page);
+  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(10);
+  await listening(page).check(); await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)).every(value => value === 0))).toBe(true);
+  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-valuenow') === '0'))).toBe(true);
+  await listening(page).uncheck();
+  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
+});
+
 test('Display and Input resets are scoped; milliseconds and physics defaults preserve enclosure size', async ({ page }) => {
   await advanced(page);
   await expect(page.locator('.display-controls')).toHaveAttribute('open', '');
@@ -125,10 +135,10 @@ test('invalid file and unavailable channel fail without capture; replacement and
   await page.addInitScript(() => { window.captureRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.captureRequests++; throw new Error('Unexpected capture'); }; });
   await advanced(page); await page.locator('.input-source').selectOption('local');
   await page.locator('.review-file').setInputFiles({ name: 'bad.wav', mimeType: 'audio/wav', buffer: Buffer.from('not audio') });
-  await listening(page).check(); await expect(page.locator('.audio-error')).toContainText('could not be decoded'); await expect(listening(page)).not.toBeChecked();
+  await listening(page).click(); await expect(page.locator('.audio-error')).toContainText('could not be decoded'); await expect(listening(page)).not.toBeChecked();
   await page.locator('.review-file').setInputFiles({ name: 'replacement.wav', mimeType: 'audio/wav', buffer: stereoWave() });
   await page.locator('.calibration-controls input[type=number]').first().fill('3');
-  await listening(page).check(); await expect(page.locator('.audio-error')).toContainText('channel 3 is unavailable'); await expect(listening(page)).not.toBeChecked();
+  await listening(page).click(); await expect(page.locator('.audio-error')).toContainText('channel 3 is unavailable'); await expect(listening(page)).not.toBeChecked();
   await page.locator('.calibration-controls input[type=number]').first().fill('1'); await start(page);
   await page.evaluate(() => { window.savedReview = document.querySelector('.audio-card').review; });
   await page.getByRole('link', { name: 'About', exact: true }).click();

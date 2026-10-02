@@ -39,7 +39,7 @@ test('physics incidents expire, rearm after recovery, and keep stopped state', a
 test('microphone failure details expire while recovery status remains, and restart clears it', async ({page}) => {
   await page.addInitScript(()=>{MediaDevices.prototype.getUserMedia=async()=>{throw new Error('Permission denied for expiry test')};});
   await page.goto(`${origin}/advanced/`);await physicsReady(page);
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.locator('.audio-error')).toContainText('Permission denied for expiry test');
   await expect(page.locator('.audio-error')).toBeEmpty({timeout:5000});
   await expect(page.locator('.audio-stopped')).toContainText('Audio stopped');

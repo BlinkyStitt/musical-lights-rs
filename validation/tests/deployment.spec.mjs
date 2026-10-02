@@ -70,7 +70,7 @@ for (const source of ['microphone', 'generated tones']) {
   await page.locator('.input-source').selectOption('generated');
       }
       fixture.deploy();
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
       const reload = page.getByRole('link', { name: 'Reload updated app' });
       await expect(reload).toBeVisible();
       await expect.poll(() => page.evaluate(() => window.testContext.state)).toBe('closed');
@@ -101,7 +101,7 @@ for (const resource of ['loudness/loudness.wasm', 'loudness/processor.js']) {
     try {
       await syntheticAudio(page); await page.goto(fixture.origin); await physicsReady(page); await trackMicrophone(page);
       fixture.retireDuring(resource);
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
       await expect(page.getByRole('link', { name: 'Reload updated app' })).toBeVisible();
       expect(await page.evaluate(() => window.microphoneRequests)).toBe(1);
       await expect.poll(() => page.evaluate(() => [window.testContext.state, ...window.capturedTracks.map(track => track.readyState)])).toEqual(['closed', 'ended']);
@@ -127,7 +127,7 @@ test('a deployment leaves existing listening untouched and checks the next sessi
     await expect(page.locator('.runtime-update')).toHaveCount(0);
     expect(await page.evaluate(() => window.testContext.state)).toBe('running');
     await stop.uncheck();
-    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Reload updated app' })).toBeVisible();
   } finally { await fixture.close(); }
 });

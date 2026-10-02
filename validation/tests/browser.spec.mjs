@@ -75,7 +75,7 @@ test('microphone denial displays an error and closes the audio context', async (
     MediaDevices.prototype.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); };
   });
   await page.goto(leptos);
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Microphone denied');
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);

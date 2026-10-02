@@ -241,12 +241,18 @@ def main():
         cases.append(case)
     output = Path("docs/audio-audit-results")
     output.mkdir(exist_ok=True)
+    wasm = Path("musical-lights-worklet/pkg/loudness.wasm")
     (output / "current-windows.json").write_text(
         json.dumps(
             {
                 "upstreamRevision": REVISION,
-                "productionWasmSha256": hashlib.sha256(
-                    Path("musical-lights-worklet/pkg/loudness.wasm").read_bytes()
+                # The independent reference CI job builds the native producer;
+                # the web job builds WASM. Report its hash only when available.
+                "productionWasmSha256": hashlib.sha256(wasm.read_bytes()).hexdigest()
+                if wasm.exists()
+                else None,
+                "productionNativeSha256": hashlib.sha256(
+                    Path("target/release/examples/partial_trace").read_bytes()
                 ).hexdigest(),
                 "productionDspSourceSha256": hashlib.sha256(
                     Path("musical-lights-core/src/audio/partial/mod.rs").read_bytes()

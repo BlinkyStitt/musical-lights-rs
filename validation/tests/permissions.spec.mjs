@@ -131,7 +131,7 @@ test('unsupported permission queries still allow microphone and motion access fr
 
 test('dismissed microphone access has persistent guidance without claiming a permanent denial', async ({ page }) => {
   await permissions(page, 'prompt'); await page.goto(url); await physicsReady(page);
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'not-allowed');
   await expect(page.locator('.microphone-permission')).toContainText('Check this site’s browser permissions');
   await expect(page.locator('.audio-error')).toBeEmpty({ timeout: 6000 });
