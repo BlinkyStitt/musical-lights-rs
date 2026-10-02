@@ -212,6 +212,26 @@ test('the song button is prominent above the lights on a narrow phone and usable
   await expect(page.locator('.recognition-status')).toBeInViewport();
   await expect(identify).toBeEnabled();
   expect(uploads).toHaveLength(0);
+  // The top-area exit gesture defers closing for 300 ms. A control click must
+  // still leave fullscreen intact after that deferred gesture would complete.
+  await page.waitForTimeout(350);
+  await expect(exit).toBeVisible();
   await exit.click();
   await page.screenshot({ path: testInfo.outputPath('prominent-song-button-phone.png') });
+});
+
+test.describe('song controls with touch input', () => {
+  test.use({ hasTouch: true });
+  test('a top-area song-button tap identifies without closing fullscreen', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    const uploads = await setup(page);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
+    await page.getByRole('button', { name: 'Identify song', exact: true }).tap();
+    await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+    await page.waitForTimeout(350);
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+    expect(uploads).toHaveLength(1);
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
+    await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
+  });
 });
