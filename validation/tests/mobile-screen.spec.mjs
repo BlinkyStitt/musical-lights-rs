@@ -128,13 +128,17 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     Object.defineProperty(document, 'fullscreenEnabled', { value: false });
     Element.prototype.requestFullscreen = undefined;
     window.inputRequests = 0;
+    const Context = window.AudioContext;
+    window.AudioContext = class extends Context {
+      constructor(...args) { super(...args); window.sourceContext = this; }
+    };
     MediaDevices.prototype.getUserMedia = async () => {
       window.inputRequests++;
-      const context = new AudioContext();
+      const context = window.sourceContext;
       const oscillator = context.createOscillator();
       const destination = context.createMediaStreamDestination();
-      oscillator.connect(destination); oscillator.start(); await context.resume();
-      window.sourceContext = context; window.sourceStream = destination.stream;
+      oscillator.connect(destination); oscillator.start();
+      window.sourceStream = destination.stream;
       return destination.stream;
     };
   });
@@ -142,6 +146,8 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   const expand = page.getByRole('button', { name: 'Fullscreen', exact: true });
   await expect(expand).toBeEnabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
   const initialScroll = await page.evaluate(() => scrollY);
   await expand.tap();
@@ -178,7 +184,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   expect(await page.evaluate(() => scrollY)).toBe(initialScroll);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
-  await page.evaluate(() => sourceContext.close());
+  await expect.poll(() => page.evaluate(() => sourceContext.state)).toBe('closed');
   expect(errors).toEqual([]);
 });
 

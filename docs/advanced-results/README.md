@@ -11,6 +11,11 @@ runs through the production loudness WASM and its existing display filter, then
 the same physics and renderer. This preview opens no AudioContext and requests
 no microphone or sensor permission. Listening replaces it with the selected
 source; stopping or interruption resumes it. Phone motion remains independent.
+Entering Fullscreen also starts Listening from the same action. Exiting leaves
+capture running; entering again reuses an active or pending session. Safari's
+audio startup is unlocked with a one-sample silent source inside that gesture,
+then suspended until the complete analysis graph is connected. The preview
+worker remains separate from the capture graph and stops when capture starts.
 
 Display and Input & calibration begin expanded. Physics and Diagnostics begin
 collapsed. Reset display changes only scrolling/camera; Reset fields restores
@@ -170,6 +175,10 @@ measurements from different source trees.
   touch targets, direct loads, refresh and Home/Advanced back/forward navigation.
 - Enable Listening and Phone motion independently; stop each while the other
   runs. Check denied access, tilt-only access, interruption and page exit.
+- From a fresh page, start Listening and clap after several seconds. Confirm
+  the switch stays enabled and checked, and the live input changes the bars.
+  Repeat by entering Fullscreen while Listening is off; confirm exiting and
+  re-entering preserves one capture session. Check Safari on both Mac and iPhone.
 - Shake on all axes and tilt in portrait/landscape, with rotation lock on/off.
   Repeat normal/fullscreen with Reduced Motion; automatic scrolling stays off.
 - Identify a song with microphone input; confirm the fullscreen title is readable

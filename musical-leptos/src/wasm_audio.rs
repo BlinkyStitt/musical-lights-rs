@@ -10,6 +10,8 @@ use web_sys::{
 
 #[wasm_bindgen(module = "/src/audio_setup.js")]
 extern "C" {
+    #[wasm_bindgen(catch, js_name = suspendForStartup)]
+    fn suspend_for_startup(context: &AudioContext) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = acquireInput)]
     async fn acquire_input(context: &AudioContext, channel: u32) -> Result<MediaStream, JsValue>;
     #[wasm_bindgen(js_name = inputIsGenerated)]
@@ -54,6 +56,7 @@ pub struct AudioSession {
 }
 struct AudioResources {
     context: AudioContext,
+    startup_suspension: js_sys::Promise,
     stream: Option<MediaStream>,
     input: Option<MediaStreamAudioSourceNode>,
     worklet: Option<AudioWorkletNode>,
@@ -72,9 +75,20 @@ impl AudioSession {
                 "The loudness model requires a 48000 Hz audio context",
             ));
         }
+        // Unlock and then suspend inside the initiating gesture, before native
+        // fullscreen consumes Safari's activation. Await suspension before
+        // assembling the graph so its first render quanta stay contiguous.
+        let startup_suspension = match suspend_for_startup(&context) {
+            Ok(promise) => promise,
+            Err(error) => {
+                let _ = context.close();
+                return Err(error);
+            }
+        };
         Ok(Self {
             resources: Rc::new(RefCell::new(Some(AudioResources {
                 context,
+                startup_suspension,
                 stream: None,
                 input: None,
                 worklet: None,
@@ -105,16 +119,17 @@ impl AudioSession {
         channel: u32,
         mut on_update: impl FnMut(AudioUpdate) + 'static,
     ) -> Result<(), JsValue> {
-        let context = self
-            .resources
-            .borrow()
-            .as_ref()
-            .ok_or_else(closed_session)?
-            .context
-            .clone();
+        let (context, startup_suspension) = {
+            let guard = self.resources.borrow();
+            let resources = guard.as_ref().ok_or_else(closed_session)?;
+            (
+                resources.context.clone(),
+                resources.startup_suspension.clone(),
+            )
+        };
         // Build the complete graph before its sample clock starts. Connecting
         // nodes on a running context can interrupt the first render quanta.
-        JsFuture::from(context.suspend()?).await?;
+        JsFuture::from(startup_suspension).await?;
         if self.resources.borrow().is_none() {
             return Err(closed_session());
         }

@@ -2,6 +2,18 @@ const profiles = new WeakMap();
 const sessions = new WeakMap();
 let nextSession = 0;
 
+// Safari needs resume inside the gesture, before requestFullscreen consumes
+// activation. No input is connected yet; suspend again before graph setup.
+export function suspendForStartup(context) {
+    const primer = context.createBufferSource();
+    primer.buffer = context.createBuffer(1, 1, context.sampleRate);
+    primer.connect(context.destination);
+    // Starting a scheduled source unlocks Safari synchronously. resume alone
+    // defers its activation check until fullscreen has consumed the gesture.
+    primer.start();
+    return context.resume().then(() => context.suspend()).finally(() => primer.disconnect());
+}
+
 function beginSession(context, card, source) {
     const session = { sessionId: ++nextSession, source, sampleRate: context.sampleRate,
         diagnostics: card.querySelector('.tone-trace')?.checked === true, state: 'starting', repeat: false };

@@ -69,10 +69,14 @@ test.beforeEach(async ({ page }) => {
 
 test('each microphone session resets diagnostics and rejects stale tone packets', async ({ page }) => {
   await page.addInitScript(() => {
+    const Context = window.AudioContext;
+    window.AudioContext = class extends Context {
+      constructor(...args) { super(...args); window.captureContext = this; }
+    };
     MediaDevices.prototype.getUserMedia = async () => {
-      const context = new AudioContext({ sampleRate: 48000 });
+      const context = window.captureContext;
       const destination = context.createMediaStreamDestination(), tone = context.createOscillator();
-      tone.connect(destination); tone.start(); await context.resume();
+      tone.connect(destination); tone.start();
       return destination.stream;
     };
   });
@@ -83,10 +87,13 @@ test('each microphone session resets diagnostics and rejects stale tone packets'
   for (const source of ['generated', 'microphone', 'microphone']) {
     await page.locator('.input-source').selectOption(source);
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    // A new session can still be unlocking its suspended graph. Do not read
+    // the preceding session's recorded rows before acquisition resets them.
+    await expect(page.locator('.listening-toggle')).toBeEnabled();
+    await expect(page.locator('.mic-status')).toHaveText(source === 'generated' ? 'Digital audio · Mic off' : 'Listening · Mic on');
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(0);
     const metadata = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneMetadata);
     expect(metadata.source).toBe(source);
-    await expect(page.locator('.mic-status')).toHaveText(source === 'generated' ? 'Digital audio · Mic off' : 'Listening · Mic on');
     expect(metadata.sessionId).not.toBe(previous);
     if (source === 'microphone') expect(metadata.kind).toBeUndefined();
     const result = await page.evaluate(oldId => {
