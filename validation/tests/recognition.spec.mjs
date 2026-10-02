@@ -5,7 +5,7 @@ import { syntheticAudio, physicsReady } from '../physics-state.mjs';
 const base = 'http://127.0.0.1:8101';
 const song = { artist: 'Artist, with "quotes"', title: 'A very long song title that keeps going across the narrow phone display and should scroll smoothly', album: 'Album' };
 
-async function setup(page, { realRecorder = false, allowUnavailable = false, status = 200, result = song } = {}) {
+async function setup(page, { realRecorder = false, allowUnavailable = false, captureMs = 300, status = 200, result = song } = {}) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     MediaDevices.prototype.getUserMedia = async () => {
@@ -31,7 +31,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, sta
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace(/name="musical-lights-recognition" content="[^"]*"/, 'name="musical-lights-recognition" content="/recognize"') });
   });
-  if (!realRecorder) await page.addInitScript(() => {
+  if (!realRecorder) await page.addInitScript(captureMs => {
     window.captureStarts = 0;
     window.MediaRecorder = class {
       static isTypeSupported(type) { return type === 'audio/mp4'; }
@@ -44,8 +44,8 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, sta
       }
     };
     const timeout = window.setTimeout;
-    window.setTimeout = (callback, ms, ...args) => timeout(callback, ms === 10_000 ? 300 : ms, ...args);
-  });
+    window.setTimeout = (callback, ms, ...args) => timeout(callback, ms === 10_000 ? captureMs : ms, ...args);
+  }, captureMs);
   const uploads = [];
   await page.route(base + '/recognize', async route => {
     uploads.push({ type: route.request().headers()['content-type'], data: route.request().postDataBuffer() });
@@ -192,7 +192,9 @@ test('a missing recorder disables recognition without disabling listening or his
 
 test('the song button is prominent above the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 720 });
-  const uploads = await setup(page);
+  // Keep the real capture window while checking layout and clicking Cancel.
+  // Slow CI can outlast the shortened recording used by successful matches.
+  const uploads = await setup(page, { captureMs: 10_000 });
   const identify = page.locator('.audio-controls').getByRole('button', { name: 'Identify song', exact: true });
   await expect(identify).toBeInViewport();
   expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
