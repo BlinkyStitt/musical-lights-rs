@@ -63,30 +63,34 @@ for (const source of ['microphone', 'generated tones']) {
     const fixture = await deploymentFixture();
     try {
       await syntheticAudio(page);
-      const path = '/phone/?source=bookmark#check';
+      const path = '/advanced/?source=bookmark#check';
       await page.goto(fixture.origin + path); await physicsReady(page); await trackMicrophone(page);
       if (source === 'generated tones') {
-        await page.locator('.generated-audio').check();
+        await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
       }
       fixture.deploy();
-      await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
       const reload = page.getByRole('link', { name: 'Reload updated app' });
       await expect(reload).toBeVisible();
       await expect.poll(() => page.evaluate(() => window.testContext.state)).toBe('closed');
       expect(await page.evaluate(() => window.microphoneRequests)).toBe(0);
-      expect(fixture.requests).not.toContain(`/assets/${fixture.original}/loudness/loudness.wasm`);
+      // Idle preview may already have loaded the same production DSP, without capture.
+      expect(await page.evaluate(() => window.microphoneRequests)).toBe(0);
       await reload.click();
       await expect(page).toHaveURL(fixture.origin + path);
       await physicsReady(page);
       await expect(page.locator('meta[name="musical-lights-assets"]')).toHaveAttribute('content', `/assets/${fixture.next}/`);
       if (source === 'generated tones') {
-        await page.locator('.generated-audio').check();
+        await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
       }
-      await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
       expect(fixture.requests).toContain(`/assets/${fixture.next}/loudness/loudness.wasm`);
       expect(fixture.requests).toContain(`/assets/${fixture.next}/loudness/processor.js`);
-      await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
     } finally { await fixture.close(); }
   });
 }
@@ -97,11 +101,11 @@ for (const resource of ['loudness/loudness.wasm', 'loudness/processor.js']) {
     try {
       await syntheticAudio(page); await page.goto(fixture.origin); await physicsReady(page); await trackMicrophone(page);
       fixture.retireDuring(resource);
-      await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
       await expect(page.getByRole('link', { name: 'Reload updated app' })).toBeVisible();
       expect(await page.evaluate(() => window.microphoneRequests)).toBe(1);
       await expect.poll(() => page.evaluate(() => [window.testContext.state, ...window.capturedTracks.map(track => track.readyState)])).toEqual(['closed', 'ended']);
-      await expect(page.getByRole('button', { name: 'Start listening', exact: true })).toBeEnabled();
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeEnabled();
     } finally { await fixture.close(); }
   });
 }
@@ -110,18 +114,20 @@ test('a deployment leaves existing listening untouched and checks the next sessi
   const fixture = await deploymentFixture();
   try {
     await syntheticAudio(page); await page.goto(fixture.origin); await physicsReady(page);
-    await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-    const stop = page.getByRole('button', { name: 'Stop listening', exact: true });
-    await expect(stop).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    const stop = page.getByRole('checkbox', { name: 'Listening', exact: true });
+    await expect(stop).toBeChecked();
+    await expect(stop).toBeEnabled();
     const session = await page.locator('.audio-card').getAttribute('data-audio-session');
     fixture.deploy();
     await page.waitForTimeout(300);
-    await expect(stop).toBeVisible();
+    await expect(stop).toBeChecked();
+    await expect(stop).toBeEnabled();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-session', session);
     await expect(page.locator('.runtime-update')).toHaveCount(0);
     expect(await page.evaluate(() => window.testContext.state)).toBe('running');
-    await stop.click();
-    await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+    await stop.uncheck();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect(page.getByRole('link', { name: 'Reload updated app' })).toBeVisible();
   } finally { await fixture.close(); }
 });

@@ -1,0 +1,1598 @@
+{
+  "generatedAt": "2026-10-02T06:39:06.228Z",
+  "build": "export const build = 'aebaced153aa778f7ea67269c502b7cd6bcf9b2e-dirty';\n",
+  "recording": "Actual production WebGL canvas and digital source stream; VP9/Opus capture. Output clocks remain estimates; no fitted gain or trace shift.",
+  "humanListening": "pending",
+  "physicalPhone": "pending",
+  "fpsAcceptance": false,
+  "results": [
+    {
+      "scrolling": true,
+      "identity": {
+        "name": "music",
+        "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+        "samples": 288000,
+        "rate": 48000,
+        "provenance": {
+          "repository": "https://github.com/librosa/data",
+          "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+          "source": "audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+          "sourceSha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+          "license": "CC-BY-3.0",
+          "transformation": "FFmpeg mono average, 48 kHz, seconds 8–14, fixed peak 0.2",
+          "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+        },
+        "source": "licensed-excerpt",
+        "channels": 1,
+        "duration": 6
+      },
+      "sessions": [
+        {
+          "sessionId": 1,
+          "source": "music",
+          "sampleRate": 48000,
+          "diagnostics": false,
+          "state": "ended",
+          "repeat": false,
+          "reason": "natural end",
+          "startedAt": "2026-10-02T06:38:44.190Z",
+          "playbackDevice": "",
+          "timing": [
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:44.565Z",
+              "processingSeconds": 0,
+              "outputSeconds": 0,
+              "state": "starting",
+              "method": "estimated-latency",
+              "confidence": "approximate",
+              "audioTime": -0.005333333333333333,
+              "baseLatency": 0.005333333333333333,
+              "outputLatency": 0
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:44.699Z",
+              "processingSeconds": 0.005333333333333333,
+              "outputSeconds": 0,
+              "state": "starting",
+              "method": "estimated-latency",
+              "confidence": "approximate",
+              "audioTime": 0,
+              "baseLatency": 0.005333333333333333,
+              "outputLatency": 0
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:44.760Z",
+              "processingSeconds": 0.050666666666666665,
+              "outputSeconds": 0.01937833331187566,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.02204499997854233
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:44.866Z",
+              "processingSeconds": 0.15733333333333333,
+              "outputSeconds": 0.12821366665474576,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.12821366665474576
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:44.968Z",
+              "processingSeconds": 0.2613333333333333,
+              "outputSeconds": 0.23003599998807908,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.23003599998807908
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.066Z",
+              "processingSeconds": 0.35733333333333334,
+              "outputSeconds": 0.3281420000119209,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.3281420000119209
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.166Z",
+              "processingSeconds": 0.45866666666666667,
+              "outputSeconds": 0.4281543333571752,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.4281543333571752
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.266Z",
+              "processingSeconds": 0.5573333333333333,
+              "outputSeconds": 0.5282906666881244,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.5282906666881244
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.360Z",
+              "processingSeconds": 0.6506666666666666,
+              "outputSeconds": 0.6223213333643277,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.6223213333643277
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.459Z",
+              "processingSeconds": 0.752,
+              "outputSeconds": 0.7213676666165988,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.7213676666165988
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.567Z",
+              "processingSeconds": 0.8586666666666667,
+              "outputSeconds": 0.8288523333404859,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.8288523333404859
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.667Z",
+              "processingSeconds": 0.96,
+              "outputSeconds": 0.9293356666499774,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.9293356666499774
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.766Z",
+              "processingSeconds": 1.056,
+              "outputSeconds": 1.0278256666690508,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.0278256666690508
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.866Z",
+              "processingSeconds": 1.1573333333333333,
+              "outputSeconds": 1.128377000026226,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.128377000026226
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:45.966Z",
+              "processingSeconds": 1.2586666666666666,
+              "outputSeconds": 1.2279873333357176,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.2279873333357176
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.059Z",
+              "processingSeconds": 1.3493333333333333,
+              "outputSeconds": 1.3215100000166893,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.3215100000166893
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.167Z",
+              "processingSeconds": 1.456,
+              "outputSeconds": 1.429140000011921,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.429140000011921
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.265Z",
+              "processingSeconds": 1.5573333333333332,
+              "outputSeconds": 1.5273739999666216,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.5273739999666216
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.367Z",
+              "processingSeconds": 1.6586666666666667,
+              "outputSeconds": 1.6291633333428701,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.6291633333428701
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.466Z",
+              "processingSeconds": 1.7573333333333334,
+              "outputSeconds": 1.728586666709582,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.728586666709582
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.567Z",
+              "processingSeconds": 1.8586666666666667,
+              "outputSeconds": 1.8292569999570847,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.8292569999570847
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.665Z",
+              "processingSeconds": 1.9573333333333334,
+              "outputSeconds": 1.9276219999713897,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.9276219999713897
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.767Z",
+              "processingSeconds": 2.058666666666667,
+              "outputSeconds": 2.0294613333547913,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.0294613333547913
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.859Z",
+              "processingSeconds": 2.1493333333333333,
+              "outputSeconds": 2.121547999988079,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.121547999988079
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:46.966Z",
+              "processingSeconds": 2.256,
+              "outputSeconds": 2.2287820000071523,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.2287820000071523
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.066Z",
+              "processingSeconds": 2.3573333333333335,
+              "outputSeconds": 2.328474,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.328474
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.166Z",
+              "processingSeconds": 2.458666666666667,
+              "outputSeconds": 2.428020333357175,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.428020333357175
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.267Z",
+              "processingSeconds": 2.56,
+              "outputSeconds": 2.529184666669051,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.529184666669051
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.367Z",
+              "processingSeconds": 2.656,
+              "outputSeconds": 2.6289379999642377,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.6289379999642377
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.467Z",
+              "processingSeconds": 2.7573333333333334,
+              "outputSeconds": 2.7290359999833105,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.7290359999833105
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.568Z",
+              "processingSeconds": 2.8586666666666667,
+              "outputSeconds": 2.8300553333333336,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.8300553333333336
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.667Z",
+              "processingSeconds": 2.96,
+              "outputSeconds": 2.928941666669051,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.928941666669051
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.766Z",
+              "processingSeconds": 3.056,
+              "outputSeconds": 3.028256666666667,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.028256666666667
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.860Z",
+              "processingSeconds": 3.152,
+              "outputSeconds": 3.1221886666642824,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.1221886666642824
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:47.965Z",
+              "processingSeconds": 3.2586666666666666,
+              "outputSeconds": 3.227791333338102,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.227791333338102
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.070Z",
+              "processingSeconds": 3.36,
+              "outputSeconds": 3.332591666659514,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.332591666659514
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.166Z",
+              "processingSeconds": 3.456,
+              "outputSeconds": 3.4286986666642822,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.4286986666642822
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.266Z",
+              "processingSeconds": 3.5573333333333332,
+              "outputSeconds": 3.5282759999976157,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.5282759999976157
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.366Z",
+              "processingSeconds": 3.6586666666666665,
+              "outputSeconds": 3.628809333319028,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.628809333319028
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.466Z",
+              "processingSeconds": 3.7573333333333334,
+              "outputSeconds": 3.7283226666547455,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.7283226666547455
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.568Z",
+              "processingSeconds": 3.8613333333333335,
+              "outputSeconds": 3.8300989999952315,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.8300989999952315
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.659Z",
+              "processingSeconds": 3.952,
+              "outputSeconds": 3.921700666664283,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.921700666664283
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.759Z",
+              "processingSeconds": 4.050666666666666,
+              "outputSeconds": 4.021435999964238,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.021435999964238
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.867Z",
+              "processingSeconds": 4.16,
+              "outputSeconds": 4.12933566671435,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.12933566671435
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:48.969Z",
+              "processingSeconds": 4.261333333333333,
+              "outputSeconds": 4.231078999949932,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.231078999949932
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.067Z",
+              "processingSeconds": 4.357333333333333,
+              "outputSeconds": 4.3292110000047686,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.3292110000047686
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.169Z",
+              "processingSeconds": 4.458666666666667,
+              "outputSeconds": 4.430854333345254,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.430854333345254
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.267Z",
+              "processingSeconds": 4.56,
+              "outputSeconds": 4.529672666683356,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.529672666683356
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.369Z",
+              "processingSeconds": 4.661333333333333,
+              "outputSeconds": 4.6316609999976155,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.6316609999976155
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.469Z",
+              "processingSeconds": 4.76,
+              "outputSeconds": 4.731407333347638,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.731407333347638
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.559Z",
+              "processingSeconds": 4.850666666666666,
+              "outputSeconds": 4.8213649999809265,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.8213649999809265
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.671Z",
+              "processingSeconds": 4.96,
+              "outputSeconds": 4.932894999947548,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.932894999947548
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.772Z",
+              "processingSeconds": 5.061333333333334,
+              "outputSeconds": 5.034004999976158,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.034004999976158
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.870Z",
+              "processingSeconds": 5.1626666666666665,
+              "outputSeconds": 5.132393333307108,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.132393333307108
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:49.970Z",
+              "processingSeconds": 5.261333333333333,
+              "outputSeconds": 5.232696666673819,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.232696666673819
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.074Z",
+              "processingSeconds": 5.365333333333333,
+              "outputSeconds": 5.336256999961853,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.336256999961853
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.172Z",
+              "processingSeconds": 5.461333333333333,
+              "outputSeconds": 5.434733333345254,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.434733333345254
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.275Z",
+              "processingSeconds": 5.568,
+              "outputSeconds": 5.537427666688124,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.537427666688124
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.370Z",
+              "processingSeconds": 5.661333333333333,
+              "outputSeconds": 5.632616666690509,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.632616666690509
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.470Z",
+              "processingSeconds": 5.76,
+              "outputSeconds": 5.732293666697662,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.732293666697662
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.570Z",
+              "processingSeconds": 5.8613333333333335,
+              "outputSeconds": 5.831919999992847,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.831919999992847
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.670Z",
+              "processingSeconds": 5.962666666666666,
+              "outputSeconds": 5.931972333354792,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.931972333354792
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.768Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.971589666654746,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.030256333321413
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.859Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.972159666647593,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.121492999980926
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:50.968Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.968642666676204,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.229976000009537
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.067Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.971769666661899,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.329102999995232
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.170Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.968353666700045,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.432353666700045
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.266Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.968783666707198,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.528783666707198
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.368Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.96865766670243,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.629991000035763
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.466Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.970692666614214,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.728025999947548
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.567Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.9708136666785885,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.829480333345255
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:51.677Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.968661666642825,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.939328333309492
+            }
+          ],
+          "selectedChannel": 0,
+          "clip": {
+            "name": "music",
+            "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+            "samples": 288000,
+            "rate": 48000,
+            "provenance": {
+              "repository": "https://github.com/librosa/data",
+              "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+              "source": "audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+              "sourceSha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+              "license": "CC-BY-3.0",
+              "transformation": "FFmpeg mono average, 48 kHz, seconds 8–14, fixed peak 0.2",
+              "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+            },
+            "source": "licensed-excerpt",
+            "channels": 1,
+            "duration": 6
+          },
+          "audioStart": 0,
+          "channel": 0,
+          "pascalsPerUnit": 2,
+          "calibrated": false
+        }
+      ],
+      "recordingStartedAtPerformanceMs": 1272.9500000476837,
+      "config": [
+        0.9278030395507812,
+        9.8100004196167,
+        1100,
+        0.15000000596046448,
+        0.20000000298023224,
+        0.23999999463558197,
+        0.03999999910593033,
+        0.3199999928474426
+      ],
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.8037.0 Safari/537.36"
+    },
+    {
+      "scrolling": false,
+      "identity": {
+        "name": "music",
+        "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+        "samples": 288000,
+        "rate": 48000,
+        "provenance": {
+          "repository": "https://github.com/librosa/data",
+          "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+          "source": "audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+          "sourceSha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+          "license": "CC-BY-3.0",
+          "transformation": "FFmpeg mono average, 48 kHz, seconds 8–14, fixed peak 0.2",
+          "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+        },
+        "source": "licensed-excerpt",
+        "channels": 1,
+        "duration": 6
+      },
+      "sessions": [
+        {
+          "sessionId": 1,
+          "source": "music",
+          "sampleRate": 48000,
+          "diagnostics": false,
+          "state": "ended",
+          "repeat": false,
+          "reason": "natural end",
+          "startedAt": "2026-10-02T06:38:55.838Z",
+          "playbackDevice": "",
+          "timing": [
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:55.971Z",
+              "processingSeconds": 0,
+              "outputSeconds": 0,
+              "state": "starting",
+              "method": "estimated-latency",
+              "confidence": "approximate",
+              "audioTime": -0.005333333333333333,
+              "baseLatency": 0.005333333333333333,
+              "outputLatency": 0
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.072Z",
+              "processingSeconds": 0.010666666666666666,
+              "outputSeconds": 0,
+              "state": "playing",
+              "method": "estimated-latency",
+              "confidence": "approximate",
+              "audioTime": -0.018666666666666665,
+              "baseLatency": 0.005333333333333333,
+              "outputLatency": 0.024
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.171Z",
+              "processingSeconds": 0.10666666666666667,
+              "outputSeconds": 0.0788373333047231,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.0788373333047231
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.272Z",
+              "processingSeconds": 0.208,
+              "outputSeconds": 0.1793726666809718,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.1793726666809718
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.371Z",
+              "processingSeconds": 0.30933333333333335,
+              "outputSeconds": 0.2786780000429153,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.2786780000429153
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.471Z",
+              "processingSeconds": 0.4053333333333333,
+              "outputSeconds": 0.3786983333094915,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.3786983333094915
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.572Z",
+              "processingSeconds": 0.5066666666666667,
+              "outputSeconds": 0.4793213333142598,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.4793213333142598
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.671Z",
+              "processingSeconds": 0.608,
+              "outputSeconds": 0.5790916666499775,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.5790916666499775
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.774Z",
+              "processingSeconds": 0.7093333333333334,
+              "outputSeconds": 0.681145999961853,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.681145999961853
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.871Z",
+              "processingSeconds": 0.8053333333333333,
+              "outputSeconds": 0.7789303333237966,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.7789303333237966
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:56.972Z",
+              "processingSeconds": 0.9066666666666666,
+              "outputSeconds": 0.8793713333261808,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.8793713333261808
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.073Z",
+              "processingSeconds": 1.008,
+              "outputSeconds": 0.9802716666666665,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 0.9802716666666665
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.172Z",
+              "processingSeconds": 1.1093333333333333,
+              "outputSeconds": 1.079434000038147,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.079434000038147
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.272Z",
+              "processingSeconds": 1.208,
+              "outputSeconds": 1.1791153333357176,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.1791153333357176
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.370Z",
+              "processingSeconds": 1.3066666666666666,
+              "outputSeconds": 1.2779023332975703,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.2779023332975703
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.471Z",
+              "processingSeconds": 1.408,
+              "outputSeconds": 1.3786486666428248,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.3786486666428248
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.571Z",
+              "processingSeconds": 1.5093333333333334,
+              "outputSeconds": 1.4788270000047683,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.4788270000047683
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.670Z",
+              "processingSeconds": 1.6053333333333333,
+              "outputSeconds": 1.577845999985695,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.577845999985695
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.770Z",
+              "processingSeconds": 1.7066666666666668,
+              "outputSeconds": 1.67778233334287,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.67778233334287
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.870Z",
+              "processingSeconds": 1.808,
+              "outputSeconds": 1.7780236666475933,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.7780236666475933
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:57.971Z",
+              "processingSeconds": 1.9093333333333333,
+              "outputSeconds": 1.878316000014305,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.878316000014305
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.071Z",
+              "processingSeconds": 2.005333333333333,
+              "outputSeconds": 1.978801333383401,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 1.978801333383401
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.170Z",
+              "processingSeconds": 2.1066666666666665,
+              "outputSeconds": 2.077913333333333,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.077913333333333
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.271Z",
+              "processingSeconds": 2.208,
+              "outputSeconds": 2.1784016666380563,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.1784016666380563
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.371Z",
+              "processingSeconds": 2.3093333333333335,
+              "outputSeconds": 2.2781069999809263,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.2781069999809263
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.471Z",
+              "processingSeconds": 2.4053333333333335,
+              "outputSeconds": 2.378875333376249,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.378875333376249
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.573Z",
+              "processingSeconds": 2.509333333333333,
+              "outputSeconds": 2.480156666647593,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.480156666647593
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.671Z",
+              "processingSeconds": 2.608,
+              "outputSeconds": 2.578936666673819,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.578936666673819
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.770Z",
+              "processingSeconds": 2.7066666666666666,
+              "outputSeconds": 2.6776920000190736,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.6776920000190736
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.871Z",
+              "processingSeconds": 2.8053333333333335,
+              "outputSeconds": 2.7785913333500227,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.7785913333500227
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:58.972Z",
+              "processingSeconds": 2.9066666666666667,
+              "outputSeconds": 2.879570666669051,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.879570666669051
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.071Z",
+              "processingSeconds": 3.008,
+              "outputSeconds": 2.978843666635673,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 2.978843666635673
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.171Z",
+              "processingSeconds": 3.1093333333333333,
+              "outputSeconds": 3.0785690000190735,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.0785690000190735
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.276Z",
+              "processingSeconds": 3.2106666666666666,
+              "outputSeconds": 3.1834706666499772,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.1834706666499772
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.371Z",
+              "processingSeconds": 3.3066666666666666,
+              "outputSeconds": 3.278388333361944,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.278388333361944
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.470Z",
+              "processingSeconds": 3.408,
+              "outputSeconds": 3.377948666659514,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.377948666659514
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.570Z",
+              "processingSeconds": 3.509333333333333,
+              "outputSeconds": 3.4778400000047682,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.4778400000047682
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.671Z",
+              "processingSeconds": 3.608,
+              "outputSeconds": 3.57904233334287,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.57904233334287
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.770Z",
+              "processingSeconds": 3.7066666666666666,
+              "outputSeconds": 3.678085333364328,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.678085333364328
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.871Z",
+              "processingSeconds": 3.808,
+              "outputSeconds": 3.778141666661898,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.778141666661898
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:38:59.971Z",
+              "processingSeconds": 3.9093333333333335,
+              "outputSeconds": 3.8789129999928473,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.8789129999928473
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.075Z",
+              "processingSeconds": 4.010666666666666,
+              "outputSeconds": 3.9825993333500227,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 3.9825993333500227
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.171Z",
+              "processingSeconds": 4.1066666666666665,
+              "outputSeconds": 4.078594333354792,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.078594333354792
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.271Z",
+              "processingSeconds": 4.208,
+              "outputSeconds": 4.1787126667000445,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.1787126667000445
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.371Z",
+              "processingSeconds": 4.309333333333333,
+              "outputSeconds": 4.278211000000001,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.278211000000001
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.471Z",
+              "processingSeconds": 4.405333333333333,
+              "outputSeconds": 4.378238333330949,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.378238333330949
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.571Z",
+              "processingSeconds": 4.506666666666667,
+              "outputSeconds": 4.478246333321412,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.478246333321412
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.671Z",
+              "processingSeconds": 4.608,
+              "outputSeconds": 4.578284666638057,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.578284666638057
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.770Z",
+              "processingSeconds": 4.706666666666667,
+              "outputSeconds": 4.675073333309491,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.677739999976158
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.871Z",
+              "processingSeconds": 4.8053333333333335,
+              "outputSeconds": 4.778422333333333,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.778422333333333
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:00.970Z",
+              "processingSeconds": 4.906666666666666,
+              "outputSeconds": 4.878063333319028,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.878063333319028
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.071Z",
+              "processingSeconds": 5.008,
+              "outputSeconds": 4.979043666633288,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 4.979043666633288
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.171Z",
+              "processingSeconds": 5.109333333333334,
+              "outputSeconds": 5.078431999973774,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.078431999973774
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.270Z",
+              "processingSeconds": 5.205333333333333,
+              "outputSeconds": 5.178058999969005,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.178058999969005
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.371Z",
+              "processingSeconds": 5.306666666666667,
+              "outputSeconds": 5.278638333376248,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.278638333376248
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.470Z",
+              "processingSeconds": 5.408,
+              "outputSeconds": 5.377630666676204,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.377630666676204
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.571Z",
+              "processingSeconds": 5.509333333333333,
+              "outputSeconds": 5.478477999985694,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.478477999985694
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.671Z",
+              "processingSeconds": 5.605333333333333,
+              "outputSeconds": 5.57825733337148,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.57825733337148
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.771Z",
+              "processingSeconds": 5.706666666666667,
+              "outputSeconds": 5.6781043333357175,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.6781043333357175
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.871Z",
+              "processingSeconds": 5.808,
+              "outputSeconds": 5.778808666618984,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.778808666618984
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:01.971Z",
+              "processingSeconds": 5.9093333333333335,
+              "outputSeconds": 5.8789739999856945,
+              "state": "playing",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.8789739999856945
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.071Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.973531999992847,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 5.978865333326181
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.171Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.971647666647594,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.07831433331426
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.271Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.970523666652362,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.178523666652362
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.371Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.968863666616599,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.278196999949932
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.471Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.97040833334287,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.37840833334287
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.570Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.97104166669766,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.477708333364327
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.670Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.969686666669052,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.577686666669051
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.771Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.969130666666667,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.678464
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.871Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.970561333323797,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.778561333323797
+            },
+            {
+              "sessionId": 1,
+              "recordedAt": "2026-10-02T06:39:02.970Z",
+              "processingSeconds": 6,
+              "outputSeconds": 5.971143666647594,
+              "state": "ended",
+              "method": "output-timestamp",
+              "confidence": "output clock estimate",
+              "audioTime": 6.87781033331426
+            }
+          ],
+          "selectedChannel": 0,
+          "clip": {
+            "name": "music",
+            "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+            "samples": 288000,
+            "rate": 48000,
+            "provenance": {
+              "repository": "https://github.com/librosa/data",
+              "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+              "source": "audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+              "sourceSha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+              "license": "CC-BY-3.0",
+              "transformation": "FFmpeg mono average, 48 kHz, seconds 8–14, fixed peak 0.2",
+              "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+            },
+            "source": "licensed-excerpt",
+            "channels": 1,
+            "duration": 6
+          },
+          "audioStart": 0,
+          "channel": 0,
+          "pascalsPerUnit": 2,
+          "calibrated": false
+        }
+      ],
+      "recordingStartedAtPerformanceMs": 812.285000026226,
+      "config": [
+        0.9278030395507812,
+        9.8100004196167,
+        1100,
+        0.15000000596046448,
+        0.20000000298023224,
+        0.23999999463558197,
+        0.03999999910593033,
+        0.3199999928474426
+      ],
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.8037.0 Safari/537.36"
+    }
+  ]
+}

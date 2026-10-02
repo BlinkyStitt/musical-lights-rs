@@ -36,7 +36,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
       await video.scrollIntoViewIfNeeded(); await video.evaluate(v => v.play());
       await expect.poll(() => video.evaluate(v => v.readyState >= 2 && v.currentTime > 0 && !v.error)).toBe(true);
     }
-    expect((await page.goto(`${origin}/phone/`)).status()).toBe(200);
+    expect((await page.goto(`${origin}/advanced/`)).status()).toBe(200);
     await expect(page.getByRole('meter')).toHaveCount(24);
     await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
     const actualBuild = await page.evaluate(() => fetch(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(r => r.text()));

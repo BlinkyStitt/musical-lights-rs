@@ -1,0 +1,278 @@
+{
+  "baselineCommit": "07268b2ab8e62e94d5ad014f98c96d5127ce1b2a",
+  "baselineWasmSha256": "3399ed1ff6e8267f3f410541b05e217d5914de7220c750094c8878f6094191d6",
+  "productionWasmSha256": "381be9dd39492d2b56b6ab127a4978f1be56579434d321730aeb5e43097e164a",
+  "node": "v26.8.2",
+  "traceProtocolUnchanged": 5,
+  "traceBuffersLazy": true,
+  "results": [
+    {
+      "name": "tone-50",
+      "reducedMotion": false,
+      "pcmSha256": "141cc65b4b8cff771ebea78bb699ae5ffac121f1fac46a14e9ef4787b36c1692",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-50",
+      "reducedMotion": true,
+      "pcmSha256": "141cc65b4b8cff771ebea78bb699ae5ffac121f1fac46a14e9ef4787b36c1692",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-150",
+      "reducedMotion": false,
+      "pcmSha256": "e9796bd8365e98a35f409d7c3e59097f2554b5841554629130152668d362a7d4",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-150",
+      "reducedMotion": true,
+      "pcmSha256": "e9796bd8365e98a35f409d7c3e59097f2554b5841554629130152668d362a7d4",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-250",
+      "reducedMotion": false,
+      "pcmSha256": "de3dd0e0f0202b87278791a612797d12477a4f8fae4b45fc0b49585b4ed53075",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-250",
+      "reducedMotion": true,
+      "pcmSha256": "de3dd0e0f0202b87278791a612797d12477a4f8fae4b45fc0b49585b4ed53075",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-1000",
+      "reducedMotion": false,
+      "pcmSha256": "e996a142c844b77cf579469c6770e4888291b2fad3b75751bedaed5c386f20ed",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-1000",
+      "reducedMotion": true,
+      "pcmSha256": "e996a142c844b77cf579469c6770e4888291b2fad3b75751bedaed5c386f20ed",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-3400",
+      "reducedMotion": false,
+      "pcmSha256": "688dc33d1e9169855e8019c885bd25e5075a663dc2366582b44b3af12859d137",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-3400",
+      "reducedMotion": true,
+      "pcmSha256": "688dc33d1e9169855e8019c885bd25e5075a663dc2366582b44b3af12859d137",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-8600",
+      "reducedMotion": false,
+      "pcmSha256": "fe4d084fb2bc535fd728161709c07a81056bfed3c78ca6a3e1582afb0b2fe027",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-8600",
+      "reducedMotion": true,
+      "pcmSha256": "fe4d084fb2bc535fd728161709c07a81056bfed3c78ca6a3e1582afb0b2fe027",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-13700",
+      "reducedMotion": false,
+      "pcmSha256": "424bd84fa1b3f3a6d02b435284aa26b4ef94c305a091bb522163bd8b2de1a8cc",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "tone-13700",
+      "reducedMotion": true,
+      "pcmSha256": "424bd84fa1b3f3a6d02b435284aa26b4ef94c305a091bb522163bd8b2de1a8cc",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-mid",
+      "reducedMotion": false,
+      "pcmSha256": "c667d7e13dd49f59e6a54f04fe42fe975c090e6eb22746e66f663bdcfc52bb4d",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-mid",
+      "reducedMotion": true,
+      "pcmSha256": "c667d7e13dd49f59e6a54f04fe42fe975c090e6eb22746e66f663bdcfc52bb4d",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-high",
+      "reducedMotion": false,
+      "pcmSha256": "496dd3d48af8457a5ec0f86be55517f81182a0d2ee76ff1521b6fd671e5477e1",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-high",
+      "reducedMotion": true,
+      "pcmSha256": "496dd3d48af8457a5ec0f86be55517f81182a0d2ee76ff1521b6fd671e5477e1",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-burst",
+      "reducedMotion": false,
+      "pcmSha256": "fa523c3f5b2ee63faa4d0fd8c71803815e033499c577e8a92bf3c1329f95269f",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-burst",
+      "reducedMotion": true,
+      "pcmSha256": "fa523c3f5b2ee63faa4d0fd8c71803815e033499c577e8a92bf3c1329f95269f",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-swell",
+      "reducedMotion": false,
+      "pcmSha256": "2dd2be380dd5e7df9129892b3483b2350a5bfe826e7ab64f7d0f59bca13fa135",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "confirmation-swell",
+      "reducedMotion": true,
+      "pcmSha256": "2dd2be380dd5e7df9129892b3483b2350a5bfe826e7ab64f7d0f59bca13fa135",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "low-mid-repeat",
+      "reducedMotion": false,
+      "pcmSha256": "d96d85fc00efa3cc2327a498a310d9ee06299b5e7f3982ffe3608929f7fcda4c",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "low-mid-repeat",
+      "reducedMotion": true,
+      "pcmSha256": "d96d85fc00efa3cc2327a498a310d9ee06299b5e7f3982ffe3608929f7fcda4c",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "upper-mid-repeat",
+      "reducedMotion": false,
+      "pcmSha256": "08c77e63598675ffa1e493b74627e718c334a5c5188560363394b5326a238de0",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "upper-mid-repeat",
+      "reducedMotion": true,
+      "pcmSha256": "08c77e63598675ffa1e493b74627e718c334a5c5188560363394b5326a238de0",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "soft-crest",
+      "reducedMotion": false,
+      "pcmSha256": "e5f4fc75fc7f0ec04b798a4b645fd0a846909b6fe1c43b11d8c77dd612da2fc6",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "soft-crest",
+      "reducedMotion": true,
+      "pcmSha256": "e5f4fc75fc7f0ec04b798a4b645fd0a846909b6fe1c43b11d8c77dd612da2fc6",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "articulated-train",
+      "reducedMotion": false,
+      "pcmSha256": "54478629103b55358fa63afc7baaa9803a7c686711aaccb286f6095e5685950b",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "articulated-train",
+      "reducedMotion": true,
+      "pcmSha256": "54478629103b55358fa63afc7baaa9803a7c686711aaccb286f6095e5685950b",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "gentle-rise",
+      "reducedMotion": false,
+      "pcmSha256": "e82f90ca6f5689cfeb45739c948ef94968c836b9fd3cce14ce66203e471f88bb",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "gentle-rise",
+      "reducedMotion": true,
+      "pcmSha256": "e82f90ca6f5689cfeb45739c948ef94968c836b9fd3cce14ce66203e471f88bb",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "short-burst",
+      "reducedMotion": false,
+      "pcmSha256": "baaa285c2803680c7022acab36df522afe58ae82328d08c52424912084689d1c",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "short-burst",
+      "reducedMotion": true,
+      "pcmSha256": "baaa285c2803680c7022acab36df522afe58ae82328d08c52424912084689d1c",
+      "frames": 1000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "trumpet",
+      "reducedMotion": false,
+      "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+      "frames": 2666,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "trumpet",
+      "reducedMotion": true,
+      "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+      "frames": 2666,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "music",
+      "reducedMotion": false,
+      "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+      "frames": 3000,
+      "fullTraceBitIdentical": true
+    },
+    {
+      "name": "music",
+      "reducedMotion": true,
+      "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+      "frames": 3000,
+      "fullTraceBitIdentical": true
+    }
+  ],
+  "humanListening": "pending",
+  "physicalPhone": "pending"
+}

@@ -38,14 +38,16 @@ test('physics incidents expire, rearm after recovery, and keep stopped state', a
 });
 test('microphone failure details expire while recovery status remains, and restart clears it', async ({page}) => {
   await page.addInitScript(()=>{MediaDevices.prototype.getUserMedia=async()=>{throw new Error('Permission denied for expiry test')};});
-  await page.goto(`${origin}/phone/`);await physicsReady(page);
-  await page.getByRole('button',{name:'Start listening',exact:true}).click();
+  await page.goto(`${origin}/advanced/`);await physicsReady(page);
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.audio-error')).toContainText('Permission denied for expiry test');
   await expect(page.locator('.audio-error')).toBeEmpty({timeout:5000});
   await expect(page.locator('.audio-stopped')).toContainText('Audio stopped');
-  await page.locator('.generated-audio').check();
-  await page.getByRole('button',{name:'Start listening',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Stop listening',exact:true})).toBeVisible();
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
   await expect(page.locator('.audio-stopped')).toBeEmpty();
   await page.getByRole('link',{name:'About',exact:true}).click();
 });

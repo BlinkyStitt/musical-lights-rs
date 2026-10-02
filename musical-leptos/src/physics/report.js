@@ -172,7 +172,7 @@ export class PhoneReport {
       device: this.query('.phone-device').value.trim(), browser: this.query('.phone-browser').value.trim(), lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
       cameraDegrees: this.view.rotation, scrolling: this.view.card.querySelector('.scroll-lights').checked, warmupSeconds: 15, measurementSeconds: 300,
-      audioSource: 'generated → MediaStream → AudioWorklet → loudness WASM',
+      audioSource: 'generated PCM → AudioWorklet → loudness WASM',
       startedAt: new Date().toISOString(), config, layout: this.view.layout, palette: Array.from(this.view.palette) };
     this.query('.phone-start').disabled = true; this.query('.phone-finish').disabled = false;
     this.query('.physics-reset').disabled = true; this.query('.phone-export').disabled = true;

@@ -2,6 +2,7 @@
 // and verify the meter actually hit there, rather than rounding a locator's
 // center and requiring the browser to target a different neighboring sample.
 export async function meterPoint(page, meter) {
+  await meter.scrollIntoViewIfNeeded();
   return meter.evaluate(meter => {
     const box = meter.getBoundingClientRect();
     const x = Math.round(box.x + box.width / 2), y = Math.round(box.y + box.height / 2);

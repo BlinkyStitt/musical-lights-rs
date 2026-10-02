@@ -42,7 +42,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
     };
   });
   await page.goto('http://127.0.0.1:8101');
-  await page.getByRole('button', { name: 'Start listening' }).tap();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(() => page.getByRole('meter').nth(4).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   const { point, send, move } = await touchInput(page, context);
@@ -66,8 +66,8 @@ test('a browser touch swipe across a live bar exits before release without a fre
   // suppresses an immediately injected post-swipe tap even on a plain page;
   // a separate gesture after 200 ms delivers the click. Allow 50 ms margin.
   await page.waitForTimeout(250);
-  await page.getByRole('button', { name: 'Stop listening' }).tap();
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
   await page.evaluate(() => sourceContext.close());
   expect(errors).toEqual([]);

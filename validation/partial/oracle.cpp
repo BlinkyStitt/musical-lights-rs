@@ -31,6 +31,8 @@ int main(int argc, char** argv) {
         for (double d:ome.getResponse()) std::cout << std::pow(10,d/10) << ",\n";
         return 0;
     }
+    const int knownSource = grid && argc > 2 ? std::stoi(argv[2]) : -1;
+    if (knownSource < -1 || knownSource > 23) return 2;
     SignalBank input;
     const int bins = frequencies.size();
     input.initialize(25,1,bins,1,48000);
@@ -49,7 +51,7 @@ int main(int argc, char** argv) {
         input.zeroSignals();
         for (int bin=0;bin<bins;++bin) {
             int band=0; while(band<24 && frequencies[bin]>=edges[band+1]) ++band;
-            input.setSample(band,0,bin,0,powers[bin]);
+            input.setSample(knownSource >= 0 ? knownSource : band,0,bin,0,powers[bin]);
         }
         weight.process(input);
         for(int bin=0;bin<bins;++bin) {

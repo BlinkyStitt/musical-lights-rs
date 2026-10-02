@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio } from '../physics-state.mjs';
-const url = 'http://127.0.0.1:8101/phone/';
+const url = 'http://127.0.0.1:8101/advanced/';
 
 async function permissions(page, state = 'granted') {
   await page.addInitScript(({ state }) => {
@@ -44,13 +44,13 @@ async function permissions(page, state = 'granted') {
   }, { state });
 }
 
-for (const path of ['/', '/phone/?source=bookmark#permissions']) {
+for (const path of ['/', '/advanced/?source=bookmark#permissions']) {
   test(`queried access is displayed without requesting capture on direct entry ${path}`, async ({ page }, info) => {
     await permissions(page, 'granted');
     await page.goto(`http://127.0.0.1:8101${path}`);
     await expect(page.locator('.microphone-permission')).toHaveText('Microphone access allowed.');
-    await expect(page.locator('.mic-status')).toHaveText('Microphone off');
-    await expect(page.locator('.motion-status')).toHaveText('Motion access allowed · motion off.');
+    await expect(page.locator('.mic-status')).toHaveText('Microphone off · silent sine preview');
+    await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
     await page.reload();
     await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
     expect(await page.evaluate(() => window.permissionRequests)).toEqual([]);
@@ -73,8 +73,8 @@ test('permission status follows revocation, return from settings, and route clea
     window.dispatchEvent(new Event('focus'));
   });
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
-  await expect(page.locator('.motion-status')).toHaveText('Motion access allowed · motion off.');
-  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
   await page.evaluate(() => {
     setPermission('accelerometer', 'denied');
@@ -84,7 +84,7 @@ test('permission status follows revocation, return from settings, and route clea
     setPermission('accelerometer', 'granted');
   });
   await expect(page.locator('.motion-status')).toContainText(/waiting for sensor readings/i);
-  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.locator('.microphone-permission')).toHaveCount(0);
   const count = await page.evaluate(() => permissionQueries.length);
@@ -102,7 +102,7 @@ test('pending access is distinct from permission and route cleanup removes its d
   await page.evaluate(() => {
     window.microphoneMode = 'pending';
   });
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'requesting');
   await expect(page.locator('.microphone-permission')).toContainText('respond to your browser if it asks');
   await page.getByRole('link', { name: 'About', exact: true }).click();
@@ -116,21 +116,22 @@ test('unsupported permission queries still allow microphone and motion access fr
   } }));
   await page.goto(url); await physicsReady(page);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'unknown');
-  await expect(page.locator('.motion-status')).toHaveText('Motion off · tap Enable motion to check access.');
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+  await expect(page.locator('.motion-status')).toHaveText('Motion off · turn on Phone motion to check access.');
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
-  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
-  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
-  await expect(page.locator('.mic-status')).toHaveText('Microphone off');
-  await expect(page.locator('.motion-status')).toHaveText('Motion access allowed · motion off.');
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+  await expect(page.locator('.mic-status')).toHaveText('Microphone off · silent sine preview');
+  await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
   await page.reload();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'unknown');
 });
 
 test('dismissed microphone access has persistent guidance without claiming a permanent denial', async ({ page }) => {
   await permissions(page, 'prompt'); await page.goto(url); await physicsReady(page);
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'not-allowed');
   await expect(page.locator('.microphone-permission')).toContainText('Check this site’s browser permissions');
   await expect(page.locator('.audio-error')).toBeEmpty({ timeout: 6000 });
@@ -150,8 +151,9 @@ test('missing device APIs are reported as unavailable without disabling test aud
   await page.goto(url); await physicsReady(page);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'unavailable');
   await expect(page.locator('.motion-status')).toHaveText('Phone motion is unavailable in this browser.');
-  await page.locator('.generated-audio').check();
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-  await expect(page.locator('.mic-status')).toHaveText('Test audio · Mic off');
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.locator('.mic-status')).toHaveText('Digital audio · Mic off');
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'unavailable');
 });

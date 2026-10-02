@@ -1,0 +1,539 @@
+{
+  "upstreamRevision": "82de790f79c5b358040861e8bdb906a55009b117",
+  "productionWasmSha256": "381be9dd39492d2b56b6ab127a4978f1be56579434d321730aeb5e43097e164a",
+  "productionDspSourceSha256": "19bf90019e71368a333ef6486e00921a5d5538c2e291744038735ca768cabe91",
+  "numpyVersion": "2.5.3",
+  "sourceSha256": {
+    "validation/partial/window-audit.py": "d60d966a77de683086f20c539db5bb628c27fa2ef8389c60abec8ff3f762c64c",
+    "validation/partial/oracle.cpp": "172e6a32eaecf257c68a7932eac81b5950089e5f772db1fc6d093625749e1e68"
+  },
+  "status": "quantified model difference, not a conformance pass",
+  "fixed": {
+    "windowMs": 42.666666666666664,
+    "hopMs": 2,
+    "centerBeforeEndMs": 21.333333333333332
+  },
+  "reference": {
+    "windowMs": [
+      64,
+      32,
+      16,
+      8,
+      4,
+      2
+    ],
+    "hopMs": 1,
+    "fftSize": 4096,
+    "centerBeforeEndMs": 32,
+    "frequencyLimitHz": 15001
+  },
+  "fittedGain": false,
+  "fittedTimeShift": false,
+  "cases": [
+    {
+      "frequencyHz": 50,
+      "pcmSha256": "4cc389552a32157f5372b9b16827610798d6120f4e72c623f01e60e2d4f978ea",
+      "fixed": {
+        "dominantBand": 0,
+        "steadySones": 0.20245163643622655,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 0,
+        "steadySones": 0.2143136969036675,
+        "rise90Ms": 84.99999999999997,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.05520746483532374
+    },
+    {
+      "frequencyHz": 150,
+      "pcmSha256": "cb3ca637a2fc3ae14fc177e429d848a32347dd04e082193dfd24dc7d542fee11",
+      "fixed": {
+        "dominantBand": 1,
+        "steadySones": 1.0263234107955324,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 1,
+        "steadySones": 1.0785211300892175,
+        "rise90Ms": 83.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.27025317489253775
+    },
+    {
+      "frequencyHz": 250,
+      "pcmSha256": "b7979094416dbe1a7beee1d9a0d7d276c9687dd5426c62886111b2a89d43fcb5",
+      "fixed": {
+        "dominantBand": 2,
+        "steadySones": 1.5336557434449976,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 2,
+        "steadySones": 1.4923049765850194,
+        "rise90Ms": 84.99999999999997,
+        "fall10Ms": 145.00000000000003
+      },
+      "maxBandDifferenceSones": 0.4459508368884186
+    },
+    {
+      "frequencyHz": 1000,
+      "pcmSha256": "9d744134a8465db30de6649ebc3afb324afafbcf4c1254a660392dc5fb16cc23",
+      "fixed": {
+        "dominantBand": 8,
+        "steadySones": 2.5587137031050373,
+        "rise90Ms": 74.00000000000001,
+        "fall10Ms": 136.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 8,
+        "steadySones": 2.300863415576015,
+        "rise90Ms": 82.99999999999996,
+        "fall10Ms": 145.00000000000003
+      },
+      "maxBandDifferenceSones": 0.8999545415205135
+    },
+    {
+      "frequencyHz": 3400,
+      "pcmSha256": "9748d871c0fece49b544cadb632e81e9278b02ad0baef929e743c2258297c428",
+      "fixed": {
+        "dominantBand": 16,
+        "steadySones": 4.428845757390889,
+        "rise90Ms": 70.0,
+        "fall10Ms": 140.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 16,
+        "steadySones": 3.3275677260576244,
+        "rise90Ms": 81.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 1.9989837798484391
+    },
+    {
+      "frequencyHz": 8600,
+      "pcmSha256": "a4f863f4ea85355adad022319bc1190e8f202508b47b52feac160a969aee2264",
+      "fixed": {
+        "dominantBand": 21,
+        "steadySones": 1.1766276677461436,
+        "rise90Ms": 68.0,
+        "fall10Ms": 142.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 21,
+        "steadySones": 1.2332481650752043,
+        "rise90Ms": 81.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.5682074909837557
+    },
+    {
+      "frequencyHz": 13700,
+      "pcmSha256": "bdb3cc087a1c2a96ddd34862191aa6dae485bfaae5bb20f11601ef4235ccd20f",
+      "fixed": {
+        "dominantBand": 23,
+        "steadySones": 0.7150811980088965,
+        "rise90Ms": 66.0,
+        "fall10Ms": 142.0000000000001
+      },
+      "sixWindow": {
+        "dominantBand": 23,
+        "steadySones": 0.7551520820981525,
+        "rise90Ms": 81.99999999999996,
+        "fall10Ms": 146.00000000000014
+      },
+      "maxBandDifferenceSones": 0.36714802574416194
+    }
+  ],
+  "controls": {
+    "tone3400Hz": {
+      "productionGeometry": {
+        "parameters": {},
+        "dominantBand": 16,
+        "steadySones": 4.428845757390889,
+        "rise90Ms": 69.99999999999996,
+        "peakSones": 4.428845757433368
+      },
+      "window64msGrid4096": {
+        "parameters": {
+          "sizes": [
+            3072
+          ],
+          "fft_size": 4096
+        },
+        "dominantBand": 16,
+        "steadySones": 4.427171012852837,
+        "rise90Ms": 79.99999999999996,
+        "peakSones": 4.427171012910271
+      },
+      "window32ms": {
+        "parameters": {
+          "sizes": [
+            1536
+          ],
+          "fft_size": 2048
+        },
+        "dominantBand": 16,
+        "steadySones": 4.431079763990001,
+        "rise90Ms": 64.0,
+        "peakSones": 4.4310797644842985
+      },
+      "gridOnly4096": {
+        "parameters": {
+          "fft_size": 4096
+        },
+        "dominantBand": 16,
+        "steadySones": 4.4289240419629,
+        "rise90Ms": 69.99999999999996,
+        "peakSones": 4.428924042365274
+      },
+      "gridOnly8192": {
+        "parameters": {
+          "fft_size": 8192
+        },
+        "dominantBand": 16,
+        "steadySones": 4.429140400265558,
+        "rise90Ms": 69.99999999999996,
+        "peakSones": 4.429140400681707
+      },
+      "coverageOnly15kHz": {
+        "parameters": {
+          "limit": 15000
+        },
+        "dominantBand": 16,
+        "steadySones": 4.428845757390889,
+        "rise90Ms": 69.99999999999996,
+        "peakSones": 4.428845757433368
+      },
+      "updateOnly1ms": {
+        "parameters": {
+          "hop": 48
+        },
+        "dominantBand": 16,
+        "steadySones": 4.428845757391952,
+        "rise90Ms": 69.99999999999996,
+        "peakSones": 4.428845757427242
+      },
+      "alignmentOnly32ms": {
+        "parameters": {
+          "center": 1536
+        },
+        "dominantBand": 16,
+        "steadySones": 4.428845757356404,
+        "rise90Ms": 79.99999999999996,
+        "peakSones": 4.428845757402482
+      },
+      "sixWindow": {
+        "parameters": {
+          "sizes": [
+            3072,
+            1536,
+            768,
+            384,
+            192,
+            96
+          ],
+          "fft_size": 4096,
+          "hop": 48,
+          "limit": 15000
+        },
+        "dominantBand": 16,
+        "steadySones": 3.3275677260576244,
+        "rise90Ms": 81.99999999999996,
+        "peakSones": 3.3275698022539313
+      },
+      "knownSourceFixed": {
+        "parameters": {
+          "source": 16
+        },
+        "dominantBand": 16,
+        "steadySones": 4.4288496957907935,
+        "rise90Ms": 53.99999999999999,
+        "peakSones": 4.750136932182003
+      },
+      "knownSourceSixWindow": {
+        "parameters": {
+          "sizes": [
+            3072,
+            1536,
+            768,
+            384,
+            192,
+            96
+          ],
+          "fft_size": 4096,
+          "hop": 48,
+          "limit": 15000,
+          "source": 16
+        },
+        "dominantBand": 16,
+        "steadySones": 4.671253240339492,
+        "rise90Ms": 77.99999999999996,
+        "peakSones": 4.936265311126292
+      }
+    },
+    "windowLengthSameGridAndCenter": {
+      "1536": {
+        "dominantBand": 16,
+        "steadySones": 4.43118521051675,
+        "rise90Ms": 79.99999999999996,
+        "peakSones": 4.43118521098969
+      },
+      "2048": {
+        "dominantBand": 16,
+        "steadySones": 4.428924042228552,
+        "rise90Ms": 79.99999999999996,
+        "peakSones": 4.4289240425525485
+      },
+      "3072": {
+        "dominantBand": 16,
+        "steadySones": 4.427171012852837,
+        "rise90Ms": 79.99999999999996,
+        "peakSones": 4.427171012910271
+      }
+    },
+    "coverage": [
+      {
+        "name": "boundary-100",
+        "pcmSha256": "c3700306f5e7cf622d343c22c985d4a1eb84cb7b512fc55d7bf2f9f38de7090f",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 1,
+          "steadySones": 0.16656944151729763,
+          "rise90Ms": 47.999999999999986,
+          "peakSones": 0.19015167195578353
+        },
+        "sixWindow": {
+          "dominantBand": 1,
+          "steadySones": 0.3209804270344977,
+          "rise90Ms": 76.99999999999996,
+          "peakSones": 0.3209839624956837
+        },
+        "maxBandDifferenceSones": 0.15492877491667945
+      },
+      {
+        "name": "boundary-1080",
+        "pcmSha256": "9c36325205c2614ede9594f1ccdef06178e16e87c6028abe6562dd341f6d8a41",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 8,
+          "steadySones": 1.5017845881106908,
+          "rise90Ms": 73.99999999999996,
+          "peakSones": 1.5017845971737633
+        },
+        "sixWindow": {
+          "dominantBand": 8,
+          "steadySones": 0.7676500711519708,
+          "rise90Ms": 80.99999999999996,
+          "peakSones": 0.7676517200544543
+        },
+        "maxBandDifferenceSones": 0.7341415181325175
+      },
+      {
+        "name": "boundary-3150",
+        "pcmSha256": "aa9ac3ccbdac2dab291d062646aa8d9570265ee78a4623a89f69ad82b31ff2d6",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 15,
+          "steadySones": 1.4898189200357401,
+          "rise90Ms": 71.99999999999996,
+          "peakSones": 1.489818922630082
+        },
+        "sixWindow": {
+          "dominantBand": 16,
+          "steadySones": 1.5710193834186321,
+          "rise90Ms": 81.99999999999996,
+          "peakSones": 1.5710207622814316
+        },
+        "maxBandDifferenceSones": 0.925704651572846
+      },
+      {
+        "name": "boundary-3700",
+        "pcmSha256": "9e024261a09bec49d21179c7cf96eb5311dddbe56e9aa34e6832b0791418238c",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 17,
+          "steadySones": 2.416320545583991,
+          "rise90Ms": 71.99999999999996,
+          "peakSones": 2.416320546299944
+        },
+        "sixWindow": {
+          "dominantBand": 17,
+          "steadySones": 1.6383707786211743,
+          "rise90Ms": 81.99999999999996,
+          "peakSones": 1.638793409018288
+        },
+        "maxBandDifferenceSones": 1.134196081014991
+      },
+      {
+        "name": "boundary-9500",
+        "pcmSha256": "3bbea7b316d3d84443c7dcadd7513f85c9d6d2e0e445f31cdad49eb70fa1846c",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 21,
+          "steadySones": 0.47825443143812163,
+          "rise90Ms": 69.99999999999996,
+          "peakSones": 0.47825443148203045
+        },
+        "sixWindow": {
+          "dominantBand": 22,
+          "steadySones": 0.3734449622949232,
+          "rise90Ms": 81.99999999999996,
+          "peakSones": 0.3734449622958571
+        },
+        "maxBandDifferenceSones": 0.26763164025149383
+      },
+      {
+        "name": "boundary-12000",
+        "pcmSha256": "37261bce70a2680dc644d46e0590efff2baa8cefa91b32b7e89be739a7820e99",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 23,
+          "steadySones": 0.7646552185896894,
+          "rise90Ms": 71.99999999999996,
+          "peakSones": 0.7646552185899195
+        },
+        "sixWindow": {
+          "dominantBand": 22,
+          "steadySones": 0.32905474695453124,
+          "rise90Ms": 80.99999999999996,
+          "peakSones": 0.3301129210043338
+        },
+        "maxBandDifferenceSones": 0.44333953475828375
+      },
+      {
+        "name": "boundary-15500",
+        "pcmSha256": "1cb003bed2691264161762ab1c446fbddeb585cbb041c3b383c5e406dc5128a1",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 23,
+          "steadySones": 0.05510587851210365,
+          "rise90Ms": 41.99999999999998,
+          "peakSones": 0.06552168455942144
+        },
+        "sixWindow": {
+          "dominantBand": 23,
+          "steadySones": 0.07068303576668637,
+          "rise90Ms": 78.99999999999996,
+          "peakSones": 0.07806722761150248
+        },
+        "maxBandDifferenceSones": 0.044517889930543585
+      },
+      {
+        "name": "burst10ms",
+        "pcmSha256": "1a7dddda481e9f4f2f29ba3dec27eeb15ef815910f14c104ce108d7633365ad4",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 16,
+          "steadySones": 5.784739775219793e-06,
+          "rise90Ms": 2.0000000000000018,
+          "peakSones": 1.792033844776159
+        },
+        "sixWindow": {
+          "dominantBand": 16,
+          "steadySones": 3.5419139268494913e-06,
+          "rise90Ms": 30.99999999999997,
+          "peakSones": 1.1279796130179915
+        },
+        "maxBandDifferenceSones": 1.6336046207237391
+      },
+      {
+        "name": "noise",
+        "pcmSha256": "087efc86f676f6c63f4ba9b93867a345d549c67e7866cc46146827fb182b6181",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 18,
+          "steadySones": 0.4149010289399617,
+          "rise90Ms": 107.99999999999999,
+          "peakSones": 0.48941631423427984
+        },
+        "sixWindow": {
+          "dominantBand": 17,
+          "steadySones": 0.3973823022883185,
+          "rise90Ms": 75.99999999999996,
+          "peakSones": 0.5209912799076328
+        },
+        "maxBandDifferenceSones": 0.26177342249236213
+      },
+      {
+        "name": "nearMasker",
+        "pcmSha256": "02397910ac6feeecd2a6dda9fa62d1998ac2e26e8ea604f7e041c7271ed2c734",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 9,
+          "steadySones": 2.3793589445787986,
+          "rise90Ms": 73.99999999999996,
+          "peakSones": 2.379359940015258
+        },
+        "sixWindow": {
+          "dominantBand": 9,
+          "steadySones": 1.8914069039392694,
+          "rise90Ms": 82.99999999999996,
+          "peakSones": 1.8914219781461508
+        },
+        "maxBandDifferenceSones": 0.8163403649175381
+      },
+      {
+        "name": "separatedSources",
+        "pcmSha256": "3f97b9cc0bd39fa28e185c5675e3af3546bd8035305bdcd92356339e3653d92c",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 16,
+          "steadySones": 4.428822716378514,
+          "rise90Ms": 69.99999999999996,
+          "peakSones": 4.4288227175267485
+        },
+        "sixWindow": {
+          "dominantBand": 16,
+          "steadySones": 3.3277274787433124,
+          "rise90Ms": 81.99999999999996,
+          "peakSones": 3.3277577714236393
+        },
+        "maxBandDifferenceSones": 1.9979274891957683
+      },
+      {
+        "name": "trumpet",
+        "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 8,
+          "steadySones": 1.3425387404371714,
+          "rise90Ms": 19.99999999999996,
+          "peakSones": 2.502906375510824
+        },
+        "sixWindow": {
+          "dominantBand": 8,
+          "steadySones": 1.0470108306376849,
+          "rise90Ms": 27.999999999999968,
+          "peakSones": 1.9854764283252015
+        },
+        "maxBandDifferenceSones": 1.2210436057067633
+      },
+      {
+        "name": "music",
+        "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+        "currentBuildMatchesFixed": true,
+        "fixed": {
+          "dominantBand": 3,
+          "steadySones": 0.31401406936199633,
+          "rise90Ms": -368.0,
+          "peakSones": 1.1125695050694628
+        },
+        "sixWindow": {
+          "dominantBand": 1,
+          "steadySones": 0.5484573518213384,
+          "rise90Ms": 20.999999999999964,
+          "peakSones": 1.1765127813028462
+        },
+        "maxBandDifferenceSones": 0.4423014619400874
+      }
+    ],
+    "interpretation": "source partial loudness, not total ISO loudness or human perceptual error; no fitted gain or time shift"
+  },
+  "historicalCasesReproduced": 7
+}

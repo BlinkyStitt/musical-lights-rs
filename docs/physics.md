@@ -104,15 +104,13 @@ scales shake/pointer acceleration to 10% and uses the configured slower stroke
 time, while gravity keeps its physical magnitude. Disabling motion restores
 the default downward gravity.
 
-Motion and tilt permissions are requested from either Enable motion or the Start listening click and
-enabled independently, so a pending tilt request cannot block granted motion
-access. Enable motion works without starting the microphone; its status distinguishes
-denied access, permission granted without readings, and active sensor readings.
-The button tracks enabled listeners separately from shaking permission: tilt-only
-sessions still show Disable motion, even when shaking is denied, unavailable, or
-pending. Disabling removes both listeners, invalidates pending grants, and clears
-sensor forces without changing musical targets. Stop listening
-and route cleanup invalidate both requests and remove listeners. Display rotation
+The **Phone motion** switch requests motion and tilt permissions independently
+of Listening. A pending tilt request cannot block granted acceleration access.
+The switch tracks actual listeners, including tilt-only sessions, and pending
+permission can be canceled. Turning Phone motion off clears sensor forces and
+invalidates pending grants while musical targets continue. Turning Listening
+off releases audio capture and starts the silent sine preview while sensors
+continue. Leaving the page closes both sessions and the preview. Display rotation
 lock never gates accelerometer delivery: a fixed screen angle still maps shakes
 into that fixed viewport, even with no orientation events.
 When linear acceleration is unavailable, a 250 ms exponential baseline removes
@@ -140,10 +138,10 @@ help explains site settings and potentially separate browser/Home Screen grants.
 These checks follow the [Permissions API](https://w3c.github.io/permissions/)
 and [media capture permission semantics](https://w3c.github.io/mediacapture-main/#permissions-integration).
 
-Physical-phone motion acceptance remains a separate check: after Start listening
-and allowing motion access, try left/right, up/down, and toward/away shakes in
+Physical-phone motion acceptance remains a separate check: after turning on Phone motion
+and allowing access, try left/right, up/down, and toward/away shakes in
 portrait and landscape. Repeat with music driving the bars; both sources must
-move the balls together. Hold still to check that shaking stops, then press Stop
+move the balls together. Hold still to check that shaking stops, then turn off Phone motion
 to check that sensor forces stop while gravity continues. Side impacts should
 rebound, and balls pressed against vertical walls should still fall when they
 have no support underneath. Synthetic browser events do not verify the phone's
@@ -242,7 +240,7 @@ loading cannot recreate resources after cleanup.
 
 ## iPhone 16e acceptance
 
-Use the feature preview's `/phone` page in Safari. A Mac browser or an emulated
+Use the `/advanced` page in Safari. A Mac browser or an emulated
 iPhone does not establish the phone result.
 
 The FPS display counts actual animation-frame intervals. The app has no 30 FPS
@@ -254,9 +252,10 @@ and export timing data. A 30-second run ended early can help diagnose frame
 intervals, render cost, and physics delay; it is not a five-minute acceptance
 result. Do not infer a phone performance improvement from a Mac measurement.
 
-1. Turn Low Power Mode off. Enter the actual iOS version in the panel.
-2. Keep generated audio selected and press **Start listening**. It sends PCM
-   through a MediaStream and the real AudioWorklet/loudness WASM pipeline.
+1. Turn Low Power Mode off. Enter the actual model, browser and iOS version.
+2. Select Test tones and turn on **Listening**. It sends PCM
+   directly through the real AudioWorklet/loudness WASM pipeline. Keep Repeat
+   on and Diagnostic recording off; digital review files do not qualify.
 3. Select **Normal view** and start the test. Keep the page visible for the
    15-second warmup and the complete five-minute measurement.
 4. Confirm smooth motion only if it looked smooth. Export the JSON report.

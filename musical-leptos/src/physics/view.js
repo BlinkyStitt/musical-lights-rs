@@ -153,7 +153,7 @@ export class PhysicsView {
       for (let i = 0; i < 24; i++) {
         this.previewLevels[i] = data.state[4 + i * 4];
         const elapsed = data.state[0] - data.state[5 + i * 4];
-        this.previewEdges[i] = data.state[5 + i * 4] >= 0 && elapsed >= 0 ? Math.max(0, 1 - elapsed / .12) * (this.reduced.matches ? .5 : 1) : 0;
+        this.previewEdges[i] = data.state[5 + i * 4] >= 0 && elapsed >= 0 ? Math.max(0, 1 - elapsed / .18) * (this.reduced.matches ? .5 : 1) : 0;
         this.meters[i].setAttribute('aria-valuenow', String(Math.round(this.previewLevels[i] * 100)));
       }
       this.push(this.previewLevels, this.previewEdges, this.card.querySelector('.scroll-lights').checked && !this.reduced.matches);

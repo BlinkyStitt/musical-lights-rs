@@ -13,7 +13,7 @@ test('Leptos renders routes and 24 meters without the temporary counter', async 
   await expect(page.getByRole('button', { name: /Pause display|Resume display/i })).toHaveCount(0);
   await expect(page.getByText('Every band has room')).toHaveCount(0);
   await expect(page.locator('.meter-guide')).toHaveText('LOUDQUIET');
-  await expect(page.locator('.frame-rate')).toHaveText('— FPS');
+  await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Old Arduino Code' })).toBeVisible();
   await page.getByRole('link', { name: 'Home', exact: true }).click();
@@ -75,9 +75,9 @@ test('microphone denial displays an error and closes the audio context', async (
     MediaDevices.prototype.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); };
   });
   await page.goto(leptos);
-  await page.getByRole('button', { name: 'Start listening' }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.getByRole('alert')).toContainText('Microphone denied');
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
   await expectOnlySphereAnimation(page);
 });
@@ -117,7 +117,7 @@ for (const rate of [44100, 48000]) {
     await page.goto(leptos);
     await expect(page.getByRole('meter')).toHaveCount(24);
     const bandColors = await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()));
-    await page.getByRole('button', { name: 'Start listening' }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect(page.getByText(`Sample rate: 48000 Hz`)).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.inputClipped)).toBeGreaterThan(0);
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
@@ -130,15 +130,16 @@ for (const rate of [44100, 48000]) {
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
     expect(await page.evaluate(() => window.originalMeters.every((node, i) => node === document.querySelectorAll('.meter')[i]))).toBe(true);
     expect(await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()))).toEqual(bandColors);
-    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
     await expectOnlySphereAnimation(page);
-    await expect(page.locator('.frame-rate')).toHaveText('— FPS');
-    await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(n => n.getAttribute('aria-valuenow') === '0'))).toBe(true);
+    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
     await page.evaluate(() => window.inputContext.close());
-    await page.getByRole('button', { name: 'Start listening' }).click();
-    await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
     await page.getByRole('link', { name: 'About', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed', 'closed']);
@@ -154,7 +155,7 @@ test('leaving the view while permission is pending releases the late stream', as
     MediaDevices.prototype.getUserMedia = () => new Promise(resolve => { window.resolveInput = resolve; });
   });
   await page.goto(leptos);
-  await page.getByRole('button', { name: 'Start listening' }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(() => page.evaluate(() => typeof window.resolveInput)).toBe('function');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
@@ -205,6 +206,9 @@ for (const colorScheme of ['light', 'dark']) {
         };
       });
       await page.goto(leptos);
+      // This geometry/contrast fixture visits all 24 source columns. The idle
+      // sine now scrolls them too; freeze scrolling for stationary hover targets.
+      await page.locator('.scroll-lights').uncheck();
       const card = await page.locator('.audio-card').boundingBox();
       expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
@@ -214,9 +218,10 @@ for (const colorScheme of ['light', 'dark']) {
       const last = await meters[23].boundingBox();
       expect(first.y).toBe(last.y);
       expect(last.x + last.width).toBeLessThan(card.x + card.width);
-      await expect(page.getByRole('button', { name: 'Start listening' })).toBeInViewport();
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeInViewport();
       await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
-      expect(first.y).toBeLessThan(200);
+      const controls = await page.locator('.audio-controls').boundingBox();
+      expect(first.y).toBeLessThan(controls.y + controls.height + 64);
       const description = await page.locator('.intro').boundingBox();
       expect(description.y).toBeGreaterThan(first.y + first.height);
       for (const meter of meters) {
@@ -232,7 +237,7 @@ for (const colorScheme of ['light', 'dark']) {
         })).toEqual({ text: label, visible: true, inside: true });
       }
       await page.mouse.move(0, 0);
-      await page.getByRole('button', { name: 'Start listening' }).focus();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).focus();
       await page.keyboard.press('Tab');
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
@@ -240,7 +245,7 @@ for (const colorScheme of ['light', 'dark']) {
       // Exercise every colored bar through the real audio processor.
       // Include a collection pause before the first live bar attack.
       await page.requestGC();
-      await page.getByRole('button', { name: 'Start listening' }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
       await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
       // Check actual text colors against the background they use.
       const colors = await page.evaluate(() => {
@@ -253,7 +258,7 @@ for (const colorScheme of ['light', 'dark']) {
           return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
         };
         const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-        const text = ['.primary', '.fullscreen-button', '.wake-status', '.control-note', '.frame-rate', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
+        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.control-note', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
           const node = document.querySelector(selector);
           let parent = node;
           while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;
@@ -301,7 +306,7 @@ for (const colorScheme of ['light', 'dark']) {
         .toEqual(colors.meters.map(meter => meter.color));
       await page.emulateMedia({ colorScheme });
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(background);
-      await page.getByRole('button', { name: 'Stop listening' }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
       await page.evaluate(() => window.noiseContext.close());
     });
   }

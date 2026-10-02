@@ -30,12 +30,13 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
           });
         }};
       });
-      await page.goto(`${url}/phone/`);
-      await page.locator('.generated-audio').check();
+      await page.goto(`${url}/advanced/`);
+      await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+      await page.locator('.input-source').selectOption('generated');
       await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
       await page.locator('.tone-kind').selectOption('bursts');
-      await page.getByRole('button',{name:'Start listening',exact:true}).click();
-      await page.getByRole('button',{name:'Stop listening',exact:true}).waitFor();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).waitFor();
       const data=await page.evaluate(()=>new Promise(resolve=>{
         const view=document.querySelector('#dancinglights').physics,frames=[];
         const sample=now=>{

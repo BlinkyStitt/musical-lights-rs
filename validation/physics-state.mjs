@@ -26,14 +26,20 @@ export async function syntheticAudio(page, permission = 'granted') {
   await page.addInitScript(({ permission }) => {
     const Context = window.AudioContext;
     window.AudioContext = class extends Context {
-      constructor(...args) { super(...args); window.testContext = this; }
+      constructor(...args) { super(...args); window.testContext = this; this.addEventListener('statechange', event => { if (window.freezeClock) event.stopImmediatePropagation(); }); }
       get currentTime() { return window.audioNow ?? super.currentTime; }
     };
     const Node = window.AudioWorkletNode;
     window.AudioWorkletNode = class extends Node {
       constructor(...args) {
         super(...args); window.testNode = this;
-        this.port.addEventListener('message', ({ data }) => {
+        this.port.addEventListener('message', event => {
+          const { data } = event;
+          // Once the fixture clock is frozen, delayed native snapshots must
+          // not replace its explicit synthetic input. Errors still propagate.
+          if (window.freezeClock && event.isTrusted && data.type === 'frame') {
+            event.stopImmediatePropagation(); return;
+          }
           if (data.type === 'frame') window.lastAnalysisTime = data.state[0];
         });
       }
@@ -65,11 +71,32 @@ export async function startFrozen(page) {
   // Most physics fixtures measure fixed source columns. Scrolling has its own
   // end-to-end checks and can be re-enabled explicitly after this helper.
   await page.locator('.scroll-lights').uncheck();
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
   await page.evaluate(async () => {
+    // Controlled clock fixture suppresses the real interruption event.
+    window.freezeClock = true;
     await window.testContext.suspend();
     await new Promise(resolve => setTimeout(resolve, 50));
     window.audioNow = window.testContext.currentTime;
   });
+  // Idle audio can move bodies and scroll columns before capture starts. These
+  // controlled fixtures require the original initial room and source phase.
+  await page.evaluate(() => new Promise(resolve => {
+    const view = document.querySelector('#dancinglights').physics;
+    const reset = ({ data }) => {
+      if (data.type !== 'reset') return;
+      view.worker.removeEventListener('message', reset); resolve();
+    };
+    view.worker.addEventListener('message', reset);
+    view.worker.postMessage({ type: 'reset', config: Array.from(view.config) });
+  }));
+  await physicsReady(page);
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return Math.max(...v.current.slice(v.layout[9], v.layout[10]));
+  })).toBeLessThan(.0031);
 }

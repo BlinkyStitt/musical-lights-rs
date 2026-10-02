@@ -18,7 +18,7 @@ A 20 ms RMS window is not sufficient for every frequency. It covers one cycle at
 
 The browser builds its full graph while the context is suspended, then starts the audio clock. It requests a 48 kHz AudioContext and disables automatic gain, echo cancellation, and noise suppression. It checks actual track settings. Unknown or enabled processing keeps the input uncalibrated. A selected input channel supplies the signal; opposite-phase channels cannot cancel through downmixing. Web Audio converts the track's native rate to the analysis context rate.
 
-Open **Input calibration**, choose the input channel before capture, and supply the known steady reference level in dB SPL. Keep microphone placement and input gain fixed. The measurement uses exactly three seconds of RMS input. Silence, clipping, and invalid levels fail. The scale is `20e-6 * 10^(reference_dB/20) / measured_RMS`. The browser applies it at an exact sample boundary and binds a saved profile to the device, channel, context rate, and complete reported track settings. A changed track setting, mute, ended track, or processor failure stops the session. The browser cannot detect a physical gain change that the device does not report; repeat calibration after such a change. Blocked local storage permits calibration for the current session only.
+Open **Advanced → Input & calibration**, choose the input channel before capture, and supply the known steady reference level in dB SPL. Keep microphone placement and input gain fixed. The measurement uses exactly three seconds of RMS input. Silence, clipping, and invalid levels fail. The scale is `20e-6 * 10^(reference_dB/20) / measured_RMS`. The browser applies it at an exact sample boundary and binds a saved profile to the device, channel, context rate, and complete reported track settings. A changed track setting, mute, ended track, or processor failure stops the session. The browser cannot detect a physical gain change that the device does not report; repeat calibration after such a change. Blocked local storage permits calibration for the current session only.
 
 The terminal requests 48 kHz and uses the default channel numbered 1. Other supported rates of at least 44.1 kHz pass through the pinned 128-tap, 90 dB `resampler` FIR. The stream retains history across callbacks. Sixty-three zero prehistory samples align the upstream FIR center; its remaining 1/1024-input-sample phase precision is at most 23 ns at 44.1 kHz. Tests bound the resulting callback-dependent PCM roundoff at 0.0001 for a 1 kHz, amplitude-0.5 tone. The loudness model itself gives bit-identical frames for the same PCM stream under all tested partitions. Native clipping checks include both integer rails.
 
@@ -52,6 +52,18 @@ once, by bin center, using the existing frequency boundaries. Components from
 15.5–20 kHz remain background for all bars. The 42.67 ms window includes zero
 prehistory at session start; its timestamp is the end-exclusive sample clock.
 Its center lies 21.33 ms before that timestamp, separately from temporal response.
+“Fixed window” means the latest **42.7 ms** examined, with an update every **2 ms**.
+Longer windows separate nearby frequencies better but spread short events over
+time. The Cambridge front end uses longer low-frequency windows and shorter
+high-frequency windows, as described by [the model author](https://journals.sagepub.com/doi/10.1177/2331216514550620).
+The [current audit](audio-audit-results/current-windows.json) varies window size,
+FFT grid, coverage, update rate, alignment and source assignment explicitly.
+At 3.4 kHz, disjoint frequency slices give 4.429 versus 3.328 sones; assigning
+the entire tone to one known source gives 4.429 versus 4.671. The 33% difference
+therefore does not establish a 33% error in total loudness or human perception.
+The adapted reference is not full Cambridge-model conformance. Analysis timing,
+shared display filtering, and the approximately 1.13 s full-height visual gravity
+release are separate stages; no gains are fitted or traces shifted to agree.
 
 The Moore–Glasberg–Baer partial-loudness calculation uses free-field outer/middle
 ear weighting, monaural presentation, and 149 auditory filters spaced by

@@ -34,16 +34,17 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
         ]) await context.route(url, route => route.fulfill({ path, contentType: path.endsWith('.wasm') ? 'application/wasm' : 'text/javascript' }));
       }
       const errors = []; page.on('pageerror', error => errors.push(error.message));
-      await page.goto(`${url}/phone/`);
-      await page.locator('.generated-audio').check();
+      await page.goto(`${url}/advanced/`);
+      await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+      await page.locator('.input-source').selectOption('generated');
       await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
       assert(Math.abs(await page.evaluate(() => document.querySelector('#dancinglights').physics.config[6]) - (baseline ? .08 : .04)) < 1e-6);
-      await page.getByRole('button', { name: 'Start listening', exact: true }).click();
-      await page.getByRole('button', { name: 'Stop listening', exact: true }).waitFor();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).waitFor();
       await page.waitForFunction(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
       if (mode !== 'normal') await page.getByRole('button', { name: /fullscreen/i }).first().click();
       // Keep the graph visible while the normal page's tone panel is open below it.
-      await page.locator('.audio-card').scrollIntoViewIfNeeded();
+      await page.locator('#dancinglights').scrollIntoViewIfNeeded();
       await page.waitForTimeout(5000);
       const data = await page.evaluate(() => new Promise(resolve => {
         const v = document.querySelector('#dancinglights').physics;
@@ -73,7 +74,7 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
       result.push(item); console.log(name, mode, item.summary);
       await page.screenshot({ path: `${output}/${name}-${mode}.png` });
       if (mode !== 'normal') await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
-      await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
       await context.close();
       await writeFile(`${output}/browser-timing-detail.json.gz`, gzipSync(JSON.stringify(result)));
       await writeFile(`${output}/browser-timing.json`, JSON.stringify(result.map(({ intervals, progress, ...summary }) => summary), null, 2) + '\n');

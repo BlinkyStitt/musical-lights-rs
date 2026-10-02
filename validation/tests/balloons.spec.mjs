@@ -45,7 +45,7 @@ test('continuous scrolling carries source identity and stops in place', async ({
     const phase = document.querySelector('#dancinglights').physics.renderedPhase;
     return Math.abs(((phase - stopped + 36) % 24) - 12);
   }, phase)).toBeGreaterThan(.1);
-  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
 });
 
 test('Reduced Motion suppresses scrolling and Stop retains source identity', async ({ page }) => {
@@ -56,7 +56,7 @@ test('Reduced Motion suppresses scrolling and Stop retains source identity', asy
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(0);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(1);
-  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(0);
   await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', '≈ 0–100 Hz');
 });
@@ -133,7 +133,7 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   expect(await page.evaluate(() => document.querySelector('canvas') === window.originalCanvas)).toBe(true);
   expect(await page.evaluate(() => window.workers.size)).toBe(1);
   expect(await page.evaluate(() => window.frames.size)).toBe(1);
-  await page.getByRole('button', { name: 'Stop listening' }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   const tick = (await physicsState(page)).tick;
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(tick + 10);
   await page.getByRole('link', { name: 'About', exact: true }).click();
@@ -161,7 +161,7 @@ test('pointer and device inputs apply recorded forces and reduced motion reduces
 });
 
 test('physical controls require reset while camera rotation preserves the running world', async ({ page }) => {
-  await page.goto(url); await physicsReady(page);
+  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.physics-controls > summary').click();
   const before = await physicsState(page);
   await page.locator('[data-config="2"]').fill('2200');
@@ -206,21 +206,23 @@ test('depth shakes and audio bars both move balls while tilt permission is still
   expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
   expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[26])).toBe(0);
-  await page.getByRole('button', { name: 'Stop listening' }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 5, z: 5 } })));
-  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.acceleration)).toEqual([-5, -5, -5]);
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
 });
 
 for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
-  test(`late sensor permission cannot restore listeners after ${end}`, async ({ page }) => {
+  test(`audio lifecycle never implicitly requests sensor permission after ${end}`, async ({ page }) => {
     await syntheticAudio(page, 'pending'); await page.goto(url); await physicsReady(page);
     await page.evaluate(() => { window.savedInput = document.querySelector('#dancinglights').physics.motion; });
     if (end === 'microphone denial') await page.evaluate(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Microphone denied'); }; });
-    await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     if (end === 'microphone denial') await expect(page.getByRole('alert')).toContainText('Microphone denied');
     else {
-      await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
-      if (end === 'stop') await page.getByRole('button', { name: 'Stop listening' }).click();
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
+      if (end === 'stop') await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
       if (end === 'route') await page.getByRole('link', { name: 'About', exact: true }).click();
       if (end === 'audio failure') { await page.evaluate(() => window.testNode.dispatchEvent(new Event('processorerror'))); await expect(page.getByRole('alert')).toContainText('Audio processor failed'); }
     }
@@ -244,19 +246,21 @@ test('context loss pauses physics and restoration resumes without losing the Exi
 });
 
 test('phone page sends generated PCM through the audio processor and exports an honest incomplete report', async ({ page }) => {
-  await page.goto(`${url}/phone`); await physicsReady(page);
-  await expect(page.locator('.generated-audio')).not.toBeChecked();
-  await page.locator('.generated-audio').check();
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await expect(page.locator('.input-source')).toHaveValue('microphone');
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
-  await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
+  await page.locator('.phone-device').fill('Mac emulation'); await page.locator('.phone-browser').fill('test browser'); await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
+  await page.locator('.physics-controls').evaluate(node => { node.open = true; });
   await page.locator('[data-config="5"]').fill('0.36');
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
-  await page.locator('.physics-controls > summary').click();
+  await page.locator('.diagnostics-controls > summary').click();
   const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sequence)).toBeGreaterThan(sequence + 24);
   await page.getByRole('button', { name: 'End test early' }).click();
@@ -291,6 +295,7 @@ test('snapshots stay fresh while the render loop is paused', async ({ page }) =>
   const result = await page.evaluate(async () => {
     const view = document.querySelector('#dancinglights').physics;
     cancelAnimationFrame(view.request);
+    view.recordTiming = true;
     const tick = view.current[2], frames = view.metrics.frames, samples = view.timing.snapshots.length;
     try {
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -308,7 +313,7 @@ test('snapshots stay fresh while the render loop is paused', async ({ page }) =>
 
 test('expensive physics ticks yield snapshots between steps and retain their debt', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
-  await page.evaluate(() => { document.querySelector('#dancinglights').physics.timing.snapshots = []; });
+  await page.evaluate(() => { document.querySelector('#dancinglights').physics.timing.snapshots = []; document.querySelector('#dancinglights').physics.recordTiming = true; });
   const worker = page.workers().find(worker => worker.url().endsWith('/physics/worker.js'));
   const before = await physicsState(page);
   await worker.evaluate(async () => {
@@ -331,10 +336,11 @@ test('expensive physics ticks yield snapshots between steps and retain their deb
 });
 
 test('phone acceptance rejects frozen snapshots despite 60 FPS and a current worker', async ({ page }) => {
-  await page.goto(url); await physicsReady(page);
+  await page.goto(`${url}/advanced`); await physicsReady(page);
   const results = await page.evaluate(() => {
     // Synthetic reports test the acceptance rule; they are not device measurements.
     const report = document.querySelector('#dancinglights').physics.report;
+    report.intervals = new Float32Array(60000); report.renderCosts = new Float32Array(60000);
     report.intervals.fill(1000 / 60); report.count = 18000;
     report.invalid = []; report.maxSnapshotAgeMs = 10;
     report.progress = Array.from({ length: 300 }, (_, i) => ({ elapsedMs: i * 1000, tick: 1800 + i * 120, debtMs: 0 }));
@@ -449,7 +455,7 @@ test('rotation-locked phone can enable shaking without starting the microphone',
     Object.defineProperty(screen.orientation, 'angle', { configurable: true, value: 0 });
     Object.defineProperty(DeviceOrientationEvent, 'requestPermission', { configurable: true, value: () => Promise.resolve('denied') });
   });
-  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
   expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
   await page.waitForTimeout(2000);
@@ -474,7 +480,7 @@ test('rotation-locked phone can enable shaking without starting the microphone',
   });
   expect(travel.filter(distance => distance > .08).length).toBeGreaterThanOrEqual(before.balls.length / 2);
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
-  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
   await expect(page.locator('.motion-status')).toHaveText('Motion access allowed · motion off.');
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
   expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
@@ -484,16 +490,17 @@ test('motion denial is visible and a new gesture can retry without stopping musi
   await syntheticAudio(page, 'denied'); await page.goto(url); await startFrozen(page);
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'denied');
   await page.evaluate(() => { Object.defineProperty(DeviceMotionEvent, 'requestPermission', { configurable: true, value: () => Promise.resolve('granted') }); });
-  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
   await page.evaluate(() => {
     window.sendBars(Array(24).fill(.5));
     window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 0, z: 0 } }));
   });
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
-  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toEqual(Array(24).fill(.5));
-  await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
 });
 
 for (const acceleration of ['denied', 'unavailable', 'pending']) {
@@ -505,16 +512,16 @@ for (const acceleration of ['denied', 'unavailable', 'pending']) {
         value: () => acceleration === 'pending' ? new Promise(resolve => { window.finishShakePermission = resolve; }) : Promise.resolve('denied'),
       });
     }, acceleration);
-    await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
-    const disable = page.getByRole('button', { name: 'Disable motion', exact: true });
+    await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
+    const disable = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
     await expect(disable).toBeEnabled();
-    await expect(disable).toHaveAttribute('aria-pressed', 'true');
+    await expect(disable).toBeChecked();
     await expect(page.locator('.motion-status')).toContainText('Tilt on');
     await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 20, gamma: 45 })));
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[34])).toBeGreaterThan(1);
     expect(await page.evaluate(() => window.testContext === undefined)).toBe(true);
-    await disable.click();
-    await expect(page.getByRole('button', { name: 'Enable motion', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await disable.uncheck();
+    await expect(page.getByRole('checkbox', { name: 'Phone motion', exact: true })).not.toBeChecked();
     await page.evaluate(() => {
       window.finishShakePermission?.('granted');
       window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 60, gamma: 60 }));

@@ -18,23 +18,26 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   });
   // Use the real generated-audio pipeline to raise the bars. Silent input can
   // leave every ball at rest before a slower browser reaches the Stop button.
-  await page.goto('http://127.0.0.1:8101/phone/');
+  await page.goto('http://127.0.0.1:8101/advanced/');
   await physicsReady(page);
-  await expect(page.locator('.generated-audio')).not.toBeChecked();
-  await page.locator('.generated-audio').check();
-  await page.getByRole('button', { name: 'Start listening' }).tap();
-  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
+  await expect(page.locator('.input-source')).toHaveValue('microphone');
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
   // This test needs an airborne ball at Stop. The narrow, masking-aware
   // display intentionally does not raise half the bars for six active tones.
   await expect.poll(async () => (await physicsState(page)).balls.some(ball => ball.position[1] > ball.radius + .1)).toBe(true);
-  const box = await page.locator('canvas').boundingBox();
+  const box = await page.locator('#dancinglights canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
   await page.mouse.move(0, 0);
-  const stop = page.getByRole('button', { name: 'Stop listening' });
+  const stop = page.getByRole('checkbox', { name: 'Listening', exact: true });
   await stop.evaluate(button => button.addEventListener('click', () => {
     // Capture at the actual Stop event so protocol latency cannot consume the
     // fall before its starting height is measured.
@@ -58,7 +61,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   expect(stopped.balls.some(ball => ball.y > ball.radius + .1)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
   await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toBeEmpty();
   expect(errors).toEqual([]);
 });
@@ -138,7 +141,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await page.goto('http://127.0.0.1:8101');
   const expand = page.getByRole('button', { name: 'Fullscreen', exact: true });
   await expect(expand).toBeEnabled();
-  await page.getByRole('button', { name: 'Start listening' }).tap();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
   const initialScroll = await page.evaluate(() => scrollY);
   await expand.tap();
@@ -148,22 +151,15 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(page.locator('.calibration-controls')).toBeHidden();
   await expect(page.locator('.control-note')).toBeHidden();
   await expect(page.locator('.wake-status')).toBeHidden();
-  const fps = page.locator('.frame-rate');
-  await expect(fps).toHaveCount(1);
-  await expect(fps).toBeVisible();
-  await expect(fps).toHaveText(/^[1-9][0-9]* FPS$/);
-  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeHidden();
+  await expect(page.locator('.frame-rate')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeHidden();
   await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
   for (const viewport of [{ width: 390, height: 664 }, { width: 844, height: 390 }, { width: 390, height: 664 }]) {
     await page.setViewportSize(viewport);
     await expect.poll(async () => (await page.locator('.audio-card').boundingBox()).height).toBe(viewport.height);
     const graph = await page.locator('#dancinglights').boundingBox();
     expect(graph.height).toBeGreaterThan(viewport.height * .9);
-    await expect(fps).toBeInViewport({ ratio: 1 });
-    const counter = await fps.boundingBox();
-    const exitBox = await exit.boundingBox();
-    expect(counter.x).toBeGreaterThan(exitBox.x + exitBox.width);
-    expect(counter.height).toBeLessThan(30);
+    await expect(exit).toBeInViewport({ ratio: 1 });
   }
   await page.screenshot({ path: 'test-results/iphone-lights-only.png' });
   expect(await page.evaluate(() => inputRequests)).toBe(1);
@@ -177,9 +173,10 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   // document-level gesture events after it changes the viewport.
   await exit.tap();
   await expect(page.locator('.site-header')).toBeVisible();
-  await expect(page.locator('.calibration-controls')).toBeVisible();
+  await expect(page.locator('.calibration-controls')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
   expect(await page.evaluate(() => scrollY)).toBe(initialScroll);
-  await page.getByRole('button', { name: 'Stop listening' }).tap();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
   await page.evaluate(() => sourceContext.close());
   expect(errors).toEqual([]);
@@ -218,11 +215,11 @@ test('a rejected native fullscreen request still expands the page and Escape exi
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeHidden();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeHidden();
   await expect(page.locator('.screen-error')).toBeEmpty();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeInViewport();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeInViewport();
   await expect(page.locator('.site-header')).toBeVisible();
 });
 
@@ -243,9 +240,10 @@ test('browser back closes the expanded view and restores the page', async ({ pag
 test('fullscreen transitions keep live audio and bounded simulation delay', async ({ page }) => {
   await page.addInitScript(() => { Object.defineProperty(document, 'fullscreenEnabled', { value: false }); });
   await page.setViewportSize({width:390,height:844});
-  await page.goto('http://127.0.0.1:8101/phone/');await physicsReady(page);
-  await page.locator('.generated-audio').check();
-  await page.getByRole('button',{name:'Start listening',exact:true}).click();
+  await page.goto('http://127.0.0.1:8101/advanced/');await physicsReady(page);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
   await page.waitForTimeout(2000);
   await page.evaluate(()=>{

@@ -1,6 +1,6 @@
 # Manual song recognition
 
-Start listening, then press **Identify song**. Each press records the next ten
+Turn on **Listening**, then press **Identify song**. Each press records the next ten
 seconds using the existing microphone stream and sends it through the Rust
 Cloudflare Worker to AudD. There is no periodic recognition or automatic retry.
 Listening and loudness analysis otherwise stay on the device.
