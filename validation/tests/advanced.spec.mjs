@@ -130,6 +130,9 @@ for (const clip of ['trumpet', 'music', 'local']) {
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.addInitScript(() => { window.captureRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.captureRequests++; throw new Error('No microphone for digital sources'); }; });
     await advanced(page); await page.locator('.diagnostics-controls > summary').click();
+    // These settings only control generated tones, not licensed/local PCM.
+    await page.locator('.tone-frequency').fill(clip === 'trumpet' ? '19' : '');
+    await page.locator('.tone-level').fill(clip === 'trumpet' ? '0' : '');
     await page.locator('.input-source').selectOption(clip);
     if (clip === 'local') { await page.locator('.review-file').setInputFiles({ name: 'stereo.wav', mimeType: 'audio/wav', buffer: stereoWave() }); await page.locator('.calibration-controls input[type=number]').first().fill('2'); }
     await expect(page.locator('.tone-audible')).toBeChecked();

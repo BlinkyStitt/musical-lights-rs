@@ -214,10 +214,10 @@ export async function acquireInput(context, selectedChannel) {
         const kind = query('.tone-kind')?.value ?? 'exercise';
         const frequency = Number(query('.tone-frequency')?.value ?? 1000);
         const db = Number(query('.tone-level')?.value ?? -34);
-        if (!Number.isFinite(db) || db < -90 || db > -12 || !Number.isFinite(frequency) || frequency < 20 || frequency > 15500)
-            throw new Error('Choose a level from −90 to −12 dBFS and a frequency from 20 to 15500 Hz.');
         let buffer, identity;
         if (generated) {
+            if (!Number.isFinite(db) || db < -90 || db > -12 || !Number.isFinite(frequency) || frequency < 20 || frequency > 15500)
+                throw new Error('Choose a level from −90 to −12 dBFS and a frequency from 20 to 15500 Hz.');
             if (selectedChannel !== 0) throw new Error('Test tones have one channel. Choose input channel 1.');
             const pcm = tonePCM(kind, frequency, 10 ** (db / 20), context.sampleRate);
             buffer = context.createBuffer(1, pcm.length, context.sampleRate); buffer.copyToChannel(pcm, 0);
@@ -242,7 +242,18 @@ export async function acquireInput(context, selectedChannel) {
         Object.assign(session, generated ? { kind, frequency, dbfs: db, peakAmplitude: 10 ** (db / 20) } : { clip: identity });
         Object.assign(session, {
             audioStart: context.currentTime, repeat: query('.tone-repeat')?.checked ?? true });
-        let source, startedAt = context.currentTime, offset = 0, paused = false, ended = false, generation = 0;
+        let source, offset = 0, paused = false, ended = false, generation = 0;
+        // Output may still be in a preceding loop or transport state. Map its
+        // context clock through the timeline before wrapping/clamping position.
+        const timeline = [];
+        const markPosition = position => timeline.push({ time: context.currentTime, position,
+            running: !paused && !ended, repeat: session.repeat });
+        const positionAt = time => {
+            const segment = timeline.findLast(segment => segment.time <= time);
+            if (!segment) return 0;
+            const elapsed = segment.position + (segment.running ? time - segment.time : 0);
+            return segment.repeat && segment.running ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
+        };
         const watchEnd = current => {
             const token = ++generation;
             current.onended = () => {
@@ -258,7 +269,7 @@ export async function acquireInput(context, selectedChannel) {
             current.buffer = buffer; current.loop = session.repeat;
             current.connect(playback);
             watchEnd(current);
-            startedAt = context.currentTime; current.start(0, offset);
+            markPosition(offset); current.start(0, offset);
             session.publish(context.state === 'running' ? 'playing' : 'starting', 'source start');
         };
         const listeners = [];
@@ -271,13 +282,13 @@ export async function acquireInput(context, selectedChannel) {
                 offset = 0; paused = false; ended = false;
                 playback.gain.value = 1; start();
             } else if (paused) {
-                paused = false; startedAt = context.currentTime;
+                paused = false; markPosition(offset);
                 watchEnd(source);
                 source.playbackRate.value = 1; playback.gain.value = 1;
                 session.publish(context.state === 'running' ? 'playing' : 'interrupted', 'resume');
             } else {
-                offset = session.repeat ? (offset + context.currentTime - startedAt) % buffer.duration : Math.min(buffer.duration, offset + context.currentTime - startedAt);
-                paused = true; watchEnd(source);
+                offset = positionAt(context.currentTime);
+                paused = true; markPosition(offset); watchEnd(source);
                 // Keep the render graph connected and its sample clock running.
                 // A zero playback rate holds position; mute the held sample so
                 // analysis receives silence rather than a DC signal.
@@ -292,18 +303,19 @@ export async function acquireInput(context, selectedChannel) {
             query('.tone-pause').textContent = 'Pause playback';
         });
         listen('.tone-repeat', 'change', () => {
+            const position = positionAt(context.currentTime);
             session.repeat = query('.tone-repeat').checked; source.loop = session.repeat;
+            markPosition(position);
             session.publish(session.state, 'repeat changed');
         });
         listen('.tone-audible', 'change', () => { monitor.gain.value = query('.tone-audible').checked ? 1 : 0; });
         start(); query('.tone-pause').disabled = false; query('.review-replay').disabled = false;
         const timer = setInterval(() => {
             if (session.closed) return;
-            const elapsed = offset + (paused || ended ? 0 : context.currentTime - startedAt);
-            const at = session.repeat && !ended ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
+            const at = positionAt(context.currentTime);
             const state = generated ? toneState(kind, at, frequency, 10 ** (db / 20)) : null;
             const timing = playbackTiming(context);
-            card.dispatchEvent(new CustomEvent('review-playback', { detail: { sessionId: session.sessionId, recordedAt: new Date().toISOString(), processingSeconds: at, outputSeconds: Math.max(0, at - context.currentTime + timing.audioTime), state: session.state, ...timing } }));
+            card.dispatchEvent(new CustomEvent('review-playback', { detail: { sessionId: session.sessionId, recordedAt: new Date().toISOString(), processingSeconds: at, outputSeconds: positionAt(timing.audioTime), state: session.state, ...timing } }));
             const status = query('.tone-status');
             if (status) status.textContent = state ? `${kind}: ${state.frequencies.map(f => f.toFixed(1)).join(' + ') || 'no tone'} Hz, ${state.amplitude ? (20 * Math.log10(state.amplitude)).toFixed(1) : '−∞'} dBFS peak, ${at.toFixed(1)} / ${toneCases[kind]} s (${session.state})` : `${identity.name}: ${at.toFixed(2)} / ${buffer.duration.toFixed(2)} s (${session.state}) · ${timing.confidence}`;
         }, 100);

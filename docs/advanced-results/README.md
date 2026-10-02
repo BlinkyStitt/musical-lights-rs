@@ -35,6 +35,14 @@ observations about accents, swells and decay. Output timing is estimated using
 unverified. Raw analysis times, filtered targets and rendered geometry retain
 separate scales and timestamps. Trace v6 and phone-report v2 exports and physics
 replay protocols are retained. Recording storage is allocated only when needed.
+Output positions map that clock through pause, resume, replay and repeat changes
+before wrapping at a loop boundary or clamping at completion. The preceding
+iteration stays visible in exported timing until its audio finishes, and a
+completed clip's output position drains to its endpoint. Empty or invalid test
+tone parameters block only generated input; licensed excerpts and local files
+decode independently of those fields. The production-module transport harness
+covers these cases with a six-second clip and 200 ms output delay, alongside
+the real Chromium/WebKit source, worklet, transport and export checks.
 Rendered samples read the interpolated instance geometry actually drawn, keeping
 the physics snapshot separately as `collider`. The plot maps the render host
 timestamp into the context clock using the packet's observed timestamp pair,
@@ -93,6 +101,14 @@ It retains the serial startup guard, one worker and zero retries. The preview
 recording test is opt-in and is also run explicitly to generate the files above.
 Human listening and physical-device evidence remain pending independently of
 software results.
+
+The October 2 playback-review repair passed all 46 Node harness tests and the
+pinned Leptos checks/build. Its full macOS rerun passed 326 browser tests with
+one skip, but was not fully green: the microphone calibration precision check
+returned 14.22945 rather than 14.17572 Pa/unit (tolerance 0.05), identically with
+the original reviewed audio module in a controlled baseline comparison. Four
+WebKit networking-process `EXC_GUARD` reports were also recorded. The playback
+regressions passed in both engines; current CI results are recorded on PR #35.
 
 ## Host timing measurements
 
