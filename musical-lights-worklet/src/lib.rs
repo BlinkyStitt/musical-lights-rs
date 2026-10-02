@@ -1,5 +1,6 @@
 //! A DOM-free numeric WASM interface, owned by one AudioWorklet instance.
-//! All allocation occurs when creating the processor. No browser API imports.
+//! Allocation occurs at creation or diagnostic setup, never while processing audio.
+//! No browser API imports.
 use musical_lights_core::audio::{
     browser::{BrowserPresentation, BrowserSnapshot},
     loudness::{Calibration, LoudnessError, LoudnessFrame, LoudnessMeter, SAMPLE_RATE, SoundField},
@@ -32,8 +33,7 @@ struct AudioProcessor {
     calibration_result: f32,
     latest_sones: f64,
     clipped: u64,
-    trace_enabled: bool,
-    trace: [f64; TRACE_CAPACITY * TRACE_STRIDE],
+    trace: Option<Box<[f64]>>,
     trace_count: usize,
     trace_dropped: u32,
 }
@@ -63,8 +63,7 @@ impl AudioProcessor {
             calibration_result: 0.0,
             latest_sones: 0.0,
             clipped: 0,
-            trace_enabled: false,
-            trace: [0.0; TRACE_CAPACITY * TRACE_STRIDE],
+            trace: None,
             trace_count: 0,
             trace_dropped: 0,
         }
@@ -124,7 +123,6 @@ impl AudioProcessor {
             let display = &mut self.display;
             let iso = &self.iso_frame;
             let reduced = self.reduced;
-            let trace_enabled = self.trace_enabled;
             let trace = &mut self.trace;
             let trace_count = &mut self.trace_count;
             let trace_dropped = &mut self.trace_dropped;
@@ -143,7 +141,7 @@ impl AudioProcessor {
                             spectrum,
                             reduced,
                         );
-                        if trace_enabled {
+                        if let Some(trace) = trace.as_mut() {
                             if *trace_count < TRACE_CAPACITY {
                                 let row = &mut trace[*trace_count * TRACE_STRIDE
                                     ..(*trace_count + 1) * TRACE_STRIDE];
@@ -255,8 +253,8 @@ macro_rules! export {
     };
 }
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
-export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace_enabled = enabled != 0; p.trace_count = 0; p.trace_dropped = 0; });
-export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ptr());
+export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace = if enabled != 0 { Some(vec![0.0; TRACE_CAPACITY * TRACE_STRIDE].into_boxed_slice()) } else { None }; p.trace_count = 0; p.trace_dropped = 0; });
+export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ref().map_or(core::ptr::null(), |trace| trace.as_ptr()));
 export!(processor_trace_version(handle) -> u32, _p => 5);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);

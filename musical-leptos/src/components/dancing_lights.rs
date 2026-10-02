@@ -478,6 +478,9 @@ pub fn DancingLights(
                 <label class="control-row">"Source"<select class="input-source" disabled=move || listening.get() || starting.get()>
                     <option value="microphone">"Microphone"</option>
                     <option value="generated">"Test tones"</option>
+                    <option value="trumpet">"Jazz Trumpet Loops"</option>
+                    <option value="music">"Vibe Ace"</option>
+                    <option value="local">"Local audio file"</option>
                 </select></label>
                 <p class="capture-information"></p>
 

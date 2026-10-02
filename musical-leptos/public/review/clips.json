@@ -1,0 +1,32 @@
+[
+  {
+    "name": "trumpet",
+    "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+    "samples": 256003,
+    "rate": 48000,
+    "provenance": {
+      "repository": "https://github.com/librosa/data",
+      "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+      "source": "audio/sorohanro_-_solo-trumpet-06.ogg",
+      "sourceSha256": "8374466fd3951d24509da6e799b132a0db0bdeda69d99c69d989a6888d3d727d",
+      "license": "CC-BY-3.0",
+      "transformation": "FFmpeg mono average, 48 kHz, seconds 0\u20135.333395833333333, fixed peak 0.2",
+      "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+    }
+  },
+  {
+    "name": "music",
+    "pcmSha256": "1e8f8e932b7c07fde6ee4f5dbb189fc0184266394c2752eabd64cf6946a64567",
+    "samples": 288000,
+    "rate": 48000,
+    "provenance": {
+      "repository": "https://github.com/librosa/data",
+      "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+      "source": "audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+      "sourceSha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+      "license": "CC-BY-3.0",
+      "transformation": "FFmpeg mono average, 48 kHz, seconds 8\u201314, fixed peak 0.2",
+      "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+    }
+  }
+]

@@ -48,3 +48,13 @@ https://phenicx.upf.edu/system/files/publications/Boeck_DAFx-13.pdf.
 Source-band attribution, loudness eligibility, bounded pending candidates,
 rearming, and white pulses are application-specific presentation choices.
 No upstream implementation source is bundled for these two algorithms.
+
+Runtime listening review excerpts (CC BY 3.0): “Jazz Trumpet Loops Pack in F
+90 bpm” by [Mihai Sorohan](https://freesound.org/s/77711/) and “Vibe Ace” by
+[Kevin MacLeod](https://freemusicarchive.org/music/Kevin_MacLeod/Jazz_Sampler/Vibe_Ace).
+Obtained from [librosa/data revision 38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0](https://github.com/librosa/data/tree/38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0/audio),
+decoded to mono 48 kHz float32 and scaled once to peak 0.2 for the original audit.
+Trumpet uses the available first 5.333 seconds; Vibe Ace uses seconds 8–14.
+The versioned assets reuse those exact audit PCM bytes. Source and PCM hashes
+are in `musical-leptos/public/review/clips.json`. License:
+[Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).

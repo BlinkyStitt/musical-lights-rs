@@ -67,7 +67,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     if (!session || session.closed) throw new Error('Audio session has closed');
     const track = stream.getAudioTracks()[0];
     const settings = track.getSettings();
-    const raw = ['autoGainControl', 'echoCancellation', 'noiseSuppression'].every(key => settings[key] === false);
+    const raw = session.source === 'microphone' && ['autoGainControl', 'echoCancellation', 'noiseSuppression'].every(key => settings[key] === false);
     const key = JSON.stringify([settings, channel, context.sampleRate]);
     let profile;
     if (raw && settings.deviceId) {
@@ -79,7 +79,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     }
     const pressure = profile?.pascalsPerUnit;
     const pascalsPerUnit = Number.isFinite(pressure) && pressure > 0 ? pressure : undefined;
-    Object.assign(session, { channel, pascalsPerUnit: pascalsPerUnit ?? 2, calibrated: pascalsPerUnit !== undefined });
+    Object.assign(session, { channel: session.selectedChannel ?? channel, pascalsPerUnit: pascalsPerUnit ?? 2, calibrated: pascalsPerUnit !== undefined });
     session.publish(session.state, 'processor ready');
     let module;
     try {
@@ -97,7 +97,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     const node = new AudioWorkletNode(context, 'loudness-processor', {
         channelCountMode: 'max', channelInterpretation: 'discrete',
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
-        processorOptions: { module, pascalsPerUnit, channel, reducedMotion,
+        processorOptions: { module, pascalsPerUnit, channel: session.source === 'microphone' ? channel : 0, reducedMotion,
             diagnostics: session.diagnostics, sessionId: session.sessionId },
     });
     const card = document.querySelector('.audio-card');
@@ -134,15 +134,16 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     profiles.set(node, { key, settings, track, raw, session, calibrated: pascalsPerUnit !== undefined,
         release: () => { context.removeEventListener('statechange', contextChanged); node.port.removeEventListener('message', trace); clearInterval(monitor); track.removeEventListener('ended', ended); track.removeEventListener('mute', muted); node.removeEventListener('processorerror', crashed); },
     });
+    if (session.source !== 'microphone') generatedSources.get(stream)?.playback.connect(node);
     return node;
 }
 
-export function inputIsGenerated(stream) { return sessions.get(stream)?.source === 'generated'; }
+export function inputIsGenerated(stream) { return sessions.get(stream)?.source !== 'microphone'; }
 
 export function captureStatus(node) {
     const profile = profiles.get(node);
     if (!profile) return 'Uncalibrated';
-    if (profile.session.source === 'generated') return 'Generated test signal · microphone off';
+    if (profile.session.source !== 'microphone') return `${profile.session.source === 'generated' ? 'Generated test signal' : 'Digital review PCM'} · microphone off · channel ${profile.session.channel + 1}`;
     if (!profile.raw) return 'Uncalibrated · capture processing is unverified';
     return profile.calibrated ? 'Calibrated for this input' : 'Uncalibrated · estimated perceived loudness';
 }
@@ -175,13 +176,15 @@ export function isCurrentProcessorMessage(node, data) {
 }
 
 const generatedSources = new WeakMap();
-export async function acquireInput(context) {
+export async function acquireInput(context, selectedChannel) {
     const card = /** @type {HTMLElement} */ (document.querySelector('.audio-card'));
-    const generated = card.querySelector('.input-source')?.value === 'generated';
-    const session = beginSession(context, card, generated ? 'generated' : 'microphone');
+    const sourceKind = card.querySelector('.input-source')?.value ?? 'microphone';
+    const generated = sourceKind === 'generated', digital = sourceKind !== 'microphone';
+    const session = beginSession(context, card, sourceKind);
+    session.selectedChannel = selectedChannel;
     try {
         await requireCurrentRuntime(context);
-        if (!generated) {
+        if (!digital) {
             const permission = state => {
                 if (!session.closed && card.isConnected && card.dataset.audioSession === String(session.sessionId))
                     card.dispatchEvent(new CustomEvent('microphone-access', { detail: state }));
@@ -207,19 +210,37 @@ export async function acquireInput(context) {
             throw error;
         });
         const query = selector => card.querySelector(selector);
+        if (!card.review || !query('.tone-pause')) throw new Error('Advanced controls are still loading. Turn on Listening again.');
         const kind = query('.tone-kind')?.value ?? 'exercise';
         const frequency = Number(query('.tone-frequency')?.value ?? 1000);
         const db = Number(query('.tone-level')?.value ?? -34);
         if (!Number.isFinite(db) || db < -90 || db > -12 || !Number.isFinite(frequency) || frequency < 20 || frequency > 15500)
             throw new Error('Choose a level from −90 to −12 dBFS and a frequency from 20 to 15500 Hz.');
-        const pcm = tonePCM(kind, frequency, 10 ** (db / 20), context.sampleRate);
-        const buffer = context.createBuffer(1, pcm.length, context.sampleRate);
-        buffer.copyToChannel(pcm, 0);
+        let buffer, identity;
+        if (generated) {
+            if (selectedChannel !== 0) throw new Error('Test tones have one channel. Choose input channel 1.');
+            const pcm = tonePCM(kind, frequency, 10 ** (db / 20), context.sampleRate);
+            buffer = context.createBuffer(1, pcm.length, context.sampleRate); buffer.copyToChannel(pcm, 0);
+        } else {
+            const decoded = await card.review.decode(context);
+            identity = decoded.identity;
+            if (selectedChannel >= decoded.buffer.numberOfChannels) throw new Error(`Input channel ${selectedChannel + 1} is unavailable in this file.`);
+            buffer = context.createBuffer(1, decoded.buffer.length, decoded.buffer.sampleRate);
+            buffer.copyToChannel(decoded.buffer.getChannelData(selectedChannel), 0);
+        }
+        if (context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
+        const { playbackTiming } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/review.js', document.baseURI));
+        if (context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
         const destination = context.createMediaStreamDestination();
         const playback = context.createGain(); playback.connect(destination);
+        // Keep a mono channel connected after a buffer ends. The worklet must
+        // analyze real silence while transport remains available for Replay.
+        const silence = context.createConstantSource(); silence.offset.value = 0;
+        silence.connect(playback); silence.start();
         const monitor = context.createGain(); monitor.gain.value = query('.tone-audible')?.checked ? 1 : 0;
         monitor.connect(context.destination); playback.connect(monitor);
-        Object.assign(session, { kind, frequency, dbfs: db, peakAmplitude: 10 ** (db / 20),
+        Object.assign(session, generated ? { kind, frequency, dbfs: db, peakAmplitude: 10 ** (db / 20) } : { clip: identity });
+        Object.assign(session, {
             audioStart: context.currentTime, repeat: query('.tone-repeat')?.checked ?? true });
         let source, startedAt = context.currentTime, offset = 0, paused = false, ended = false, generation = 0;
         const watchEnd = current => {
@@ -265,34 +286,42 @@ export async function acquireInput(context) {
             }
             query('.tone-pause').textContent = paused ? 'Resume playback' : 'Pause playback';
         });
+        listen('.review-replay', 'click', () => {
+            if (source) { source.onended = null; source.stop(); source.disconnect(); }
+            offset = 0; paused = false; ended = false; playback.gain.value = 1; start();
+            query('.tone-pause').textContent = 'Pause playback';
+        });
         listen('.tone-repeat', 'change', () => {
             session.repeat = query('.tone-repeat').checked; source.loop = session.repeat;
             session.publish(session.state, 'repeat changed');
         });
         listen('.tone-audible', 'change', () => { monitor.gain.value = query('.tone-audible').checked ? 1 : 0; });
-        start(); query('.tone-pause').disabled = false;
+        start(); query('.tone-pause').disabled = false; query('.review-replay').disabled = false;
         const timer = setInterval(() => {
             if (session.closed) return;
             const elapsed = offset + (paused || ended ? 0 : context.currentTime - startedAt);
             const at = session.repeat && !ended ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
-            const state = toneState(kind, at, frequency, 10 ** (db / 20));
+            const state = generated ? toneState(kind, at, frequency, 10 ** (db / 20)) : null;
+            const timing = playbackTiming(context);
+            card.dispatchEvent(new CustomEvent('review-playback', { detail: { sessionId: session.sessionId, recordedAt: new Date().toISOString(), processingSeconds: at, outputSeconds: Math.max(0, at - context.currentTime + timing.audioTime), state: session.state, ...timing } }));
             const status = query('.tone-status');
-            if (status) status.textContent = `${kind}: ${state.frequencies.map(f => f.toFixed(1)).join(' + ') || 'no tone'} Hz, ${state.amplitude ? (20 * Math.log10(state.amplitude)).toFixed(1) : '−∞'} dBFS peak, ${at.toFixed(1)} / ${toneCases[kind]} s (${session.state})`;
+            if (status) status.textContent = state ? `${kind}: ${state.frequencies.map(f => f.toFixed(1)).join(' + ') || 'no tone'} Hz, ${state.amplitude ? (20 * Math.log10(state.amplitude)).toFixed(1) : '−∞'} dBFS peak, ${at.toFixed(1)} / ${toneCases[kind]} s (${session.state})` : `${identity.name}: ${at.toFixed(2)} / ${buffer.duration.toFixed(2)} s (${session.state}) · ${timing.confidence}`;
         }, 100);
         const stream = destination.stream;
         sessions.set(stream, session);
-        generatedSources.set(stream, () => {
+        generatedSources.set(stream, { playback, release: () => {
             clearInterval(timer); for (const remove of listeners) remove();
             source.onended = null; if (!ended) source.stop();
-            source.disconnect(); playback.disconnect(); monitor.disconnect(); destination.disconnect();
+            source.disconnect(); silence.stop(); silence.disconnect(); playback.disconnect(); monitor.disconnect(); destination.disconnect();
             if (card.dataset.audioSession === String(session.sessionId) && query('.tone-pause')) {
-                query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause playback';
+                query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause playback'; query('.review-replay').disabled = true;
+                card.review.buffer = null;
             }
-        });
+        } });
         return stream;
     } catch (error) { session.close(); throw error; }
 }
 export function releaseInput(stream) {
     sessions.get(stream)?.close(); sessions.delete(stream);
-    generatedSources.get(stream)?.(); generatedSources.delete(stream);
+    generatedSources.get(stream)?.release(); generatedSources.delete(stream);
 }

@@ -1,3 +1,4 @@
+import { ListeningReview } from './review.js';
 import { settingSwitch } from './controls.js';
 import { build } from './build.js';
 
@@ -30,7 +31,7 @@ export class PhoneReport {
       <button type="button" class="physics-reset">Apply settings and reset</button>
       <button type="button" class="physics-defaults">Restore defaults and reset</button>`;
     this.host.innerHTML = `<summary>Diagnostics</summary>
-      <p>Test tones use the same analysis and renderer as microphone capture. Stop Listening to change sources.</p>
+      <p>Test tones and listening review use the same analysis and renderer as microphone capture. Stop Listening to change sources.</p>
       <p class="diagnostic-fps" aria-label="Frame rate"></p>
       <p class="sensor-readings" aria-label="Sensor readings"></p>
       <label>Test tone<select class="tone-kind"><option value="exercise">Changing 24-tone exercise</option><option value="stationary">Stationary tone (60 s)</option><option value="stepped">Step through all 24 bands (48 s)</option><option value="sweep">Continuous sweep (24 s)</option><option value="two">Two tones (30 s)</option><option value="volume">Volume steps (90 s)</option><option value="bursts">Short bursts (8 s)</option><option value="silence">Silence (3 s)</option></select></label>
@@ -70,6 +71,7 @@ export class PhoneReport {
       const config = this.readConfig();
       if (config) view.worker.postMessage({ type: 'reset', config });
     });
+    this.review = new ListeningReview(view); view.card.review = this.review;
     this.toneChunks = []; this.toneRows = 0; this.toneDropped = 0; this.tonePhysics = [];
     const trace = ({ detail }) => {
       if (detail.sessionId !== this.toneMetadata?.sessionId || this.audioState?.state === 'stopped') return;
@@ -268,5 +270,5 @@ export class PhoneReport {
     link.href = url; link.download = `musical-lights-${build}-${this.result.mode}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  close() { for (const remove of this.removers) remove(); this.active = false; this.intervals = this.renderCosts = null; this.toneChunks = []; this.tonePhysics = []; this.host.replaceChildren(); this.physicsHost.replaceChildren(); }
+  close() { this.review.close(); delete this.view.card.review; for (const remove of this.removers) remove(); this.active = false; this.intervals = this.renderCosts = null; this.toneChunks = []; this.tonePhysics = []; this.host.replaceChildren(); this.physicsHost.replaceChildren(); }
 }
