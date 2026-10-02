@@ -43,8 +43,9 @@ test('native permission changes update the mounted display and denied capture fa
   await observeCapture(page);
   await page.goto(origin); await physicsReady(page);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'denied');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'not-allowed');
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   expect(await page.evaluate(() => captures.length)).toBe(0);
   expect(await page.evaluate(() => captureRequests)).toBe(1);
   await context.grantPermissions(['microphone'], { origin });

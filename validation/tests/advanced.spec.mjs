@@ -49,6 +49,34 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
 });
 
+test('diagnostic plot separates interpolated render geometry and its clock from analysis and physics', async ({ page }) => {
+  await advanced(page);
+  const { sample, moves, unverified } = await page.evaluate(() => {
+    const card = document.querySelector('.audio-card'), review = card.review, view = document.querySelector('#dancinglights').physics;
+    review.sessionId = 'clock-regression'; review.samples = [];
+    const receivedAt = performance.timeOrigin + performance.now();
+    view.renderedAt = receivedAt - 25;
+    view.current[view.layout[9] + 8] = .7 * view.height;
+    view.bars.instanceMatrix.array[8 * 16 + 13] = .2 * view.height - view.layout[6] / 2;
+    const trace = new Float64Array(511);
+    trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;
+    const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
+    ctx.moveTo = function(x, y) { moves.push([x, y]); return original.call(this, x, y); };
+    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt, receivedAudioTime: 1.25 } })); }
+    finally { ctx.moveTo = original; }
+    const sample = review.samples[0];
+    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt } }));
+    return { sample, moves, unverified: review.samples[1] };
+  });
+  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
+  expect(sample.collider).toBeCloseTo(.7, 5); expect(sample.rendered).toBeCloseTo(.2, 5);
+  expect(moves).toHaveLength(3);
+  expect(moves[0][0]).toBeCloseTo(1.1 / 1.225 * 900, 5);
+  expect(moves[1][0]).toBeCloseTo(moves[0][0], 5);
+  expect(moves[2][0]).toBe(900); expect(moves[2][1]).toBeCloseTo(200, 3);
+  expect(unverified).toMatchObject({ renderedTime: null, renderedTimeConfidence: 'unverified' });
+});
+
 test('Display and Input resets are scoped; milliseconds and physics defaults preserve enclosure size', async ({ page }) => {
   await advanced(page);
   await expect(page.locator('.display-controls')).toHaveAttribute('open', '');

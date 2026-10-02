@@ -13,6 +13,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function touchInput(page, context) {
+  // Desktop Chromium keeps a separate mouse at (0, 0) while CDP injects touch.
+  // Scrolling idle bands can hover under that mouse and reveal unrelated labels.
+  // Keep the mouse outside the phone viewport; all tested touch stays native.
+  await page.mouse.move(-100, -100);
   const box = await page.getByRole('meter').nth(4).boundingBox();
   const session = await context.newCDPSession(page);
   const point = { x: Math.round(box.x + box.width / 2), y: box.y + box.height - 200, id: 1 };

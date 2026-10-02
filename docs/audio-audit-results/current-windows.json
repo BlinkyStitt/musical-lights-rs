@@ -1,10 +1,11 @@
 {
   "upstreamRevision": "82de790f79c5b358040861e8bdb906a55009b117",
   "productionWasmSha256": "381be9dd39492d2b56b6ab127a4978f1be56579434d321730aeb5e43097e164a",
+  "productionNativeSha256": "518607a0fdf4e3f2449c7ce93cf7cbe048874166fb28ca9661672ff8832a2254",
   "productionDspSourceSha256": "19bf90019e71368a333ef6486e00921a5d5538c2e291744038735ca768cabe91",
   "numpyVersion": "2.5.3",
   "sourceSha256": {
-    "validation/partial/window-audit.py": "d60d966a77de683086f20c539db5bb628c27fa2ef8389c60abec8ff3f762c64c",
+    "validation/partial/window-audit.py": "4914f5fd6b6688cb1383fe9198ab40a985cc40b8d475d8c364aa46fc954788b5",
     "validation/partial/oracle.cpp": "172e6a32eaecf257c68a7932eac81b5950089e5f772db1fc6d093625749e1e68"
   },
   "status": "quantified model difference, not a conformance pass",

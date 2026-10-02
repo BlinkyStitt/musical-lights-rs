@@ -35,6 +35,11 @@ observations about accents, swells and decay. Output timing is estimated using
 unverified. Raw analysis times, filtered targets and rendered geometry retain
 separate scales and timestamps. Trace v6 and phone-report v2 exports and physics
 replay protocols are retained. Recording storage is allocated only when needed.
+Rendered samples read the interpolated instance geometry actually drawn, keeping
+the physics snapshot separately as `collider`. The plot maps the render host
+timestamp into the context clock using the packet's observed timestamp pair,
+labels that estimate, and preserves raw timestamps in exports. It applies no
+fitted alignment; unverified render times are omitted from the plotted curve.
 
 The five-minute workflow still requires the repeating 24-tone exercise with
 recording off, 15-second warmup and the existing 60 FPS/debt/lag thresholds.
@@ -80,9 +85,64 @@ present; the separate web job builds and tests the actual worklet.
 The live local-file test compares 200 raw/filtered frames exactly against an
 offline run of the identical decoded selected-channel PCM in both Chromium and
 WebKit. Replay after natural completion and the initial recording checks passed
-in both browser engines. Full browser, separate diagnostics-off timing and CI
-results are recorded below when complete. Human listening and physical-device
-evidence remain pending independently of software results.
+in both browser engines. The follow-up [PR #35](https://github.com/BlinkyStitt/musical-lights-rs/pull/35)
+records the completed local browser outcome and current CI result separately.
+Run the full suite from the repository root with pinned tools and macOS host
+access: `PATH="$PWD/.tools/bin:$PATH" python3 validation/validate.py browser`.
+It retains the serial startup guard, one worker and zero retries. The preview
+recording test is opt-in and is also run explicitly to generate the files above.
+Human listening and physical-device evidence remain pending independently of
+software results.
+
+## Host timing measurements
+
+The October 2, 2026 measurements use pinned Chromium 154.0.8037.0 and WebKit
+26.6 on macOS. The recorded build is `14677ab-dirty`: the final source tree with
+the render-geometry/clock correction, before the evidence commit. The production
+loudness WASM hash remains the one in the equality report. These runs use a
+repeating generated-tone exercise with diagnostic recording off, five seconds
+of warmup and thirty seconds of measurement per case. They do not substitute for
+the fifteen-second warmup and five-minute physical-phone workflow.
+
+| Mac browser profile | View | Mean FPS | p95 frame time | Existing thresholds |
+| --- | --- | ---: | ---: | --- |
+| Chromium | Normal | 60.00 | 16.8 ms | Pass |
+| Chromium | Portrait fullscreen | 60.00 | 16.7 ms | Pass |
+| Chromium | Landscape fullscreen | 60.00 | 16.7 ms | Pass |
+| WebKit, iPhone profile | Normal | 60.00 | 18.0 ms | Pass |
+| WebKit, iPhone profile | Portrait fullscreen | 60.00 | 18.0 ms | Pass |
+| WebKit, iPhone profile | Landscape fullscreen | 60.00 | 18.0 ms | Pass |
+
+All six cases meet the existing FPS, frame-tail, simulation-debt, drift and
+snapshot-age assertions, with no discarded simulation time or overload ticks.
+[Summaries](browser-timing.json), [full samples](browser-timing-detail.json.gz)
+and the six profile/view screenshots retain the measurements. The separate
+[fullscreen transition run](fullscreen-timing.json) also passes entry,
+landscape/portrait rotation and exit budgets in both engines, including the
+existing allowance for occasional frames over 25 ms.
+
+The [instrumented latency run](latency.json) retains separate analysis,
+receipt, collider and render observations; [full samples](latency-detail.json.gz)
+are provided. Analysis reaches 10% of each burst's raw peak in 16–18 ms; transport
+age p95 is 4 ms in Chromium and 1.33 ms in WebKit. Later bursts first show 1% bar
+height at 61.3–80 ms. The first burst is already above that height before onset:
+its 10.7–13.3 ms visual observation describes residual movement, **not** a new
+attack latency. The export explicitly flags this condition and retains the
+unshifted timestamps. These are software observations, not verified physical
+audio-output or human-perception timing.
+
+Regenerate timing artifacts from the repository root with pinned tools and
+macOS host access, separately from other browser runs:
+
+```sh
+PATH="$PWD/.tools/bin:$PATH" .tools/bin/node validation/phone-timing.mjs https://musical-lights.test docs/advanced-results
+PATH="$PWD/.tools/bin:$PATH" .tools/bin/node validation/fullscreen-timing.mjs https://musical-lights.test docs/advanced-results/fullscreen-timing.json --expect-clean
+PATH="$PWD/.tools/bin:$PATH" .tools/bin/node validation/partial/latency.mjs https://musical-lights.test docs/advanced-results
+```
+
+The phone-timing runner resumes its existing detail file. To collect a fresh
+run, preserve the previous timing artifacts elsewhere first rather than mixing
+measurements from different source trees.
 
 ## Physical-phone and human listening checklist — pending
 

@@ -1,0 +1,238 @@
+[
+  {
+    "browserName": "chromium",
+    "physicalPhone": false,
+    "instrumented": true,
+    "cycles": [
+      {
+        "second": 1,
+        "measurement10PercentOfBurstPeakMs": 16.000000000000014,
+        "receipt10PercentOfBurstPeakMs": 18.666666666666607,
+        "collider1PercentHeightObservedMs": 13.33333333333342,
+        "render1PercentHeightMs": 13.33333333333342,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666706,
+          "collider": 0.15760809183120728,
+          "rendered": 0.16393470764160156
+        },
+        "colliderAlreadyAboveThreshold": true,
+        "renderAlreadyAboveThreshold": true
+      },
+      {
+        "second": 2,
+        "measurement10PercentOfBurstPeakMs": 17.999999999999794,
+        "receipt10PercentOfBurstPeakMs": 18.66666666666683,
+        "collider1PercentHeightObservedMs": 64.00000000000006,
+        "render1PercentHeightMs": 64.00000000000006,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -5.333333333333412,
+          "collider": 0.0030023017898201942,
+          "rendered": 0.004398345947265625
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      },
+      {
+        "second": 3,
+        "measurement10PercentOfBurstPeakMs": 16.000000000000014,
+        "receipt10PercentOfBurstPeakMs": 16.000000000000014,
+        "collider1PercentHeightObservedMs": 61.33333333333324,
+        "render1PercentHeightMs": 61.33333333333324,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666817,
+          "collider": 0.0030022698920220137,
+          "rendered": 0.003002166748046875
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      },
+      {
+        "second": 4,
+        "measurement10PercentOfBurstPeakMs": 17.999999999999794,
+        "receipt10PercentOfBurstPeakMs": 18.666666666666387,
+        "collider1PercentHeightObservedMs": 61.333333333333684,
+        "render1PercentHeightMs": 61.333333333333684,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -5.33333333333319,
+          "collider": 0.0030023048166185617,
+          "rendered": 0.003002166748046875
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      },
+      {
+        "second": 5,
+        "measurement10PercentOfBurstPeakMs": 16.000000000000014,
+        "receipt10PercentOfBurstPeakMs": 18.666666666666387,
+        "collider1PercentHeightObservedMs": 61.333333333333684,
+        "render1PercentHeightMs": 61.333333333333684,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666373,
+          "collider": 0.0030022726859897375,
+          "rendered": 0.003002166748046875
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      }
+    ],
+    "interpretation": "Height observations with already-above-threshold flags are residual movement, not new attack latency. Raw times are retained without fitted alignment.",
+    "transportAgeMs": {
+      "min": 0,
+      "p95": 4.0000000000000036,
+      "max": 4.000000000000448
+    },
+    "height": 0.9278030628124685,
+    "barMax": 0.6818029880523682,
+    "workload": {
+      "sessionId": 1,
+      "source": "generated",
+      "sampleRate": 48000,
+      "diagnostics": false,
+      "state": "playing",
+      "repeat": true,
+      "selectedChannel": 0,
+      "kind": "bursts",
+      "frequency": 1000,
+      "dbfs": -34,
+      "peakAmplitude": 0.0199526231496888,
+      "audioStart": 0,
+      "channel": 0,
+      "pascalsPerUnit": 2,
+      "calibrated": false,
+      "reason": "context running"
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.15000000596046448,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.03999999910593033,
+      0.3199999928474426
+    ]
+  },
+  {
+    "browserName": "webkit",
+    "physicalPhone": false,
+    "instrumented": true,
+    "cycles": [
+      {
+        "second": 1,
+        "measurement10PercentOfBurstPeakMs": 16.000000000000014,
+        "receipt10PercentOfBurstPeakMs": 16.000000000000014,
+        "collider1PercentHeightObservedMs": 10.666666666666602,
+        "render1PercentHeightMs": 10.666666666666602,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666706,
+          "collider": 0.01925310306251049,
+          "rendered": 0.031200408935546875
+        },
+        "colliderAlreadyAboveThreshold": true,
+        "renderAlreadyAboveThreshold": true
+      },
+      {
+        "second": 2,
+        "measurement10PercentOfBurstPeakMs": 17.999999999999794,
+        "receipt10PercentOfBurstPeakMs": 18.66666666666683,
+        "collider1PercentHeightObservedMs": 45.33333333333323,
+        "render1PercentHeightMs": 64.00000000000006,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666595,
+          "collider": 0.00300204916857183,
+          "rendered": 0.003002166748046875
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      },
+      {
+        "second": 3,
+        "measurement10PercentOfBurstPeakMs": 16.000000000000014,
+        "receipt10PercentOfBurstPeakMs": 16.000000000000014,
+        "collider1PercentHeightObservedMs": 61.33333333333324,
+        "render1PercentHeightMs": 80.00000000000007,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666817,
+          "collider": 0.0030022698920220137,
+          "rendered": 0.0033369064331054688
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      },
+      {
+        "second": 4,
+        "measurement10PercentOfBurstPeakMs": 17.999999999999794,
+        "receipt10PercentOfBurstPeakMs": 18.666666666666387,
+        "collider1PercentHeightObservedMs": 45.33333333333367,
+        "render1PercentHeightMs": 64.00000000000006,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -2.666666666666817,
+          "collider": 0.0030023048166185617,
+          "rendered": 0.003002166748046875
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      },
+      {
+        "second": 5,
+        "measurement10PercentOfBurstPeakMs": 16.000000000000014,
+        "receipt10PercentOfBurstPeakMs": 16.000000000000014,
+        "collider1PercentHeightObservedMs": 64.00000000000006,
+        "render1PercentHeightMs": 64.00000000000006,
+        "thresholdHeight": 0.009788029880523682,
+        "heightBeforeBurst": {
+          "observedRelativeMs": -5.333333333333634,
+          "collider": 0.0030022726859897375,
+          "rendered": 0.0045452117919921875
+        },
+        "colliderAlreadyAboveThreshold": false,
+        "renderAlreadyAboveThreshold": false
+      }
+    ],
+    "interpretation": "Height observations with already-above-threshold flags are residual movement, not new attack latency. Raw times are retained without fitted alignment.",
+    "transportAgeMs": {
+      "min": 0,
+      "p95": 1.3333333333336306,
+      "max": 1.3333333333340747
+    },
+    "height": 0.9278030628124685,
+    "barMax": 0.6818029880523682,
+    "workload": {
+      "sessionId": 1,
+      "source": "generated",
+      "sampleRate": 48000,
+      "diagnostics": false,
+      "state": "playing",
+      "repeat": true,
+      "selectedChannel": 0,
+      "kind": "bursts",
+      "frequency": 1000,
+      "dbfs": -34,
+      "peakAmplitude": 0.0199526231496888,
+      "audioStart": 0,
+      "channel": 0,
+      "pascalsPerUnit": 2,
+      "calibrated": false,
+      "reason": "context running"
+    },
+    "config": [
+      0.9278030395507812,
+      9.8100004196167,
+      1100,
+      0.15000000596046448,
+      0.20000000298023224,
+      0.23999999463558197,
+      0.03999999910593033,
+      0.3199999928474426
+    ]
+  }
+]

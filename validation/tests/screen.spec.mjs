@@ -240,8 +240,9 @@ test('the mounted view owns its wake lock independently of microphone permission
   });
   await page.goto('http://127.0.0.1:8101');
   await expect(page.locator('.wake-status')).toHaveText('Screen stays awake');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Microphone denied');
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   expect(await page.evaluate(() => screenLocks[0].released)).toBe(false);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect.poll(() => page.evaluate(() => screenLocks[0].released)).toBe(true);

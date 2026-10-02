@@ -106,7 +106,9 @@ test('native recording identifies on demand and exports timestamps, or reports a
 
 for (const action of ['cancel', 'stop', 'route']) {
   test(`${action} during song capture cannot upload or stop an unrelated listening session`, async ({ page }) => {
-    const uploads = await setup(page);
+    // Keep the production capture duration: a 300 ms mock can finish while CI
+    // is still dispatching the cancellation gesture.
+    const uploads = await setup(page, { captureMs: 10_000 });
     await page.getByRole('button', { name: 'Identify song', exact: true }).click();
     if (action === 'cancel') await page.getByRole('button', { name: 'Cancel identification' }).click();
     if (action === 'stop') await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();

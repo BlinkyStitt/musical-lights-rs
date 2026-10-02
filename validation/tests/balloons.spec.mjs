@@ -217,9 +217,13 @@ for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
     await syntheticAudio(page, 'pending'); await page.goto(url); await physicsReady(page);
     await page.evaluate(() => { window.savedInput = document.querySelector('#dancinglights').physics.motion; });
     if (end === 'microphone denial') await page.evaluate(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Microphone denied'); }; });
-    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-    if (end === 'microphone denial') await expect(page.getByRole('alert')).toContainText('Microphone denied');
+    if (end === 'microphone denial') {
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
+      await expect(page.getByRole('alert')).toContainText('Microphone denied');
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
+    }
     else {
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
       await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
       if (end === 'stop') await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
