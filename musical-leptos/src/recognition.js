@@ -55,7 +55,7 @@ export class SongRecognition {
     this.tools = document.createElement('section');
     this.tools.className = 'song-tools';
     this.tools.setAttribute('aria-label', 'Song recognition');
-    this.tools.innerHTML = `<div class="song-actions"><button type="button" class="identify-song" aria-describedby="recognition-disclosure">Identify song</button><button type="button" class="cancel-recognition" hidden>Cancel identification</button></div>
+    this.tools.innerHTML = `<div class="song-actions"><button type="button" class="identify-song" aria-describedby="recognition-disclosure"><span aria-hidden="true">♫</span> Identify song</button><button type="button" class="cancel-recognition" hidden>Cancel identification</button></div>
       <p id="recognition-disclosure">Identify song sends a 10-second microphone recording to AudD through our server. Only recognized song details are saved on this device.</p>
       <p class="recognition-status" role="status"></p>
       <details class="song-history"><summary>Song history (0)</summary><p>Detection times, not exact song start times. History is local to this browser.</p><div class="song-actions"><button type="button" class="export-songs-csv">Export CSV</button><button type="button" class="export-songs-json">Export JSON</button></div><p class="song-storage-status" role="status"></p><ol></ol></details>`;
@@ -68,6 +68,11 @@ export class SongRecognition {
     card.querySelector('.spectrum-panel').before(this.strip);
     const query = selector => this.tools.querySelector(selector);
     this.button = query('.identify-song'); this.cancelButton = query('.cancel-recognition');
+    const row = card.querySelector('.button-row');
+    const fullscreen = row.querySelector('.fullscreen-button');
+    row.insertBefore(this.button, fullscreen);
+    row.insertBefore(this.cancelButton, fullscreen);
+    query('.song-actions').remove();
     this.status = query('.recognition-status');
     this.button.onclick = () => this.identify();
     this.cancelButton.onclick = () => this.cancel('Identification canceled.');
@@ -104,6 +109,7 @@ export class SongRecognition {
   refresh() {
     const supported = typeof MediaRecorder !== 'undefined';
     this.button.disabled = !this.endpoint() || !supported || !this.input || !this.playing || Boolean(this.job);
+    this.button.title = !this.playing ? 'Start listening, then identify the music.' : 'Identify the music playing now.';
     this.cancelButton.hidden = !this.job;
     if (!this.job && !this.status.textContent) this.status.textContent = !this.endpoint()
       ? 'Song recognition is not configured yet.' : !supported ? 'Song recognition is unavailable in this browser.'
@@ -219,6 +225,6 @@ export class SongRecognition {
     this.card.removeEventListener('audio-session', this.onSession);
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('storage', this.onStorage);
-    this.resize.disconnect(); this.tools.remove(); this.strip.remove();
+    this.resize.disconnect(); this.button.remove(); this.cancelButton.remove(); this.tools.remove(); this.strip.remove();
   }
 }

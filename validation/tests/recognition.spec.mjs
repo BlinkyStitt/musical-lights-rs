@@ -189,3 +189,29 @@ test('a missing recorder disables recognition without disabling listening or his
   await expect(page.getByText('Song history (0)', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Stop listening', exact: true })).toBeVisible();
 });
+
+test('the song button is prominent above the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  const uploads = await setup(page);
+  const identify = page.locator('.audio-controls').getByRole('button', { name: 'Identify song', exact: true });
+  await expect(identify).toBeInViewport();
+  expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
+  await expect(identify).toHaveCSS('font-weight', '700');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(identify).toBeInViewport();
+  await expect(identify).toBeEnabled();
+  const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+  expect(await identify.evaluate(button => button.getBoundingClientRect().left >= document.querySelector('.fullscreen-button').getBoundingClientRect().right)).toBe(true);
+  expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.frame-rate').getBoundingClientRect().top)).toBe(true);
+  await identify.click();
+  await expect(page.locator('.recognition-status')).toHaveText('Listening for 10 seconds…');
+  await expect(page.locator('.recognition-status')).toBeInViewport();
+  await page.getByRole('button', { name: 'Cancel identification', exact: true }).click();
+  await expect(page.locator('.recognition-status')).toHaveText('Identification canceled.');
+  await expect(page.locator('.recognition-status')).toBeInViewport();
+  await expect(identify).toBeEnabled();
+  expect(uploads).toHaveLength(0);
+  await exit.click();
+  await page.screenshot({ path: testInfo.outputPath('prominent-song-button-phone.png') });
+});

@@ -373,11 +373,6 @@ pub fn DancingLights() -> impl IntoView {
                         {move || if fullscreen.get() { "Exit fullscreen" } else { "Fullscreen" }}
                     </button>
                 </div>
-                <p class="mic-status" role="status">
-                    {move || if starting.get() { "Starting audio" } else if listening.get() {
-                        if generated.get() { "Test audio · Mic off" } else { "Listening · Mic on" }
-                    } else { "Microphone off" }}
-                </p>
             </div>
             <div class="spectrum-panel">
                 <p class="fullscreen-hint">"Click Exit fullscreen"</p>
@@ -424,6 +419,11 @@ pub fn DancingLights() -> impl IntoView {
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
             <div class="display-note">
+                <p class="mic-status" role="status">
+                    {move || if starting.get() { "Starting audio" } else if listening.get() {
+                        if generated.get() { "Test audio · Mic off" } else { "Listening · Mic on" }
+                    } else { "Microphone off" }}
+                </p>
                 <p class="control-note">{move || if listening.get() {
                     format!("Sample rate: {} Hz", sample_rate.get())
                 } else { "Tap Start listening to begin.".into() }}</p>
