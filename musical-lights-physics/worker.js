@@ -9,7 +9,7 @@ const capacity = 50000;
 let simulation, config, palette, buffer, timer, lastTime, origin;
 let paused = true, debt = 0, maxDebt = 0, pending = [], publishedTick = -2;
 let input = new Float32Array(38), recording = null, recordingOverflow = false;
-let costs = new Float32Array(capacity), costCount = 0, totalCost = 0, steps = 0;
+let costs = null, costCount = 0, totalCost = 0, steps = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
 let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
 let batchTicks = 0, batchSubsteps = 0, batchMaxSubsteps = 0;
@@ -132,14 +132,14 @@ self.onmessage = async ({ data }) => {
         if (recording) throw new Error('Finish the phone test before resetting physics');
         reset(data.config); postMessage({ type: 'reset', config: Array.from(config) }); break;
       case 'record':
-        reset(data.config); recording = []; costCount = 0; recordingOverflow = false;
+        reset(data.config); recording = []; costs = new Float32Array(capacity); costCount = 0; recordingOverflow = false;
         recordingStart = absoluteNow(); initialTick = simulation.tick();
         postMessage({ type: 'recording', timestamp: recordingStart, config: Array.from(config) }); break;
       case 'report':
         postMessage({ type: 'report', inputs: recording, physicsCosts: Array.from(costs.subarray(0, costCount)),
           recordingOverflow, substepTotal, maxSubsteps, overloadTicks, substepCosts, config: Array.from(config), initialTick, finalTick: simulation.tick(),
           elapsedMs: absoluteNow() - recordingStart, debt, maxDebt, discardedSimulationMs: 0, finalSnapshot: Array.from(snapshot()) });
-        recording = null; break;
+        recording = null; costs = null; substepCosts = []; break;
       default: throw new Error('Unknown physics worker message');
     }
   } catch (error) {

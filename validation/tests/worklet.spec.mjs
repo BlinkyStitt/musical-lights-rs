@@ -199,6 +199,11 @@ test('diagnostic frames preserve all 240 measurements and bound a stalled receiv
     const p = processor();
     const w = p.value.wasm, h = p.value.processor;
     w.processor_trace_enable(h, 1);
+    // This manual trace consumer enables recording after construction. Lazy
+    // allocation can grow WASM memory, so renew its views before processing.
+    // The production processor enables diagnostics before constructing views.
+    p.value.input = new Float32Array(w.memory.buffer, w.processor_input(h), w.processor_capacity(h));
+    p.value.snapshot = new Float64Array(w.memory.buffer, w.processor_snapshot(h), w.processor_snapshot_length(h));
     const rows = [];
     for (let i = 0; i < pcm.length; i += size) {
       expect(p.push(pcm.subarray(i, i + size))).toBe(true);

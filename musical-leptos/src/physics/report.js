@@ -1,3 +1,5 @@
+import { ListeningReview } from './review.js';
+import { settingSwitch } from './controls.js';
 import { build } from './build.js';
 
 const summarize = values => {
@@ -9,36 +11,43 @@ const summarize = values => {
 export class PhoneReport {
   constructor(view) {
     this.view = view;
-    this.host = view.card.querySelector('.physics-controls');
+    this.host = view.card.querySelector('.diagnostics-controls');
+    this.physicsHost = view.card.querySelector('.physics-controls');
+    this.defaults = [...view.config];
     this.removers = [];
     this.invalid = [];
-    this.intervals = new Float32Array(60000); this.renderCosts = new Float32Array(60000);
+    this.intervals = null; this.renderCosts = null;
     this.count = 0; this.costCount = 0; this.progress = [];
     const fields = [
       ['Gravity (m/s²)', 1, 0, 30, .01], ['Density (kg/m³)', 2, 1, 20000, 1],
-      ['Restitution (ratio)', 3, 0, 1, .01], ['Friction (ratio)', 4, 0, 2, .01],
-      ['Enclosure depth (m)', 5, .2, 2, .01], ['Full stroke time (s)', 6, .04, 2, .01],
-      ['Reduced motion stroke (s)', 7, .32, 4, .01],
+      ['Bounce (ratio)', 3, 0, 1, .01], ['Friction (ratio)', 4, 0, 2, .01],
+      ['Enclosure depth (m)', 5, .2, 2, .01], ['Large attack duration (ms)', 6, 40, 2000, 10],
+      ['Reduced Motion attack duration (ms)', 7, 320, 4000, 10],
     ];
-    this.host.innerHTML = `<summary>Physics prototype and phone test</summary>
-      <p>These values are starting assumptions. Apply physical settings with Reset. Camera changes keep the simulation.</p>
-      <p>Vertical walls have no friction and at least 0.55 restitution. The controls below set the other surfaces and balls.</p>
-      <div class="physics-fields">${fields.map(([name, index, min, max, step]) => `<label>${name}<input data-config="${index}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(view.config[index].toPrecision(6))}"></label>`).join('')}</div>
-      <label>Camera rotation (degrees)<input class="camera-rotation" type="range" min="-40" max="40" value="0"></label>
+    this.physicsHost.innerHTML = `<summary>Physics</summary>
+      <p>Apply settings to reset the balls and bars. Current enclosure dimensions are retained.</p>
+      <p>Vertical walls have no friction and at least 0.55 bounce. These controls set the other surfaces and balls.</p>
+      <div class="physics-fields">${fields.map(([name, index, min, max, step]) => `<label class="control-row">${name}<input data-config="${index}" type="number" min="${min}" max="${max}" step="${step}" value="${Number((view.config[index] * (index >= 6 ? 1000 : 1)).toPrecision(6))}"></label>`).join('')}</div>
       <button type="button" class="physics-reset">Apply settings and reset</button>
-      <p><a href="/phone">Open the phone test page</a></p>
-      <label><input type="checkbox" class="generated-audio"> Use test tones instead of the microphone on the next Start listening</label>
-      <label>Tone on next Start<select class="tone-kind"><option value="exercise">Changing 24-tone exercise</option><option value="stationary">Stationary tone (60 s)</option><option value="stepped">Step through all 24 bands (48 s)</option><option value="sweep">Continuous sweep (24 s)</option><option value="two">Two tones (30 s)</option><option value="volume">Volume steps (90 s)</option><option value="bursts">Short bursts (8 s)</option><option value="silence">Silence (3 s)</option></select></label>
+      <button type="button" class="physics-defaults">Restore defaults and reset</button>`;
+    this.host.innerHTML = `<summary>Diagnostics</summary>
+      <p>Test tones and listening review use the same analysis and renderer as microphone capture. Stop Listening to change sources.</p>
+      <p class="diagnostic-fps" aria-label="Frame rate"></p>
+      <p class="sensor-readings" aria-label="Sensor readings"></p>
+      <label>Test tone<select class="tone-kind"><option value="exercise">Changing 24-tone exercise</option><option value="stationary">Stationary tone (60 s)</option><option value="stepped">Step through all 24 bands (48 s)</option><option value="sweep">Continuous sweep (24 s)</option><option value="two">Two tones (30 s)</option><option value="volume">Volume steps (90 s)</option><option value="bursts">Short bursts (8 s)</option><option value="silence">Silence (3 s)</option></select></label>
       <label>Frequency (Hz)<input class="tone-frequency" type="number" min="20" max="15500" value="1000"></label>
       <label>Input level (dBFS peak)<input class="tone-level" type="number" min="-90" max="-12" value="-34"></label>
-      <label><input class="tone-repeat" type="checkbox" checked> Repeat</label>
-      <label><input class="tone-audible" type="checkbox"> Audible playback</label>
-      <button type="button" class="tone-pause" disabled>Pause tone</button>
-      <p class="tone-status" role="status">Choose a tone, then Start listening. Levels describe generated PCM, not calibrated sound pressure.</p>
-      <label><input class="tone-trace" type="checkbox"> Record loudness and motion diagnostics on next Start (up to 100 seconds)</label>
+      ${settingSwitch("Repeat", "tone-repeat", true)}
+      ${settingSwitch("Audible playback", "tone-audible")}
+      <button type="button" class="tone-pause" disabled>Pause playback</button>
+      <p class="tone-status" role="status">Choose a tone, then turn on Listening. Levels describe generated PCM, not calibrated sound pressure.</p>
+      ${settingSwitch("Diagnostic recording", "tone-trace")}
+      <p>Recording starts with the next Listening session (up to 100 seconds). Turn it off for phone FPS acceptance.</p>
       <button type="button" class="tone-export" disabled>Export tone trace</button>
       <p class="tone-trace-status" role="status"></p>
-      <p>iPhone 16e, Safari. Set Low Power Mode to off. Each test has 15 seconds of warmup, then five minutes of measurement. Test normal view, portrait fullscreen, and landscape fullscreen.</p>
+      <p>Enter the actual phone model and browser. Set Low Power Mode to off. Each test has 15 seconds of warmup, then five minutes of measurement. Test normal view, portrait fullscreen, and landscape fullscreen.</p>
+      <label>Phone model<input class="phone-device" placeholder="e.g. iPhone 16e" required></label>
+      <label>Browser<input class="phone-browser" placeholder="e.g. Safari" required></label>
       <label>iOS version<input class="ios-version" placeholder="Enter the iOS version" required></label>
       <label>View<select class="phone-mode"><option value="normal">Normal view</option><option value="portrait-fullscreen">Portrait fullscreen</option><option value="landscape-fullscreen">Landscape fullscreen</option></select></label>
       <label><input class="low-power-off" type="checkbox"> Low Power Mode is off</label>
@@ -47,13 +56,22 @@ export class PhoneReport {
       <p class="phone-progress" role="status"></p>
       <label><input class="phone-smooth" type="checkbox"> I confirm that the motion looked smooth</label>
       <button type="button" class="phone-export" disabled>Export test report</button>`;
-    if (location.pathname.replace(/\/$/, '') === '/phone') this.host.open = true;
     this.listen('.camera-rotation', 'input', event => view.setCamera(Number(event.target.value)));
+    this.listen('.display-reset', 'click', () => { this.query('.camera-rotation').value = '0'; view.setCamera(0); });
+    this.listen('.physics-defaults', 'click', () => {
+      if (this.active) return;
+      const config = [...this.defaults]; config[0] = view.height;
+      for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
+        const index = Number(node.dataset.config); node.value = config[index] * (index >= 6 ? 1000 : 1);
+      }
+      view.worker.postMessage({ type: 'reset', config });
+    });
     this.listen('.physics-reset', 'click', () => {
       if (this.active) return;
       const config = this.readConfig();
       if (config) view.worker.postMessage({ type: 'reset', config });
     });
+    this.review = new ListeningReview(view); view.card.review = this.review;
     this.toneChunks = []; this.toneRows = 0; this.toneDropped = 0; this.tonePhysics = [];
     const trace = ({ detail }) => {
       if (detail.sessionId !== this.toneMetadata?.sessionId || this.audioState?.state === 'stopped') return;
@@ -83,6 +101,8 @@ export class PhoneReport {
         this.query('.tone-trace-status').textContent = '';
       }
       this.toneMetadata = detail; this.audioState = detail;
+      const active = detail.state !== 'stopped';
+      for (const selector of ['.tone-kind', '.tone-frequency', '.tone-level', '.tone-trace']) this.query(selector).disabled = active;
       if (this.active && (!this.acceptanceWorkload() || detail.sessionId !== this.metadata.sessionId))
         this.invalidate(`Audio workload changed: ${detail.reason ?? detail.state}`);
     };
@@ -109,13 +129,14 @@ export class PhoneReport {
     this.listen('.phone-export', 'click', () => this.export());
     this.listen('.phone-smooth', 'change', () => this.showResult());
   }
-  query(selector) { return this.host.querySelector(selector); }
+  query(selector) { return this.view.card.querySelector(selector); }
   listen(selector, type, listener) { const node = this.query(selector); node.addEventListener(type, listener); this.removers.push(() => node.removeEventListener(type, listener)); }
   readConfig() {
     const config = [...this.view.config]; config[0] = this.view.height;
-    for (const node of this.host.querySelectorAll('[data-config]')) {
+    for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
       if (!node.reportValidity()) return null;
-      config[Number(node.dataset.config)] = Number(node.value);
+      const index = Number(node.dataset.config);
+      config[index] = Number(node.value) / (index >= 6 ? 1000 : 1);
     }
     return config;
   }
@@ -130,8 +151,8 @@ export class PhoneReport {
     if (this.view.card.dataset.toneDiagnostics === 'true') { progress.textContent = 'Turn off diagnostic recording and restart audio before measuring phone FPS.'; return; }
     const mode = this.query('.phone-mode').value;
     const expanded = this.view.card.hasAttribute('data-expanded');
-    if (!this.query('.ios-version').value.trim() || !this.query('.low-power-off').checked) {
-      progress.textContent = 'Enter the iOS version and confirm that Low Power Mode is off.'; return;
+    if (!this.query('.phone-device').value.trim() || !this.query('.phone-browser').value.trim() || !this.query('.ios-version').value.trim() || !this.query('.low-power-off').checked) {
+      progress.textContent = 'Enter the phone model, browser and iOS version and confirm that Low Power Mode is off.'; return;
     }
     if (!this.acceptanceWorkload()) {
       progress.textContent = 'Start the repeating 24-tone exercise with diagnostics off before the test.'; return;
@@ -143,14 +164,15 @@ export class PhoneReport {
     }
     if (mode !== 'normal' && !expanded) this.view.card.querySelector('.fullscreen-button').click();
     const config = this.readConfig(); if (!config) return;
+    this.intervals = new Float32Array(60000); this.renderCosts = new Float32Array(60000);
     this.active = true; this.invalid = []; this.result = null; this.count = 0; this.costCount = 0; this.progress = [];
     this.previous = null; this.startMs = null; this.lastProgress = 0;
     this.maxSnapshotAgeMs = 0;
     this.metadata = { build, sessionId: this.audioState.sessionId, workload: { ...this.audioState }, userAgent: navigator.userAgent, ios: this.query('.ios-version').value.trim(),
-      device: 'iPhone 16e (user test)', lowPowerMode: 'off (user confirmed)', mode,
+      device: this.query('.phone-device').value.trim(), browser: this.query('.phone-browser').value.trim(), lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
       cameraDegrees: this.view.rotation, scrolling: this.view.card.querySelector('.scroll-lights').checked, warmupSeconds: 15, measurementSeconds: 300,
-      audioSource: 'generated → MediaStream → AudioWorklet → loudness WASM',
+      audioSource: 'generated PCM → AudioWorklet → loudness WASM',
       startedAt: new Date().toISOString(), config, layout: this.view.layout, palette: Array.from(this.view.palette) };
     this.query('.phone-start').disabled = true; this.query('.phone-finish').disabled = false;
     this.query('.physics-reset').disabled = true; this.query('.phone-export').disabled = true;
@@ -161,6 +183,13 @@ export class PhoneReport {
     if (mode === 'normal') this.view.card.scrollIntoView({ block: 'start' });
   }
   frame(now, cost) {
+    if (!this.lastDiagnostic || now - this.lastDiagnostic > 1000) {
+      const elapsed = now - (this.fpsAt ?? now), frames = this.view.metrics.frames - (this.fpsFrames ?? 0);
+      this.query('.diagnostic-fps').textContent = elapsed > 0 ? `${(frames * 1000 / elapsed).toFixed(0)} FPS` : '— FPS';
+      this.fpsAt = now; this.fpsFrames = this.view.metrics.frames; this.lastDiagnostic = now;
+      const readings = this.view.motion.readings;
+      this.query('.sensor-readings').textContent = `Motion permission/state: ${this.view.motion.state}; ${readings.motionEvents} acceleration events, ${readings.orientationEvents} tilt events; reading age: ${readings.at == null ? 'unavailable' : (now - readings.at).toFixed(0) + ' ms'}; gravity vector (m/s²): ${JSON.stringify(Array.from(this.view.input.slice(34, 37)))}; screen angle: ${readings.screenAngle ?? 'unavailable'} degrees; gravity-inclusive (m/s²): ${JSON.stringify(readings.gravity ?? null)}; linear acceleration (m/s²): ${JSON.stringify(readings.linear ?? null)}; tilt: ${readings.beta ?? '—'} / ${readings.gamma ?? '—'} degrees.`;
+    }
     if (!this.active) return;
     if (this.view.card.querySelector('.scroll-lights').checked !== this.metadata.scrolling) this.invalidate('Scrolling changed during test');
     if (!this.acceptanceWorkload() || this.audioState.sessionId !== this.metadata.sessionId)
@@ -176,7 +205,7 @@ export class PhoneReport {
       else this.invalidate('Frame report capacity exceeded');
     }
     this.previous = now;
-    if (!this.view.card.querySelector('.stop-listening')) this.invalidate('Audio stopped during test');
+
     const expanded = this.view.card.hasAttribute('data-expanded');
     if (expanded !== (this.metadata.mode !== 'normal') || innerWidth !== this.metadata.viewport[0]
       || innerHeight !== this.metadata.viewport[1]) this.invalidate('View changed during test');
@@ -241,5 +270,5 @@ export class PhoneReport {
     link.href = url; link.download = `musical-lights-${build}-${this.result.mode}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  close() { for (const remove of this.removers) remove(); this.active = false; this.host.replaceChildren(); }
+  close() { this.review.close(); delete this.view.card.review; for (const remove of this.removers) remove(); this.active = false; this.intervals = this.renderCosts = null; this.toneChunks = []; this.tonePhysics = []; this.host.replaceChildren(); this.physicsHost.replaceChildren(); }
 }

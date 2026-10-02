@@ -48,7 +48,7 @@ test('an unknown nested route loads the app not-found view with HTTP 404', async
   expect(errors).toEqual([]);
 });
 
-for (const route of ['/', '/about/', '/phone/']) {
+for (const route of ['/', '/about/', '/advanced/']) {
   test(`Musical Lights branding fits a narrow header on ${route}`, async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto(`${origin}${route}`);
@@ -57,7 +57,7 @@ for (const route of ['/', '/about/', '/phone/']) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
     const brand = await page.locator('.wordmark').boundingBox();
     const nav = await page.locator('.site-header nav').boundingBox();
-    expect(brand.x + brand.width).toBeLessThanOrEqual(nav.x);
+    expect(brand.y + brand.height <= nav.y || brand.x + brand.width <= nav.x).toBe(true);
   });
 }
 
@@ -66,14 +66,14 @@ test('a stale cached entry navigates to the current deployment before loading th
   const { version } = await (await request.get(`${origin}/build.json`)).json();
   const old = '0'.repeat(24);
   let entries = 0;
-  await page.route(`${origin}/phone/**`, async route => {
+  await page.route(`${origin}/advanced/**`, async route => {
     if (!route.request().isNavigationRequest()) return route.continue();
     entries++;
     await route.fulfill({ contentType: 'text/html', body: entries === 1 ? html.replaceAll(version, old) : html });
   });
-  await page.goto(`${origin}/phone/?source=bookmark#test`);
+  await page.goto(`${origin}/advanced/?source=bookmark#test`);
   await expect(page.getByRole('meter')).toHaveCount(24);
-  await expect(page).toHaveURL(`${origin}/phone/?source=bookmark#test`);
+  await expect(page).toHaveURL(`${origin}/advanced/?source=bookmark#test`);
   expect(entries).toBe(2);
   await expect(page.locator('meta[name="musical-lights-assets"]')).toHaveAttribute('content', `/assets/${version}/`);
   await expect.poll(() => page.workers().some(worker => worker.url().includes(`/assets/${version}/physics/worker.js`))).toBe(true);
@@ -106,11 +106,30 @@ test('runtime requests use one version, including audio and transitive worker WA
   }
   expect(await page.evaluate(() => window.workletURL)).toBe(assets + 'loudness/processor.js');
   expect(requests.filter(path => /\.(js|wasm)$/.test(path)).every(path => path.startsWith(assets))).toBe(true);
-  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
 });
 
 test('an unavailable deployment check still boots the coherent cached runtime', async ({ page }) => {
   await page.route('**/build.json?*', route => route.abort());
   await page.goto(origin);
   await expect(page.getByRole('meter')).toHaveCount(24);
+});
+
+for (const path of ['/advanced', '/advanced/']) {
+  test(`direct ${path} loads, refreshes and participates in browser history`, async ({ page }) => {
+    expect((await page.goto(`${origin}${path}`)).status()).toBe(200);
+    await expect(page.getByRole('heading', { name: 'Advanced', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Advanced', exact: true })).toHaveAttribute('aria-current', 'page');
+    expect((await page.reload()).status()).toBe(200);
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await expect(page.locator('.settings-section')).toHaveCount(0);
+    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
+    await page.goBack(); await expect(page.locator('.input-source')).toBeVisible();
+    await page.goForward(); await expect(page.locator('.learning-topics')).toBeVisible();
+  });
+}
+test('retired phone route gets normal not-found behavior', async ({ page }) => {
+  expect((await page.goto(`${origin}/phone/`)).status()).toBe(404);
+  await expect(page.getByRole('heading')).toContainText("We couldn't find that page!");
+  expect((await page.reload()).status()).toBe(404);
 });

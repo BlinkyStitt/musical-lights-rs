@@ -25,7 +25,9 @@ for (const width of [320, 375, 1440]) {
         expectedHeadroom: 1 - view.current[view.layout[17]+1] / view.visibleHeight,
         hitRegionError: Math.max(...meters.map((node,i) => {
           const box=node.getBoundingClientRect();
-          const projected=graph.x+graph.width/2+((i+.5)*view.layout[3]-view.width/2)/(view.camera.right-view.camera.left)*graph.width;
+          const column = (i + view.renderedPhase) % 24;
+          const center = column + Math.min(1, 24 - column) / 2;
+          const projected=graph.x+graph.width/2+(center*view.layout[3]-view.width/2)/(view.camera.right-view.camera.left)*graph.width;
           return Math.abs(box.x+box.width/2-projected);
         })),
         colors: groups.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()),
@@ -60,7 +62,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await page.addInitScript(() => {
     const Context = window.AudioContext;
     window.AudioContext = class extends Context {
-      constructor(...args) { super(...args); window.transportContext = this; }
+      constructor(...args) { super(...args); window.transportContext = this; this.addEventListener('statechange', event => { if (window.freezeTransport) event.stopImmediatePropagation(); }); }
     };
     const Node = window.AudioWorkletNode;
     window.AudioWorkletNode = class extends Node {
@@ -71,9 +73,11 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await page.goto('http://127.0.0.1:8101');
   // Keep the fake capture source after WebKit recreates its native wrapper.
   await page.requestGC();
-  await page.getByRole('button', { name: 'Start listening' }).click();
-  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+  await expect(page.locator('.listening-toggle')).toBeEnabled();
   await page.evaluate(async () => {
+    window.freezeTransport = true;
     await window.transportContext.suspend();
     // Establish a raised support before the invalid packet removes it. A slow
     // runner may otherwise observe balls already resting on the floor.

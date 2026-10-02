@@ -57,7 +57,7 @@ def publish(staging: Path) -> str:
         raise ValueError("Expected exactly one Trunk application bootstrap")
     (staging / "index.html").write_text(html)
     (staging / "build.json").write_text(json.dumps({"version": version}))
-    for relative in ("about/index.html", "phone/index.html", "404.html"):
+    for relative in ("about/index.html", "advanced/index.html", "404.html"):
         destination = staging / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(staging / "index.html", destination)

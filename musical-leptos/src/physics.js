@@ -62,7 +62,7 @@ export function orientationGravity(beta, gamma, magnitude = 9.81) {
   return [magnitude * Math.cos(b) * Math.sin(g), -magnitude * Math.sin(b), -magnitude * Math.cos(b) * Math.cos(g)];
 }
 
-// Optional sensor permission must begin in the Start listening click stack.
+// Optional sensor permission must begin in the Phone motion change stack.
 // Closing also invalidates pending permission promises before Rust drops callbacks.
 export class PhysicsInput {
   constructor(layer, onPointer, onGravity, onShake, onStatus = () => {}, onPermission = () => {}) {
@@ -74,6 +74,7 @@ export class PhysicsInput {
     this.onPermission = onPermission;
     this.state = 'off';
     this.motionGravityAt = -Infinity;
+    this.readings = { orientationEvents: 0, motionEvents: 0 };
     // iOS WebKit forwards CoreMotion's userAcceleration + gravity. Other
     // browsers report support acceleration, whose gravity component is reversed.
     // iPadOS can identify itself as a touch-capable Mac in desktop mode.
@@ -93,12 +94,17 @@ export class PhysicsInput {
     this.listen('pointerout', event => { if (!event.relatedTarget) clearPointer(); });
     this.listen('blur', clearPointer);
     this.orientation = event => {
+      Object.assign(this.readings, { orientationEvents: this.readings.orientationEvents + 1,
+        at: performance.now(), screenAngle: angle(), beta: event.beta, gamma: event.gamma });
       if (Number.isFinite(event.beta) && Number.isFinite(event.gamma)
         && performance.now() - this.motionGravityAt > 500) {
         onGravity(...orientationGravity(event.beta, event.gamma), angle());
       }
     };
     this.acceleration = event => {
+      Object.assign(this.readings, { motionEvents: this.readings.motionEvents + 1,
+        at: performance.now(), screenAngle: angle(), gravity: event.accelerationIncludingGravity ? { x: event.accelerationIncludingGravity.x, y: event.accelerationIncludingGravity.y, z: event.accelerationIncludingGravity.z } : null,
+        linear: event.acceleration ? { x: event.acceleration.x, y: event.acceleration.y, z: event.acceleration.z } : null });
       const axes = ['x', 'y', 'z'];
       const linear = axes.map(axis => event.acceleration?.[axis]);
       const raw = axes.map(axis => event.accelerationIncludingGravity?.[axis]);
@@ -200,19 +206,15 @@ export class Scene {
     palette = new Float32Array(palette);
     this.closed = false;
     const card = layer.closest('.audio-card');
-    this.motionButton = document.createElement('button');
-    this.motionButton.className = 'motion-button';
-    this.motionButton.textContent = 'Enable motion';
-    this.motionButton.type = 'button';
-    this.motionButton.setAttribute('aria-pressed', 'false');
     this.motionControls = document.createElement('div');
     this.motionControls.className = 'motion-controls';
-    this.motionControls.append(this.motionButton);
-    card.querySelector('.display-note').insertAdjacentElement('afterend', this.motionControls);
+    this.motionButton = card.querySelector('.motion-button');
+    this.motionControls.append(this.motionButton.closest('label'));
+    card.querySelector('.button-row').prepend(this.motionControls);
     this.motionStatus = document.createElement('p');
     this.motionStatus.className = 'motion-status';
     this.motionStatus.setAttribute('role', 'status');
-    this.motionControls.append(this.motionStatus);
+    card.querySelector('.display-note').after(this.motionStatus);
     this.microphoneStatus = document.createElement('p');
     this.microphoneStatus.className = 'microphone-permission';
     this.microphoneStatus.setAttribute('role', 'status');
@@ -222,9 +224,9 @@ export class Scene {
     const summary = document.createElement('summary');
     summary.textContent = 'About microphone and motion access';
     const help = document.createElement('p');
-    help.textContent = 'Access is controlled by your browser. To reduce repeated microphone prompts, choose Allow in this site’s browser permissions, if available. A bookmark uses the browser’s permissions; a Home Screen app or another browser may have separate permissions. Motion access may be requested again after reopening. Nothing starts until you tap Start listening or Enable motion.';
+    help.textContent = 'Access is controlled by your browser. To reduce repeated microphone prompts, choose Allow in this site’s browser permissions, if available. A bookmark uses the browser’s permissions; a Home Screen app or another browser may have separate permissions. Motion access may be requested again after reopening. Microphone and sensors stay off until you turn on their switches.';
     this.permissionHelp.append(summary, help);
-    this.motionControls.after(this.permissionHelp);
+    this.motionStatus.after(this.permissionHelp);
     this.renderPermissions = () => {
       // Avoid repeating identical live-region announcements for independent queries.
       const show = (element, text) => { if (element.textContent !== text) element.textContent = text; };
@@ -233,7 +235,7 @@ export class Scene {
         : !navigator.mediaDevices?.getUserMedia ? 'unavailable' : states.microphone ?? 'unknown';
       this.microphoneStatus.dataset.state = microphone;
       show(this.microphoneStatus, {
-        unknown: 'Microphone permission cannot be checked here. Tap Start listening to check access.',
+        unknown: 'Microphone permission cannot be checked here. Turn on Listening to check access.',
         prompt: 'Microphone off · your browser will ask for access when needed.',
         granted: 'Microphone access allowed.',
         denied: 'Microphone access blocked. Allow it in this site’s browser settings, then try again.',
@@ -244,6 +246,7 @@ export class Scene {
       }[microphone]);
       const sensors = [states.accelerometer, states.gyroscope];
       const state = this.input?.state ?? 'off';
+      this.motionStatus.dataset.state = state;
       if (state !== 'off') {
         show(this.motionStatus, sensors.includes('denied') && ['waiting', 'active'].includes(state)
           ? 'Motion access blocked. Check this site’s browser permissions, then disable and enable motion.'
@@ -255,7 +258,7 @@ export class Scene {
               active: matchMedia('(prefers-reduced-motion: reduce)').matches
                 ? 'Motion on · Reduced Motion limits shaking.'
                 : 'Motion on · shake your phone to move the balls.',
-              denied: 'Motion access denied. Allow Motion & Orientation for this site, then tap Enable motion.',
+              denied: 'Motion access denied. Allow Motion & Orientation for this site, then turn on Phone motion.',
               unavailable: 'This browser is not providing phone motion.',
             }[state]);
         return;
@@ -267,10 +270,10 @@ export class Scene {
         : sensors.includes('prompt') ? 'prompt' : 'unknown';
       this.motionStatus.dataset.permission = motion;
       show(this.motionStatus, {
-        unknown: 'Motion off · tap Enable motion to check access.',
+        unknown: 'Motion off · turn on Phone motion to check access.',
         prompt: 'Motion off · your browser may ask for access when enabled.',
         granted: 'Motion access allowed · motion off.',
-        denied: 'Motion access blocked. Check this site’s browser permissions, then tap Enable motion.',
+        denied: 'Motion access blocked. Check this site’s browser permissions, then turn on Phone motion.',
         unavailable: 'Phone motion is unavailable in this browser.',
         insecure: 'Motion access requires a secure HTTPS page.',
       }[motion]);
@@ -280,9 +283,10 @@ export class Scene {
       (...args) => this.view?.deviceGravity(...args),
       (...args) => this.view?.deviceAcceleration(...args),
       (state, on) => {
-        this.motionButton.textContent = on ? 'Disable motion' : 'Enable motion';
-        this.motionButton.disabled = state === 'requesting' && !on;
-        this.motionButton.setAttribute('aria-pressed', String(on));
+        this.motionButton.checked = on || state === 'requesting';
+        this.motionButton.indeterminate = !on && state === 'requesting';
+        this.motionButton.disabled = false;
+        this.motionButton.dataset.pending = String(state === 'requesting');
         this.motionStatus.dataset.state = state;
         this.renderPermissions();
       }, () => {
@@ -296,8 +300,8 @@ export class Scene {
     this.card = card;
     // A dedicated gesture allows shaking without microphone access and makes
     // permission retry explicit. Display rotation lock is never consulted.
-    this.motionButton.onclick = () => {
-      if (this.input.enabled) {
+    this.motionButton.onchange = () => {
+      if (!this.motionButton.checked) {
         this.input.stopMotion(); this.view?.clearMotion();
       }
       else { this.input.stopMotion(); this.input.startMotion(); }
@@ -311,11 +315,11 @@ export class Scene {
   }
   push(levels, edges, scrolling) { this.view?.push(levels, edges, scrolling); }
   startMotion() { this.input.startMotion(); }
-  stopMotion() { this.input.stopMotion(); this.view?.stopMotion(); }
+  clearAudio() { this.view?.clearAudio(); }
   close() {
     this.closed = true; this.permissions.close();
     this.card.removeEventListener('microphone-access', this.microphoneAccess);
     this.input.close(); this.view?.close(); this.view = null;
-    this.motionControls.remove(); this.microphoneStatus.remove(); this.permissionHelp.remove();
+    this.motionControls.remove(); this.motionStatus.remove(); this.microphoneStatus.remove(); this.permissionHelp.remove();
   }
 }

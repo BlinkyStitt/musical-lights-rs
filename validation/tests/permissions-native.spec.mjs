@@ -21,17 +21,18 @@ async function observeCapture(page) {
 test('browser-managed grant survives reload and native capture stops on Stop and route close', async ({ page, context }) => {
   await context.grantPermissions(['microphone'], { origin });
   await observeCapture(page);
-  await page.goto(`${origin}/phone/?source=bookmark#permissions`); await physicsReady(page);
+  await page.goto(`${origin}/advanced/?source=bookmark#permissions`); await physicsReady(page);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
   expect(await page.evaluate(() => captureRequests)).toBe(0);
   await page.reload(); await physicsReady(page);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
   expect(await page.evaluate(() => captureRequests)).toBe(0);
   for (const end of ['Stop listening', 'About']) {
-    await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
     expect(await page.evaluate(() => captures.at(-1).getAudioTracks()[0].readyState)).toBe('live');
-    await page.getByRole(end === 'About' ? 'link' : 'button', { name: end, exact: true }).click();
+    if (end === 'About') await page.getByRole('link', { name: 'About', exact: true }).click();
+    else await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
     await expect.poll(() => page.evaluate(() => captures.map(stream => stream.getAudioTracks()[0].readyState)))
       .toEqual(end === 'About' ? ['ended', 'ended'] : ['ended']);
   }
@@ -42,8 +43,9 @@ test('native permission changes update the mounted display and denied capture fa
   await observeCapture(page);
   await page.goto(origin); await physicsReady(page);
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'denied');
-  await page.getByRole('button', { name: 'Start listening', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'not-allowed');
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   expect(await page.evaluate(() => captures.length)).toBe(0);
   expect(await page.evaluate(() => captureRequests)).toBe(1);
   await context.grantPermissions(['microphone'], { origin });
@@ -75,14 +77,14 @@ test('browser-delivered virtual sensor readings reach the real motion and force 
       sensorEvents.push({ trusted: event.isTrusted, x: event.acceleration?.x, y: event.acceleration?.y });
     });
   });
-  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await cdp.send('Emulation.setSensorOverrideReadings', { type: 'accelerometer', reading: { xyz: { x: 0, y: 7.8, z: 0 } } });
   await cdp.send('Emulation.setSensorOverrideReadings', { type: 'linear-acceleration', reading: { xyz: { x: 0, y: -2, z: 0 } } });
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[25])).toBeCloseTo(2, 5);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[35])).toBeCloseTo(-9.8, 5);
   expect(await page.evaluate(() => sensorEvents.some(event => event.trusted && event.y === -2))).toBe(true);
-  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27))))
     .toEqual([0, 0, 0]);
 });
@@ -96,7 +98,7 @@ test('native gravity turns upside down and settles balls against the back of a f
     await cdp.send('Emulation.setSensorOverrideReadings', { type, reading: { xyz: { x: 0, y: type === 'accelerometer' ? 9.8 : 0, z: 0 } } });
   }
   await page.goto(origin); await physicsReady(page);
-  await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
   await cdp.send('Emulation.setSensorOverrideReadings', { type: 'accelerometer', reading: { xyz: { x: 0, y: -9.8, z: 0 } } });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[35])).toBeCloseTo(9.8, 5);
@@ -111,6 +113,6 @@ test('native gravity turns upside down and settles balls against the back of a f
     return Array.from({ length: v.layout[21] }, (_, i) => v.current[3 + i * v.layout[8] + 2]).every(z => z < -.01);
   })).toBe(true);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[35])).toBe(0);
-  await page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(34, 38)))).toEqual([0, 0, 0, 0]);
 });

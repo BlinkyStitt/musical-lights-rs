@@ -70,7 +70,7 @@ class PublishTests(unittest.TestCase):
                 self.assertEqual(
                     json.loads((root / "build.json").read_text()), {"version": version}
                 )
-                for route in ("about/index.html", "phone/index.html", "404.html"):
+                for route in ("about/index.html", "advanced/index.html", "404.html"):
                     self.assertEqual((root / route).read_text(), html)
                 self.assertTrue((root / "social-preview.png").is_file())
 

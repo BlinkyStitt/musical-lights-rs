@@ -32,7 +32,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
       if (age <= 1 / fps) expect(edge).toBeGreaterThanOrEqual(.7 * intensity);
       if (age >= .18) expect(edge).toBe(0);
     }
-    await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   });
 }
 
@@ -87,7 +87,7 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
     await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.edges[0])).toBe(reducedMotion === 'reduce' ? .5 : 1);
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
-    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
     await physicsReady(page);
   });

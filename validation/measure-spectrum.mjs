@@ -182,8 +182,8 @@ try {
       }, { percussion });
       if (cdp) await cdp.send('Profiler.start');
       await page.goto(url);
-      await page.getByRole('button', { name: 'Start listening' }).click();
-      await page.getByRole('button', { name: 'Stop listening' }).waitFor();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).waitFor();
       if (expanded) await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
       await page.waitForTimeout(5000);
       assert.equal(await page.locator('.audio-card').getAttribute('data-expanded') !== null, expanded);
@@ -237,7 +237,7 @@ try {
           await page.keyboard.press('Escape');
         }
       }
-      await page.getByRole('button', { name: 'Stop listening' }).click();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
       await page.evaluate(() => window.measureInput.context.close());
       assert.deepEqual(errors, []);
       result.profiles.push({ name, browser: browser.version(), expanded, cpuRate, percussion, measuredSeconds: seconds, meters,

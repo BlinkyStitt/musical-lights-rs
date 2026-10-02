@@ -11,10 +11,8 @@ extern "C" {
     fn new(layer: &web_sys::HtmlElement, palette: &[f32], on_frame: &js_sys::Function) -> Scene;
     #[wasm_bindgen(method)]
     fn push(this: &Scene, levels: &[f32], edges: &[f32], scrolling: bool);
-    #[wasm_bindgen(method, js_name = startMotion)]
-    fn start_motion(this: &Scene);
-    #[wasm_bindgen(method, js_name = stopMotion)]
-    fn stop_motion(this: &Scene);
+    #[wasm_bindgen(method, js_name = clearAudio)]
+    fn clear_audio(this: &Scene);
     #[wasm_bindgen(method)]
     fn close(this: &Scene);
 }
@@ -40,11 +38,8 @@ impl PhysicsAnimation {
             _frame: frame,
         }
     }
-    pub fn start_listening(&self) {
-        self.scene.start_motion();
-    }
-    pub fn stop_listening(&self) {
-        self.scene.stop_motion();
+    pub fn clear_audio(&self) {
+        self.scene.clear_audio();
     }
     pub fn push(&self, frame: DisplayFrame<DISPLAY_BANDS>, scrolling: bool) {
         self.scene.push(&frame.levels, &frame.edges, scrolling);

@@ -13,6 +13,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function touchInput(page, context) {
+  // Desktop Chromium keeps a separate mouse at (0, 0) while CDP injects touch.
+  // Scrolling idle bands can hover under that mouse and reveal unrelated labels.
+  // Keep the mouse outside the phone viewport; all tested touch stays native.
+  await page.mouse.move(-100, -100);
   const box = await page.getByRole('meter').nth(4).boundingBox();
   const session = await context.newCDPSession(page);
   const point = { x: Math.round(box.x + box.width / 2), y: box.y + box.height - 200, id: 1 };
@@ -42,7 +46,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
     };
   });
   await page.goto('http://127.0.0.1:8101');
-  await page.getByRole('button', { name: 'Start listening' }).tap();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(() => page.getByRole('meter').nth(4).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   const { point, send, move } = await touchInput(page, context);
@@ -66,8 +70,8 @@ test('a browser touch swipe across a live bar exits before release without a fre
   // suppresses an immediately injected post-swipe tap even on a plain page;
   // a separate gesture after 200 ms delivers the click. Allow 50 ms margin.
   await page.waitForTimeout(250);
-  await page.getByRole('button', { name: 'Stop listening' }).tap();
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
   await page.evaluate(() => sourceContext.close());
   expect(errors).toEqual([]);

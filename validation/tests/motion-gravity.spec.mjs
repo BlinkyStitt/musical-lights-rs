@@ -18,7 +18,7 @@ for (const apple of [false, true]) {
       await page.goto('http://127.0.0.1:8101'); await physicsReady(page);
       await page.locator('.scroll-lights').uncheck();
       const send = async (gravity, angle = 0) => {
-        await page.getByRole('button', { name: 'Enable motion', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
         await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
         await page.evaluate(({ gravity, angle, apple, fallback }) => {
           Object.defineProperty(screen.orientation, 'angle', { configurable: true, value: angle });
@@ -30,7 +30,7 @@ for (const apple of [false, true]) {
         await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
       };
       const gravity = () => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(34, 37)));
-      const disable = () => page.getByRole('button', { name: 'Disable motion', exact: true }).click();
+      const disable = () => page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();
       const settledDown = async () => {
         await expect.poll(async () => {
           const state = await physicsState(page);
@@ -63,7 +63,7 @@ for (const apple of [false, true]) {
       await settledDown();
       await disable();
       expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(34, 38)))).toEqual([0, 0, 0, 0]);
-      await expect(page.getByRole('button', { name: 'Start listening', exact: true })).toBeVisible();
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
     });
   }
 }

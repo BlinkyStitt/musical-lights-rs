@@ -30,12 +30,13 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
           });
         }};
       });
-      await page.goto(`${url}/phone/`);
-      await page.locator('.generated-audio').check();
+      await page.goto(`${url}/advanced/`);
+      await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+      await page.locator('.input-source').selectOption('generated');
       await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
       await page.locator('.tone-kind').selectOption('bursts');
-      await page.getByRole('button',{name:'Start listening',exact:true}).click();
-      await page.getByRole('button',{name:'Stop listening',exact:true}).waitFor();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Listening', exact: true }).waitFor();
       const data=await page.evaluate(()=>new Promise(resolve=>{
         const view=document.querySelector('#dancinglights').physics,frames=[];
         const sample=now=>{
@@ -54,16 +55,22 @@ for(const [browserName,engine] of [['chromium',chromium],['webkit',webkit]]) {
         const measured=packets.find(p=>p.measured>=maximum*.1);
         const raised=frames=>frames.find(p=>p.audioTime>=at&&p.audioTime<at+.5);
         const threshold=.003+(data.barMax-.003)*.01;
+        const before=data.frames.findLast(p=>p.audioTime<at);
         const collider=raised(data.frames.filter(p=>p.colliderTop>=threshold));
         const rendered=raised(data.frames.filter(p=>p.renderedTop>=threshold));
         assert(measured&&collider&&rendered);
         cycles.push({second,measurement10PercentOfBurstPeakMs:(measured.sourceTime-at)*1000,
           receipt10PercentOfBurstPeakMs:(measured.audioTime-at)*1000,
           collider1PercentHeightObservedMs:(collider.audioTime-at)*1000,
-          render1PercentHeightMs:(rendered.audioTime-at)*1000});
+          render1PercentHeightMs:(rendered.audioTime-at)*1000,
+          thresholdHeight:threshold,
+          heightBeforeBurst:before?{observedRelativeMs:(before.audioTime-at)*1000,collider:before.colliderTop,rendered:before.renderedTop}:null,
+          colliderAlreadyAboveThreshold:before?.colliderTop>=threshold,
+          renderAlreadyAboveThreshold:before?.renderedTop>=threshold});
       }
       const ages=data.packets.map(p=>(p.audioTime-p.sourceTime)*1000).sort((a,b)=>a-b);
       const item={browserName,physicalPhone:false,instrumented:true,cycles,
+        interpretation:'Height observations with already-above-threshold flags are residual movement, not new attack latency. Raw times are retained without fitted alignment.',
         transportAgeMs:{min:ages[0],p95:ages[Math.ceil(ages.length*.95)-1],max:ages.at(-1)},...data};
       results.push(item); console.log(browserName,cycles,item.transportAgeMs);
     } finally {await browser.close();}

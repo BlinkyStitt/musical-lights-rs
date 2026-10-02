@@ -83,7 +83,7 @@ export class SongRecognition {
       this.playing = detail.state === 'playing' && detail.source === 'microphone';
       if (!this.playing) this.cancel();
       if (detail.state === 'stopped') this.input = null;
-      if (['Ready to identify a song.', 'Start listening to identify a song.'].includes(this.status.textContent)) this.status.textContent = '';
+      if (['Ready to identify a song.', 'Turn on Listening to identify a song.'].includes(this.status.textContent)) this.status.textContent = '';
       this.refresh();
     };
     this.onVisibility = () => { if (document.hidden) this.cancel('Identification canceled when the page was hidden.'); };
@@ -109,11 +109,11 @@ export class SongRecognition {
   refresh() {
     const supported = typeof MediaRecorder !== 'undefined';
     this.button.disabled = !this.endpoint() || !supported || !this.input || !this.playing || Boolean(this.job);
-    this.button.title = !this.playing ? 'Start listening, then identify the music.' : 'Identify the music playing now.';
+    this.button.title = !this.playing ? 'Turn on Listening, then identify the music.' : 'Identify the music playing now.';
     this.cancelButton.hidden = !this.job;
     if (!this.job && !this.status.textContent) this.status.textContent = !this.endpoint()
       ? 'Song recognition is not configured yet.' : !supported ? 'Song recognition is unavailable in this browser.'
-        : !this.playing ? 'Start listening to identify a song.' : 'Ready to identify a song.';
+        : !this.playing ? 'Turn on Listening to identify a song.' : 'Ready to identify a song.';
   }
 
   cancel(message = '') {

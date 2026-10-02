@@ -61,9 +61,10 @@ def main() -> None:
         geometry.replace("from 'three'", "from './three.module.js'")
     )
     shutil.copyfile(root / "worker.js", output / "worker.js")
-    for name in ("view.js", "report.js"):
+    for name in ("view.js", "report.js", "demo-worker.js", "review.js"):
         shutil.copyfile(web / "src/physics" / name, output / name)
     shutil.copyfile(web / "src/tones.js", output / "tones.js")
+    shutil.copyfile(web / "src/controls.js", output / "controls.js")
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()

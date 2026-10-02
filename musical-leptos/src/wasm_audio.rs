@@ -11,7 +11,7 @@ use web_sys::{
 #[wasm_bindgen(module = "/src/audio_setup.js")]
 extern "C" {
     #[wasm_bindgen(catch, js_name = acquireInput)]
-    async fn acquire_input(context: &AudioContext) -> Result<MediaStream, JsValue>;
+    async fn acquire_input(context: &AudioContext, channel: u32) -> Result<MediaStream, JsValue>;
     #[wasm_bindgen(js_name = inputIsGenerated)]
     fn input_is_generated(stream: &MediaStream) -> bool;
     #[wasm_bindgen(js_name = releaseInput)]
@@ -23,6 +23,8 @@ extern "C" {
         channel: u32,
         reduced: bool,
     ) -> Result<AudioWorkletNode, JsValue>;
+    #[wasm_bindgen(js_name = forgetCalibration)]
+    fn forget_calibration(node: &AudioWorkletNode);
     #[wasm_bindgen(js_name = captureStatus)]
     fn capture_status(node: &AudioWorkletNode) -> String;
     #[wasm_bindgen(catch, js_name = saveCalibration)]
@@ -116,7 +118,7 @@ impl AudioSession {
         if self.resources.borrow().is_none() {
             return Err(closed_session());
         }
-        let stream = acquire_input(&context).await?;
+        let stream = acquire_input(&context, channel).await?;
         {
             let mut guard = self.resources.borrow_mut();
             let Some(resources) = guard.as_mut() else {
@@ -201,13 +203,13 @@ impl AudioSession {
                 release_processor(&worklet);
                 return Err(closed_session());
             };
-            resources.input = Some(context.create_media_stream_source(&stream)?);
+            if !input_is_generated(&stream) {
+                resources.input = Some(context.create_media_stream_source(&stream)?);
+            }
             port.set_onmessage(Some(callback.as_ref().unchecked_ref()));
-            resources
-                .input
-                .as_ref()
-                .unwrap()
-                .connect_with_audio_node(&worklet)?;
+            if let Some(input) = &resources.input {
+                input.connect_with_audio_node(&worklet)?;
+            }
             worklet.connect_with_audio_node(&context.destination())?;
             resources.worklet = Some(worklet);
             resources.callback = Some(callback);
@@ -265,6 +267,16 @@ impl AudioSession {
         Reflect::set(&message, &"type".into(), &"calibrate".into())?;
         Reflect::set(&message, &"dbSpl".into(), &db_spl.into())?;
         worklet.port()?.post_message(&message)
+    }
+    pub fn forget_calibration(&self) {
+        if let Some(node) = self
+            .resources
+            .borrow()
+            .as_ref()
+            .and_then(|r| r.worklet.as_ref())
+        {
+            forget_calibration(node);
+        }
     }
     pub fn stop(&self) {
         self.resources.borrow_mut().take();

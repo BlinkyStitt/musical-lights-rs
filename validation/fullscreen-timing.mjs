@@ -19,10 +19,11 @@ for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,d
     await staticPreview(context,origin);
     await context.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{value:false});Element.prototype.requestFullscreen=undefined;});
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(`${origin}/phone/`);
-    await page.locator('.generated-audio').check();
+    await page.goto(`${origin}/advanced/`);
+    await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+    await page.locator('.input-source').selectOption('generated');
     await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
-    await page.getByRole('button',{name:'Start listening',exact:true}).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await page.waitForFunction(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
     await page.waitForTimeout(2000);
     await page.evaluate(()=>{

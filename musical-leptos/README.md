@@ -17,8 +17,9 @@ trunk build --release --locked
 
 The release output is `dist/`. Microphone access needs HTTPS or localhost.
 The post-build hook publishes the built entry document at `about/index.html`
-and `404.html`. GitHub Pages redirects `/about` to `/about/` and serves the
-About page with HTTP 200, including direct visits and refreshes. Unknown paths
+and `advanced/index.html`, plus `404.html`. GitHub Pages serves About and
+Advanced with HTTP 200, including direct visits and refreshes. `/phone` follows
+the normal not-found path; there is no compatibility redirect. Unknown paths
 start the same Leptos router through Pages' custom 404 document and retain
 HTTP 404. The generated `<base href="/">` keeps scripts, styles, and WASM at the
 site root when a nested URL loads. No client redirect or URL encoding is needed.
@@ -33,24 +34,16 @@ reveals an approximate frequency label.
 Hz labels use the established integer-Bark endpoints. Touch readouts
 keep the existing three-second timeout and gesture handling.
 
-Twenty-four decorative balls move among the bars. Their resting diameters range
-from 0.55 to four bar widths. Contact pressure compresses them into rounded
-capsules. They push each other sideways and recover their round shape when
-space opens. Drawing and collisions use the same width, height, and end radius.
-Motion starts when the graph appears and continues with the
-microphone off. Steady gravity pulls them toward the bottom of the page, even
-when a phone lies flat on its back. They accelerate as they fall and bounce off
-each other, bars, and graph edges. Rounded bar corners send corner hits sideways.
-Move a mouse near a sphere to repel it.
-Device tilt supplies a small wind force, and a shake supplies a short impulse.
-Gravity stays in page coordinates and is stronger than the tilt wind. Touch
-gestures still control the graph and fullscreen view.
+Eight rigid balls move among the bars using the shared rigid-body physics worker
+and WebGL renderer. Their surfaces, bar targets and enclosure dimensions match
+the collision geometry. Audio attack strokes, gravity release, shaking, tilting
+and mouse forces follow [the physics contract](../docs/physics.md).
 
-The Start listening click also requests device motion permission where required.
-If that request fails, is denied, or the sensor API is unavailable, mouse input
-continues to work. Shake input uses acceleration without gravity; devices that
-cannot provide it still support tilt when available. No sensor input is required
-to use the microphone.
+Listening and Phone motion are separate native switches. Each requests only its
+own access. Motion can run with the microphone off, including tilt-only sessions.
+Turning either off preserves the other; route cleanup closes both. When Listening
+is off, a silent sine signal runs through the production DSP and renderer without
+an AudioContext or microphone request.
 
 Each sphere starts with the graph's rainbow color at its horizontal center.
 Its initial position selects the color once. A new impact with a bar blends
@@ -62,38 +55,18 @@ Sphere-to-sphere collisions, resting contact, and nearby bars do not change the
 color. The sphere retains its color until a later bar impact, including when
 listening stops and starts again.
 
-Gravity is 4.8 graph heights/s² normally and 2.4 with Reduced Motion.
-A sphere released in free space falls at least half a graph height in half a
-second normally, or one tenth with Reduced Motion. Speed is capped at 3.2 graph
-units/s. Reduced Motion disables shake impulses and reduces mouse forces and
-bar impulses. It applies stronger damping and softer bounces. Gravity still
-points down the page. Collision correction keeps the bodies outside solid bar
-surfaces; a sufficiently compressed body can pass through a real gap.
-The graph leaves 5% of its height above the maximum bar level, including in
-fullscreen. It adds no separate space for large balls. Contacts resolve when
-the graph first receives its size and whenever that size changes.
-Spheres do not block pointer input or appear in the accessibility tree.
+Stopping Listening clears musical targets and flashes; the silent preview then
+resumes. Phone motion stays active until its switch is off or the page closes.
+Disabling motion clears sensor forces while audio continues. Route cleanup
+cancels animation, terminates workers, closes audio, and removes sensor listeners.
+Late permission results cannot reopen a closed motion session.
 
-Sphere physics writes directly to the existing decorative nodes on animation
-frames. Collision checks reject separated bounds before computing contact
-distances. Bounded graph distances use squared arithmetic and square roots,
-avoiding the general-purpose WASM `hypot` path. The renderer caches style handles
-and encodes a sphere's color only when an impact changes it. See the
-[fullscreen performance measurements](../docs/validation.md#fullscreen-physics-performance).
-The release compiler and WASM optimizer use level 3 to favor execution speed.
-Stop listening, microphone permission failure, and audio failure clear
-the bar levels and remove sensor listeners. Gravity, momentum, sphere collisions,
-and mouse input continue. Route cleanup cancels the pending frame and removes
-all input listeners. Late motion permission results cannot restore sensors for
-a closed audio session. Sensor permission denial leaves gravity and mouse input
-active.
-
-Fullscreen expands the visualizer and keeps the microphone controls available.
-Use Exit fullscreen or the browser's fullscreen exit to return to the page.
-The button follows actual browser state and reports rejected requests.
+Fullscreen expands the visualizer, hides settings, and keeps manual Identify song
+available with microphone input. Exit fullscreen or Escape returns to the page.
+Recovery notices appear above the song overlay.
 
 The visible visualizer requests a [screen wake lock](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API),
-including before microphone access. Its status appears beside the FPS counter.
+including before microphone access. Its status appears below the lights; FPS is available in Advanced diagnostics.
 The lock releases when the tab is hidden or the view closes, and the page requests
 a new lock when visible again. Browser or power settings can reject or release
 it; the status then reads “Screen may sleep.” This does not change system sleep
@@ -113,8 +86,7 @@ gaps and circular top corners with a radius of one quarter of the bar width.
 A 1-pixel white inner border follows all four edges, including the rounded top
 and baseline. It fades with the existing attack envelope. The center keeps its
 color even at peak glow. One Tab stop remembers the last focused bar.
-Left/Right moves one bar; Home/End selects the endpoints. Tab exits to Input
-calibration and Shift+Tab returns to Fullscreen.
+Left/Right moves one bar; Home/End selects the endpoints. Tab exits to Scroll lights on Home (Display on Advanced); Shift+Tab returns to Fullscreen.
 
 The model still calculates 240 specific-loudness values internally. It integrates
 each set of ten values into one Bark band, then applies one shared adaptive gain
@@ -122,17 +94,19 @@ and proportional common-headroom scaling. Browser bars, sphere collisions, termi
 and LEDs use that same band activity. The grid and LOUD label cover the fill
 area; the 5% headroom sits above that scale.
 
-One transferable snapshot contains 122 f64 values (976 payload bytes): audio
-time, Reduced Motion, and five target and edge values for each of 24 bands. The decoder
+One transferable snapshot contains 99 f64 values (792 payload bytes): audio
+time, Reduced Motion, total sones, and four target and edge values for each of 24 bands. The decoder
 rejects malformed data and closes that audio session. One snapshot can wait for
 acknowledgement; analysis continues while the UI is delayed, and the next
 acknowledgement releases current state without a backlog.
 
-Each loudness frame supplies the current gain-scaled target, without a height hold or decorative release. White edges retain independent acoustic attack timing. Physical bars use 80 ms acceleration-limited strokes (320 ms with Reduced Motion); rendering follows the collider snapshots. See [the display contract](../docs/loudness.md) and [physics timing](../docs/physics.md).
+Each loudness frame supplies the current gain-scaled target, without a height hold or decorative release. White edges retain independent acoustic attack timing. Physical bars use 40 ms attack strokes and approximately 1.13 s full-height gravity release (320 ms with Reduced Motion); rendering follows the collider snapshots. See [the display contract](../docs/loudness.md) and [physics timing](../docs/physics.md).
 
-Audio analysis runs at the full input rate. One reusable animation callback draws
-the existing nodes and is cancelled when listening stops or the view closes,
-including pending microphone permission. There is no separate pause/resume state.
+Audio analysis runs at the full input rate. The renderer keeps drawing when
+Listening stops and cancels its callback on page exit. Advanced provides private
+local-file playback, two attributed audit excerpts, test tones, pause/resume,
+replay, repeat and listening-note exports. Digital sources use the same worklet
+and preserve the selected channel PCM; they request no microphone permission.
 
 The shared loudness model runs at 48 kHz and emits a complete loudness frame every
 96 samples (2 ms). A worklet callback can complete zero, one, or several frames.
@@ -140,19 +114,19 @@ It consumes each frame to preserve attacks, then transfers the latest full motio
 state when the UI has acknowledged the previous packet. Audio callbacks do not
 set the screen frame rate. Silence still advances the model and motion state.
 
-The FPS counter measures that animation callback over at least one second. It
+The Advanced diagnostics FPS counter measures that animation callback over at least one second. It
 includes delayed frames and does not count audio callbacks or depend on bar
 movement. It shows “— FPS” when drawing stops. The browser controls
 [animation frame timing](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame);
 the page does not assume or force 120 FPS. The counter measures callback delivery,
 not physical monitor refresh or GPU presentation.
 
-White-edge timing does not limit height changes. The previous combined bar/edge flash-rate guarantee depended on a height hold that is now removed. The `/phone` page provides stationary tones, all-band steps, sweeps, two tones, volume changes, bursts, and silence for visual review, with optional audible playback and bounded diagnostic traces.
+White-edge timing does not limit height changes. The previous combined bar/edge flash-rate guarantee depended on a height hold that is now removed. The `/advanced` page provides stationary tones, all-band steps, sweeps, two tones, volume changes, bursts, and silence for visual review, with optional audible playback and bounded diagnostic traces.
 
 Floating-point PCM can exceed its nominal [-1, 1] range, as specified by the
 [Web Audio standard](https://www.w3.org/TR/webaudio/#AudioBuffer). The processor
-accepts finite peaks without clipping. Missing input produces silent blocks
-that still advance filter state. Channel mixing rounds only after averaging.
+accepts finite peaks without clipping. A disconnected or missing selected channel stops the session. Digital playback
+preserves the selected channel without averaging or fitted gain.
 
 See [validation](../docs/validation.md) for routes, microphone, worklet, layout,
 contrast, reduced motion, and display timing checks. The temporary interaction counter

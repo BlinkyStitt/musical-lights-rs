@@ -223,7 +223,7 @@ test('unsupported native screen APIs still allow the lights-only view', async ({
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeEnabled();
   await expect(page.getByRole('meter')).toHaveCount(24);
 });
 
@@ -240,8 +240,9 @@ test('the mounted view owns its wake lock independently of microphone permission
   });
   await page.goto('http://127.0.0.1:8101');
   await expect(page.locator('.wake-status')).toHaveText('Screen stays awake');
-  await page.getByRole('button', { name: 'Start listening' }).click();
+  await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Microphone denied');
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   expect(await page.evaluate(() => screenLocks[0].released)).toBe(false);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect.poll(() => page.evaluate(() => screenLocks[0].released)).toBe(true);
@@ -270,7 +271,7 @@ test('native wake-lock status matches the browser grant and releases on route cl
   const result = await page.evaluate(() => nativeLockResult);
   console.log(`Native screen wake lock: ${result}`);
   await expect(page.locator('.wake-status')).toHaveText(result === 'granted' ? 'Screen stays awake' : 'Screen may sleep');
-  await expect(page.getByRole('button', { name: 'Start listening' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeEnabled();
   if (result === 'granted') expect(await page.evaluate(() => nativeLock.released)).toBe(false);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   if (result === 'granted') await expect.poll(() => page.evaluate(() => nativeLock.released)).toBe(true);
@@ -291,7 +292,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     });
     await page.goto('http://127.0.0.1:8101');
     await page.requestGC();
-    await page.getByRole('button', { name: 'Start listening' }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
     const before = await page.locator('#dancinglights').boundingBox();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -301,12 +302,10 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     expect(card).toEqual({ x: 0, y: 0, ...viewport });
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
     expect((await page.locator('#dancinglights').boundingBox()).height).toBeGreaterThan(before.height + 100);
-    await expect(page.getByRole('button', { name: 'Stop listening' })).toBeHidden();
+    await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeHidden();
     await expect(page.locator('.control-note')).toBeHidden();
     await expect(page.locator('.wake-status')).toBeHidden();
-    await expect(page.locator('.frame-rate')).toBeVisible();
-    await expect(page.locator('.frame-rate')).toHaveText(/^[1-9][0-9]* FPS$/);
-    await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
+    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
     await expect(page.locator('.site-header')).toBeHidden();
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });
@@ -319,7 +318,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await page.mouse.move(viewport.width / 2, 200, { steps: 5 });
     await page.mouse.up();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
-    await expect(page.locator('.frame-rate')).toHaveText(/^[1-9][0-9]* FPS$/);
+    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
@@ -327,7 +326,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await page.evaluate(() => document.exitFullscreen());
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('live');
-    await page.getByRole('button', { name: 'Stop listening' }).click();
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
     expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('ended');
     await page.evaluate(() => sourceContext.close());
   });
