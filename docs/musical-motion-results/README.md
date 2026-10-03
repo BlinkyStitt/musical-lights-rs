@@ -32,6 +32,13 @@ seconds; the bar controller owns fixed arrays. Browser source acquisition,
 permissions, song uploads, Rapier bodies, shaders and light objects stay in their
 platform adapters. The hardware core has no dependency on those packages.
 
+Scrolling follows the smoothed tempo at an average of two columns per beat:
+four columns per second at 120 BPM, twice the initial PR speed. Gentle balanced
+reversals every two beats limit the excursion to two columns, and
+position stays continuous through tempo changes. Reduced
+Motion disables automatic travel. The rate is defined in the shared core, so
+embedded displays and the browser adapter use the same motion.
+
 The estimator aggregates existing 2 ms spectral novelty into a 50 Hz envelope.
 It retains eight seconds (400 f32 values), evaluates after four seconds every
 half-second, searches 60–200 BPM using normalized mean-centered onset
@@ -86,6 +93,16 @@ Chromium/iPhone-profile WebKit run passes 32 checks, including native touch,
 fullscreen transitions, and stopping Listening after Exit. Full-suite, CI and
 deployment results are reported separately in
 [PR #39](https://github.com/BlinkyStitt/musical-lights-rs/pull/39) and its Actions runs.
+
+The faster-scroll follow-up passes all 64 core tests in each of four feature
+configurations, all 40 physics tests, and the worklet/Leptos checks. Its focused
+Chromium, WebKit and iPhone-profile WebKit run passes all 79 checks with the
+serial startup and crash guards intact, including expensive-step scheduling,
+fullscreen snapshot age, wall containment, native touch and Reduced Motion.
+The refreshed identical-PCM image previews record roughly 60 FPS on this Mac
+with scrolling enabled and disabled; see each browser's `render-cost.json`.
+These short digital-music runs do not qualify as phone FPS acceptance. Full-suite
+and current-head CI results remain separately reported in the PR.
 
 Core validation passes 63 tests in each of four feature configurations, including
 four tempo tests and reusable bar-motion/scroll/drag/pigment checks. The core also

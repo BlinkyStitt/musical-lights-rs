@@ -91,7 +91,8 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
     })
     .unwrap();
     sim.step();
-    assert!(sim.scroll_phase > stopped);
+    assert!(sim.scroll_phase != stopped);
+    assert!((sim.scroll_phase - stopped).abs() < SCROLL_PEAK_SPEED / HZ as f64);
     sim.apply(SimulationInput {
         tick: sim.tick,
         reduced_motion: true,
@@ -1370,7 +1371,7 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
         ..SimulationInput::default()
     })
     .unwrap();
-    for _ in 0..120 {
+    for _ in 0..(HZ as f64 * SCROLL_PERIOD / 8.0) as usize {
         sim.step();
     }
     let phase = sim.scroll_phase;
@@ -1385,7 +1386,7 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
         ..SimulationInput::default()
     })
     .unwrap();
-    for _ in 0..120 {
+    for _ in 0..(HZ as f64 * SCROLL_PERIOD / 8.0) as usize {
         slow.step();
     }
     let phase = slow.scroll_phase;

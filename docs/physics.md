@@ -67,10 +67,12 @@ Large attacks from rest must arrive within 1% of a stable target within 50 ms
 of physics receipt. Stable corrections up to 1% must settle within 150 ms.
 Retarget reversals include braking and are tested separately.
 
-The full pattern scrolls in both directions on an eight-second sinusoidal cycle
-at 120 BPM, reversing gently every four seconds. Average absolute travel is two
-columns per second, scaling with the smoothed tempo; peak speed is π/2 times that
-rate. Equal travel left and right removes permanent conveyor bias. A tempo-scaled
+The full pattern scrolls in both directions on a two-second sinusoidal cycle
+at 120 BPM, reversing gently every second. Average absolute travel is four
+columns per second (two columns per beat), scaling with the smoothed tempo;
+peak speed is π/2 times that rate. Equal travel left and right removes permanent
+conveyor bias. The shorter cycle limits the excursion to two columns
+instead of increasing the distance balls are carried toward a wall. A tempo-scaled
 enabled-time clock preserves position through tempo changes and when stopped,
 with a 120 ms smoothstep start/stop transition.
 Disabling scrolling and Reduced Motion stop in place; enabling scrolling resumes there.
@@ -217,8 +219,9 @@ reset. Phone acceptance also checks snapshot age and displayed tick progress;
 a running worker with a frozen renderer cannot pass on frame rate alone.
 
 **Scroll lights** now continuously translates the collider/visual source
-columns. At 120 BPM it averages two columns per second of absolute travel, with
-balanced smooth reversals every four seconds of tempo-scaled enabled time.
+columns. At 120 BPM it averages four columns per second of absolute travel (two
+columns per beat), with balanced smooth reversals every second of
+tempo-scaled enabled time.
 Tempo changes integrate into the running phase. Switching scrolling off eases
 to a stop in place; Reduced Motion disables automatic travel. Source colors,
 contacts, accessible labels and audio data keep their source identity.

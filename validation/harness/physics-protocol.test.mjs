@@ -18,7 +18,10 @@ test('the built WASM accepts protocol 7 scrolling and stops at its published pha
     sim.input(input);
     for (let i = 0; i < 240; i++) sim.step();
     const phase = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])[layout[20]];
-    assert(Math.abs(phase() - (2 * 8 / 4) * Math.sin((2 - .060) * Math.PI / 4)) < .001);
+    // Four columns/second with a two-second cycle gives a two-column
+    // amplitude. Published phase wraps negative displacement into 24 columns.
+    const expected = 2 * Math.sin((2 - .060) * Math.PI);
+    assert(Math.abs(phase() - ((expected + 24) % 24)) < .001);
     input[33] = 0; sim.input(input);
     for (let i = 0; i < 30; i++) sim.step();
     const stopped = phase();

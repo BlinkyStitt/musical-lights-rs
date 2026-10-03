@@ -2,8 +2,11 @@
 //! units for scrolling, linear RGB for pigments; no engine, heap, or browser APIs.
 use num::Float;
 
-pub const SCROLL_SPEED: f64 = 2.0;
-pub const SCROLL_PERIOD: f64 = 8.0;
+/// Average absolute travel at 120 BPM: two columns per beat.
+pub const SCROLL_SPEED: f64 = 4.0;
+/// Four-beat full cycle at 120 BPM; each direction lasts two beats.
+/// The shorter cycle keeps the excursion bounded when increasing travel speed.
+pub const SCROLL_PERIOD: f64 = 2.0;
 pub const SCROLL_EASE: f64 = 0.120;
 pub const SCROLL_PEAK_SPEED: f64 = SCROLL_SPEED * core::f64::consts::FRAC_PI_2;
 
@@ -105,13 +108,39 @@ mod tests {
             travel += dx.abs();
         }
         assert!(distance.abs() < 1e-8);
-        assert!((travel / 16.0 - 2.0).abs() < 0.001);
+        assert!((travel / 16.0 - 4.0).abs() < 0.001);
         let dx = scroll.advance(true, 180.0, 1.0 / 120.0);
         assert!(dx.abs() <= SCROLL_PEAK_SPEED * 1.5 / 120.0);
         for _ in 0..30 {
             scroll.advance(false, 180.0, 1.0 / 120.0);
         }
         assert_eq!(scroll.advance(false, 180.0, 1.0 / 120.0), 0.0);
+    }
+    #[test]
+    fn scrolling_travels_two_columns_per_beat_across_the_tempo_range() {
+        for bpm in [60.0, 90.0, 120.0, 180.0, 200.0] {
+            let mut scroll = BalancedScroll::default();
+            let dt = 1.0 / 240.0;
+            for _ in 0..240 {
+                scroll.advance(true, bpm, dt);
+            }
+            // Integrate two complete reversal cycles at each tempo. Fractional
+            // final ticks keep the measurement window exact, including 200 BPM.
+            let duration = 2.0 * SCROLL_PERIOD * 120.0 / bpm;
+            let mut remaining = duration;
+            let mut travel = 0.0;
+            let mut displacement = 0.0;
+            while remaining > 1e-12 {
+                let step = remaining.min(dt);
+                let dx = scroll.advance(true, bpm, step);
+                travel += dx.abs();
+                displacement += dx;
+                remaining -= step;
+            }
+            let beats = duration * bpm / 60.0;
+            assert!((travel / beats - 2.0).abs() < 0.001, "{bpm} BPM");
+            assert!(displacement.abs() < 1e-8, "{bpm} BPM");
+        }
     }
     #[test]
     fn drag_is_stable_and_depends_on_size_and_speed() {
