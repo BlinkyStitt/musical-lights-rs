@@ -24,9 +24,10 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await page.locator('.review-start').click();
+  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
@@ -37,7 +38,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
   await page.mouse.move(0, 0);
-  const stop = page.getByRole('checkbox', { name: 'Listening', exact: true });
+  const stop = page.locator('.review-stop');
   await stop.evaluate(button => button.addEventListener('click', () => {
     // Capture at the actual Stop event so protocol latency cannot consume the
     // fall before its starting height is measured.
@@ -147,7 +148,8 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(expand).toBeEnabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
   const initialScroll = await page.evaluate(() => scrollY);
   await expand.tap();
@@ -249,7 +251,7 @@ test('fullscreen transitions keep live audio and bounded simulation delay', asyn
   await page.goto('http://127.0.0.1:8101/advanced/');await physicsReady(page);
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.locator('.review-start').click();
   await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
   await page.waitForTimeout(2000);
   await page.evaluate(()=>{

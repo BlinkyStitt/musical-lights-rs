@@ -70,12 +70,12 @@ for (const source of ['microphone', 'generated tones']) {
   await page.locator('.input-source').selectOption('generated');
       }
       fixture.deploy();
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
+      if (source === 'generated tones') await page.locator('.review-start').click(); else await page.locator('.listening-toggle').click();
       const reload = page.getByRole('link', { name: 'Reload updated app' });
       await expect(reload).toBeVisible();
       await expect.poll(() => page.evaluate(() => window.testContext.state)).toBe('closed');
       expect(await page.evaluate(() => window.microphoneRequests)).toBe(0);
-      // Idle preview may already have loaded the same production DSP, without capture.
+      // The idle spectrum wave uses no audio context or capture.
       expect(await page.evaluate(() => window.microphoneRequests)).toBe(0);
       await reload.click();
       await expect(page).toHaveURL(fixture.origin + path);
@@ -85,12 +85,13 @@ for (const source of ['microphone', 'generated tones']) {
         await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
       }
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
+      if (source === 'generated tones') await page.locator('.review-start').click(); else await page.locator('.listening-toggle').check();
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
+  if (source !== 'generated tones') await expect(page.locator('.listening-toggle')).toBeEnabled();
       expect(fixture.requests).toContain(`/assets/${fixture.next}/loudness/loudness.wasm`);
       expect(fixture.requests).toContain(`/assets/${fixture.next}/loudness/processor.js`);
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+      if (source === 'generated tones') await page.locator('.review-stop').click(); else await page.locator('.listening-toggle').uncheck();
     } finally { await fixture.close(); }
   });
 }

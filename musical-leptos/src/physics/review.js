@@ -22,10 +22,10 @@ export class ListeningReview {
     this.sessions = []; this.samples = []; this.removers = [];
     this.root = document.createElement('section'); this.root.className = 'listening-review';
     this.root.innerHTML = `<h2>Listening review</h2>
-      <p>Local files stay in browser memory. PCM levels are preserved; output volume is not calibrated SPL. Music starts only when you turn on Listening.</p>
+      <p>Local files stay in browser memory. PCM levels are preserved; output volume is not calibrated SPL. Selecting music starts playback; Listening controls only the microphone.</p>
       <p>“Jazz Trumpet Loops Pack in F 90 bpm” by <a href="https://freesound.org/s/77711/">Mihai Sorohan</a> and “Vibe Ace” by <a href="https://freemusicarchive.org/music/Kevin_MacLeod/Jazz_Sampler/Vibe_Ace">Kevin MacLeod</a>, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. Audit excerpts: mono 48 kHz, fixed peak 0.2; trumpet first 5.333 s, Vibe Ace 8–14 s.</p>
       <label class="control-row">Local audio file<input class="review-file" type="file" accept="audio/*"></label>
-      <p class="review-status" role="status">Choose a review source in Input & calibration.</p>
+      <p class="review-status" role="status">Choose a source above the lights.</p>
       <button class="review-replay" type="button" disabled>Replay</button>
       <label class="control-row">Playback device<input class="review-device" placeholder="e.g. built-in speakers, headphones"></label>
       <label class="control-row">Listening notes<textarea class="review-notes" rows="4" placeholder="Describe accents, swells and decay; include playback times."></textarea></label>
@@ -35,7 +35,7 @@ export class ListeningReview {
       <canvas class="review-plot" width="900" height="260" aria-label="Diagnostic plot: raw partial sones, filtered targets, rendered height"></canvas>
       <p class="review-plot-key">Solid: raw partial sones / 10. Dashed: filtered target (0–1). Dotted: rendered height / enclosure height at its render time, estimated from the host/context timestamp pair. No fitted gains or shifted traces.</p>`;
     this.card.querySelector('.diagnostics-controls').append(this.root);
-    const input = this.card.querySelector('.calibration-controls');
+    const input = this.card.querySelector('.input-source-controls');
     this.file = this.root.querySelector('.review-file'); input.append(this.file.closest('label'));
     this.source = this.card.querySelector('.input-source');
     this.card.querySelector('.capture-information').textContent = 'Live microphone capture; calibration is specific to the input.';
@@ -43,12 +43,17 @@ export class ListeningReview {
       this.generation++; this.buffer = null; this.identity = null;
       if (this.source.value !== 'local') { this.localFile = null; this.file.value = ''; }
       this.card.querySelector('.tone-audible').checked = !['microphone', 'generated'].includes(this.source.value);
-      this.card.querySelector('.capture-information').textContent = this.source.value === 'microphone' ? 'Live microphone capture; calibration is specific to the input.' : 'Digital PCM · microphone off · stop Listening to change source or channel.';
+      this.card.querySelector('.capture-information').textContent = this.source.value === 'microphone' ? 'Live microphone capture; calibration is specific to the input.' : 'Digital PCM · microphone off · stop playback to change channel.';
+      this.select(!['microphone', 'generated'].includes(this.source.value) && (this.source.value !== 'local' || !!this.localFile));
     });
     this.listen(this.file, 'change', () => {
       this.generation++; this.buffer = null; this.identity = null;
       this.localFile = this.file.files?.[0] ?? null;
-      this.status(this.localFile ? `${this.localFile.name} selected. Turn on Listening to decode and play.` : 'Choose a local audio file.');
+      this.source.value = 'local';
+      this.card.querySelector('.tone-audible').checked = true;
+      this.card.querySelector('.capture-information').textContent = 'Digital PCM · microphone off · stop playback to change channel.';
+      this.status(this.localFile ? `${this.localFile.name} selected. Starting playback…` : 'Choose a local audio file.');
+      this.select(!!this.localFile);
     });
     this.listen(this.root.querySelector('.review-note'), 'click', () => {
       this.observations ??= [];
@@ -59,7 +64,6 @@ export class ListeningReview {
     this.listen(this.root.querySelector('.review-export'), 'click', () => this.export());
     this.listen(this.card, 'audio-session', ({ detail }) => {
       const active = ['starting', 'playing', 'paused', 'ended', 'interrupted'].includes(detail.state);
-      this.file.disabled = active; // Source and channel are also disabled by Rust signals.
       if (detail.sessionId !== this.sessionId) {
         this.sessionId = detail.sessionId;
         if (detail.source !== 'microphone') this.sessions.push({ ...detail, startedAt: new Date().toISOString(), playbackDevice: this.root.querySelector('.review-device').value, timing: [] });
@@ -89,6 +93,10 @@ export class ListeningReview {
         receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime });
       this.plot();
     });
+  }
+  select(play) {
+    this.card.querySelector('.tone-status').hidden = this.source.value === 'microphone';
+    this.card.dispatchEvent(new CustomEvent('review-input', { detail: { source: this.source.value, play } }));
   }
   listen(node, type, fn) { node.addEventListener(type, fn); this.removers.push(() => node.removeEventListener(type, fn)); }
   status(text) { if (!this.closed) this.root.querySelector('.review-status').textContent = text; }

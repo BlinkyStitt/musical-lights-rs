@@ -25,7 +25,8 @@ for (const action of ['Listening', 'Fullscreen']) {
     await page.goto(origin); await physicsReady(page);
     if (action === 'Listening') await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     else await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-    await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'false');
     await page.waitForTimeout(2500);
     await expect(page.locator('.listening-toggle')).toBeChecked();
@@ -51,7 +52,8 @@ test('browser-managed grant survives reload and native capture stops on Stop and
   expect(await page.evaluate(() => captureRequests)).toBe(0);
   for (const end of ['Stop listening', 'About']) {
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-    await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
     expect(await page.evaluate(() => captures.at(-1).getAudioTracks()[0].readyState)).toBe('live');
     if (end === 'About') await page.getByRole('link', { name: 'About', exact: true }).click();
     else await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();

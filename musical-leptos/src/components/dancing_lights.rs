@@ -2,7 +2,7 @@ use crate::{
     display::DisplayAnimation,
     physics::PhysicsAnimation,
     screen::ScreenSession,
-    wasm_audio::{AudioSession, AudioUpdate},
+    wasm_audio::{AudioSession, AudioUpdate, InputControlSession},
 };
 use leptos::prelude::*;
 use musical_lights_core::{
@@ -21,10 +21,12 @@ struct SessionOwner {
     session: Rc<RefCell<Option<AudioSession>>>,
     animation: Rc<RefCell<Option<DisplayAnimation>>>,
     physics: Rc<RefCell<Option<PhysicsAnimation>>>,
+    generation: Rc<Cell<u64>>,
 }
 
 impl SessionOwner {
     fn stop(&self) {
+        self.generation.set(self.generation.get() + 1);
         if let Some(session) = self.session.borrow_mut().take() {
             session.stop();
         }
@@ -187,6 +189,8 @@ pub fn DancingLights(
     let (scrolling, set_scrolling) = signal(true);
     let source_band = |band: usize| band;
     let (listening, set_listening) = signal(false);
+    let (playing, set_playing) = signal(false);
+    let (input_source, set_input_source) = signal(String::from("microphone"));
     let (generated, set_generated) = signal(false);
     let (capture_status, set_capture_status) =
         signal(String::from("Uncalibrated · estimated perceived loudness"));
@@ -237,6 +241,7 @@ pub fn DancingLights(
         session: Rc::new(RefCell::new(None)),
         animation: Rc::new(RefCell::new(None)),
         physics: Rc::new(RefCell::new(None)),
+        generation: Rc::new(Cell::new(0)),
     });
     let canvas_layer = NodeRef::<leptos::html::Span>::new();
     canvas_layer.on_load(move |element| {
@@ -260,7 +265,7 @@ pub fn DancingLights(
         })
     });
     let start = move || {
-        if starting.get_untracked() || listening.get_untracked() {
+        if starting.get_untracked() || playing.get_untracked() {
             return;
         }
         set_error.set(None);
@@ -278,11 +283,12 @@ pub fn DancingLights(
         };
         let rate = session.sample_rate();
         let owner = owner.get_value();
+        let generation = owner.generation.get();
         let alive = owner.alive.clone();
         let physics = owner.physics.clone();
         let animation = match DisplayAnimation::new(
             session.clone(),
-            move || scrolling.get_untracked() && listening.get_untracked(),
+            move || scrolling.get_untracked() && playing.get_untracked(),
             move |values, fps, enabled| {
                 if !alive.get() {
                     return;
@@ -318,7 +324,7 @@ pub fn DancingLights(
                 .start(
                     input_channel.get_untracked().saturating_sub(1),
                     move |update| {
-                        if !alive.get() {
+                        if !alive.get() || failure_owner.generation.get() != generation {
                             return;
                         }
                         match update {
@@ -335,6 +341,7 @@ pub fn DancingLights(
                                 set_error.set(Some(message));
                                 set_calibrating.set(false);
                                 set_listening.set(false);
+                                set_playing.set(false);
                                 set_starting.set(false);
                                 set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
                                 set_frame_rate.set(None);
@@ -350,7 +357,7 @@ pub fn DancingLights(
                 .await;
             // A route can close while getUserMedia is still awaiting permission.
             // Its result releases any stream acquired after that close.
-            if !owner.alive.get() {
+            if !owner.alive.get() || owner.generation.get() != generation {
                 return;
             }
             set_starting.set(false);
@@ -358,10 +365,12 @@ pub fn DancingLights(
                 Ok(()) => {
                     set_generated.set(session.is_generated());
                     set_capture_status.set(session.status());
-                    set_listening.set(true);
+                    set_playing.set(true);
+                    set_listening.set(!session.is_generated());
                 }
                 Err(error) => {
                     set_listening.set(false);
+                    set_playing.set(false);
                     owner.stop();
                     set_frame_rate.set(None);
                     set_audio_stopped.set(true);
@@ -370,29 +379,59 @@ pub fn DancingLights(
             }
         });
     };
+    let stop = move || {
+        owner.with_value(|owner| owner.stop());
+        set_listening.set(false);
+        set_playing.set(false);
+        set_starting.set(false);
+        set_frame_rate.set(None);
+        set_error.set(None);
+        set_audio_stopped.set(false);
+        set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
+    };
+    let inputs = StoredValue::new_local(None::<InputControlSession>);
+    card.on_load(move |element| {
+        inputs.set_value(Some(InputControlSession::new(
+            &element,
+            move |source, play| {
+                stop();
+                set_input_source.set(source);
+                if play {
+                    start();
+                }
+            },
+        )));
+    });
+    on_cleanup(move || {
+        inputs.update_value(|inputs| {
+            inputs.take();
+        })
+    });
     view! {
         <section class="audio-card" data-mode=if advanced { "advanced" } else { "home" } aria-label="Live audio spectrum" node_ref=card>
             <div class="audio-controls">
                 <div class="button-row">
-                    <SettingSwitch label="Phone motion" class="motion-button"
-                        checked=Signal::derive(|| false) on_change=Callback::new(|_| {})/>
                     <SettingSwitch label="Listening" class="listening-toggle"
-                        checked=listening.into() disabled=starting.into()
+                        checked=listening.into() disabled=Signal::derive(move || starting.get() || input_source.get() != "microphone")
                         on_change=Callback::new(move |enabled| {
                             if enabled { start(); } else {
-                                owner.with_value(|owner| owner.stop());
-                                set_listening.set(false);
-                                set_frame_rate.set(None);
-                                set_error.set(None);
-                                set_audio_stopped.set(false);
-                                set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
+                                stop();
                             }
                         })/>
+                    <p class="mic-status" role="status"><span class="mic-session-status"></span>
+                        <span>{move || if input_source.get() == "microphone" && error_notice.get().is_some() {
+                            "Microphone unavailable."
+                        } else { "" }}</span>
+                    </p>
+                    <SettingSwitch label="Phone motion" class="motion-button"
+                        checked=Signal::derive(|| false) on_change=Callback::new(|_| {})/>
+                    <SettingSwitch label="Scroll lights" class="scroll-lights"
+                        checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
                         title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; click Exit fullscreen to return" }
                         on:click=move |_| {
-                            if !fullscreen.get_untracked() { start(); }
+                            if !fullscreen.get_untracked() && input_source.get_untracked() == "microphone" { start(); }
                             screen.with_value(|session| {
                                 if let Some(session) = session { session.toggle_fullscreen(); }
                             });
@@ -401,6 +440,21 @@ pub fn DancingLights(
                     </button>
                 </div>
             </div>
+            <Show when=move || advanced>
+                <div class="input-source-controls">
+                <label class="control-row">"Source"<select class="input-source">
+                    <option value="microphone">"Microphone"</option>
+                    <option value="generated">"Test tones"</option>
+                    <option value="trumpet">"Jazz Trumpet Loops"</option>
+                    <option value="music">"Vibe Ace"</option>
+                    <option value="local">"Local audio file"</option>
+                </select></label>
+                </div>
+                <div class="playback-controls" hidden=move || input_source.get() == "microphone">
+                    <button class="review-start" disabled=move || starting.get() || playing.get() on:click=move |_| start()>"Play audio"</button>
+                    <button class="review-stop" disabled=move || !starting.get() && !playing.get() on:click=move |_| stop()>"Stop audio"</button>
+                </div>
+            </Show>
             <div class="spectrum-panel">
                 <p class="fullscreen-hint">"Click Exit fullscreen"</p>
                 <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
@@ -446,19 +500,7 @@ pub fn DancingLights(
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
             <div class="display-note">
-                <p class="mic-status" role="status">
-                    {move || if starting.get() { "Starting audio" } else if listening.get() {
-                        if generated.get() { "Digital audio · Mic off" } else { "Listening · Mic on" }
-                    } else { "Microphone off · silent sine preview" }}
-                </p>
-                <p class="control-note">{move || if listening.get() {
-                    format!("Sample rate: {} Hz", sample_rate.get())
-                } else { "Turn on Listening or enter Fullscreen to begin.".into() }}</p>
                 <p class="display-status">
-                <Show when=move || !advanced>
-                    <SettingSwitch label="Scroll lights" class="scroll-lights"
-                    checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
-                </Show>
                     <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>
 
                 </p>
@@ -467,28 +509,20 @@ pub fn DancingLights(
                 <p class="reduced-motion-note">"Reduced Motion disables automatic scrolling."</p>
             </Show>
             <Show when=move || advanced>
-                <details class="display-controls settings-section" open>
+                <details class="display-controls settings-section">
                     <summary>"Display"</summary>
-                <SettingSwitch label="Scroll lights" class="scroll-lights"
-                    checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
                     <p class="reduced-motion-note">"Reduced Motion disables automatic scrolling."</p>
                     <label class="control-row">"Camera angle (degrees)"<input class="camera-rotation" type="range" min="-40" max="40" value="0"/></label>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
-            <p class="calibration-status">{move || capture_status.get()}</p>
-            <details class="calibration-controls settings-section" open>
+            <details class="calibration-controls settings-section">
                 <summary>"Input & calibration"</summary>
-                <label class="control-row">"Source"<select class="input-source" disabled=move || listening.get() || starting.get()>
-                    <option value="microphone">"Microphone"</option>
-                    <option value="generated">"Test tones"</option>
-                    <option value="trumpet">"Jazz Trumpet Loops"</option>
-                    <option value="music">"Vibe Ace"</option>
-                    <option value="local">"Local audio file"</option>
-                </select></label>
+                <p class="calibration-status">{move || capture_status.get()}</p>
+                <p class="control-note">{move || if sample_rate.get() > 0.0 { format!("Sample rate: {} Hz", sample_rate.get()) } else { String::new() }}</p>
                 <p class="capture-information"></p>
 
                 <p>"Bars estimate perceived loudness within the mix, with one automatically adjusting display scale. White borders accent detected attacks. Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
-                <label class="control-row">"Input channel "<input type="number" min="1" step="1" prop:value=move || input_channel.get() disabled=move || listening.get() || starting.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<u32>() { set_input_channel.set(value.max(1)); } }/></label>
+                <label class="control-row">"Input channel "<input type="number" min="1" step="1" prop:value=move || input_channel.get() disabled=move || playing.get() || starting.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<u32>() { set_input_channel.set(value.max(1)); } }/></label>
                 <label class="control-row">"Reference level (dB SPL) "<input type="number" step="0.1" prop:value=move || reference_level.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<f64>() { set_reference_level.set(value); } }/></label>
                 <button disabled=move || !listening.get() || generated.get() || calibrating.get() on:click=move |_| {
                     owner.with_value(|owner| {
@@ -500,7 +534,7 @@ pub fn DancingLights(
                         }
                     });
                 }>"Measure reference"</button>
-                <button class="input-reset" disabled=move || listening.get() || starting.get() on:click=move |_| {
+                <button class="input-reset" disabled=move || playing.get() || starting.get() on:click=move |_| {
                     set_input_channel.set(1); set_reference_level.set(94.0);
                 }>"Reset fields"</button>
                 <button class="forget-calibration" disabled=move || !listening.get() || generated.get() on:click=move |_| {
@@ -509,6 +543,7 @@ pub fn DancingLights(
                         owner.stop();
                     });
                     set_listening.set(false); set_frame_rate.set(None);
+                    set_playing.set(false);
                     set_capture_status.set("Uncalibrated · estimated perceived loudness".into());
                     set_audio.set(DisplayFrame::<DISPLAY_BANDS>::default());
                 }>"Forget this calibration and stop"</button>
@@ -517,12 +552,14 @@ pub fn DancingLights(
                 <details class="physics-controls settings-section"></details>
                 <details class="diagnostics-controls settings-section"></details>
             </Show>
+            <div class="recovery-notices">
             <p class="physics-status" role="status"></p>
             <p class="audio-error" role="alert">{move || error_notice.get()}</p>
             <p class="audio-stopped" role="status">{move || if audio_stopped.get() && error_notice.get().is_none() {
-                if fullscreen.get() { "Audio stopped. Exit fullscreen to restart." } else { "Audio stopped. Turn on Listening to restart." }
+                "Audio stopped. Turn on Listening or use Play audio to restart."
             } else { "" }}</p>
             <p class="screen-error" role="status">{move || screen_notice.get()}</p>
+            </div>
         </section>
     }
 }
