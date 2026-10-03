@@ -104,7 +104,17 @@ with scrolling enabled and disabled; see each browser's `render-cost.json`.
 These short digital-music runs do not qualify as phone FPS acceptance. Full-suite
 and current-head CI results remain separately reported in the PR.
 
-Core validation passes 63 tests in each of four feature configurations, including
+The first complete faster-scroll run passed 360 checks, skipped the opt-in
+recorder, and failed one hover fixture at a subpixel seam fragment. A deterministic
+production-layout regression fails in both browsers with the old helper. The
+repair selects the wider visible portion of the same source, including its
+wrapped copy, and waits for the stop transition in stationary layout tests.
+All 92 focused layout/theme, native hover, keyboard, touch, physics and fullscreen
+checks pass afterward. The two MP4 previews are refreshed for the faster build
+and contain identical licensed audio packets; their timing remains approximate
+recording evidence, separate from output-device latency and FPS acceptance.
+
+Initial core validation passed 63 tests in each of four feature configurations, including
 four tempo tests and reusable bar-motion/scroll/drag/pigment checks. The core also
 compiles for actual `thumbv6m-none-eabi` and `thumbv7em-none-eabihf` targets with
 `--no-default-features --features libm`; hardware execution remains unmeasured.

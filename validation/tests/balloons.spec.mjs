@@ -1,8 +1,29 @@
 import { test, expect } from '@playwright/test';
 import { replayReport } from '../replay-physics.mjs';
 import { physicsReady, physicsState, syntheticAudio, startFrozen } from '../physics-state.mjs';
+import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
+
+test('a subpixel seam fragment uses its visible wrapped copy for native hover', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(url); await physicsReady(page);
+  await page.locator('.scroll-lights').uncheck();
+  await page.evaluate(() => {
+    const view = document.querySelector('#dancinglights').physics;
+    // Hold one real rendered pointer layout at the seam. This is a geometry
+    // fixture, independent of worker timing and frame-rate acceptance.
+    cancelAnimationFrame(view.request); view.request = null;
+    view.positionMeters(1.99999);
+  });
+  const meter = page.getByRole('meter').nth(22);
+  expect((await meter.boundingBox()).width).toBeLessThan(1);
+  const label = await meter.getAttribute('aria-label');
+  const point = await meterPoint(page, meter);
+  expect(point.label).toBe(label);
+  await page.mouse.move(point.x, point.y);
+  await expect(page.getByRole('tooltip')).toHaveText(label);
+});
 
 test('continuous scrolling carries source identity and stops in place', async ({ page }, info) => {
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);

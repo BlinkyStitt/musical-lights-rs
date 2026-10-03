@@ -211,6 +211,12 @@ for (const colorScheme of ['light', 'dark']) {
       // This geometry/contrast fixture visits all 24 source columns. The idle
       // sine now scrolls them too; freeze scrolling for stationary hover targets.
       await page.locator('.scroll-lights').uncheck();
+      // The switch eases to a stop; wait for the displayed phase to settle.
+      await page.waitForFunction(() => {
+        const view = document.querySelector('#dancinglights').physics;
+        return view?.current && view.previous
+          && view.current[view.layout[20]] === view.previous[view.layout[20]];
+      });
       const card = await page.locator('.audio-card').boundingBox();
       expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
