@@ -1,6 +1,6 @@
 {
   "upstreamRevision": "82de790f79c5b358040861e8bdb906a55009b117",
-  "productionWasmSha256": "381be9dd39492d2b56b6ab127a4978f1be56579434d321730aeb5e43097e164a",
+  "productionWasmSha256": "feca42c046ae90a63e0794ee56bfbccaacae1e7a8e66a11cda8f06f3c54c50a2",
   "productionNativeSha256": "518607a0fdf4e3f2449c7ce93cf7cbe048874166fb28ca9661672ff8832a2254",
   "productionDspSourceSha256": "19bf90019e71368a333ef6486e00921a5d5538c2e291744038735ca768cabe91",
   "numpyVersion": "2.5.3",

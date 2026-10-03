@@ -25,7 +25,7 @@ async function expectSample(page, index) {
 
 test('spectrum has one Tab stop, direct exits, and remembers the last focused sample', async ({ page }) => {
   const fullscreen = page.getByRole('button', { name: 'Fullscreen', exact: true });
-  const scroll = page.getByRole('checkbox', { name: 'Scroll lights' });
+  const history = page.locator('.song-history > summary');
   await expect(page.getByRole('meter')).toHaveCount(24);
   await expect(page.locator('.bark-group[role="group"]')).toHaveCount(24);
   await expect(page.locator('.meter[tabindex="0"]')).toHaveCount(1);
@@ -34,7 +34,7 @@ test('spectrum has one Tab stop, direct exits, and remembers the last focused sa
   await expectSample(page, 0);
   await expect(page.getByRole('tooltip')).toHaveText('≈ 0–100 Hz');
   await page.keyboard.press('Tab');
-  await expect(scroll).toBeFocused();
+  await expect(history).toBeFocused();
   await expect(page.getByRole('tooltip')).toBeHidden();
   await page.keyboard.press('Shift+Tab');
   await expectSample(page, 0);
@@ -48,7 +48,7 @@ test('spectrum has one Tab stop, direct exits, and remembers the last focused sa
   await expectSample(page, 13);
   await expect(page.getByRole('tooltip')).toHaveText('≈ 2000–2320 Hz');
   await page.keyboard.press('Tab');
-  await expect(scroll).toBeFocused();
+  await expect(history).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expectSample(page, 13);
   await page.keyboard.press('Shift+Tab');

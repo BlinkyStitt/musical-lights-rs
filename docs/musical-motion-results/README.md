@@ -1,0 +1,218 @@
+# Controls, recognition, and musical motion
+
+Home and Advanced share Listening, Phone motion, Scroll lights, Identify song,
+and Fullscreen in one wrapping top bar. Microphone startup/interruption/failure
+state stays beside Listening; routine healthy state has no repeated status.
+Advanced puts source/file selection and digital transport above the visualization.
+Display, Input & calibration, Physics, Diagnostics and Song history start closed
+below it. Home keeps its educational content and omits FPS. `/advanced` remains
+available; `/phone` retains ordinary not-found behavior.
+
+Music/file selection starts digital playback with Listening off. Generated tones
+wait for Play audio. PCM and channel selection are preserved. Replacement first
+stops the prior owner and releases buffers; route exit releases the selected file.
+Fullscreen can start the selected microphone and preserves digital playback. Its
+same bar respects safe areas, with one song footer and recovery notices above it.
+Reset actions retain their separate scopes and physics durations use milliseconds.
+
+## Shared embedded implementation
+
+Reusable calculations live in `musical-lights-core`, with fixed storage and
+`no_std` support: `audio::tempo`, `lights::musical_motion`, and
+`lights::bar_motion`. Applications adapt those calculations to hardware or
+Rapier/rendering. The idle travelling wave also lives in the core; its browser
+worker calls a small WASM adapter without creating an audio processor or requesting
+a microphone. The core uses no Web APIs, engine types, or new DSP dependency.
+The new tempo stream leaves loudness/filtered-target transports unchanged.
+
+Firmware can feed each existing 2 ms novelty frame to `TempoEstimator::push`,
+read `estimate()` without allocation, and pass its BPM to `BalancedScroll::advance`
+with the hardware update duration. `idle_wave` takes column count and elapsed
+seconds; the bar controller owns fixed arrays. Browser source acquisition,
+permissions, song uploads, Rapier bodies, shaders and light objects stay in their
+platform adapters. The hardware core has no dependency on those packages.
+
+The estimator aggregates existing 2 ms spectral novelty into a 50 Hz envelope.
+It retains eight seconds (400 f32 values), evaluates after four seconds every
+half-second, searches 60–200 BPM using normalized mean-centered onset
+correlation, rejects weak/nonperiodic evidence, and favors continuity at ambiguous
+octaves. Accepted tempo enters a three-second time-based EMA; lost confidence
+holds for two seconds before smoothly returning to 120 BPM. It estimates tempo,
+not beat timestamps, and makes no promise of correct metrical interpretation for
+all music. A startup interpretation can differ from a listener's half/double tempo.
+
+The design uses the autocorrelation idea in
+[Ellis (2007)](https://www.ee.columbia.edu/~dpwe/pubs/Ellis07-beattrack.pdf), not
+its noncausal dynamic-programming beat path. Inspected alternatives were unsuitable
+as direct embedded dependencies:
+
+- [BTrack C++ source](https://github.com/adamstark/BTrack/blob/master/src/BTrack.cpp)
+  resizes vectors and uses FFT/resampling libraries; it is a causal design
+  reference, without copied implementation code.
+- [librosa beat source](https://github.com/librosa/librosa/blob/main/librosa/beat.py)
+  operates on NumPy arrays with Python/Numba/SciPy machinery and offline paths.
+- [Rust bpm-analyzer](https://github.com/apoint123/bpm-analyzer) exposes full-PCM
+  analysis and dynamically stored beat results, rather than an allocation-free
+  incremental novelty consumer. We retain the existing core math dependencies.
+
+## Verification boundaries
+
+Local compiler, core feature matrix, worklet, physics, browser, reference audit,
+and offline evidence are recorded here after validation. The historical fixed-window
+[audit](../audio-audit-results/README.md) is retained unchanged. Raw loudness,
+filtered targets, rendered movement, output-clock estimates and the approximately
+1.13-second full-height bar release remain separate quantities.
+
+Routine recognition checks use mocks and native recording with a mocked endpoint.
+The single-request live AudD check is separately invoked; no production uploads
+are allowed from development. Physical-device and human-listening acceptance
+remain pending: normal/fullscreen, rotation lock, Reduced Motion, shaking and
+tilting on an actual iPhone, plus accents/swells/decay observations during playback.
+
+The final complete browser suite passes 359 checks with one opt-in recorder skip,
+using the unchanged serial startup guard, one worker and zero retries. Its
+offline harness passes all 58 tests. The optional canvas recorder passes when
+invoked separately, with Listening off and recordings written to a temporary
+directory. Earlier audio-gap and fixture-race runs are retained below. See
+[functional validation](functional-validation.json).
+
+Core validation passes 63 tests in each of four feature configurations, including
+four tempo tests and reusable bar-motion/scroll/drag/pigment checks. The core also
+compiles for actual `thumbv6m-none-eabi` and `thumbv7em-none-eabihf` targets with
+`--no-default-features --features libm`; hardware execution remains unmeasured.
+The standalone physics suite passes 40 tests, including containment, contact
+history, tempo continuity and comparison with independent quadratic-drag formulas.
+
+`validation/partial/tempo.mjs` compared six three-second fixtures against the saved
+pre-tempo production WASM: all 9,000 complete diagnostic rows were bit-identical.
+Actual PCM click trains converge within 5 BPM of 60, 90, 120, 150, 180 and 200 BPM.
+The two short repeated licensed excerpts did not pass confidence gating and
+retained the 120 BPM fallback. This limitation is visible in
+[tempo observations](tempo-observations.json), without claiming music accuracy.
+The warmed 1,640-byte estimator processed 52 seconds of envelope input in 1.552 ms
+on this Mac (0.0030% host CPU; worst push 0.012 ms). These timings exclude FFT work
+and do not measure a microcontroller.
+
+The broader current-build comparison also reproduced 38 complete traces against
+main, including licensed PCM, noise/masking/boundary fixtures and Reduced Motion.
+All raw measurements, filtered targets and flash events are bit-identical;
+diagnostic buffers remain absent until enabled. The reference audit reproduces
+historical measurements unchanged, with current artifact hashes updated.
+
+## Physical-device and listening checklist
+
+| Check | Evidence still required |
+| --- | --- |
+| Normal, portrait fullscreen, landscape fullscreen | Three complete diagnostics-off five-minute exercise reports and smooth-motion confirmation on the actual iPhone |
+| Rotation lock | Portrait and landscape controls, geometry, screen-angle diagnostics and exit behavior |
+| Reduced Motion | Automatic scrolling disabled, additional pigment drift stopped, readable ring/title, normal and fullscreen views |
+| Shaking and tilting | Native permission state, gravity/linear readings, tilt-only enable/stop, independent Listening and Phone motion shutdown |
+| Human listening | Timestamped accents, swells and decay observations using licensed excerpts or private local files, with playback-device details |
+
+No live AudD request was made for this change. Its separately invoked script
+remains outside the routine mock suite. No firmware was flashed, and compiling
+the reusable core for ARM does not establish microcontroller execution cost.
+
+## Reproduce the evidence
+
+Run from the repository root with the pinned tools on `PATH`. Browser commands
+on macOS require host access and retain the serial startup guard, one worker and
+zero retries. Complete offline CPU checks before running real-time browser checks.
+
+```sh
+export PATH="$PWD/.tools/bin:$PATH"
+python3 validation/validate.py core worklet physics leptos reference
+node --test validation/harness/*.test.mjs
+node validation/partial/current-build.mjs /path/to/main/pkg/loudness.wasm
+node validation/partial/tempo.mjs /path/to/main/pkg/loudness.wasm
+python3 validation/validate.py browser
+node validation/phone-timing.mjs https://musical-lights.test docs/musical-motion-results
+node validation/musical-previews.mjs
+```
+
+The optional video recorder requires FFmpeg and encodes the audio once before
+copying the same packets into both MP4s. Recording and encoding do not qualify
+as FPS acceptance or output-device latency measurements.
+
+## Diagnostics-off host timing
+
+Each layout uses five seconds of warmup and thirty seconds of measured repeating
+24-tone exercise PCM through the real AudioWorklet and physics worker. All six
+runs pass the existing numeric thresholds with diagnostic recording off and no
+discarded simulation time. These short Mac measurements do not establish the
+five-minute physical-phone or human smooth-motion result. Build identity,
+timestamps, workload and output-clock confidence are retained in
+[browser timing](browser-timing.json); detailed samples are in
+[browser-timing-detail.json.gz](browser-timing-detail.json.gz).
+
+| Mac browser | View | FPS | p95 frame (ms) | Maximum debt (ms) |
+| --- | --- | ---: | ---: | ---: |
+| Chromium | normal | 60.00 | 16.70 | 6.93 |
+| Chromium | portrait-fullscreen | 60.00 | 16.70 | 6.27 |
+| Chromium | landscape-fullscreen | 60.00 | 16.70 | 6.67 |
+| iPhone-profile WebKit | normal | 60.00 | 18.00 | 6.67 |
+| iPhone-profile WebKit | portrait-fullscreen | 60.00 | 18.00 | 9.67 |
+| iPhone-profile WebKit | landscape-fullscreen | 60.00 | 18.00 | 6.67 |
+
+The final matrix verifies 390 × 844 portrait and 844 × 390 landscape viewports,
+with 2.597 m and 0.555 m fullscreen enclosure heights. Chromium uses its native
+fullscreen path and WebKit uses the phone expanded-page path. GPU identity is
+recorded, including Chromium’s SwiftShader software renderer.
+
+The separate music-preview measurements record CPU draw submission and browser
+frame pacing; music is not the phone acceptance workload. The lit scene uses
+seven draw submissions (two instanced meshes, four walls, one enclosure line).
+No shadow maps or bloom are enabled. Render submission time excludes GPU
+completion. See the Chromium and WebKit `*-render-cost.json` files for those
+observations, including WebKit's wider-view frame pacing limitations.
+
+## Identical-audio previews
+
+- [Scrolling with audio](scrolling-with-audio.mp4)
+- [Stationary columns with the same audio](stationary-with-audio.mp4)
+- [Angled lighting and contact pigments](chromium-scrolling-angled-swirl.png)
+
+Both four-second MP4s use the first four seconds of the existing mono 48 kHz
+licensed trumpet excerpt, encoded once and copied without gain changes into
+each video. Audio packet hashes and the source PCM identity are recorded in
+[video metadata](video-previews.json). Synchronization uses an approximate
+recording-start clock; it is not output-device latency evidence. The recorder
+uses expanded page fullscreen to keep its capture viewport stable.
+
+Audio: “Jazz Trumpet Loops Pack in F 90 bpm” by
+[Mihai Sorohan](https://freesound.org/s/77711/),
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+The repository audit excerpt retains its documented mono/48 kHz conversion and
+fixed peak 0.2. No private local file or microphone audio is published here.
+
+## Rendering and timing investigation
+
+The earlier standard-material native Chromium landscape run reached 57.10 FPS
+and failed the unchanged gate. Its [record](standard-native-timing.json) is
+retained alongside [fullscreen controls](fullscreen-pacing-control.json).
+Chromium reported a SwiftShader software GPU; blank and render-disabled controls
+held 60 FPS, as did the lit expanded-page view. Bars, balls and enclosure now use diffuse
+Lambert lighting to reduce shader work. Contact patterns remain in object coordinates.
+Both browser engines pass the framebuffer checks for source colors, dark borders,
+white highlights, side-face illumination and nearby attack lights.
+
+A subsequent native portrait run exposed a separate clock-domain error, retained
+in [frame-clock-failure.json](frame-clock-failure.json). Animation-frame timestamps
+can precede actual callback execution. Physics and snapshot receipts use the
+monotonic clock. The renderer now uses `performance.now()` for its input/presentation
+timing, snapshot age and sensor age; reports compare physics progress with that
+same clock. Animation-frame timestamps remain the frame-interval measure. A
+regression deliberately separates the clocks and checks both contracts. No fixed
+offset, gain or acoustic trace shift is applied, and the acceptance thresholds
+are unchanged.
+
+One complete functional run passed 358 checks with one skip and one failure
+caused by a native [128-sample audio-clock gap](audio-clock-gap.json). The app
+stopped that discontinuous session and showed recovery; the test could no longer
+click Stop. The unchanged focused Stop regression then passed. No callback-gap
+protection, test threshold, startup guard, worker count or retry setting was relaxed.
+
+A separate full run exposed a test fixture race: it compared a newly received
+contact history with the preceding rendered frame. The fixture now draws the
+current snapshot synchronously before comparing pigment attributes. It retains
+all independent pixel, lighting, side-face and Reduced Motion assertions.

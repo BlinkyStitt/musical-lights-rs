@@ -1,0 +1,12 @@
+{
+  "build": {
+    "version": "aa7124c925adf09e3f2a50b2"
+  },
+  "run": "full browser suite on macOS, one worker, zero retries",
+  "test": "chromium: stop invalidates measurement and resume cannot repair acceptance",
+  "observed": "Audio sample clock jumped by 128 samples. Restart listening.",
+  "result": "The session stopped and the later Stop click timed out because its button was disabled.",
+  "interpretation": "Native audio discontinuity correctly enters recovery. This run does not prove the intended Stop regression.",
+  "changes": "No discontinuity protection or test threshold changed.",
+  "productionWasmSha256": "feca42c046ae90a63e0794ee56bfbccaacae1e7a8e66a11cda8f06f3c54c50a2"
+}

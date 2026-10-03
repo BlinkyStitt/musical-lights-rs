@@ -7,9 +7,11 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import checkBrowserStartup from './browser-startup.mjs';
 import assert from 'node:assert/strict';
 import { staticPreview } from './static-preview.mjs';
-const url = process.argv[2] ?? 'http://127.0.0.1:8104';
+const url = process.argv[2] ?? 'https://musical-lights.test';
 const output = process.argv[3] ?? 'docs/gain-stroke-results';
 const baseline = process.argv[4] === 'baseline';
+const focusedCase = process.argv.find(arg => arg.startsWith('--case='))?.slice(7);
+const build = JSON.parse(await readFile('musical-leptos/dist/build.json', 'utf8'));
 const summary = values => {
   const sorted = values.toSorted((a,b) => a-b);
   return { mean: values.reduce((a,b) => a+b,0) / values.length, p95: sorted[Math.ceil(sorted.length * .95) - 1], max: sorted.at(-1) };
@@ -17,12 +19,14 @@ const summary = values => {
 const finishBrowserAudit = await checkBrowserStartup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'webkit', use: { browserName: 'webkit' } }] });
 try {
 const result = await readFile(`${output}/browser-timing-detail.json.gz`).then(bytes => JSON.parse(gunzipSync(bytes))).catch(() => []);
+assert(result.every(item => item.build?.version === build.version), 'Cached timing belongs to another build; choose an empty output directory.');
 for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-profile-webkit-mac', webkit, devices['iPhone 13']]]) {
   const browser = await engine.launch();
   try {
     for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
+      if (focusedCase && focusedCase !== `${name}:${mode}`) continue;
       if (result.some(item => item.name === name && item.mode === mode)) continue;
-      console.log(`Starting ${baseline ? 'baseline' : 'partial'} ${name} ${mode}`);
+      console.log(`Starting ${baseline ? 'baseline' : 'current'} ${name} ${mode}`);
       const context = await browser.newContext({ ...profile, viewport: mode === 'landscape-fullscreen' ? { width: 844, height: 390 } : { width: 390, height: 844 } });
       await staticPreview(context, url);
       const page = await context.newPage();
@@ -33,14 +37,15 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
           ['**/physics/physics.js', '.cache/physics80-wasm/physics.js'],
         ]) await context.route(url, route => route.fulfill({ path, contentType: path.endsWith('.wasm') ? 'application/wasm' : 'text/javascript' }));
       }
+      await page.setViewportSize(mode === 'landscape-fullscreen' ? { width: 844, height: 390 } : { width: 390, height: 844 });
       const errors = []; page.on('pageerror', error => errors.push(error.message));
       await page.goto(`${url}/advanced/`);
+      await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
       await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
       await page.locator('.input-source').selectOption('generated');
-      await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
       assert(Math.abs(await page.evaluate(() => document.querySelector('#dancinglights').physics.config[6]) - (baseline ? .08 : .04)) < 1e-6);
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).waitFor();
+      await page.locator('.review-start').click();
+      await page.locator('.review-stop').waitFor();
       await page.waitForFunction(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
       if (mode !== 'normal') await page.getByRole('button', { name: /fullscreen/i }).first().click();
       // Keep the graph visible while the normal page's tone panel is open below it.
@@ -53,15 +58,22 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
         const sample = now => {
           if (previous != null) intervals.push(now - previous);
           previous = now;
-          progress.push({ ms: now - start, debt: v.metrics.debt, snapshotAge: v.metrics.snapshotAgeMs, tick: v.current[2], substeps: v.current[v.layout[15]], excess: v.current[v.layout[15] + 1] });
-          if (now - start < 30000) requestAnimationFrame(sample);
-          else resolve({ before, after: { ...v.metrics }, intervals, progress, config: v.config, layout: v.layout, userAgent: navigator.userAgent, workload: v.report.audioState });
+          const monotonicNow = performance.now();
+          progress.push({ ms: monotonicNow - start, frameTimeMs: now - start, debt: v.metrics.debt, snapshotAge: monotonicNow - v.received, tick: v.current[2], substeps: v.current[v.layout[15]], excess: v.current[v.layout[15] + 1] });
+          if (monotonicNow - start < 30000) requestAnimationFrame(sample);
+          else {
+            const gl = v.renderer.getContext(), debug = gl.getExtension('WEBGL_debug_renderer_info');
+            resolve({ gpu: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null, before, after: { ...v.metrics }, intervals, progress, config: v.config, layout: v.layout, viewport: { width: innerWidth, height: innerHeight },
+          enclosureHeight: v.current[1], fullscreen: document.fullscreenElement ? 'native' : v.card.hasAttribute('data-expanded') ? 'expanded' : 'normal', userAgent: navigator.userAgent, workload: v.report.audioState, playbackTiming: v.card.review.lastPlayback });
+          }
         };
         requestAnimationFrame(sample);
       }));
+      assert.deepEqual(data.viewport, mode === 'landscape-fullscreen' ? { width: 844, height: 390 } : { width: 390, height: 844 });
+      assert.equal(data.fullscreen === 'normal', mode === 'normal');
       const frames = summary(data.intervals), debts = summary(data.progress.map(p => p.debt));
       const driftMs = data.progress.at(-1).ms - data.progress[0].ms - (data.progress.at(-1).tick - data.progress[0].tick) * 1000 / 120;
-      const item = { name, mode, baseline, physicalPhone: false, ...data, summary: { fps: 1000 / frames.mean, frameMs: frames, physicsDebtMs: debts, simulationDriftMs: driftMs,
+      const item = { name, mode, baseline, build, measuredAt: new Date().toISOString(), physicalPhone: false, ...data, summary: { fps: 1000 / frames.mean, frameMs: frames, physicsDebtMs: debts, simulationDriftMs: driftMs,
         over25Fraction: data.intervals.filter(x => x > 25).length / data.intervals.length,
         physicsCpuMsPerTick: (data.after.physicsMs - data.before.physicsMs) / (data.after.physicsSteps - data.before.physicsSteps),
         overloadTicks: data.after.overloadTicks - data.before.overloadTicks }, errors };
@@ -74,12 +86,12 @@ for (const [name, engine, profile] of [['chromium-mac', chromium, {}], ['iphone-
       result.push(item); console.log(name, mode, item.summary);
       await page.screenshot({ path: `${output}/${name}-${mode}.png` });
       if (mode !== 'normal') await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
-      await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+      await page.locator('.review-stop').click();
       await context.close();
       await writeFile(`${output}/browser-timing-detail.json.gz`, gzipSync(JSON.stringify(result)));
       await writeFile(`${output}/browser-timing.json`, JSON.stringify(result.map(({ intervals, progress, ...summary }) => summary), null, 2) + '\n');
     }
   } finally { await browser.close(); }
 }
-if (!baseline) assert(result.length === 6 && result.every(r => r.numericPass), 'Browser performance blocks partial-loudness promotion');
+if (!baseline) assert(result.length === (focusedCase ? 1 : 6) && result.every(r => r.numericPass), 'Browser performance blocks musical-motion promotion');
 } finally { await finishBrowserAudit(); }

@@ -1,0 +1,230 @@
+{
+  "name": "chromium-mac",
+  "mode": "portrait-fullscreen",
+  "baseline": false,
+  "build": {
+    "version": "4f378a2f527bc472ac533cdd"
+  },
+  "measuredAt": "2026-10-03T08:50:04.857Z",
+  "physicalPhone": false,
+  "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+  "before": {
+    "frames": 322,
+    "renderMs": 99.10000014305115,
+    "debt": 4.766520182291261,
+    "maxDebt": 8.30004882812497,
+    "physicsSteps": 685,
+    "physicsMs": 415.2999988794327,
+    "discardedSimulationMs": 0,
+    "snapshotAgeMs": 3.600000023841858,
+    "substepTotal": 12330,
+    "maxSubsteps": 93,
+    "overloadTicks": 0,
+    "maxSchedulingGap": 7,
+    "maxStepMs": 3.5
+  },
+  "after": {
+    "frames": 2112,
+    "renderMs": 409.89999771118164,
+    "debt": 0.9667154947891223,
+    "maxDebt": 8.333333333332243,
+    "physicsSteps": 4297,
+    "physicsMs": 2045.2999970912933,
+    "discardedSimulationMs": 0,
+    "snapshotAgeMs": 6.100000071528484,
+    "substepTotal": 59387,
+    "maxSubsteps": 97,
+    "overloadTicks": 0,
+    "maxSchedulingGap": 7,
+    "maxStepMs": 3.5
+  },
+  "config": [
+    0.9278030395507812,
+    9.8100004196167,
+    8,
+    0.7200000286102295,
+    0.11999999731779099,
+    0.23999999463558197,
+    0.03999999910593033,
+    0.3199999928474426
+  ],
+  "layout": [
+    24,
+    120,
+    1.2000000476837158,
+    0.05000000074505806,
+    0.0020000000949949026,
+    0.012000000104308128,
+    20,
+    0,
+    18,
+    147,
+    171,
+    363,
+    404,
+    0.003000000026077032,
+    371,
+    395,
+    128,
+    399,
+    7,
+    0.4000000059604645,
+    403,
+    8,
+    38
+  ],
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "enclosureHeight": 2.5969231128692627,
+  "fullscreen": "native",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.8037.0 Safari/537.36",
+  "workload": {
+    "sessionId": 1,
+    "source": "generated",
+    "sampleRate": 48000,
+    "diagnostics": false,
+    "state": "playing",
+    "repeat": true,
+    "selectedChannel": 0,
+    "kind": "exercise",
+    "frequency": 1000,
+    "dbfs": -34,
+    "peakAmplitude": 0.0199526231496888,
+    "audioStart": 0,
+    "channel": 0,
+    "pascalsPerUnit": 2,
+    "calibrated": false,
+    "reason": "context running"
+  },
+  "playbackTiming": {
+    "sessionId": 1,
+    "recordedAt": "2026-10-03T08:50:04.681Z",
+    "processingSeconds": 5.072000000000003,
+    "outputSeconds": 5.041970666571302,
+    "state": "playing",
+    "method": "output-timestamp",
+    "confidence": "output clock estimate",
+    "audioTime": 35.0419706665713
+  },
+  "summary": {
+    "fps": 59.60253868834435,
+    "frameMs": {
+      "mean": 16.77780883174958,
+      "p95": 16.799999999999272,
+      "max": 66.69999999999891
+    },
+    "physicsDebtMs": {
+      "mean": 3.071572756632598,
+      "p95": 6.0665690104156536,
+      "max": 8.133382161456305
+    },
+    "simulationDriftMs": -67.83333333332848,
+    "over25Fraction": 0.004471771939631079,
+    "physicsCpuMsPerTick": 0.4512735321738263,
+    "overloadTicks": 0
+  },
+  "errors": [],
+  "numericPass": false,
+  "firstProgress": [
+    {
+      "ms": -5.699999999999818,
+      "debt": 4.899902343749593,
+      "snapshotAge": -5.699999999999818,
+      "tick": 687,
+      "substeps": 41,
+      "excess": 0
+    },
+    {
+      "ms": 11,
+      "debt": 3.699951171874588,
+      "snapshotAge": 2.9000000953674316,
+      "tick": 696,
+      "substeps": 8,
+      "excess": 0
+    },
+    {
+      "ms": 27.600000000000364,
+      "debt": 2.73323567708292,
+      "snapshotAge": 7.500000095367795,
+      "tick": 698,
+      "substeps": 7,
+      "excess": 0
+    },
+    {
+      "ms": 44.30000000000018,
+      "debt": 0.7665201822912522,
+      "snapshotAge": 8.200000095367614,
+      "tick": 700,
+      "substeps": 9,
+      "excess": 0
+    },
+    {
+      "ms": 61,
+      "debt": 6.300048828124584,
+      "snapshotAge": 7.200000047683716,
+      "tick": 702,
+      "substeps": 19,
+      "excess": 0
+    },
+    {
+      "ms": 77.60000000000036,
+      "debt": 1.0332845052079165,
+      "snapshotAge": 7.9000000715259375,
+      "tick": 704,
+      "substeps": 20,
+      "excess": 0
+    }
+  ],
+  "lastProgress": [
+    {
+      "ms": 29926.5,
+      "debt": 4.699951171872462,
+      "snapshotAge": 2.4000000953674316,
+      "tick": 4287,
+      "substeps": 27,
+      "excess": 0
+    },
+    {
+      "ms": 29943.1,
+      "debt": 5.933186848955794,
+      "snapshotAge": 1.0000000953659764,
+      "tick": 4289,
+      "substeps": 20,
+      "excess": 0
+    },
+    {
+      "ms": 29959.800000000003,
+      "debt": 2.766520182289126,
+      "snapshotAge": 4.400000023844768,
+      "tick": 4291,
+      "substeps": 19,
+      "excess": 0
+    },
+    {
+      "ms": 29976.5,
+      "debt": 4.300048828122458,
+      "snapshotAge": 2.9000000953674316,
+      "tick": 4293,
+      "substeps": 16,
+      "excess": 0
+    },
+    {
+      "ms": 29993.199999999997,
+      "debt": 5.63338216145579,
+      "snapshotAge": 1.6000000953645213,
+      "tick": 4295,
+      "substeps": 16,
+      "excess": 0
+    },
+    {
+      "ms": 30009.800000000003,
+      "debt": 0.9667154947891223,
+      "snapshotAge": 6.100000071528484,
+      "tick": 4297,
+      "substeps": 12,
+      "excess": 0
+    }
+  ]
+}

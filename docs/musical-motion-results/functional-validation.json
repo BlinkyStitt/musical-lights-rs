@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-10-03T10:00:21.604812+00:00",
+  "build": {
+    "version": "aa7124c925adf09e3f2a50b2"
+  },
+  "productionCommit": "644a10a",
+  "browser": {
+    "command": "PATH=\"$PWD/.tools/bin:$PATH\" python3 validation/validate.py browser",
+    "macOSHostAccess": true,
+    "passed": 359,
+    "skipped": 1,
+    "skipReason": "Opt-in canvas preview recorder; invoked separately and passed",
+    "workers": 1,
+    "retries": 0,
+    "serialStartupGuard": true
+  },
+  "offlineHarness": {
+    "passed": 58
+  },
+  "core": {
+    "testsPerConfiguration": 63,
+    "configurations": 4,
+    "noStdTargets": [
+      "thumbv6m-none-eabi",
+      "thumbv7em-none-eabihf"
+    ]
+  },
+  "physics": {
+    "passed": 40
+  },
+  "unchangedPcm": {
+    "completeTraces": 38,
+    "additionalDiagnosticRows": 9000,
+    "bitIdentical": true
+  },
+  "pending": [
+    "CI",
+    "physical iPhone acceptance",
+    "human listening",
+    "live AudD check"
+  ],
+  "limitations": [
+    "Host timing is not physical-phone acceptance or MCU execution cost",
+    "Earlier failed runs are retained in the accompanying report"
+  ]
+}

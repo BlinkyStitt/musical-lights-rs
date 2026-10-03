@@ -122,7 +122,8 @@ for (const path of ['/advanced', '/advanced/']) {
     await expect(page.getByRole('link', { name: 'Advanced', exact: true })).toHaveAttribute('aria-current', 'page');
     expect((await page.reload()).status()).toBe(200);
     await page.getByRole('link', { name: 'Home', exact: true }).click();
-    await expect(page.locator('.settings-section')).toHaveCount(0);
+    await expect(page.locator('.display-controls, .calibration-controls, .physics-controls, .diagnostics-controls')).toHaveCount(0);
+    await expect(page.locator('.song-history')).not.toHaveAttribute('open');
     await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
     await page.goBack(); await expect(page.locator('.input-source')).toBeVisible();
     await page.goForward(); await expect(page.locator('.learning-topics')).toBeVisible();

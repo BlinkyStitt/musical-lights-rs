@@ -61,7 +61,7 @@ FFT grid, coverage, update rate, alignment and source assignment explicitly.
 At 3.4 kHz, disjoint frequency slices give 4.429 versus 3.328 sones; assigning
 the entire tone to one known source gives 4.429 versus 4.671. The 33% difference
 therefore does not establish a 33% error in total loudness or human perception.
-The adapted reference is not full Cambridge-model conformance. Analysis timing,
+The adapted reference is an investigation rather than full Cambridge-model conformance; [Moore’s account of the model family](https://journals.sagepub.com/doi/10.1177/2331216514550620) describes distinct stationary, partial, and time-varying models. Analysis timing,
 shared display filtering, and the approximately 1.13 s full-height visual gravity
 release are separate stages; no gains are fitted or traces shifted to agree.
 

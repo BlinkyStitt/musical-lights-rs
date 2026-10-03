@@ -20,7 +20,7 @@ async function acceptancePage(page, repeat = true) {
   await page.locator('.tone-repeat').setChecked(repeat);
   await page.locator('.review-start').click();
   await expect(page.locator('.review-start')).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
 }
 test('non-repeating exercise cannot start phone acceptance', async ({ page }) => {
   await acceptancePage(page, false);
@@ -147,7 +147,7 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
     await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
     await expect(page.locator('.tone-status')).toContainText('paused');
     await page.getByRole('button', { name: 'Resume playback', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
     const resumedRows = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows);
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(resumedRows + 100);
     await expect(page.getByRole('alert')).toBeEmpty();
@@ -165,9 +165,9 @@ test('an old source ended callback cannot end a resumed session', async ({ page 
   await page.evaluate(() => { window.oldEnded = window.exerciseSource.onended; });
   await page.locator('.tone-pause').click();
   await page.locator('.tone-pause').click();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await page.evaluate(() => window.oldEnded());
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await page.locator('.phone-start').click();
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.active)).toBe(true);
 });
@@ -180,7 +180,7 @@ test('a new non-exercise session cannot restore an invalid acceptance run', asyn
   await page.locator('.tone-kind').selectOption('stationary');
   await page.locator('.review-start').click();
   await expect(page.locator('.review-start')).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid.length)).toBeGreaterThan(0);
   await page.locator('.phone-finish').click();
   await expect(page.locator('.phone-start')).toBeEnabled();
@@ -195,7 +195,7 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
   await page.locator('.tone-trace').check();
   await page.locator('.review-start').click();
   await expect(page.locator('.review-start')).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   for (let cycle = 0; cycle < 6; cycle++) {
     await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
     // Use measured ISO loudness to prove that pause supplies silence while
@@ -220,7 +220,7 @@ test('a naturally ended tone restarts and ignores the replaced source callback',
   await expect(page.locator('.tone-pause')).toHaveText('Replay');
   await page.locator('.tone-pause').click();
   await page.evaluate(() => window.oldEnded());
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await expect(page.getByRole('alert')).toBeEmpty();
   await page.locator('.review-stop').click();
@@ -246,7 +246,7 @@ test('Advanced Listening uses microphone silence until real input arrives', asyn
   await page.goto('http://127.0.0.1:8101/advanced'); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.mic-status')).toBeEmpty();
   const actual = await page.evaluate(() => ({

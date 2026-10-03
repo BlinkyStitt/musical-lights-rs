@@ -1,0 +1,70 @@
+[
+  {
+    "build": {
+      "version": "aa7124c925adf09e3f2a50b2"
+    },
+    "measuredAt": "2026-10-03T09:55:44.023Z",
+    "scrolling": true,
+    "fps": 59.95352979516292,
+    "p95FrameMs": 20.639999999999873,
+    "meanRenderMs": 0.27078838174276215,
+    "debt": 2.5868326822912096,
+    "discardedSimulationMs": 0,
+    "bpm": 120,
+    "confidence": 0,
+    "clip": {
+      "name": "trumpet",
+      "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+      "samples": 256003,
+      "rate": 48000,
+      "provenance": {
+        "repository": "https://github.com/librosa/data",
+        "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+        "source": "audio/sorohanro_-_solo-trumpet-06.ogg",
+        "sourceSha256": "8374466fd3951d24509da6e799b132a0db0bdeda69d99c69d989a6888d3d727d",
+        "license": "CC-BY-3.0",
+        "transformation": "FFmpeg mono average, 48 kHz, seconds 0–5.333395833333333, fixed peak 0.2",
+        "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+      },
+      "source": "licensed-excerpt",
+      "channels": 1,
+      "duration": 5.333395833333333
+    },
+    "diagnostics": "false",
+    "physicalDevice": false
+  },
+  {
+    "build": {
+      "version": "aa7124c925adf09e3f2a50b2"
+    },
+    "measuredAt": "2026-10-03T09:55:50.146Z",
+    "scrolling": false,
+    "fps": 60.24216851809267,
+    "p95FrameMs": 22.26000000000022,
+    "meanRenderMs": 0.1766804979253109,
+    "debt": 1.7735188802074404,
+    "discardedSimulationMs": 0,
+    "bpm": 120,
+    "confidence": 0,
+    "clip": {
+      "name": "trumpet",
+      "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+      "samples": 256003,
+      "rate": 48000,
+      "provenance": {
+        "repository": "https://github.com/librosa/data",
+        "revision": "38f4b06556fa0ff1acda5e677d8ba05d1bc0fff0",
+        "source": "audio/sorohanro_-_solo-trumpet-06.ogg",
+        "sourceSha256": "8374466fd3951d24509da6e799b132a0db0bdeda69d99c69d989a6888d3d727d",
+        "license": "CC-BY-3.0",
+        "transformation": "FFmpeg mono average, 48 kHz, seconds 0–5.333395833333333, fixed peak 0.2",
+        "humanAnnotations": "pending; no onset truth labels or perceptual pass claimed"
+      },
+      "source": "licensed-excerpt",
+      "channels": 1,
+      "duration": 5.333395833333333
+    },
+    "diagnostics": "false",
+    "physicalDevice": false
+  }
+]

@@ -66,11 +66,14 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       // and inner flash together; outside samples can contain antialiasing.
       const border = Array.from({ length: Math.ceil(3 * pixels.ratio) }, (_, offset) => rgb(left + offset))
         .sort((a, b) => Math.min(...b) - Math.min(...a))[0];
-      // Every hue reaches full value with at least 50% encoded-RGB saturation.
-      expect(Math.max(...middle)).toBeGreaterThan(250);
-      expect(Math.max(...middle) - Math.min(...middle)).toBeGreaterThanOrEqual(128);
+      const boundary = [rgb(left - 1), rgb(left), rgb(left + 1)]
+        .sort((a, b) => Math.max(...a) - Math.max(...b))[0];
+      // Lit fills retain at least 75% encoded value and 40% relative saturation.
+      // The previous unlit material fixed peak value at 100% for every face.
+      expect(Math.max(...middle)).toBeGreaterThanOrEqual(255 * .75);
+      expect((Math.max(...middle) - Math.min(...middle)) / Math.max(...middle)).toBeGreaterThanOrEqual(.4);
       // The dark outer boundary is visible even on a white page.
-      expect(Math.max(...rgb(left))).toBeLessThan(Math.max(...middle));
+      expect(Math.max(...boundary), JSON.stringify({ i, left, middle, boundary })).toBeLessThan(Math.max(...middle));
       // White is confined to the inside edge; the next pixels return to the fill.
       expect(Math.min(...border)).toBeGreaterThan(Math.min(...middle));
       expect(Math.min(...rgb(left + Math.ceil(3 * pixels.ratio)))).toBeLessThan(245);

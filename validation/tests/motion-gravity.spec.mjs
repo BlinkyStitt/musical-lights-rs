@@ -17,6 +17,12 @@ for (const apple of [false, true]) {
       }, { apple });
       await page.goto('http://127.0.0.1:8101'); await physicsReady(page);
       await page.locator('.scroll-lights').uncheck();
+      // Isolate sensor gravity from the travelling idle bars' launch forces.
+      await page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics;
+        v.stopPreview(); v.idle = false;
+        v.push(Array(24).fill(0), Array(24).fill(0), false);
+      });
       const send = async (gravity, angle = 0) => {
         await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
         await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'waiting');
