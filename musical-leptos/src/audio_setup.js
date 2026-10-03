@@ -210,8 +210,10 @@ export async function acquireInput(context, selectedChannel) {
     try {
         await requireCurrentRuntime(context);
         if (!digital) {
+            const ownsInput = () => !session.closed && context.state !== 'closed' && card.isConnected
+                && card.dataset.audioSession === String(session.sessionId);
             const permission = state => {
-                if (!session.closed && card.isConnected && card.dataset.audioSession === String(session.sessionId))
+                if (ownsInput())
                     card.dispatchEvent(new CustomEvent('microphone-access', { detail: state }));
             };
             permission('requesting');
@@ -220,12 +222,19 @@ export async function acquireInput(context, selectedChannel) {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: {
                     autoGainControl: false, echoCancellation: false, noiseSuppression: false,
                 }});
-                permission('granted');
             } catch (error) {
                 // NotAllowedError also covers dismissed prompts and OS restrictions.
                 permission(error.name === 'NotAllowedError' ? 'not-allowed' : 'unknown');
                 throw error;
             }
+            // getUserMedia cannot be aborted. A canceled request can resolve
+            // after a replacement session, so discard it before any consumer
+            // (especially recognition) sees the stream.
+            if (!ownsInput()) {
+                for (const track of stream.getTracks()) track.stop();
+                throw new Error('Audio session has closed');
+            }
+            permission('granted');
             sessions.set(stream, session);
             card.dispatchEvent(new CustomEvent('recognition-input', { detail: { stream } }));
             return stream;

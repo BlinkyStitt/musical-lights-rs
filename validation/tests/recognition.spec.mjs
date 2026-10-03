@@ -30,7 +30,7 @@ test('localhost development never uploads to the inherited production endpoint',
   expect(outbound).toEqual([]);
 });
 
-async function setup(page, { realRecorder = false, allowUnavailable = false, captureMs = 300, status = 200, result = song } = {}) {
+async function setup(page, { realRecorder = false, allowUnavailable = false, captureMs = 300, status = 200, result = song, routePath = '/' } = {}) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     MediaDevices.prototype.getUserMedia = async () => {
@@ -52,7 +52,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, cap
     };
   });
   // Set the deployment configuration before application initialization.
-  await page.route(base + '/', async route => {
+  await page.route(base + routePath, async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace(/name="musical-lights-recognition" content="[^"]*"/, 'name="musical-lights-recognition" content="/recognize"') });
   });
@@ -76,7 +76,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, cap
     uploads.push({ type: route.request().headers()['content-type'], data: route.request().postDataBuffer() });
     await route.fulfill({ status, json: { result } });
   });
-  await page.goto(base); await physicsReady(page);
+  await page.goto(base + routePath); await physicsReady(page);
   await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   if (allowUnavailable && await page.evaluate(() => typeof MediaRecorder === 'undefined')) {
@@ -428,4 +428,36 @@ test('two opted-in tabs share one upload reservation without duplicate spending'
   await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
   await second.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
   await second.close();
+});
+
+test('canceled pending microphone cannot replace recognition input after source switching', async ({ page }) => {
+  const uploads = await setup(page, { routePath: '/advanced/' });
+  const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+  await listening.uncheck();
+  await page.evaluate(() => {
+    window.pendingMicrophones = [];
+    MediaDevices.prototype.getUserMedia = () => new Promise(resolve => {
+      const destination = window.testContext.createMediaStreamDestination();
+      pendingMicrophones.push({ stream: destination.stream, resolve });
+    });
+    window.recognitionInputs = [];
+    document.querySelector('.audio-card').addEventListener('recognition-input', ({ detail }) => recognitionInputs.push(detail.stream));
+  });
+  await listening.check();
+  await expect.poll(() => page.evaluate(() => pendingMicrophones.length)).toBe(1);
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.input-source').selectOption('microphone');
+  await listening.check();
+  await expect.poll(() => page.evaluate(() => pendingMicrophones.length)).toBe(2);
+  await page.evaluate(() => pendingMicrophones[1].resolve(pendingMicrophones[1].stream));
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await page.evaluate(() => pendingMicrophones[0].resolve(pendingMicrophones[0].stream));
+  await expect.poll(() => page.evaluate(() => pendingMicrophones[0].stream.getTracks()[0].readyState)).toBe('ended');
+  expect(await page.evaluate(() => recognitionInputs.length)).toBe(1);
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).check();
+  await expect.poll(() => uploads.length).toBe(1);
+  expect(await page.evaluate(() => recorder.stream === pendingMicrophones[1].stream)).toBe(true);
+  expect(await page.evaluate(() => recorder.stream.getAudioTracks()[0].readyState)).toBe('live');
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(listening).toBeChecked();
 });
