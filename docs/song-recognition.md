@@ -103,9 +103,11 @@ arguments or a clip rejected before upload.
 Use a known short WAV, M4A, WebM or Ogg excerpt under 512 KiB, with the
 expected catalog artist and title. The licensed listening-review clips have
 not been confirmed in AudD's catalog; they are not recognition ground truth.
-For a reproducible candidate, [AudD's official example](https://docs.audd.io/)
-provides `https://audd.tech/example.mp3` with the documented result
-**Imagine Dragons — Warriors**. Download and convert it locally first
+For a reproducible candidate, [AudD's example-file recipe](https://audd.io/resources/recipes/podcast-music-credits)
+identifies `https://audd.tech/example.mp3` as
+**Tears For Fears — Everybody Wants To Rule The World**. The general API docs'
+sample response naming “Warriors” is not this clip's identity.
+Download and convert it locally first
 (requires FFmpeg); these preparation steps make no recognition requests. The
 current example is about five seconds long; longer inputs are trimmed to ten:
 
@@ -121,7 +123,7 @@ Once quota is available, from the repository root:
 export PATH="$PWD/.tools/bin:$PATH"
 node validation/recognition-live.mjs --live \
   --file .cache/recognition-live/example.wav \
-  --artist 'Imagine Dragons' --title 'Warriors' \
+  --artist 'Tears For Fears' --title 'Everybody Wants To Rule The World' \
   > .cache/recognition-live/result.json
 ```
 
@@ -132,3 +134,13 @@ provider billing attribution. A pass establishes real recognition for that
 clip through the deployed service; microphone capture, browser display and
 physical-iPhone recognition still need their own acceptance checks. Do not add
 this command to routine CI or run it separately in each browser project.
+
+On 2026-10-03 at 04:44:39 UTC, one live POST returned HTTP 200 and
+**Tears For Fears — Everybody Wants To Rule The World** for the prepared
+168830-byte WAV (SHA-256
+`b4f23035fb8a70d3533fbe04a5533ac80d1f4cb5b51df490ffe56c6491205acb`).
+The initial test failed because its expected song had been taken from the
+unrelated “Warriors” sample response. The returned identity agrees with the
+example-file recipe above; the documented expectation is now corrected.
+No second live request was made, and the initial failed report is preserved in
+[the live evidence](recognition-results/2026-10-03-live.json).

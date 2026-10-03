@@ -1,0 +1,19 @@
+{
+  "endpoint": "https://musical-lights-recognition.satoshiandkin.workers.dev/recognize",
+  "clipSha256": "b4f23035fb8a70d3533fbe04a5533ac80d1f4cb5b51df490ffe56c6491205acb",
+  "bytes": 168830,
+  "expected": {
+    "artist": "Imagine Dragons",
+    "title": "Warriors"
+  },
+  "startedAt": "2026-10-03T04:44:39.256Z",
+  "workerRequests": 1,
+  "status": "failed",
+  "httpStatus": 200,
+  "actual": {
+    "artist": "Tears For Fears",
+    "title": "Everybody Wants To Rule The World"
+  },
+  "error": "Recognized artist/title differs from the expected song.",
+  "finishedAt": "2026-10-03T04:44:39.895Z"
+}
