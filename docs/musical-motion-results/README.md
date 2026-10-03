@@ -69,12 +69,23 @@ are allowed from development. Physical-device and human-listening acceptance
 remain pending: normal/fullscreen, rotation lock, Reduced Motion, shaking and
 tilting on an actual iPhone, plus accents/swells/decay observations during playback.
 
-The final complete browser suite passes 359 checks with one opt-in recorder skip,
+The initial complete browser suite passes 359 checks with one opt-in recorder skip,
 using the unchanged serial startup guard, one worker and zero retries. Its
 offline harness passes all 58 tests. The optional canvas recorder passes when
 invoked separately, with Listening off and recordings written to a temporary
 directory. Earlier audio-gap and fixture-race runs are retained below. See
 [functional validation](functional-validation.json).
+
+The fullscreen/touch review follow-up scopes Exit's compatibility-click suppression
+to its button and pointer, clears it on pointer/touch cancellation, and preserves
+normal capture release and keyboard activation. Touch assertions capture the
+frequency label from the actual native pointer-down target while scrolling stays
+enabled. Four event-replay regressions fail before the repair; all eight new
+gesture checks and all 69 offline harness checks pass afterward. The focused
+Chromium/iPhone-profile WebKit run passes 32 checks, including native touch,
+fullscreen transitions, and stopping Listening after Exit. Full-suite, CI and
+deployment results are reported separately in
+[PR #39](https://github.com/BlinkyStitt/musical-lights-rs/pull/39) and its Actions runs.
 
 Core validation passes 63 tests in each of four feature configurations, including
 four tempo tests and reusable bar-motion/scroll/drag/pigment checks. The core also
