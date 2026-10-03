@@ -183,8 +183,8 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   .song-title, .song-overflow .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
 }
 .audio-card[data-expanded] .song-tools { position: relative; order: 1; flex: none; z-index: 3; margin: 0; pointer-events: none; }
-.audio-card[data-expanded] .song-tools > :not(.recognition-status) { display: none; }
-.audio-card[data-expanded] .recognition-status { width: fit-content; margin: 0; padding: .4rem .6rem; border-radius: 6px; background: var(--surface); }
+.audio-card[data-expanded] .song-tools > :not(.recognition-status, .recognition-cooldown) { display: none; }
+.audio-card[data-expanded] :is(.recognition-status, .recognition-cooldown) { width: fit-content; margin: 0; padding: .4rem .6rem; border-radius: 6px; background: var(--surface); }
 .audio-card[data-expanded] .button-row { max-width: calc(100vw - 10.5rem); justify-content: flex-end; }
 .audio-card[data-expanded] .recognized-song { position: relative; order: 3; flex: none; z-index: 3; margin: 0; pointer-events: none; }
 .audio-card[data-expanded] .runtime-update { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; z-index: 3; padding: .6rem; background: var(--surface); }

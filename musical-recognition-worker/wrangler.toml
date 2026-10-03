@@ -14,7 +14,7 @@ ALLOWED_ORIGINS = "https://blink.stitthappens.com"
 [[ratelimits]]
 name = "PER_IP"
 namespace_id = "1001"
-simple = { limit = 2, period = 60 }
+simple = { limit = 1, period = 60 }
 
 [[ratelimits]]
 name = "TOTAL"

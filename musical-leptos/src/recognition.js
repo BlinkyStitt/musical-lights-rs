@@ -1,6 +1,36 @@
 const HISTORY_PREFIX = 'musical-lights-song:v1:';
 const SAMPLE_MS = 10_000;
 const MAX_BYTES = 512 * 1024;
+const COOLDOWN_MS = 60_000;
+const COOLDOWN_KEY = 'musical-lights-recognition-next:v1';
+
+export function recognitionEndpoint(value, pageURL, baseURL = pageURL) {
+  if (!value) return null;
+  try {
+    const page = new URL(pageURL), endpoint = new URL(value, baseURL);
+    if (!['http:', 'https:'].includes(endpoint.protocol)) return null;
+    // Development and preview builds may use a same-origin mock, never the
+    // production service accidentally inherited from index.html.
+    if (endpoint.origin !== page.origin && (page.origin !== 'https://blink.stitthappens.com' || endpoint.protocol !== 'https:')) return null;
+    return endpoint.href;
+  } catch { return null; }
+}
+
+export class RecognitionCooldown {
+  constructor(storage, now = () => Date.now()) { this.storage = storage; this.now = now; this.until = 0; }
+  remaining() {
+    try {
+      const saved = Number(this.storage?.getItem(COOLDOWN_KEY));
+      if (Number.isFinite(saved)) this.until = Math.max(this.until, saved);
+    } catch { /* Keep the session limit when storage is unavailable. */ }
+    return Math.max(0, this.until - this.now());
+  }
+  start() {
+    this.until = this.now() + COOLDOWN_MS;
+    try { this.storage?.setItem(COOLDOWN_KEY, String(this.until)); }
+    catch { /* Keep the session limit when storage is unavailable. */ }
+  }
+}
 
 export function validSong(song) {
   return song && ['artist', 'title'].every(key => typeof song[key] === 'string' && song[key].trim() && song[key].length <= 1000)
@@ -52,12 +82,14 @@ export class SongRecognition {
     let storage;
     try { storage = localStorage; } catch { /* Export still works from memory. */ }
     this.history = new SongHistory(storage);
+    this.cooldown = new RecognitionCooldown(storage);
     this.tools = document.createElement('section');
     this.tools.className = 'song-tools';
     this.tools.setAttribute('aria-label', 'Song recognition');
-    this.tools.innerHTML = `<div class="song-actions"><button type="button" class="identify-song" aria-describedby="recognition-disclosure"><span aria-hidden="true">♫</span> Identify song</button><button type="button" class="cancel-recognition" hidden>Cancel identification</button></div>
+    this.tools.innerHTML = `<div class="song-actions"><button type="button" class="identify-song" aria-describedby="recognition-disclosure recognition-cooldown"><span aria-hidden="true">♫</span> Identify song</button><button type="button" class="cancel-recognition" hidden>Cancel identification</button></div>
       <p id="recognition-disclosure">Identify song sends a 10-second microphone recording to AudD through our server. Only recognized song details are saved on this device.</p>
       <p class="recognition-status" role="status"></p>
+      <p id="recognition-cooldown" class="recognition-cooldown" role="timer" aria-live="off"></p>
       <details class="song-history"><summary>Song history (0)</summary><p>Detection times, not exact song start times. History is local to this browser.</p><div class="song-actions"><button type="button" class="export-songs-csv">Export CSV</button><button type="button" class="export-songs-json">Export JSON</button></div><p class="song-storage-status" role="status"></p><ol></ol></details>`;
     card.querySelector('.display-note').after(this.tools);
     this.strip = document.createElement('div');
@@ -74,6 +106,7 @@ export class SongRecognition {
     row.insertBefore(this.cancelButton, fullscreen);
     query('.song-actions').remove();
     this.status = query('.recognition-status');
+    this.cooldownStatus = query('.recognition-cooldown');
     this.button.onclick = () => this.identify();
     this.cancelButton.onclick = () => this.cancel('Identification canceled.');
     query('.export-songs-csv').onclick = () => this.export('csv');
@@ -87,28 +120,28 @@ export class SongRecognition {
       this.refresh();
     };
     this.onVisibility = () => { if (document.hidden) this.cancel('Identification canceled when the page was hidden.'); };
-    this.onStorage = () => this.renderHistory();
+    this.onStorage = () => { this.renderHistory(); this.refresh(); };
     card.addEventListener('recognition-input', this.onInput);
     card.addEventListener('audio-session', this.onSession);
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('storage', this.onStorage);
     this.resize = new ResizeObserver(() => this.measureTitle());
     this.resize.observe(this.strip);
+    this.cooldownTimer = setInterval(() => this.refresh(), 1000);
     this.renderHistory(); this.refresh();
   }
 
   endpoint() {
     const value = document.querySelector('meta[name="musical-lights-recognition"]')?.content;
-    if (!value) return null;
-    try {
-      const url = new URL(value, document.baseURI);
-      return url.protocol === 'https:' || url.origin === location.origin ? url.href : null;
-    } catch { return null; }
+    return recognitionEndpoint(value, location.href, document.baseURI);
   }
 
   refresh() {
     const supported = typeof MediaRecorder !== 'undefined';
-    this.button.disabled = !this.endpoint() || !supported || !this.input || !this.playing || Boolean(this.job);
+    const remaining = this.cooldown.remaining();
+    this.cooldownStatus.textContent = remaining ? `Wait ${Math.ceil(remaining / 1000)} seconds before identifying again.` : '';
+    this.cooldownStatus.hidden = !remaining;
+    this.button.disabled = !this.endpoint() || !supported || !this.input || !this.playing || Boolean(this.job) || remaining > 0;
     this.button.title = !this.playing ? 'Turn on Listening, then identify the music.' : 'Identify the music playing now.';
     this.cancelButton.hidden = !this.job;
     if (!this.job && !this.status.textContent) this.status.textContent = !this.endpoint()
@@ -129,6 +162,7 @@ export class SongRecognition {
   }
 
   async identify() {
+    this.refresh();
     if (this.button.disabled || this.closed) return;
     const endpoint = this.endpoint();
     const job = { abort: new AbortController(), sampleStartedAt: new Date().toISOString() };
@@ -158,6 +192,9 @@ export class SongRecognition {
       if (!blob.size) throw new Error('No audio was recorded. Try again.');
       this.status.textContent = 'Identifying song…';
       job.deadline = setTimeout(() => job.abort.abort(), 25_000);
+      // An upload may spend a lookup even if it fails or is canceled later.
+      // Canceled recordings never reach this point and consume no cooldown.
+      this.cooldown.start(); this.refresh();
       const response = await fetch(endpoint, { method: 'POST', body: blob, signal: job.abort.signal, credentials: 'omit', cache: 'no-store' });
       if (!response.ok) throw new Error(({ 429: 'Too many requests. Wait a minute and try again.', 503: 'Song recognition is not configured yet.', 413: 'Audio sample is too large.' })[response.status] ?? 'Recognition failed. Try again when ready.');
       const { result } = await response.json();
@@ -221,6 +258,7 @@ export class SongRecognition {
 
   close() {
     this.closed = true; this.cancel(); this.input = null;
+    clearInterval(this.cooldownTimer);
     this.card.removeEventListener('recognition-input', this.onInput);
     this.card.removeEventListener('audio-session', this.onSession);
     document.removeEventListener('visibilitychange', this.onVisibility);
