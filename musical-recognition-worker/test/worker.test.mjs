@@ -16,7 +16,7 @@ async function fixture(t, { reply = { status: 'success', result: song }, upstrea
     compatibilityDate: '2026-10-01',
     bindings: { ALLOWED_ORIGINS: origin, ...(token ? { AUDD_API_TOKEN: 'fixture-secret-never-returned' } : {}) },
     ratelimits: {
-      PER_IP: { namespace_id: '1001', simple: { limit: 2, period: 60 } },
+      PER_IP: { namespace_id: '1001', simple: { limit: 1, period: 60 } },
       TOTAL: { namespace_id: '1002', simple: { limit: 20, period: 60 } },
     },
     outboundService: async request => {
@@ -65,9 +65,9 @@ for (const options of [{ reply: { status: 'error', error: 'fixture-secret-never-
     assert.equal(f.calls.length, 1);
   });
 }
-test('per-IP limit rejects the third request without a third paid lookup', async t => {
+test('per-IP limit rejects the second request without a second paid lookup', async t => {
   const f = await fixture(t);
-  assert.equal((await f.send()).status, 200); assert.equal((await f.send()).status, 200);
+  assert.equal((await f.send()).status, 200);
   const limited = await f.send(); assert.equal(limited.status, 429);
-  assert.equal(limited.headers.get('Retry-After'), '60'); assert.equal(f.calls.length, 2);
+  assert.equal(limited.headers.get('Retry-After'), '60'); assert.equal(f.calls.length, 1);
 });

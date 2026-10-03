@@ -1,6 +1,36 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SongHistory, historyCSV, validSong } from '../../musical-leptos/src/recognition.js';
+import { SongHistory, historyCSV, validSong, recognitionEndpoint, RecognitionCooldown } from '../../musical-leptos/src/recognition.js';
+
+test('development and previews cannot inherit the live recognition endpoint', () => {
+  const live = 'https://musical-lights-recognition.satoshiandkin.workers.dev/recognize';
+  for (const page of ['http://127.0.0.1:8101/', 'http://localhost:8080/', 'https://preview.example/']) {
+    assert.equal(recognitionEndpoint(live, page), null);
+    assert.equal(recognitionEndpoint('/recognize', page), new URL('/recognize', page).href);
+  }
+  assert.equal(recognitionEndpoint(live, 'https://blink.stitthappens.com/advanced/'), live);
+  for (const value of ['', 'javascript:alert(1)', 'http://remote.example/recognize'])
+    assert.equal(recognitionEndpoint(value, 'https://blink.stitthappens.com/'), null);
+});
+
+test('lookup cooldown lasts one minute and survives reload and other tabs', () => {
+  const disk = storage(); let now = 1000;
+  const first = new RecognitionCooldown(disk, () => now), second = new RecognitionCooldown(disk, () => now);
+  assert.equal(first.remaining(), 0); first.start();
+  now += 59_999;
+  assert.equal(first.remaining(), 1); assert.equal(second.remaining(), 1);
+  assert.equal(new RecognitionCooldown(disk, () => now).remaining(), 1);
+  now++;
+  assert.equal(first.remaining(), 0); assert.equal(second.remaining(), 0);
+});
+
+test('lookup cooldown survives unavailable storage for the current session', () => {
+  const disk = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+  let now = 1000; const cooldown = new RecognitionCooldown(disk, () => now);
+  assert.equal(cooldown.remaining(), 0); cooldown.start();
+  assert.equal(cooldown.remaining(), 60_000); now += 60_000;
+  assert.equal(cooldown.remaining(), 0);
+});
 
 function storage() {
   const map = new Map();

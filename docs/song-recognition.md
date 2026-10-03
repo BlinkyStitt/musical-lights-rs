@@ -5,6 +5,13 @@ seconds using the existing microphone stream and sends it through the Rust
 Cloudflare Worker to AudD. There is no periodic recognition or automatic retry.
 Listening and loudness analysis otherwise stay on the device.
 
+After an upload starts, **Identify song** waits one minute before allowing
+another recording. The countdown applies to successes, no matches, failed
+uploads and uploads canceled after submission. It survives navigation, reloads
+and other tabs when browser storage is available. Canceling before submission
+uses no lookup and starts no cooldown. This reduces repeat lookups; it does not
+reuse an old match for music that may have changed.
+
 Cancel, Stop listening, hiding the page, and leaving Home cancel pending capture
 or upload. Canceling after the Worker has contacted AudD cannot undo that lookup
 or its cost. No audio is persisted by our application or Worker; AudD receives
@@ -25,6 +32,9 @@ The Worker is deployed at
 `https://musical-lights-recognition.satoshiandkin.workers.dev/recognize`.
 The website endpoint is configured in the `musical-lights-recognition` meta tag
 in `musical-leptos/index.html`; an empty value disables recognition.
+Only the production website can use a cross-origin recognition endpoint.
+Local development and preview builds ignore the inherited production endpoint;
+use a same-origin `/recognize` mock to develop the feature without paid calls.
 
 Create an AudD token at <https://dashboard.audd.io/>. From the repository root:
 
@@ -41,7 +51,7 @@ The Worker accepts only the configured website Origin, supported audio types,
 and recordings up to 512 KiB. It sends one request to the fixed AudD endpoint and
 times out after 20 seconds. Provider error details are never returned to clients.
 
-Rate limits allow two requests per IP and twenty total per minute **per
+Rate limits allow one request per IP and twenty total per minute **per
 Cloudflare location**. Origin checks are browser isolation, not authentication;
 non-browser clients can forge Origin. These limits are not a global spending
 cap. Configure an appropriate AudD allowance and monitor provider usage before
