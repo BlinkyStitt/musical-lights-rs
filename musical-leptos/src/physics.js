@@ -210,15 +210,15 @@ export class Scene {
     this.motionControls.className = 'motion-controls';
     this.motionButton = card.querySelector('.motion-button');
     this.motionControls.append(this.motionButton.closest('label'));
-    card.querySelector('.button-row').prepend(this.motionControls);
+    card.querySelector('.mic-status').after(this.motionControls);
     this.motionStatus = document.createElement('p');
     this.motionStatus.className = 'motion-status';
     this.motionStatus.setAttribute('role', 'status');
     card.querySelector('.display-note').after(this.motionStatus);
     this.microphoneStatus = document.createElement('p');
     this.microphoneStatus.className = 'microphone-permission';
-    this.microphoneStatus.setAttribute('role', 'status');
-    card.querySelector('.display-note').before(this.microphoneStatus);
+    this.microphoneStatus.setAttribute('aria-live', 'off');
+    (card.querySelector('.calibration-controls') ?? this.motionControls).append(this.microphoneStatus);
     this.permissionHelp = document.createElement('details');
     this.permissionHelp.className = 'permission-help';
     const summary = document.createElement('summary');
@@ -226,7 +226,7 @@ export class Scene {
     const help = document.createElement('p');
     help.textContent = 'Access is controlled by your browser. To reduce repeated microphone prompts, choose Allow in this site’s browser permissions, if available. A bookmark uses the browser’s permissions; a Home Screen app or another browser may have separate permissions. Motion access may be requested again after reopening. Microphone and sensors stay off until you turn on their switches.';
     this.permissionHelp.append(summary, help);
-    this.motionStatus.after(this.permissionHelp);
+    (card.querySelector('.calibration-controls') ?? this.motionControls).append(this.permissionHelp);
     this.renderPermissions = () => {
       // Avoid repeating identical live-region announcements for independent queries.
       const show = (element, text) => { if (element.textContent !== text) element.textContent = text; };
@@ -244,6 +244,7 @@ export class Scene {
         unavailable: 'Microphone capture is unavailable in this browser.',
         insecure: 'Microphone access requires a secure HTTPS page.',
       }[microphone]);
+      if (card.dataset.mode !== 'advanced') { this.microphoneStatus.hidden = true; this.permissionHelp.hidden = true; }
       const sensors = [states.accelerometer, states.gyroscope];
       const state = this.input?.state ?? 'off';
       this.motionStatus.dataset.state = state;

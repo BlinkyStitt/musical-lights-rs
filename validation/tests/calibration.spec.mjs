@@ -39,6 +39,7 @@ test('calibration is optional, measures a known reference, and binds to reported
   const errors=[]; page.on('pageerror', e=>errors.push(e.message));
   await input(page);
   await page.goto('http://127.0.0.1:8101/advanced/');
+  await page.locator('.calibration-controls > summary').click();
   await expect(page.locator('.calibration-status')).toContainText('Uncalibrated');
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
@@ -77,6 +78,7 @@ for(const fault of ['mute','processorerror']) {
   test(`${fault} stops capture and clears the display`,async({page})=>{
     await input(page);
     await page.goto('http://127.0.0.1:8101/advanced/');
+  await page.locator('.calibration-controls > summary').click();
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
@@ -93,6 +95,7 @@ test('Reduced Motion survives pending permission and updates the audio producer'
   await page.emulateMedia({reducedMotion:'reduce'});
   await input(page, true);
   await page.goto('http://127.0.0.1:8101/advanced/');
+  await page.locator('.calibration-controls > summary').click();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(()=>page.evaluate(()=>typeof window.allowMicrophone)).toBe('function');
   // RAF can run many times while permission is pending.
@@ -112,8 +115,10 @@ test('Reduced Motion survives pending permission and updates the audio producer'
 
 test('forget calibration removes only the active input key and stops while reset fields is unavailable during capture', async ({ page }) => {
   await input(page); await page.goto('http://127.0.0.1:8101/advanced/');
+  await page.locator('.calibration-controls > summary').click();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.locator('.listening-toggle')).toBeEnabled(); await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+  await expect(page.locator('.listening-toggle')).toBeEnabled(); await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await expect(page.locator('.input-reset')).toBeDisabled();
   await page.evaluate(() => {
     window.activeCalibrationKey = 'musical-lights-calibration:' + JSON.stringify([inputTrack.getSettings(), 0, 48000]);

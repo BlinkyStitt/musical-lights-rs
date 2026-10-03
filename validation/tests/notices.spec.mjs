@@ -41,13 +41,14 @@ test('microphone failure details expire while recovery status remains, and resta
   await page.goto(`${origin}/advanced/`);await physicsReady(page);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).click();
   await expect(page.locator('.audio-error')).toContainText('Permission denied for expiry test');
+  await expect(page.locator('.mic-status')).toHaveText('Microphone unavailable.');
   await expect(page.locator('.audio-error')).toBeEmpty({timeout:5000});
   await expect(page.locator('.audio-stopped')).toContainText('Audio stopped');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await expect(page.locator('.audio-stopped')).toBeEmpty();
   await page.getByRole('link',{name:'About',exact:true}).click();
 });

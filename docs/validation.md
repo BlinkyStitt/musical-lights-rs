@@ -41,6 +41,23 @@ Validate workflow changes with `actionlint .github/workflows/*.yml`.
 Run installer regressions with `python3 -m unittest discover -s validation/tooling -v`.
 The `reference` target includes installer and test lint/type checks.
 
+## Controls and embedded musical motion (2026-10-03)
+
+The [current evidence and previews](musical-motion-results/README.md) document
+shared controls, independent microphone/digital playback, opt-in song recognition,
+and tempo-driven motion with illuminated surfaces and contact pigments. Reusable
+tempo, idle-wave, bar-motion, scroll, drag and pigment calculations live in
+`musical-lights-core`; platform packages contain their Web, Rapier and rendering
+adapters. Both Cortex-M0 and Cortex-M4 `no_std`/`libm` checks pass without
+flashing hardware.
+
+Pinned core, worklet, physics, Leptos, reference audits and offline harness checks
+pass locally. Complete trace comparisons preserve raw loudness, filtered targets
+and attack events. Browser functional tests and separate diagnostics-off exercise
+timing are recorded in the linked report. Music previews and diagnostic recording
+do not qualify as phone FPS acceptance. Live AudD, human listening, physical-phone
+acceptance, CI and deployment are reported separately.
+
 ## Earlier validation records
 
 The 2026-09-25 source-band update and 40 ms strokes are documented in the

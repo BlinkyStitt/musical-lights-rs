@@ -49,6 +49,7 @@ export class PhysicsView {
     this.inflight = false;
     this.sequence = 0;
     this.input = new Float32Array(38);
+    this.tempo = 120;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(72);
     this.timing = { snapshots: [], resizes: [] };
@@ -86,13 +87,15 @@ export class PhysicsView {
     this.canvas.addEventListener('webglcontextrestored', this.contextRestored = () => {
       this.lost = false; this.notice.clear(); this.pause();
     });
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2));
-    const light = new THREE.DirectionalLight(0xffffff, 2); light.position.set(-1, 3, 4); this.scene.add(light);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
+    this.attackLights = Array.from({ length: 4 }, () => { const light = new THREE.PointLight(0xffffff, 0, .45, 2); this.scene.add(light); return light; });
+    const light = new THREE.DirectionalLight(0xffffff, 1.8); light.position.set(-1, 3, 4); this.scene.add(light);
     this.pointerPoint = new THREE.Vector3(); this.pointerDirection = new THREE.Vector3();
     this.object = new THREE.Object3D(); this.color = new THREE.Color(); this.quaternion = new THREE.Quaternion();
     this.listeners = [];
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
+    this.controls = this.card.querySelector('.audio-controls'); this.observer.observe(this.controls);
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
     this.listen(document, 'visibilitychange', () => { if (document.hidden) this.report?.invalidate('Page hidden during test'); this.pause(); });
     this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'rigid-body-physics' });
@@ -101,27 +104,29 @@ export class PhysicsView {
     this.measure();
     this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden });
     this.graph.physics = this;
-    this.animate = now => {
+    this.animate = frameTime => {
       this.request = null;
       if (this.closed || document.hidden || this.lost) return;
-      const start = performance.now();
+      // Worker ticks, input receipts and output timestamps use this clock.
+      // rAF names the rendering frame and can precede callback execution.
+      const start = performance.now(), now = start;
       if (this.resizePending) { this.resizePending = false; this.measure(); }
       this.onFrame(now, false);
       if (this.idle && this.preview && !this.previewPending && now - (this.previewAt ?? -Infinity) >= 1000 / 60) {
         this.previewAt = now; this.previewPending = true;
-        this.preview.postMessage({ type: 'pulse', reduced: this.reduced.matches });
+        this.preview.postMessage({ type: 'pulse', time: now / 1000, reduced: this.reduced.matches });
       }
       this.input[31] = this.reduced.matches ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
-          sequence: ++this.sequence, input: this.input });
+          sequence: ++this.sequence, input: this.input, tempo: this.tempo });
       }
       if (this.current) this.draw(now);
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
       this.metrics.frames++; this.metrics.renderMs += cost;
-      this.report?.frame(now, cost);
+      this.report?.frame(frameTime, cost);
       this.notice.sample(this.metrics, now, 1000 / (this.layout?.[1] ?? 120));
       if (!this.lastStatus || now - this.lastStatus > 1000) {
         this.notice.report = this.report?.active ? this.report.query('.phone-progress').textContent
@@ -133,10 +138,11 @@ export class PhysicsView {
     };
     this.previewLevels = new Float32Array(24); this.previewEdges = new Float32Array(24);
     this.idle = !this.card.dataset.audioSession || this.card.dataset.audioState === 'stopped';
+    this.listen(this.card, 'audio-tempo', ({ detail }) => { if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; } });
     this.listen(this.card, 'audio-session', ({ detail }) => {
       this.idle = detail.state === 'stopped';
       this.card.dataset.preview = String(this.idle);
-      if (this.idle) this.startPreview(); else this.stopPreview();
+      if (this.idle) { this.tempo = 120; this.tempoConfidence = 0; this.startPreview(); } else this.stopPreview();
     });
     if (this.idle) this.startPreview();
     this.pause();
@@ -146,10 +152,10 @@ export class PhysicsView {
     this.card.dataset.preview = 'true';
     this.preview = new Worker(new URL('./demo-worker.js', import.meta.url), { type: 'module', name: 'silent-sine-preview' });
     this.previewPending = true;
-    this.preview.postMessage({ type: 'init', reduced: this.reduced.matches,
-      wasm: new URL('../loudness/loudness.wasm', import.meta.url).href });
+    this.preview.postMessage({ type: 'init' });
     this.preview.onmessage = ({ data }) => {
       this.previewPending = false;
+      if (data.type === 'error') { this.stopPreview(); this.notice.show(`Silent preview unavailable: ${data.message}`); return; }
       if (!this.idle || this.closed || data.type !== 'frame') return;
       for (let i = 0; i < 24; i++) {
         this.previewLevels[i] = data.state[4 + i * 4];
@@ -186,6 +192,7 @@ export class PhysicsView {
   measure() {
     const box = this.layer.getBoundingClientRect(); this.motion.bounds = box;
     if (box.width <= 0 || box.height <= 0) return;
+    this.card.style.setProperty('--fullscreen-control-bottom', `${Math.max(0, this.controls.getBoundingClientRect().bottom - this.graph.getBoundingClientRect().top) + 8}px`);
     this.width = this.layout?.[2] ?? 1.2;
     this.height = Math.max(this.layout?.[19] ?? .4, this.width * box.height / box.width);
     if (this.input[32] !== this.height && this.timing.resizes.length < 5000) this.timing.resizes.push({ at: performance.now(), from: this.input[32], to: this.height });
@@ -235,6 +242,7 @@ export class PhysicsView {
       if (this.card.dataset.mode === 'advanced') this.report = new PhoneReport(this);
       this.requestSnapshot();
     } else if (data.type === 'snapshot') {
+      this.pigments = data.pigments;
       if (this.previous) this.buffers.push(this.previous.buffer);
       this.previous = this.current;
       this.current = new Float32Array(data.buffer);
@@ -265,37 +273,45 @@ export class PhysicsView {
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, gap, radius, postHeight] = this.layout;
-    this.balls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 }), this.layout[21]);
+    const ballGeometry = new THREE.SphereGeometry(1, 20, 14);
+    for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
+    const ballMaterial = new THREE.MeshLambertMaterial();
+    this.patternTime = { value: 0 };
+    ballMaterial.onBeforeCompile = shader => {
+      shader.uniforms.patternTime = this.patternTime;
+      shader.vertexShader = 'attribute vec3 pigmentA; attribute vec3 pigmentB; attribute vec3 pigmentC; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nobjectPoint = position; paintA = pigmentA; paintB = pigmentB; paintC = pigmentC;');
+      shader.fragmentShader = 'uniform float patternTime; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        float wave = sin(7.0 * objectPoint.y + 3.0 * sin(3.0 * objectPoint.x + patternTime) + 4.0 * objectPoint.z);
+        vec3 pigment = mix(mix(paintA, paintB, smoothstep(-0.85, 0.15, wave)), paintC, smoothstep(0.15, 0.9, wave));
+        diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
+    };
+    this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
     // Two chords per quarter-circle keep the narrow caps smooth at screen size.
     // Avoid dense subdivisions across all six faces of each long bar.
     const geometry = new RoundedBoxGeometry(pitch - gap, postHeight, this.config[5], 1, radius);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
-    const material = new THREE.ShaderMaterial({
-      uniforms: { halfWidth: { value: (pitch - gap) / 2 }, radius: { value: radius }, postHeight: { value: postHeight } },
-      vertexShader: `attribute float edge;
-        varying vec3 tint; varying vec3 local; varying vec3 world; varying float glow;
-        void main() { local = position; glow = edge; tint = instanceColor;
-          vec4 p = instanceMatrix * vec4(position, 1.0); world = p.xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * p; }`,
-      fragmentShader: `uniform float halfWidth; uniform float radius; uniform float postHeight;
-        varying vec3 tint; varying vec3 local; varying vec3 world; varying float glow;
-        void main() {
+    const material = new THREE.MeshLambertMaterial({ toneMapped: false });
+    material.defines = { PIXEL_RATIO: Math.min(devicePixelRatio, 2).toFixed(1) };
+    material.onBeforeCompile = shader => {
+      Object.assign(shader.uniforms, { halfWidth: { value: (pitch - gap) / 2 }, halfDepth: { value: this.config[5] / 2 }, radius: { value: radius }, postHeight: { value: postHeight } });
+      shader.vertexShader = 'attribute float edge; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      shader.fragmentShader = 'uniform float halfWidth; uniform float halfDepth; uniform float radius; uniform float postHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.x < 0.0 || world.x > 1.2) discard;
           vec2 q = vec2(abs(local.x) - (halfWidth - radius), local.y - (postHeight * 0.5 - radius));
-          float distance = radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
-          distance = min(distance, world.y);
-          // fwidth is one device pixel. Scale to one CSS pixel at the capped pixel ratio.
+          float distance = min(radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)), world.y);
           float pixel = PIXEL_RATIO * fwidth(distance);
-          float outline = 1.0 - smoothstep(0.5 * pixel, 1.5 * pixel, distance);
-          float inner = 1.0 - smoothstep(1.5 * pixel, 2.5 * pixel, distance);
-          // A permanent dark boundary keeps bright yellows/greens legible on
-          // the light surface. The one-pixel attack flash sits just inside it.
-          gl_FragColor = vec4(mix(mix(tint, vec3(1.0), inner * glow), vec3(0.0), outline), 1.0);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-      defines: { PIXEL_RATIO: Math.min(devicePixelRatio, 2).toFixed(1) },
-    });
+          float front = step(halfDepth - radius - 0.00001, abs(local.z));
+          float outline = (1.0 - smoothstep(0.5 * pixel, 1.5 * pixel, distance)) * front;
+          float inner = (1.0 - smoothstep(1.5 * pixel, 2.5 * pixel, distance)) * front;
+          diffuseColor.rgb = mix(mix(diffuseColor.rgb, vec3(1.0), inner * glow), vec3(0.0), outline);`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(glow * inner * (1.0 - outline) * .8);');
+      // Keep the boundary dark after lighting.
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= 1.0 - outline;\n#include <opaque_fragment>');
+    };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 3);
     for (let i = 0; i < count * 3; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
@@ -303,12 +319,31 @@ export class PhysicsView {
       new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
     ]), new THREE.LineBasicMaterial({ color: getComputedStyle(this.graph).getPropertyValue('--line').trim() }));
     this.scene.add(this.ceiling);
+    // Four reusable illuminated enclosure surfaces; no shadows or postprocessing.
+    const wallMaterial = new THREE.MeshLambertMaterial({ color: getComputedStyle(this.graph).getPropertyValue('--plot').trim(), side: THREE.DoubleSide });
+    this.enclosure = new THREE.Group();
+    for (let i = 0; i < 4; i++) this.enclosure.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), wallMaterial));
+    this.scene.add(this.enclosure);
   }
   draw(now) {
     const [count, , , pitch, , , postHeight, , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
     this.ceiling.position.y = current[this.layout[17]];
+    const height = current[this.layout[17]], depth = this.config[5];
+    const [back, floor, left, right] = this.enclosure.children;
+    back.position.set(this.width / 2, height / 2, -depth / 2); back.scale.set(this.width, height, 1);
+    floor.rotation.x = -Math.PI / 2; floor.position.set(this.width / 2, 0, 0); floor.scale.set(this.width, depth, 1);
+    for (const [wall, x] of [[left, 0], [right, this.width]]) { wall.rotation.y = Math.PI / 2; wall.position.set(x, height / 2, 0); wall.scale.set(depth, height, 1); }
+    if (!this.reduced.matches) this.patternTime.value = now / 10000;
+    for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
+      const attr = this.balls.geometry.attributes[name];
+      for (let i = 0; i < this.layout[21]; i++) {
+        if (this.pigments) attr.array.set(this.pigments.subarray(i * 9 + k * 3, i * 9 + k * 3 + 3), i * 3);
+        else attr.array.set(current.subarray(3 + i * stride + 15, 3 + i * stride + 18), i * 3);
+      }
+      attr.needsUpdate = true;
+    }
     const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
     const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
     const phaseOffset = this.layout[20];
@@ -336,6 +371,15 @@ export class PhysicsView {
         this.object.updateMatrix(); this.bars.setMatrixAt(i + copy * count, this.object.matrix);
       }
     }
+    let used = 0;
+    for (let i = 0; i < count && used < this.attackLights.length; i++) {
+      const glow = this.meshEdges[i];
+      if (glow < .05) continue;
+      const light = this.attackLights[used++];
+      light.position.set(((i + phase) % count + .5) * pitch, current[barOffset + i] + .025, depth / 2 + .025);
+      light.intensity = .035 * glow;
+    }
+    while (used < this.attackLights.length) this.attackLights[used++].intensity = 0;
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.renderedAt = performance.timeOrigin + now;
@@ -389,7 +433,9 @@ export class PhysicsView {
     if (!paused && !this.closed) this.request = requestAnimationFrame(this.animate);
   }
   fail(message) { this.notice.show(`Physics stopped: ${message}`, 'Motion stopped. Reload to restart.'); this.report?.invalidate(message); this.lost = true; this.pause(); }
-  disposeMeshes() { for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
+  disposeMeshes() {
+    if (this.enclosure) { for (const wall of this.enclosure.children) wall.geometry.dispose(); this.enclosure.children[0].material.dispose(); this.scene.remove(this.enclosure); }
+    for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
     this.closed = true; this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;

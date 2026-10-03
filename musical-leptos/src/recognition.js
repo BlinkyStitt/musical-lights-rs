@@ -79,6 +79,7 @@ export class SongRecognition {
     this.input = null;
     this.playing = false;
     this.job = null;
+    this.enabled = false;
     let storage;
     try { storage = localStorage; } catch { /* Export still works from memory. */ }
     this.history = new SongHistory(storage);
@@ -86,12 +87,10 @@ export class SongRecognition {
     this.tools = document.createElement('section');
     this.tools.className = 'song-tools';
     this.tools.setAttribute('aria-label', 'Song recognition');
-    this.tools.innerHTML = `<div class="song-actions"><button type="button" class="identify-song" aria-describedby="recognition-disclosure recognition-cooldown"><span aria-hidden="true">♫</span> Identify song</button><button type="button" class="cancel-recognition" hidden>Cancel identification</button></div>
-      <p id="recognition-disclosure">Identify song sends a 10-second microphone recording to AudD through our server. Only recognized song details are saved on this device.</p>
-      <p class="recognition-status" role="status"></p>
-      <p id="recognition-cooldown" class="recognition-cooldown" role="timer" aria-live="off"></p>
-      <details class="song-history"><summary>Song history (0)</summary><p>Detection times, not exact song start times. History is local to this browser.</p><div class="song-actions"><button type="button" class="export-songs-csv">Export CSV</button><button type="button" class="export-songs-json">Export JSON</button></div><p class="song-storage-status" role="status"></p><ol></ol></details>`;
-    card.querySelector('.display-note').after(this.tools);
+    this.tools.innerHTML = `<details class="song-history settings-section"><summary>Song history (0)</summary>
+      <p id="recognition-disclosure">While enabled, Identify song sends a 10-second microphone recording to AudD through our server at most once per minute. Each lookup uses one request. Only recognized song details are saved on this device.</p>
+      <p>Detection times, not exact song start times. History is local to this browser.</p><div class="song-actions"><button type="button" class="export-songs-csv">Export CSV</button><button type="button" class="export-songs-json">Export JSON</button></div><p class="song-storage-status" role="status"></p><ol></ol></details>`;
+    (card.querySelector('.diagnostics-controls') ?? card.querySelector('.display-note')).after(this.tools);
     this.strip = document.createElement('div');
     this.strip.className = 'recognized-song';
     this.strip.hidden = true;
@@ -99,16 +98,20 @@ export class SongRecognition {
     this.strip.innerHTML = '<span class="song-caption">Last recognized</span><div class="song-window"><span class="song-title"></span></div>';
     card.querySelector('.spectrum-panel').before(this.strip);
     const query = selector => this.tools.querySelector(selector);
-    this.button = query('.identify-song'); this.cancelButton = query('.cancel-recognition');
-    const row = card.querySelector('.button-row');
-    const fullscreen = row.querySelector('.fullscreen-button');
-    row.insertBefore(this.button, fullscreen);
-    row.insertBefore(this.cancelButton, fullscreen);
-    query('.song-actions').remove();
-    this.status = query('.recognition-status');
-    this.cooldownStatus = query('.recognition-cooldown');
-    this.button.onclick = () => this.identify();
-    this.cancelButton.onclick = () => this.cancel('Identification canceled.');
+    this.control = document.createElement('div'); this.control.className = 'recognition-control';
+    this.control.innerHTML = `<label class="setting-switch song-detection"><input type="checkbox" class="identify-song" aria-describedby="recognition-disclosure recognition-progress"><span>Identify song</span></label>
+      <svg class="recognition-ring" viewBox="0 0 24 24" role="img" aria-label="Song identification off"><circle class="ring-track" cx="12" cy="12" r="9"/><circle class="ring-progress" cx="12" cy="12" r="9" pathLength="1"/></svg>
+      <span id="recognition-progress" class="visually-hidden"></span><p class="recognition-status" role="status"></p>`;
+    this.button = this.control.querySelector('.identify-song');
+    const row = card.querySelector('.button-row'); row.insertBefore(this.control, row.querySelector('.fullscreen-button'));
+    this.status = this.control.querySelector('.recognition-status');
+    this.ring = this.control.querySelector('.recognition-ring');
+    this.progress = this.control.querySelector('#recognition-progress');
+    this.button.onchange = () => {
+      this.enabled = this.button.checked;
+      if (this.enabled) { this.status.textContent = ''; this.schedule(); }
+      else this.cancel('');
+    };
     query('.export-songs-csv').onclick = () => this.export('csv');
     query('.export-songs-json').onclick = () => this.export('json');
     this.onInput = ({ detail }) => { this.cancel(); this.input = detail; this.refresh(); };
@@ -139,35 +142,59 @@ export class SongRecognition {
   refresh() {
     const supported = typeof MediaRecorder !== 'undefined';
     const remaining = this.cooldown.remaining();
-    this.cooldownStatus.textContent = remaining ? `Wait ${Math.ceil(remaining / 1000)} seconds before identifying again.` : '';
-    this.cooldownStatus.hidden = !remaining;
-    this.button.disabled = !this.endpoint() || !supported || !this.input || !this.playing || Boolean(this.job) || remaining > 0;
-    this.button.title = !this.playing ? 'Turn on Listening, then identify the music.' : 'Identify the music playing now.';
-    this.cancelButton.hidden = !this.job;
+    let phase = 'off', fraction = 0, description = 'Song identification off.';
+    if (this.enabled) {
+      phase = this.job?.phase ?? 'waiting';
+      if (phase === 'capture') {
+        fraction = Math.min(1, (performance.now() - this.job.captureAt) / SAMPLE_MS);
+        description = 'Capturing ten seconds of microphone audio.';
+      } else if (phase === 'upload') { fraction = 1; description = 'Identifying song.'; }
+      else { fraction = 1 - Math.min(1, remaining / COOLDOWN_MS); description = remaining ? 'Waiting for the next song lookup.' : 'Ready for the next song lookup.'; }
+    }
+    // No live countdown announcements or spinning animation. Reduced Motion
+    // receives the same discrete once-a-second progress updates.
+    this.ring.dataset.phase = phase;
+    this.ring.style.setProperty('--recognition-progress', fraction);
+    this.ring.setAttribute('aria-label', description); this.progress.textContent = description;
+    this.button.checked = this.enabled;
+    this.button.disabled = !this.endpoint() || !supported || !this.input || !this.playing;
+    this.button.title = !this.playing ? 'Turn on Listening, then identify the music.' : 'Identify microphone audio once per minute.';
     if (!this.job && !this.status.textContent) this.status.textContent = !this.endpoint()
-      ? 'Song recognition is not configured yet.' : !supported ? 'Song recognition is unavailable in this browser.'
-        : !this.playing ? 'Turn on Listening to identify a song.' : 'Ready to identify a song.';
+      ? 'Song recognition is not configured yet.' : !supported ? 'Song recognition is unavailable in this browser.' : '';
+
   }
 
   cancel(message = '') {
+    this.enabled = false;
+    clearTimeout(this.nextLookup);
     const job = this.job;
     this.job = null;
     if (job) {
       job.abort.abort();
       clearTimeout(job.captureTimer); clearTimeout(job.deadline);
       if (job.recorder?.state !== 'inactive') job.recorder?.stop();
-      this.status.textContent = message || 'Identification canceled.';
+      this.status.textContent = message;
     }
+    this.refresh();
+  }
+
+  schedule() {
+    clearTimeout(this.nextLookup);
+    if (!this.enabled || this.closed || !this.playing || !this.input || this.job) return;
+    // Start capture ten seconds before the next allowed upload so completed
+    // lookups remain a minute apart. Recheck shared storage before dispatch.
+    const delay = Math.max(0, this.cooldown.remaining() - SAMPLE_MS);
+    this.nextLookup = setTimeout(() => this.identify(), delay);
     this.refresh();
   }
 
   async identify() {
     this.refresh();
-    if (this.button.disabled || this.closed) return;
+    if (this.button.disabled || !this.enabled || this.job || this.closed) return;
     const endpoint = this.endpoint();
-    const job = { abort: new AbortController(), sampleStartedAt: new Date().toISOString() };
+    const job = { abort: new AbortController(), sampleStartedAt: new Date().toISOString(), phase: 'capture', captureAt: performance.now() };
     this.job = job;
-    this.status.textContent = 'Listening for 10 seconds…'; this.refresh();
+    this.status.textContent = ''; this.refresh();
     try {
       const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type));
       if (!type) throw new Error('This browser cannot record a supported audio format.');
@@ -190,12 +217,31 @@ export class SongRecognition {
       if (this.job !== job) return;
       if (!job.sampleEndedAt) throw new Error('Audio recording ended early. Try again.');
       if (!blob.size) throw new Error('No audio was recorded. Try again.');
-      this.status.textContent = 'Identifying song…';
+      // Another tab may have uploaded while this recording was in progress.
+      const remaining = this.cooldown.remaining();
+      if (remaining > 0) {
+        job.phase = 'waiting'; this.refresh();
+        await new Promise((resolve, reject) => {
+          job.captureTimer = setTimeout(resolve, remaining);
+          job.abort.signal.addEventListener('abort', () => reject(new DOMException('Canceled', 'AbortError')), { once: true });
+        });
+        if (this.job !== job) return;
+        if (this.cooldown.remaining() > 0) return; // A newer tab lookup: reschedule, never overspend.
+      }
+      job.phase = 'upload'; this.refresh();
       job.deadline = setTimeout(() => job.abort.abort(), 25_000);
       // An upload may spend a lookup even if it fails or is canceled later.
       // Canceled recordings never reach this point and consume no cooldown.
-      this.cooldown.start(); this.refresh();
-      const response = await fetch(endpoint, { method: 'POST', body: blob, signal: job.abort.signal, credentials: 'omit', cache: 'no-store' });
+      const upload = () => {
+        if (this.job !== job || job.abort.signal.aborted || this.cooldown.remaining() > 0) return null;
+        this.cooldown.start(); this.refresh();
+        return fetch(endpoint, { method: 'POST', body: blob, signal: job.abort.signal, credentials: 'omit', cache: 'no-store' });
+      };
+      // Serialize cooldown reservation across tabs where Web Locks is available.
+      // Shared storage is checked again inside the lock, immediately before spend.
+      const locks = globalThis.navigator?.locks;
+      const response = locks ? await locks.request('musical-lights-recognition-upload', { signal: job.abort.signal }, upload) : await upload();
+      if (!response) return;
       if (!response.ok) throw new Error(({ 429: 'Too many requests. Wait a minute and try again.', 503: 'Song recognition is not configured yet.', 413: 'Audio sample is too large.' })[response.status] ?? 'Recognition failed. Try again when ready.');
       const { result } = await response.json();
       if (this.job !== job || this.closed) return;
@@ -205,13 +251,16 @@ export class SongRecognition {
         sampleStartedAt: job.sampleStartedAt, sampleEndedAt: job.sampleEndedAt, recognizedAt: new Date().toISOString() };
       this.history.add(entry); this.renderHistory();
       this.showSong(entry);
-      this.status.textContent = `Recognized ${entry.artist} — ${entry.title}.`;
+      this.status.textContent = '';
     } catch (error) {
-      if (this.job === job && !this.closed) this.status.textContent = error.name === 'AbortError' ? 'Recognition timed out. Try again when ready.' : error.message;
+      if (this.job === job && !this.closed) {
+        this.enabled = false;
+        this.status.textContent = `${error.name === 'AbortError' ? 'Recognition timed out.' : error.message} Song identification turned off.`;
+      }
     } finally {
       clearTimeout(job.captureTimer); clearTimeout(job.deadline);
       if (job.recorder && job.recorder.state !== 'inactive') job.recorder.stop();
-      if (this.job === job) { this.job = null; this.refresh(); }
+      if (this.job === job) { this.job = null; this.refresh(); this.schedule(); }
     }
   }
 
@@ -263,6 +312,6 @@ export class SongRecognition {
     this.card.removeEventListener('audio-session', this.onSession);
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('storage', this.onStorage);
-    this.resize.disconnect(); this.button.remove(); this.cancelButton.remove(); this.tools.remove(); this.strip.remove();
+    this.resize.disconnect(); this.control.remove(); this.tools.remove(); this.strip.remove();
   }
 }

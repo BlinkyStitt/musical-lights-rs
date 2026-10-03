@@ -75,7 +75,7 @@ export async function startFrozen(page) {
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await page.evaluate(async () => {
     // Controlled clock fixture suppresses the real interruption event.
     window.freezeClock = true;

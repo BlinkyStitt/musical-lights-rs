@@ -67,8 +67,8 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
             }
         }
     }
-    let expected =
-        SCROLL_SPEED * 4.0 * ((110.0 - SCROLL_EASE / 2.0) * std::f64::consts::TAU / 16.0).sin();
+    let expected = SCROLL_SPEED * SCROLL_PERIOD / 4.0
+        * ((110.0 - SCROLL_EASE / 2.0) * std::f64::consts::TAU / SCROLL_PERIOD).sin();
     assert!((sim.scroll_phase - expected.rem_euclid(72.0)).abs() < 0.001);
     sim.apply(SimulationInput {
         tick: sim.tick,
@@ -91,7 +91,8 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
     })
     .unwrap();
     sim.step();
-    assert!(sim.scroll_phase > stopped);
+    assert!(sim.scroll_phase != stopped);
+    assert!((sim.scroll_phase - stopped).abs() < SCROLL_PEAK_SPEED / HZ as f64);
     sim.apply(SimulationInput {
         tick: sim.tick,
         reduced_motion: true,
@@ -145,11 +146,13 @@ fn empty_space_strokes_skip_contact_work_but_nearby_strokes_keep_it() {
 }
 
 #[test]
-fn gravity_matches_ballistic_position_and_velocity() {
+fn gravity_with_drag_matches_closed_form_position_and_velocity() {
     for gravity in [3.0, 9.81, 15.0] {
         let mut sim = world(SimulationConfig {
             gravity,
             height: 5.0,
+            // Dense fixture isolates ideal gravity/contact laws from air drag.
+            density: 20000.0,
             ..SimulationConfig::default()
         });
         isolate(&mut sim, &[0]);
@@ -157,8 +160,12 @@ fn gravity_matches_ballistic_position_and_velocity() {
         for _ in 0..HZ / 2 {
             sim.step();
         }
-        assert!((velocity(&sim, 0).y + gravity * 0.5).abs() < 0.003);
-        assert!((position(&sim, 0).y - (4.0 - 0.5 * gravity * 0.25)).abs() < 0.012);
+        let k = 3.0 * 1.225 * 0.47 / (8.0 * sim.config.density * radius(0));
+        let terminal = (gravity / k).sqrt();
+        let expected_v = -terminal * (gravity * 0.5 / terminal).tanh();
+        let expected_y = 4.0 - (gravity * 0.5 / terminal).cosh().ln() / k;
+        assert!((velocity(&sim, 0).y - expected_v).abs() < 0.003);
+        assert!((position(&sim, 0).y - expected_y).abs() < 0.012);
     }
 }
 #[test]
@@ -177,6 +184,8 @@ fn rebound_height_matches_restitution_squared() {
     for restitution in [0.4, SimulationConfig::default().restitution, 0.85] {
         let mut sim = world(SimulationConfig {
             restitution,
+            // Dense fixture isolates ideal gravity/contact laws from air drag.
+            density: 20000.0,
             ..SimulationConfig::default()
         });
         isolate(&mut sim, &[0]);
@@ -216,6 +225,9 @@ fn vertical_walls_rebound_without_grabbing_tangential_motion() {
             let mut sim = world(SimulationConfig {
                 gravity: 0.0,
                 height: 5.0,
+                // Dense fixture isolates ideal gravity/contact laws from air drag.
+                density: 20000.0,
+                restitution: 0.55,
                 ..SimulationConfig::default()
             });
             isolate(&mut sim, &[0]);
@@ -250,6 +262,8 @@ fn pressure_against_a_wall_does_not_hold_a_ball_above_the_bars() {
     for axis in [0, 2] {
         let mut sim = world(SimulationConfig {
             height: 5.0,
+            // Dense fixture isolates ideal gravity/contact laws from air drag.
+            density: 20000.0,
             ..SimulationConfig::default()
         });
         isolate(&mut sim, &[0]);
@@ -810,7 +824,7 @@ fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
         impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
         horizontal_speed = horizontal_speed.max(velocity(&sim, 0).x);
     }
-    assert!(impulse > 0.001);
+    assert!(impulse / sim.world.bodies[sim.balls[0].0].mass() > 0.1);
     assert!(horizontal_speed > 0.2);
 }
 #[test]
@@ -818,6 +832,8 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
         height: 5.0,
+        // Dense fixture isolates ideal gravity/contact laws from air drag.
+        density: 20000.0,
         ..SimulationConfig::default()
     });
     isolate(&mut sim, &[0]);
@@ -857,6 +873,8 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
         height: 5.0,
         restitution: 1.0,
         friction: 0.0,
+        // Dense fixture isolates ideal gravity/contact laws from air drag.
+        density: 20000.0,
         ..SimulationConfig::default()
     });
     // Make the second fixture sphere identical to the first; the production
@@ -932,7 +950,7 @@ fn substep_overload_is_visible_without_discarding_a_tick() {
 }
 
 #[test]
-fn default_balls_have_a_small_rebound_and_settle_on_quiet_bars() {
+fn beach_balls_rebound_with_quadratic_drag_and_settle_on_quiet_bars() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
     place(
@@ -952,7 +970,16 @@ fn default_balls_have_a_small_rebound_and_settle_on_quiet_bars() {
     }
     assert!(contacted);
     println!("default 0.5 m drop: rebound {rebound} m");
-    assert!(rebound < 0.025, "default rebound too large: {rebound} m");
+    // Independent closed-form vertical quadratic-drag solution: v² after
+    // falling h, followed by height from the restitution-scaled impact speed.
+    let k = 3.0 * 1.225 * 0.47 / (8.0 * sim.config.density * radius(0));
+    let impact_v2 = sim.config.gravity / k * (1.0 - (-2.0 * k * 0.5).exp());
+    let expected = (1.0 + k * sim.config.restitution.powi(2) * impact_v2 / sim.config.gravity).ln()
+        / (2.0 * k);
+    assert!(
+        (rebound - expected).abs() < 0.012,
+        "rebound {rebound}, drag solution {expected}"
+    );
     assert!(velocity(&sim, 0).length() < 0.01);
     assert!((position(&sim, 0).y - radius(0) - BASELINE).abs() < 0.001);
 }
@@ -1140,7 +1167,7 @@ fn resize_reversal_starts_at_applied_height_and_replays_at_all_frame_rates() {
 fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
-    // Source 23 is now across the left seam; the collider copy at x=.025
+    // Source 23 is now across the left seam; the collider copy at x=0.025
     // must retain source 23's impulse column and palette entry.
     sim.scroll_phase = 1.0;
     sim.step();
@@ -1252,8 +1279,12 @@ fn measured_gravity_can_point_up_or_through_the_screen_and_is_not_reduced() {
             for _ in 0..6 {
                 sim.step();
             }
-            let expected = Vector::from_array(gravity) * 0.05;
-            assert!((velocity(&sim, 0) - expected).length() < 0.003);
+            let g = Vector::from_array(gravity);
+            assert_eq!(sim.world.gravity, g);
+            let k = 3.0 * 1.225 * 0.47 / (8.0 * sim.config.density * radius(0));
+            let terminal = (g.length() / k).sqrt();
+            let expected = g / g.length() * terminal * (g.length() * 0.05 / terminal).tanh();
+            assert!((velocity(&sim, 0) - expected).length() < 0.006);
         }
     }
 }
@@ -1274,7 +1305,10 @@ fn turning_over_wakes_settled_balls_and_stopping_restores_default_gravity() {
     for _ in 0..HZ / 5 {
         sim.step();
     }
-    assert!(velocity(&sim, 0).y > 1.8);
+    let k = 3.0 * 1.225 * 0.47 / (8.0 * sim.config.density * radius(0));
+    let terminal = (9.81 / k).sqrt();
+    let expected = terminal * (9.81 * 0.2 / terminal).tanh();
+    assert!((velocity(&sim, 0).y - expected).abs() < 0.025);
     assert!(position(&sim, 0).y > 0.15);
     sim.apply(SimulationInput {
         tick: sim.tick,
@@ -1283,5 +1317,79 @@ fn turning_over_wakes_settled_balls_and_stopping_restores_default_gravity() {
     .unwrap();
     let before = velocity(&sim, 0).y;
     sim.step();
-    assert!((velocity(&sim, 0).y - before + 9.81 * DT).abs() < 0.003);
+    let expected = terminal * ((before / terminal).atan() - 9.81 * DT / terminal).tan();
+    assert!((velocity(&sim, 0).y - expected).abs() < 0.004);
+    assert_eq!(sim.world.gravity, Vector::new(0.0, -9.81, 0.0));
+}
+
+#[test]
+fn air_drag_dissipates_fast_free_motion_without_changing_gravity() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        height: 3.0,
+        ..SimulationConfig::default()
+    });
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(0.6, 1.0, 0.0),
+        Vector::new(0.0, 8.0, 0.0),
+    );
+    sim.step();
+    assert!(velocity(&sim, 0).y > 0.0 && velocity(&sim, 0).y < 8.0);
+    assert_eq!(sim.world.gravity, Vector::ZERO);
+}
+
+#[test]
+fn contact_pigments_remember_source_and_resting_load_does_not_change_history() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(PITCH * 6.5, radius(0) + 0.025, 0.0),
+        Vector::ZERO,
+    );
+    for _ in 0..180 {
+        sim.step();
+    }
+    assert_eq!(&sim.pigments[..3], &sim.palette[6]);
+    let history = sim.pigments;
+    for _ in 0..120 {
+        sim.step();
+    }
+    assert_eq!(sim.pigments, history);
+}
+
+#[test]
+fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[]);
+    sim.apply(SimulationInput {
+        scrolling: true,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    for _ in 0..(HZ as f64 * SCROLL_PERIOD / 8.0) as usize {
+        sim.step();
+    }
+    let phase = sim.scroll_phase;
+    sim.set_tempo(180.0);
+    assert_eq!(sim.scroll_phase, phase);
+    sim.step();
+    let faster = sim.scroll_phase - phase;
+    let mut slow = world(SimulationConfig::default());
+    isolate(&mut slow, &[]);
+    slow.apply(SimulationInput {
+        scrolling: true,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    for _ in 0..(HZ as f64 * SCROLL_PERIOD / 8.0) as usize {
+        slow.step();
+    }
+    let phase = slow.scroll_phase;
+    slow.step();
+    assert!((faster / (slow.scroll_phase - phase) - 1.5).abs() < 0.01);
 }

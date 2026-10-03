@@ -302,7 +302,9 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     expect(card).toEqual({ x: 0, y: 0, ...viewport });
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
     expect((await page.locator('#dancinglights').boundingBox()).height).toBeGreaterThan(before.height + 100);
-    await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeHidden();
+    for (const name of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
+      await expect(page.getByRole('checkbox', { name, exact: true })).toBeVisible();
+    }
     await expect(page.locator('.control-note')).toBeHidden();
     await expect(page.locator('.wake-status')).toBeHidden();
     await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);

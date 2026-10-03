@@ -1,30 +1,33 @@
-# Manual song recognition
+# Opt-in song recognition
 
-Turn on **Listening**, then press **Identify song**. Each press records the next ten
-seconds using the existing microphone stream and sends it through the Rust
-Cloudflare Worker to AudD. There is no periodic recognition or automatic retry.
-Listening and loudness analysis otherwise stay on the device.
+Turn on **Listening**, then enable **Identify song**. While enabled, it records
+ten seconds from the existing microphone and sends the sample through the Rust
+Cloudflare Worker to AudD at most once per minute. Provider or recording errors
+turn the switch off; no automatic retry follows an error. No-match lookups keep
+the previous song and continue the opted-in schedule. Digital playback never
+uses recognition or requests the microphone.
 
-After an upload starts, **Identify song** waits one minute before allowing
-another recording. The countdown applies to successes, no matches, failed
-uploads and uploads canceled after submission. It survives navigation, reloads
-and other tabs when browser storage is available. Canceling before submission
-uses no lookup and starts no cooldown. This reduces repeat lookups; it does not
-reuse an old match for music that may have changed.
+The SVG ring beside the switch shows waiting, capture and upload phases, with
+an accessible phase description. It updates discretely once per second, has no
+spinning animation, and does not announce a live countdown. Reduced Motion also
+stops title scrolling. Successful recognition appears once above the normal
+visualization and once in the single fullscreen footer, with no duplicate
+success message. Errors and no-match notices stay beside Identify song.
 
-Cancel, Stop listening, hiding the page, and leaving Home cancel pending capture
-or upload. Canceling after the Worker has contacted AudD cannot undo that lookup
-or its cost. No audio is persisted by our application or Worker; AudD receives
-the recording and its own service terms apply.
+Switching identification off, stopping the microphone, changing source, hiding
+the page, or leaving the route cancels pending capture/upload. Canceled captures
+spend no lookup. Canceling an upload cannot undo a request already sent to AudD.
+The minute cooldown starts immediately before submission, including failures;
+it survives reloads/tabs through shared storage. Web Locks serialize reservation
+across supported tabs. If storage or Web Locks are unavailable, only session
+throttling and the server's request limit can be guaranteed.
 
-Successful detections show artist and title above the lights (also in fullscreen).
-Long titles scroll unless Reduced Motion is enabled. Each successful press saves
-a separate localStorage entry, including repeat songs, with sample start/end and
-recognition timestamps in UTC. These are detection times, not song start times.
-The history view shows the latest 50; CSV and JSON exports include all entries.
-Storage failures leave entries available for export for the current page session.
-Browser storage can be cleared or evicted; Safari and installed web apps may have
-separate storage. Export history you want to keep.
+Recognition is off by default. The history disclosure states that recordings
+leave the device. Our app and Worker do not persist audio. Each success saves
+separate local metadata with sample start/end and recognition timestamps in UTC;
+these are detection times, not song start times. History shows the latest 50,
+while CSV/JSON exports include all entries. Storage failure retains metadata in
+memory for export. Safari and installed web apps may have separate storage.
 
 ## Deployment and credentials
 
@@ -89,3 +92,11 @@ The pinned Linux WebKit build omits MediaRecorder, so it verifies the unavailabl
 state and uses the controlled recorder for UI tests. Native encoding is checked
 in Chromium and macOS WebKit. These checks do not establish real AudD recognition
 quality or physical iPhone behavior.
+
+## Separate live check
+
+Routine browser/harness tests use a mock recognition endpoint. The standalone
+`validation/live-recognition.mjs` sends exactly one request when explicitly
+invoked with `RUN_LIVE_RECOGNITION=1`, a known public/licensed ten-second WAV,
+and the deployed HTTPS recognition endpoint. It is excluded from routine suites
+and has no retries. Record its result separately from local mocks and encoding.

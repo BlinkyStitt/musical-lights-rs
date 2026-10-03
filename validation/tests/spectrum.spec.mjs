@@ -111,7 +111,12 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   });
   await expect(page.getByRole('alert')).toContainText('Invalid audio display state');
   await expect.poll(() => page.evaluate(() => window.transportContext.state)).toBe('closed');
-  await expect(page.getByRole('meter').first()).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+  await expect(page.locator('.listening-toggle')).not.toBeChecked();
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.idle && !!v.preview && v.tempo === 120;
+  })).toBe(true);
   await physicsReady(page);
   const before = await physicsState(page);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 10);

@@ -6,7 +6,7 @@ fixed 120 Hz clock with collision substeps and no discarded simulation time.
 `musical-lights-physics` contains the same simulation for native tests and WASM.
 The browser runs it in a dedicated Worker, separate from the AudioWorklet.
 Three.js 0.186.0 draws the actual collider transforms in one WebGL2 canvas,
-using one instanced sphere mesh, one instanced bar mesh, and a ceiling line.
+using one instanced sphere mesh, one instanced bar mesh, a ceiling line, and four lit enclosure surfaces.
 
 ## Physical setup
 
@@ -17,9 +17,9 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Width / depth | 1.2 m / 0.24 m |
 | Bar pitch / gap / top corner radius | 50 mm / 2 mm / 12 mm |
 | Sphere diameter | 8 size ratios × 48 mm |
-| Density | 1,100 kg/m³ |
+| Density | 8 kg/m³ |
 | Gravity | 9.81 m/s² |
-| Ball, bar, floor and ceiling restitution / friction | 0.15 / 0.20 |
+| Ball, bar, floor and ceiling restitution / friction | 0.72 / 0.12 |
 | Vertical wall restitution / friction | 0.55 minimum / 0 |
 | Full-height attack / release | 40 ms attack; approximately 1.13 s gravity release; slower Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
@@ -30,17 +30,20 @@ Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
 compress, and the application does not add launch impulses.
 
-The default restitution is 0.15. For a stationary surface, the ideal rebound
-height is 2.25% of the drop height, down from 30.25% at the previous 0.55.
-This reduces repeated bouncing while retaining the 40 ms bar stroke. Moving
-bars still transfer their motion through physical contacts.
+The default is a lightweight inflated-ball proxy: restitution 0.72, friction
+0.12, and angular damping 0.15. Ideal stationary-surface rebound without drag
+would be 51.84% of drop height. Quadratic air drag (air density 1.225 kg/m³,
+sphere drag coefficient 0.47) reduces that height and depends on size, speed,
+and mass. Its implicit velocity update remains dissipative for fast launches.
+These are visual prototype assumptions. Moving bars transfer momentum through
+physical contacts; the measured sensor force and existing release remain.
 
 The four vertical walls have a separate material: zero friction lets balls
 slide down even while a shake presses them against a side, front, or back wall.
 Their restitution is 0.55, combined with the ball's value using the maximum;
-the wall therefore returns more of an impact's normal speed without adding
-energy. This is a visual tuning choice, not a measured material. Rapier's
-predictive soft contacts can return less than the ideal 55%. A ball at rest
+the default ball value of 0.72 therefore governs. Lowering ball restitution
+retains the wall's 0.55 minimum. This is a visual tuning choice, not a measured
+material. Drag and predictive soft contacts can reduce ideal rebound. A ball at rest
 does not receive an artificial kick away from a wall.
 
 Bars use position-based kinematic bodies in normalized bar coordinates.
@@ -64,12 +67,17 @@ Large attacks from rest must arrive within 1% of a stable target within 50 ms
 of physics receipt. Stable corrections up to 1% must settle within 150 ms.
 Retarget reversals include braking and are tested separately.
 
-The full pattern scrolls in both directions on a 16-second sinusoidal cycle,
-reversing gently every eight seconds. Average absolute travel remains 55.5 / 80
-columns per second; peak speed is π/2 times that rate. Equal travel left and
-right removes the conveyor's permanent rightward push. An enabled-time clock
-preserves the cycle when stopped, with a 120 ms smoothstep start/stop transition.
-Stop, disabling scrolling, and Reduced Motion stop in place; enabling scrolling resumes there. Hidden pages pause simulation.
+The full pattern scrolls in both directions on a two-second sinusoidal cycle
+at 120 BPM, reversing gently every second. Average absolute travel is four
+columns per second (two columns per beat), scaling with the smoothed tempo;
+peak speed is π/2 times that rate. Equal travel left and right removes permanent
+conveyor bias. The shorter cycle limits the excursion to two columns
+instead of increasing the distance balls are carried toward a wall. A tempo-scaled
+enabled-time clock preserves position through tempo changes and when stopped,
+with a 120 ms smoothstep start/stop transition.
+Disabling scrolling and Reduced Motion stop in place; enabling scrolling resumes there.
+Stopping audio restores the independent idle wave, which obeys the same Scroll
+lights switch. Hidden pages pause simulation.
 Each source has three physical copies; only copies beyond the closed side walls
 recycle. Copies farther than one column outside either wall are disabled in
 the solver and re-enabled before they can contact a ball. Rendering clips
@@ -210,20 +218,24 @@ The renderer owns the complete transfer pool and returns both snapshots on
 reset. Phone acceptance also checks snapshot age and displayed tick progress;
 a running worker with a frozen renderer cannot pass on frame rate alone.
 
-The browser's **Scroll lights** setting rotates complete source bands to the
-right at the hat's approximately 1.44-second column cadence. Fixed bar colliders
-receive the newly assigned height through their existing motion controller;
-balls remain in the same enclosure and collide with those real bar positions.
-The input's source offset also selects the visible bar color for impact blends.
-Scroll changes do not create attacks or modify measured loudness. The clock
-pauses while hidden and resets when listening stops; Reduced Motion and the
-unchecked toggle use the original fixed source order.
+**Scroll lights** now continuously translates the collider/visual source
+columns. At 120 BPM it averages four columns per second of absolute travel (two
+columns per beat), with balanced smooth reversals every second of
+tempo-scaled enabled time.
+Tempo changes integrate into the running phase. Switching scrolling off eases
+to a stop in place; Reduced Motion disables automatic travel. Source colors,
+contacts, accessible labels and audio data keep their source identity.
 
-Physics layout version 3 retains the geometry offsets and adds a 34th input
-value: the whole-column source offset (0–23). Replay records this alongside the
-physical target heights. Older reports require their matching engine. Tone
-diagnostics retain canonical source-band measurements and identify the requested
-offset beside each physical target sample.
+The separate tempo setter leaves the 38-value held input and 99-value audio
+transport unchanged. Recording optionally includes tick-stamped `tempoEvents`;
+replay applies them before stepping. Historical reports without those events
+use 120 BPM and still require their matching historical engine.
+
+The fixed-memory estimator, scrolling oscillator, quadratic sphere drag,
+contact-pigment history, and quintic bar motion are hardware-neutral
+`musical-lights-core` modules, checked with `no_std` and no allocator. Rapier,
+Web APIs, recording ownership and Three.js shading remain application adapters.
+See [implementation and evidence](musical-motion-results/README.md).
 
 One animation loop interpolates snapshots and updates the accessible audio
 meters. ResizeObserver caches layout measurements. The renderer caps pixel
@@ -253,7 +265,7 @@ intervals, render cost, and physics delay; it is not a five-minute acceptance
 result. Do not infer a phone performance improvement from a Mac measurement.
 
 1. Turn Low Power Mode off. Enter the actual model, browser and iOS version.
-2. Select Test tones and turn on **Listening**. It sends PCM
+2. Select Test tones and click **Play audio**. It sends PCM
    directly through the real AudioWorklet/loudness WASM pipeline. Keep Repeat
    on and Diagnostic recording off; digital review files do not qualify.
 3. Select **Normal view** and start the test. Keep the page visible for the
@@ -281,8 +293,8 @@ node validation/replay-physics.mjs /path/to/exported-report.json
 ```
 
 Merge and Pages deployment require local checks, CI, and all three physical
-phone reports to pass. The Pages job depends on every validation job and runs
-only on `main`. A preview is not a production deployment.
+phone reports to pass. The Pages job depends on core, web and loudness-reference
+validation and runs only on `main`. A preview is not a production deployment.
 
 ## Local verification
 
@@ -295,7 +307,7 @@ python3 validation/validate.py browser
 ```
 
 On macOS, use host access for browser checks and keep the serial startup guard.
-The scrolling and flash update passed 50 core tests in each of four feature
+The earlier scrolling and flash update passed 50 core tests in each of four feature
 configurations, 31 native physics tests, native/WASM Clippy, pinned worklet and
 Leptos validation, and 190 browser checks plus 10 harness checks.
 These results do not establish CI, physical-phone acceptance, or production
@@ -318,3 +330,16 @@ from the light background; the one-pixel white attack flash sits just inside it.
 Bar height remains the loudness measure. Source labels, numeric
 meters, keyboard focus and pointer readouts remain available independently of
 color. LED palettes and acoustic analysis are unchanged.
+
+## Contact pigments and lighting
+
+Three recent contact pigments per ball drive a smooth procedural pattern in
+object coordinates. Its appearance rotates with the physical quaternion;
+Reduced Motion stops additional pattern drift. Existing average-color snapshot
+diagnostics stay intact, and resting contacts do not keep adding pigments.
+
+Bars use diffuse Lambert lighting with a dark boundary and white emissive attack
+highlights. Four reusable point lights illuminate nearby surfaces during attacks,
+with hemisphere/directional fill and lit enclosure surfaces. Rendering remains
+instanced, without shadow maps or bloom. Frame measurements are host evidence;
+physical-iPhone and human-listening acceptance remain pending.

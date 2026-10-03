@@ -31,7 +31,7 @@ export class PhoneReport {
       <button type="button" class="physics-reset">Apply settings and reset</button>
       <button type="button" class="physics-defaults">Restore defaults and reset</button>`;
     this.host.innerHTML = `<summary>Diagnostics</summary>
-      <p>Test tones and listening review use the same analysis and renderer as microphone capture. Stop Listening to change sources.</p>
+      <p>Test tones and listening review use the same analysis and renderer as microphone capture. Selecting music starts playback with the microphone off; use Play audio for test tones.</p>
       <p class="diagnostic-fps" aria-label="Frame rate"></p>
       <p class="sensor-readings" aria-label="Sensor readings"></p>
       <label>Test tone<select class="tone-kind"><option value="exercise">Changing 24-tone exercise</option><option value="stationary">Stationary tone (60 s)</option><option value="stepped">Step through all 24 bands (48 s)</option><option value="sweep">Continuous sweep (24 s)</option><option value="two">Two tones (30 s)</option><option value="volume">Volume steps (90 s)</option><option value="bursts">Short bursts (8 s)</option><option value="silence">Silence (3 s)</option></select></label>
@@ -40,9 +40,9 @@ export class PhoneReport {
       ${settingSwitch("Repeat", "tone-repeat", true)}
       ${settingSwitch("Audible playback", "tone-audible")}
       <button type="button" class="tone-pause" disabled>Pause playback</button>
-      <p class="tone-status" role="status">Choose a tone, then turn on Listening. Levels describe generated PCM, not calibrated sound pressure.</p>
+      <p class="tone-status" role="status" hidden>Select Test tones, then Play audio. Levels describe generated PCM, not calibrated sound pressure.</p>
       ${settingSwitch("Diagnostic recording", "tone-trace")}
-      <p>Recording starts with the next Listening session (up to 100 seconds). Turn it off for phone FPS acceptance.</p>
+      <p>Recording starts with the next audio session (up to 100 seconds). Turn it off for phone FPS acceptance.</p>
       <button type="button" class="tone-export" disabled>Export tone trace</button>
       <p class="tone-trace-status" role="status"></p>
       <p>Enter the actual phone model and browser. Set Low Power Mode to off. Each test has 15 seconds of warmup, then five minutes of measurement. Test normal view, portrait fullscreen, and landscape fullscreen.</p>
@@ -72,6 +72,11 @@ export class PhoneReport {
       if (config) view.worker.postMessage({ type: 'reset', config });
     });
     this.review = new ListeningReview(view); view.card.review = this.review;
+    const transport = this.query('.playback-controls');
+    for (const selector of ['.tone-pause', '.review-replay', '.tone-repeat', '.tone-audible']) {
+      const node = this.query(selector); transport.append(node.closest('.setting-switch') ?? node);
+    }
+    transport.after(this.query('.tone-status'));
     this.toneChunks = []; this.toneRows = 0; this.toneDropped = 0; this.tonePhysics = [];
     const trace = ({ detail }) => {
       if (detail.sessionId !== this.toneMetadata?.sessionId || this.audioState?.state === 'stopped') return;
@@ -182,7 +187,8 @@ export class PhoneReport {
     this.host.open = false;
     if (mode === 'normal') this.view.card.scrollIntoView({ block: 'start' });
   }
-  frame(now, cost) {
+  frame(frameTime, cost) {
+    const now = performance.now();
     if (!this.lastDiagnostic || now - this.lastDiagnostic > 1000) {
       const elapsed = now - (this.fpsAt ?? now), frames = this.view.metrics.frames - (this.fpsFrames ?? 0);
       this.query('.diagnostic-fps').textContent = elapsed > 0 ? `${(frames * 1000 / elapsed).toFixed(0)} FPS` : '— FPS';
@@ -201,10 +207,10 @@ export class PhoneReport {
     if (this.costCount < this.renderCosts.length) this.renderCosts[this.costCount++] = cost;
     else this.invalidate('Render report capacity exceeded');
     if (this.previous != null) {
-      if (this.count < this.intervals.length) this.intervals[this.count++] = now - this.previous;
+      if (this.count < this.intervals.length) this.intervals[this.count++] = frameTime - this.previous;
       else this.invalidate('Frame report capacity exceeded');
     }
-    this.previous = now;
+    this.previous = frameTime;
 
     const expanded = this.view.card.hasAttribute('data-expanded');
     if (expanded !== (this.metadata.mode !== 'normal') || innerWidth !== this.metadata.viewport[0]

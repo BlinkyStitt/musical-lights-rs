@@ -94,7 +94,7 @@ html:has(.audio-card[data-expanded]), body:has(.audio-card[data-expanded]) { ove
 .site-shell:has(.audio-card[data-expanded]) { visibility: hidden; }
 .audio-card[data-expanded] { visibility: visible; display: flex; flex-direction: column; justify-content: flex-end; gap: .5rem; position: fixed; inset: 0; z-index: 100; width: 100%; height: 100dvh; margin: 0; padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left)); border: 0; border-radius: 0; overflow: hidden; background: var(--plot); touch-action: pinch-zoom; }
 /* Keep the enclosure behind a footer whose rows reserve their actual height. */
-.audio-card[data-expanded] > :not(.song-tools, .display-note, .recognized-song) { position: absolute; }
+.audio-card[data-expanded] > :not(.song-tools, .display-note, .recognized-song, .recovery-notices) { position: absolute; }
 .audio-card[data-expanded] .spectrum-panel { inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 0; padding: 0; border: 0; border-radius: 0; }
 .audio-card[data-expanded] #dancinglights { height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
 .audio-card[data-expanded] .audio-controls { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: 0; }
@@ -143,7 +143,7 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .frequency-tooltip { display: flex; align-items: center; gap: .45rem; position: absolute; top: .25rem; left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: .3rem .6rem; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: .75rem; pointer-events: none; }
 .frequency-tooltip[hidden] { display: none; }
 .frequency-swatch { width: .85rem; height: .85rem; flex: none; background: var(--band-color); border: 1px solid currentColor; }
-.audio-card[data-expanded] .frequency-tooltip { top: .75rem; }
+.audio-card[data-expanded] .frequency-tooltip { top: var(--fullscreen-control-bottom, 10rem); }
 .fullscreen-hint { display: none; }
 .audio-card[data-expanded] .fullscreen-hint { display: block; position: absolute; top: .75rem; left: 50%; transform: translateX(-50%); z-index: 2; margin: 0; padding: .3rem .6rem; border-radius: 6px; color: var(--ink); background: var(--surface); font-size: .75rem; white-space: nowrap; pointer-events: none; animation: dismiss-hint 3s step-end forwards; }
 .spectrum-panel:has(.frequency-tooltip:not([hidden])) .fullscreen-hint { visibility: hidden; }
@@ -166,8 +166,7 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .runtime-update { display: block; width: fit-content; min-height: 44px; padding: .6rem 0; }
 .song-tools { margin: 1rem 0; font-size: .82rem; }
 .song-tools p { max-width: 70ch; }
-.identify-song { font-weight: 700; white-space: nowrap; }
-.identify-song:not(:disabled) { background: var(--primary); color: white; }
+.song-detection { font-weight: 700; white-space: nowrap; }
 .audio-controls .cancel-recognition[hidden] { display: none; }
 .song-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .song-actions [hidden], .recognized-song[hidden] { display: none; }
@@ -210,6 +209,7 @@ nav { flex-wrap: wrap; }
 .reduced-motion-note { display: none; }
 @media (prefers-reduced-motion: reduce) { .reduced-motion-note { display: block; } }
 .audio-card[data-expanded] :is(.setting-switch, .settings-section, .motion-status) { display: none; }
+.audio-card[data-expanded] .song-detection { display: inline-flex; }
 .audio-card[data-expanded] .physics-status:not(:empty) { z-index: 4; }
 @media (max-width: 600px) {
   .control-row, .settings-section label:not(.setting-switch) { align-items: flex-start; flex-direction: column; gap: .35rem; }
@@ -217,6 +217,44 @@ nav { flex-wrap: wrap; }
   .settings-section input[type=range] { width: 100%; }
 }
 .listening-review { margin-top: 1rem; }
+.input-source-controls { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; align-items: center; }
+.input-source-controls .control-row { flex: 1 1 15rem; justify-content: flex-start; }
+.input-source-controls .review-file { flex: 1; width: auto; min-width: 0; }
+.playback-controls:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.playback-controls .setting-switch { margin: 0; }
 .review-plot { display: block; width: 100%; height: auto; background: var(--plot); border: 1px solid var(--line); border-radius: .5rem; }
 .settings-section .review-notes { width: min(100%, 30rem); }
 .review-plot-key { font-size: .75rem; }
+
+/* One shared control bar, including expanded page/native fullscreen. */
+.button-row { align-items: center; width: 100%; }
+.mic-status:not(:has(span:not(:empty))) { display: none; }
+.mic-status { max-width: 18ch; border: 0; padding: 0; text-align: left; }
+.input-source-controls { margin-bottom: .5rem; }
+.playback-controls { margin-bottom: .75rem; }
+.recognition-control { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.recognition-status { flex-basis: 100%; max-width: 32ch; font-size: .75rem; margin: 0; overflow-wrap: anywhere; }
+.recognition-status:empty { display: none; }
+.recognition-ring { width: 24px; height: 24px; flex: none; transform: rotate(-90deg); }
+.recognition-ring circle { fill: none; stroke-width: 2; }
+.ring-track { stroke: var(--line); }
+.ring-progress { stroke: currentColor; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--recognition-progress, 0)); }
+.recognition-ring[data-phase="off"] { opacity: .45; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.audio-card[data-expanded] { justify-content: flex-end; }
+.audio-card[data-expanded] .audio-controls { top: max(.5rem, env(safe-area-inset-top)); left: max(.5rem, env(safe-area-inset-left)); right: max(.5rem, env(safe-area-inset-right)); padding: 0; }
+.audio-card[data-expanded] .button-row { max-width: none; justify-content: flex-start; gap: .25rem .5rem; }
+.audio-card[data-expanded] .button-row .setting-switch { display: inline-flex; }
+.audio-card[data-expanded] .button-row .motion-controls { display: flex; }
+.audio-card[data-expanded] .fullscreen-button { position: static; min-height: 44px; }
+.audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
+.audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
+.audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; background: var(--surface); }
+.audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
+.audio-card[data-expanded] .fullscreen-hint { display: none; }
+.input-source-controls .control-row { min-width: 0; gap: .5rem; }
+.input-source-controls :is(select, input) { min-height: 44px; min-width: 0; max-width: 100%; font: inherit; }
+.input-source-controls select { flex: 1; width: 10rem; }
+.input-source-controls .review-file { width: 10rem; }
+.physics-fields .control-row input { width: 6rem; min-width: 0; flex: 0 1 6rem; }

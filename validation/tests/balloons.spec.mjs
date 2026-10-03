@@ -1,8 +1,29 @@
 import { test, expect } from '@playwright/test';
 import { replayReport } from '../replay-physics.mjs';
 import { physicsReady, physicsState, syntheticAudio, startFrozen } from '../physics-state.mjs';
+import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
+
+test('a subpixel seam fragment uses its visible wrapped copy for native hover', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(url); await physicsReady(page);
+  await page.locator('.scroll-lights').uncheck();
+  await page.evaluate(() => {
+    const view = document.querySelector('#dancinglights').physics;
+    // Hold one real rendered pointer layout at the seam. This is a geometry
+    // fixture, independent of worker timing and frame-rate acceptance.
+    cancelAnimationFrame(view.request); view.request = null;
+    view.positionMeters(1.99999);
+  });
+  const meter = page.getByRole('meter').nth(22);
+  expect((await meter.boundingBox()).width).toBeLessThan(1);
+  const label = await meter.getAttribute('aria-label');
+  const point = await meterPoint(page, meter);
+  expect(point.label).toBe(label);
+  await page.mouse.move(point.x, point.y);
+  await expect(page.getByRole('tooltip')).toHaveText(label);
+});
 
 test('continuous scrolling carries source identity and stops in place', async ({ page }, info) => {
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);
@@ -48,7 +69,7 @@ test('continuous scrolling carries source identity and stops in place', async ({
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
 });
 
-test('Reduced Motion suppresses scrolling and Stop retains source identity', async ({ page }) => {
+test('Reduced Motion suppresses scrolling and audio stop restores the independent idle display', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
   await page.locator('.scroll-lights').check();
@@ -57,6 +78,10 @@ test('Reduced Motion suppresses scrolling and Stop retains source identity', asy
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(1);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(1);
+  await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[33])).toBe(0);
   await expect(page.getByRole('meter').first()).toHaveAttribute('aria-label', '≈ 0–100 Hz');
 });
@@ -94,7 +119,7 @@ for (const width of [375, 1440]) {
         tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(72);
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(3);
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(7);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
@@ -164,8 +189,9 @@ test('physical controls require reset while camera rotation preserves the runnin
   await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.physics-controls > summary').click();
   const before = await physicsState(page);
-  await page.locator('[data-config="2"]').fill('2200');
+  await page.locator('[data-config="2"]').fill('16');
   expect((await physicsState(page)).balls[0].mass).toBe(before.balls[0].mass);
+  await page.locator('.display-controls > summary').click();
   await page.locator('.camera-rotation').fill('20');
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick);
   expect((await physicsState(page)).balls[0].mass).toBe(before.balls[0].mass);
@@ -254,7 +280,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+  await page.locator('.review-start').click();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await page.locator('.phone-device').fill('Mac emulation'); await page.locator('.phone-browser').fill('test browser'); await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
@@ -455,6 +481,20 @@ test('rotation-locked phone can enable shaking without starting the microphone',
   await page.setViewportSize({ width: 390, height: 844 });
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);
   await page.locator('.scroll-lights').uncheck();
+  // Measure sensor-only travel from rest. The independent idle sine must not
+  // keep prescribing moving supports while this fixture establishes its floor.
+  await page.evaluate(() => new Promise(resolve => {
+    const v = document.querySelector('#dancinglights').physics;
+    v.stopPreview(); v.idle = false;
+    v.push(new Float64Array(24), new Float32Array(24), false);
+    const reset = ({ data }) => {
+      if (data.type !== 'reset') return;
+      v.worker.removeEventListener('message', reset); resolve();
+    };
+    v.worker.addEventListener('message', reset);
+    v.worker.postMessage({ type: 'reset', config: Array.from(v.config) });
+  }));
+  await physicsReady(page);
   await page.evaluate(() => {
     Object.defineProperty(screen.orientation, 'angle', { configurable: true, value: 0 });
     Object.defineProperty(DeviceOrientationEvent, 'requestPermission', { configurable: true, value: () => Promise.resolve('denied') });

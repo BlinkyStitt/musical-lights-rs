@@ -10,6 +10,11 @@ use web_sys::{
 
 #[wasm_bindgen(module = "/src/audio_setup.js")]
 extern "C" {
+    type InputControls;
+    #[wasm_bindgen(constructor)]
+    fn new(card: &web_sys::HtmlElement, on_change: &js_sys::Function) -> InputControls;
+    #[wasm_bindgen(method)]
+    fn close(this: &InputControls);
     #[wasm_bindgen(catch, js_name = suspendForStartup)]
     fn suspend_for_startup(context: &AudioContext) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = acquireInput)]
@@ -37,6 +42,25 @@ extern "C" {
     fn can_calibrate(node: &AudioWorkletNode) -> bool;
     #[wasm_bindgen(js_name = isCurrentProcessorMessage)]
     fn is_current_processor_message(node: &AudioWorkletNode, data: &JsValue) -> bool;
+}
+
+pub struct InputControlSession {
+    controls: InputControls,
+    _callback: Closure<dyn FnMut(String, bool)>,
+}
+impl InputControlSession {
+    pub fn new(card: &web_sys::HtmlElement, callback: impl FnMut(String, bool) + 'static) -> Self {
+        let callback = Closure::new(callback);
+        Self {
+            controls: InputControls::new(card, callback.as_ref().unchecked_ref()),
+            _callback: callback,
+        }
+    }
+}
+impl Drop for InputControlSession {
+    fn drop(&mut self) {
+        self.controls.close();
+    }
 }
 
 // Keep the frequent numeric frame inline; avoid one extra allocation per refresh.

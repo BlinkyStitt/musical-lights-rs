@@ -10,9 +10,10 @@ export async function replayReport(report) {
   const results = [];
   for (const fps of [30, 60, 120]) {
     const sim = new PhysicsSimulation(new Float32Array(report.config), new Float32Array(report.palette));
-    let cursor = 0;
+    let cursor = 0, tempoCursor = 0;
     while (sim.tick() < report.finalTick) {
       for (let i = 0; i < report.layout[1] / fps && sim.tick() < report.finalTick; i++) {
+        while (tempoCursor < (report.tempoEvents?.length ?? 0) && report.tempoEvents[tempoCursor].tick === sim.tick()) sim.set_tempo(report.tempoEvents[tempoCursor++].bpm);
         while (cursor < report.inputs.length && report.inputs[cursor].tick === sim.tick()) sim.input(new Float32Array(report.inputs[cursor++].values));
         sim.step();
       }

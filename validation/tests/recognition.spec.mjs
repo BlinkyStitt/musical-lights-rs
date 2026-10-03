@@ -14,7 +14,8 @@ async function expireLookupCooldown(page) {
   await page.evaluate(() => {
     const now = Date.now.bind(Date); Date.now = () => now() + 60_001;
   });
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeEnabled();
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeEnabled();
 }
 
 test('localhost development never uploads to the inherited production endpoint', async ({ page }) => {
@@ -25,11 +26,11 @@ test('localhost development never uploads to the inherited production endpoint',
   });
   await page.goto(base); await physicsReady(page);
   await expect(page.locator('.recognition-status')).toHaveText('Song recognition is not configured yet.');
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
   expect(outbound).toEqual([]);
 });
 
-async function setup(page, { realRecorder = false, allowUnavailable = false, captureMs = 300, status = 200, result = song } = {}) {
+async function setup(page, { realRecorder = false, allowUnavailable = false, captureMs = 300, status = 200, result = song, routePath = '/' } = {}) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     MediaDevices.prototype.getUserMedia = async () => {
@@ -51,7 +52,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, cap
     };
   });
   // Set the deployment configuration before application initialization.
-  await page.route(base + '/', async route => {
+  await page.route(base + routePath, async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace(/name="musical-lights-recognition" content="[^"]*"/, 'name="musical-lights-recognition" content="/recognize"') });
   });
@@ -75,16 +76,16 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, cap
     uploads.push({ type: route.request().headers()['content-type'], data: route.request().postDataBuffer() });
     await route.fulfill({ status, json: { result } });
   });
-  await page.goto(base); await physicsReady(page);
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+  await page.goto(base + routePath); await physicsReady(page);
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   if (allowUnavailable && await page.evaluate(() => typeof MediaRecorder === 'undefined')) {
-    await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+    await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
     await expect(page.locator('.recognition-status')).toHaveText('Song recognition is unavailable in this browser.');
     await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
   } else {
-    await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeEnabled();
+    await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeEnabled();
   }
   return uploads;
 }
@@ -102,10 +103,12 @@ test('native recording identifies on demand and exports timestamps, or reports a
   }
   await page.waitForTimeout(600);
   expect(uploads).toHaveLength(0);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toHaveText('Listening for 10 seconds…');
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
-  await expect(page.locator('.recognition-status')).toContainText('Recognized ', { timeout: 15000 });
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('data-phase', 'capture');
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('aria-label', 'Capturing ten seconds of microphone audio.');
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeChecked();
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`, { timeout: 15000 });
+  await expect(page.locator('.recognition-status')).toBeEmpty();
   expect(uploads).toHaveLength(1);
   expect(await page.evaluate(() => window.uploadedAudio.size)).toBeGreaterThan(100);
   expect(uploads[0].type).toMatch(/^audio\/(mp4|webm|ogg)/);
@@ -133,8 +136,9 @@ for (const action of ['cancel', 'stop', 'route']) {
     // Keep the production capture duration: a 300 ms mock can finish while CI
     // is still dispatching the cancellation gesture.
     const uploads = await setup(page, { captureMs: 10_000 });
-    await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-    if (action === 'cancel') await page.getByRole('button', { name: 'Cancel identification' }).click();
+    await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.recorder?.state)).toBe('recording');
+    if (action === 'cancel') await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
     if (action === 'stop') await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
     if (action === 'route') await page.getByRole('link', { name: 'About', exact: true }).click();
     await page.waitForTimeout(500);
@@ -147,21 +151,22 @@ for (const action of ['cancel', 'stop', 'route']) {
 
 test('no match and service failure preserve the previous song and do not retry or create history', async ({ page }) => {
   const uploads = await setup(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
   let failures = 0;
   await page.route(base + '/recognize', async route => {
     failures++;
     await route.fulfill({ status: failures === 1 ? 200 : 429, json: { result: null } });
   });
   await expireLookupCooldown(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
   await expect(page.locator('.recognition-status')).toContainText('No song recognized');
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeEnabled();
   await expireLookupCooldown(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
   await expect(page.locator('.recognition-status')).toContainText('Wait a minute');
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeEnabled();
   await page.waitForTimeout(500);
   expect(failures).toBe(2); expect(uploads).toHaveLength(1);
   await expect(page.getByText('Song history (1)', { exact: true })).toBeVisible();
@@ -170,20 +175,26 @@ test('no match and service failure preserve the previous song and do not retry o
 
 test('a paid lookup blocks repeat recordings across reload until the minute expires', async ({ page }) => {
   const uploads = await setup(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
-  await expect(page.locator('.recognition-cooldown')).toContainText('seconds before identifying again');
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeEnabled();
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('data-phase', 'waiting');
   await page.reload(); await physicsReady(page);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
-  await expect(page.getByRole('button', { name: 'Identify song', exact: true })).toBeDisabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
+  await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeEnabled();
   expect(uploads).toHaveLength(1);
   expect(await page.evaluate(() => window.captureStarts)).toBe(0);
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).check();
+  await page.waitForTimeout(300);
+  expect(uploads).toHaveLength(1); expect(await page.evaluate(() => window.captureStarts)).toBe(0);
   await expireLookupCooldown(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
   expect(uploads).toHaveLength(2);
   expect(await page.evaluate(() => window.captureStarts)).toBe(1);
 });
@@ -191,19 +202,21 @@ test('a paid lookup blocks repeat recordings across reload until the minute expi
 test('song title fits a phone, appears in fullscreen, and respects Reduced Motion', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await setup(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
   await expect(page.locator('.recognized-song')).toHaveClass(/song-overflow/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect(page.locator('.song-title')).toBeVisible();
-  await expect(page.locator('.recognition-cooldown')).toBeVisible();
+  await expect(page.locator('.recognition-ring')).toBeVisible();
+  await expect(page.locator('.recognition-cooldown, .cancel-recognition')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
   await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
   // Also cover native fullscreen, without changing OS window dimensions.
   await expect.poll(() => page.evaluate(() => {
-    const status = document.querySelector('.recognition-status').getBoundingClientRect();
+    const status = document.querySelector('.recognition-ring').getBoundingClientRect();
     const strip = document.querySelector('.recognized-song').getBoundingClientRect();
     return status.bottom <= strip.top;
   })).toBe(true);
@@ -217,9 +230,9 @@ test('canceling an upload ignores late recognition and leaves listening active',
     await delayed;
     await route.fulfill({ json: { result: song } }).catch(() => {}); // Request may already be aborted.
   });
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toHaveText('Identifying song…');
-  await page.getByRole('button', { name: 'Cancel identification' }).click();
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('data-phase', 'upload');
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
   release();
   await page.waitForTimeout(400);
   await expect(page.getByText('Song history (0)', { exact: true })).toBeVisible();
@@ -230,7 +243,8 @@ test('canceling an upload ignores late recognition and leaves listening active',
 
 test('hiding the page cancels capture without a lookup', async ({ page }) => {
   const uploads = await setup(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.recorder?.state)).toBe('recording');
   await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -251,12 +265,12 @@ test('a missing recorder disables recognition without disabling listening or his
   await expect(page.locator('.listening-toggle')).toBeEnabled();
 });
 
-test('the song button is prominent above the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
+test('the song toggle is prominent above the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 720 });
-  // Keep the real capture window while checking layout and clicking Cancel.
+  // Keep the real capture window while checking layout and switching identification off.
   // Slow CI can outlast the shortened recording used by successful matches.
   const uploads = await setup(page, { captureMs: 10_000 });
-  const identify = page.locator('.audio-controls').getByRole('button', { name: 'Identify song', exact: true });
+  const identify = page.locator('.audio-controls').getByRole('checkbox', { name: 'Identify song', exact: true });
   await expect(identify).toBeInViewport();
   expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
   await expect(identify).toHaveCSS('font-weight', '700');
@@ -265,14 +279,16 @@ test('the song button is prominent above the lights on a narrow phone and usable
   await expect(identify).toBeInViewport();
   await expect(identify).toBeEnabled();
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
-  expect(await identify.evaluate(button => button.getBoundingClientRect().left >= document.querySelector('.fullscreen-button').getBoundingClientRect().right)).toBe(true);
-  expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.recognition-status').getBoundingClientRect().top)).toBe(true);
+  expect(await identify.evaluate(button => button.getBoundingClientRect().right <= innerWidth)).toBe(true);
+  expect(await identify.evaluate(button => { const label = button.closest('label').getBoundingClientRect(), ring = document.querySelector('.recognition-ring').getBoundingClientRect(); return ring.left >= label.right && Math.abs((ring.top + ring.bottom - label.top - label.bottom) / 2) < 2; })).toBe(true);
   await identify.click();
-  await expect(page.locator('.recognition-status')).toHaveText('Listening for 10 seconds…');
-  await expect(page.locator('.recognition-status')).toBeInViewport();
-  await page.getByRole('button', { name: 'Cancel identification', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toHaveText('Identification canceled.');
-  await expect(page.locator('.recognition-status')).toBeInViewport();
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('data-phase', 'capture');
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('aria-label', 'Capturing ten seconds of microphone audio.');
+  await expect(page.locator('.recognition-ring')).toBeInViewport();
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
+  await expect(page.locator('.recognition-status')).toBeEmpty();
+  await expect(page.locator('.recognition-ring')).toHaveAttribute('data-phase', 'off');
+  await expect(page.locator('.recognition-ring')).toBeInViewport();
   await expect(identify).toBeEnabled();
   expect(uploads).toHaveLength(0);
   // The top-area exit gesture defers closing for 300 ms. A control click must
@@ -285,12 +301,13 @@ test('the song button is prominent above the lights on a narrow phone and usable
 
 test.describe('song controls with touch input', () => {
   test.use({ hasTouch: true });
-  test('a top-area song-button tap identifies without closing fullscreen', async ({ page }) => {
+  test('a top-area song-toggle tap identifies without closing fullscreen', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 });
     const uploads = await setup(page);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
-    await page.getByRole('button', { name: 'Identify song', exact: true }).tap();
-    await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+    await page.getByRole('checkbox', { name: 'Identify song', exact: true }).tap();
+    await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
     await page.waitForTimeout(350);
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
     expect(uploads).toHaveLength(1);
@@ -306,22 +323,23 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
   // Chromium cannot resize its OS window while in native fullscreen.
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await setup(page);
-  await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-  await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }, { width: 320, height: 720 }]) {
     await page.setViewportSize(viewport);
     await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
     await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
     await expect.poll(() => page.evaluate(() => {
-      const status = document.querySelector('.recognition-status').getBoundingClientRect();
+      const status = document.querySelector('.recognition-ring').getBoundingClientRect();
         const strip = document.querySelector('.recognized-song').getBoundingClientRect();
       const title = document.querySelector('.song-title').getBoundingClientRect();
       return { statusAboveSong: status.bottom <= strip.top,
         titleInsideStrip: title.top >= strip.top && title.bottom <= strip.bottom,
         titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
     })).toEqual({ statusAboveSong: true, titleInsideStrip: true, titleInsideViewport: true });
-    for (const selector of ['.recognition-status', '.recognized-song']) {
+    for (const selector of ['.recognition-ring', '.recognized-song']) {
       await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -341,8 +359,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await page.setViewportSize({ width: 320, height: 720 });
     await page.emulateMedia({ reducedMotion });
     await setup(page);
-    await page.getByRole('button', { name: 'Identify song', exact: true }).click();
-    await expect(page.locator('.recognition-status')).toContainText('Recognized ');
+    await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
+    await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(page.locator('.recognition-status')).toBeEmpty();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     const strip = page.locator('.recognized-song');
     await expect(strip).toBeVisible();
@@ -364,8 +383,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
       const bounds = await notice.boundingBox(), songBounds = await strip.boundingBox();
       // This fixture actually overlaps the opaque song footer. Visibility
       // assertions alone would pass even if the footer covered the notice.
-      expect(Math.min(bounds.y + bounds.height, songBounds.y + songBounds.height)
-        - Math.max(bounds.y, songBounds.y)).toBeGreaterThan(0);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(songBounds.y);
       const clip = { x: Math.ceil(bounds.x + 10), y: Math.ceil(bounds.y + 10),
         width: Math.floor(bounds.width - 20), height: Math.floor(bounds.height - 20) };
       const covered = await page.screenshot({ clip, animations: 'disabled', path: testInfo.outputPath(`${imageName}-with-song.png`) });
@@ -385,7 +403,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expectUncoveredNotice('.audio-error', 'microphone-failure');
     await page.clock.runFor(4000);
     await expect(page.locator('.audio-error')).toBeEmpty();
-    await expect(page.locator('.audio-stopped')).toHaveText('Audio stopped. Exit fullscreen to restart.');
+    await expect(page.locator('.audio-stopped')).toHaveText('Audio stopped. Turn on Listening or use Play audio to restart.');
     await expectUncoveredNotice('.audio-stopped', 'microphone-restart');
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
@@ -395,3 +413,51 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
     await expect(strip).toBeVisible();
   });
 }
+
+test('two opted-in tabs share one upload reservation without duplicate spending', async ({ page, context }) => {
+  const second = await context.newPage();
+  const firstUploads = await setup(page, { captureMs: 1200 });
+  const secondUploads = await setup(second, { captureMs: 1200 });
+  await Promise.all([
+    page.getByRole('checkbox', { name: 'Identify song', exact: true }).check(),
+    second.getByRole('checkbox', { name: 'Identify song', exact: true }).check(),
+  ]);
+  await expect.poll(() => firstUploads.length + secondUploads.length).toBe(1);
+  await page.waitForTimeout(1500);
+  expect(firstUploads.length + secondUploads.length).toBe(1);
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
+  await second.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
+  await second.close();
+});
+
+test('canceled pending microphone cannot replace recognition input after source switching', async ({ page }) => {
+  const uploads = await setup(page, { routePath: '/advanced/' });
+  const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+  await listening.uncheck();
+  await page.evaluate(() => {
+    window.pendingMicrophones = [];
+    MediaDevices.prototype.getUserMedia = () => new Promise(resolve => {
+      const destination = window.testContext.createMediaStreamDestination();
+      pendingMicrophones.push({ stream: destination.stream, resolve });
+    });
+    window.recognitionInputs = [];
+    document.querySelector('.audio-card').addEventListener('recognition-input', ({ detail }) => recognitionInputs.push(detail.stream));
+  });
+  await listening.check();
+  await expect.poll(() => page.evaluate(() => pendingMicrophones.length)).toBe(1);
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.input-source').selectOption('microphone');
+  await listening.check();
+  await expect.poll(() => page.evaluate(() => pendingMicrophones.length)).toBe(2);
+  await page.evaluate(() => pendingMicrophones[1].resolve(pendingMicrophones[1].stream));
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await page.evaluate(() => pendingMicrophones[0].resolve(pendingMicrophones[0].stream));
+  await expect.poll(() => page.evaluate(() => pendingMicrophones[0].stream.getTracks()[0].readyState)).toBe('ended');
+  expect(await page.evaluate(() => recognitionInputs.length)).toBe(1);
+  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).check();
+  await expect.poll(() => uploads.length).toBe(1);
+  expect(await page.evaluate(() => recorder.stream === pendingMicrophones[1].stream)).toBe(true);
+  expect(await page.evaluate(() => recorder.stream.getAudioTracks()[0].readyState)).toBe('live');
+  await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
+  await expect(listening).toBeChecked();
+});

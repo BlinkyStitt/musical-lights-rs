@@ -18,9 +18,9 @@ async function acceptancePage(page, repeat = true) {
   await page.locator('.phone-device').fill('test phone'); await page.locator('.phone-browser').fill('test browser'); await page.locator('.ios-version').fill('test');
   await page.locator('.low-power-off').check();
   await page.locator('.tone-repeat').setChecked(repeat);
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.review-start')).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
 }
 test('non-repeating exercise cannot start phone acceptance', async ({ page }) => {
   await acceptancePage(page, false);
@@ -38,7 +38,7 @@ for (const stage of ['warmup', 'measurement']) {
       await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
       if (action === 'pause') await page.locator('.tone-pause').click();
       if (action === 'repeat-off') await page.locator('.tone-repeat').uncheck();
-      if (action === 'stop') await page.locator('.listening-toggle').uncheck();
+      if (action === 'stop') await page.locator('.review-stop').click();
       if (action === 'interruption') await page.evaluate(() => window.exerciseContext.suspend());
       if (action === 'end') {
         // Turn looping off in the source, without the UI's change event, so
@@ -86,11 +86,12 @@ test('each microphone session resets diagnostics and rejects stale tone packets'
   let previous;
   for (const source of ['generated', 'microphone', 'microphone']) {
     await page.locator('.input-source').selectOption(source);
-    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    if (source === 'microphone') await page.locator('.listening-toggle').check(); else await page.locator('.review-start').click();
     // A new session can still be unlocking its suspended graph. Do not read
     // the preceding session's recorded rows before acquisition resets them.
-    await expect(page.locator('.listening-toggle')).toBeEnabled();
-    await expect(page.locator('.mic-status')).toHaveText(source === 'generated' ? 'Digital audio · Mic off' : 'Listening · Mic on');
+    if (source === 'microphone') await expect(page.locator('.listening-toggle')).toBeEnabled(); else await expect(page.locator('.review-start')).toBeDisabled();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(0);
     const metadata = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneMetadata);
     expect(metadata.source).toBe(source);
@@ -105,7 +106,7 @@ test('each microphone session resets diagnostics and rejects stale tone packets'
     expect(result.after).toBe(result.before);
     expect(result.sessions.every(id => id === metadata.sessionId)).toBe(true);
     previous = metadata.sessionId;
-    await page.locator('.listening-toggle').uncheck();
+    if (source === 'microphone') await page.locator('.listening-toggle').uncheck(); else await page.locator('.review-stop').click();
   }
 });
 
@@ -116,11 +117,12 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
     await page.locator('.input-source').selectOption('generated');
     await page.locator('.tone-kind').selectOption(kind);
     await page.locator('.tone-trace').check();
-    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-    await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
+    await page.locator('.review-start').click();
+    await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
+  await expect(page.locator('.review-start')).toBeDisabled();
     await expect(page.locator('.tone-status')).toContainText(kind);
-    await expect(page.locator('.mic-status')).toHaveText('Digital audio · Mic off');
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(100);
     const data = await page.evaluate(() => {
       const report = document.querySelector('#dancinglights').physics.report;
@@ -145,11 +147,11 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
     await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
     await expect(page.locator('.tone-status')).toContainText('paused');
     await page.getByRole('button', { name: 'Resume playback', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
     const resumedRows = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows);
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(resumedRows + 100);
     await expect(page.getByRole('alert')).toBeEmpty();
-    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+    await page.locator('.review-stop').click();
     await expect(page.getByRole('button', { name: 'Pause playback', exact: true })).toBeDisabled();
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export tone trace', exact: true }).click();
@@ -163,9 +165,9 @@ test('an old source ended callback cannot end a resumed session', async ({ page 
   await page.evaluate(() => { window.oldEnded = window.exerciseSource.onended; });
   await page.locator('.tone-pause').click();
   await page.locator('.tone-pause').click();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await page.evaluate(() => window.oldEnded());
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await page.locator('.phone-start').click();
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.active)).toBe(true);
 });
@@ -173,12 +175,12 @@ test('an old source ended callback cannot end a resumed session', async ({ page 
 test('a new non-exercise session cannot restore an invalid acceptance run', async ({ page }) => {
   await acceptancePage(page);
   await page.locator('.phone-start').click();
-  await page.locator('.listening-toggle').uncheck();
+  await page.locator('.review-stop').click();
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.tone-kind').selectOption('stationary');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.review-start')).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid.length)).toBeGreaterThan(0);
   await page.locator('.phone-finish').click();
   await expect(page.locator('.phone-start')).toBeEnabled();
@@ -191,9 +193,9 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
   await page.locator('.input-source').selectOption('generated');
   await page.locator('.tone-kind').selectOption('stationary');
   await page.locator('.tone-trace').check();
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.review-start')).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   for (let cycle = 0; cycle < 6; cycle++) {
     await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
     // Use measured ISO loudness to prove that pause supplies silence while
@@ -209,7 +211,7 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
     })).toBeGreaterThan(1);
     await expect(page.getByRole('alert')).toBeEmpty();
   }
-  await page.locator('.listening-toggle').uncheck();
+  await page.locator('.review-stop').click();
 });
 
 test('a naturally ended tone restarts and ignores the replaced source callback', async ({ page }) => {
@@ -218,10 +220,10 @@ test('a naturally ended tone restarts and ignores the replaced source callback',
   await expect(page.locator('.tone-pause')).toHaveText('Replay');
   await page.locator('.tone-pause').click();
   await page.evaluate(() => window.oldEnded());
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await expect(page.getByRole('alert')).toBeEmpty();
-  await page.locator('.listening-toggle').uncheck();
+  await page.locator('.review-stop').click();
 });
 
 test('Advanced Listening uses microphone silence until real input arrives', async ({ page }) => {
@@ -244,14 +246,15 @@ test('Advanced Listening uses microphone silence until real input arrives', asyn
   await page.goto('http://127.0.0.1:8101/advanced'); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.state)).toBe('playing');
-  await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   const actual = await page.evaluate(() => ({
     requests: window.micRequests,
     source: document.querySelector('#dancinglights').physics.report.audioState.source,
     label: document.querySelector('.mic-status').textContent,
   }));
-  expect(actual).toEqual({ requests: 1, source: 'microphone', label: 'Listening · Mic on' });
+  expect(actual).toEqual({ requests: 1, source: 'microphone', label: '' });
   const peak = () => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)));
   await page.waitForTimeout(500);
   expect(await peak()).toBe(0);

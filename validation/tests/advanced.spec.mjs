@@ -23,11 +23,11 @@ test('Home has silent sine motion without audio access, and switches support key
   await page.goto(origin); await physicsReady(page);
   await expect(listening(page)).not.toBeChecked();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
-  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
+  await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.filter(n => Number(n.getAttribute('aria-valuenow')) > 10).length)).toBe(24);
   const initial = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)));
   await expect.poll(() => page.evaluate(initial => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)).some((value, i) => Math.abs(value - initial[i]) > .01), initial)).toBe(true);
   expect(await page.evaluate(() => microphoneRequests)).toBe(0);
-  await expect(page.locator('.settings-section, .diagnostic-fps')).toHaveCount(0);
+  await expect(page.locator('.display-controls, .calibration-controls, .physics-controls, .diagnostics-controls, .diagnostic-fps')).toHaveCount(0);
   const scroll = page.getByRole('checkbox', { name: 'Scroll lights', exact: true });
   await scroll.focus(); await page.keyboard.press('Space'); await expect(scroll).not.toBeChecked();
   await expect(scroll).toBeFocused(); expect(await scroll.evaluate(n => getComputedStyle(n).outlineStyle)).toBe('solid');
@@ -44,7 +44,8 @@ test('Home has silent sine motion without audio access, and switches support key
 test('idle-to-listening transition clears preview meter values for microphone silence', async ({ page }) => {
   await syntheticAudio(page); await page.goto(origin); await physicsReady(page);
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(10);
-  await listening(page).check(); await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+  await listening(page).check(); await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)).every(value => value === 0))).toBe(true);
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-valuenow') === '0'))).toBe(true);
   await listening(page).uncheck();
@@ -81,8 +82,10 @@ test('diagnostic plot separates interpolated render geometry and its clock from 
 
 test('Display and Input resets are scoped; milliseconds and physics defaults preserve enclosure size', async ({ page }) => {
   await advanced(page);
-  await expect(page.locator('.display-controls')).toHaveAttribute('open', '');
-  await expect(page.locator('.calibration-controls')).toHaveAttribute('open', '');
+  await expect(page.locator('.display-controls')).not.toHaveAttribute('open', '');
+  await page.locator('.display-controls > summary').click();
+  await expect(page.locator('.calibration-controls')).not.toHaveAttribute('open', '');
+  await page.locator('.calibration-controls > summary').click();
   expect(await page.locator('.physics-controls').evaluate(n => n.open)).toBe(false);
   expect(await page.locator('.diagnostics-controls').evaluate(n => n.open)).toBe(false);
   await page.setViewportSize({ width: 320, height: 720 });
@@ -135,12 +138,16 @@ for (const clip of ['trumpet', 'music', 'local']) {
     // These settings only control generated tones, not licensed/local PCM.
     await page.locator('.tone-frequency').fill(clip === 'trumpet' ? '19' : '');
     await page.locator('.tone-level').fill(clip === 'trumpet' ? '0' : '');
-    await page.locator('.input-source').selectOption(clip);
-    if (clip === 'local') { await page.locator('.review-file').setInputFiles({ name: 'stereo.wav', mimeType: 'audio/wav', buffer: stereoWave() }); await page.locator('.calibration-controls input[type=number]').first().fill('2'); }
+    await page.locator('.tone-trace').check();
+    if (clip === 'local') { await page.locator('.calibration-controls > summary').click(); await page.locator('.calibration-controls input[type=number]').first().fill('2'); }
+    if (clip === 'local') await page.locator('.review-file').setInputFiles({ name: 'stereo.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+    else await page.locator('.input-source').selectOption(clip);
     await expect(page.locator('.tone-audible')).toBeChecked();
-    await page.locator('.tone-trace').check(); await start(page);
-    await expect(page.locator('.mic-status')).toHaveText('Digital audio · Mic off');
-    await expect(page.locator('.input-source')).toBeDisabled(); await expect(page.locator('.review-file')).toBeDisabled();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
+    await expect(listening(page)).not.toBeChecked();
+    await expect(page.locator('.input-source')).toBeEnabled(); await expect(page.locator('.review-file')).toBeEnabled();
+    await expect(page.locator('.input-source')).toHaveValue(clip);
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(0);
     const identity = await page.evaluate(() => document.querySelector('.audio-card').review.identity);
     expect(identity.pcmSha256).toMatch(/^[a-f0-9]{64}$/); expect(identity.channels).toBe(clip === 'local' ? 2 : 1);
@@ -157,7 +164,7 @@ for (const clip of ['trumpet', 'music', 'local']) {
     expect(report.sessions[0].timing.length).toBeGreaterThan(0); expect(report.diagnosticSamples.length).toBeGreaterThan(0);
     expect(await page.evaluate(() => captureRequests)).toBe(0);
     expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(false);
-    await listening(page).uncheck();
+    await page.locator('.review-stop').click();
     await expect(page.locator('.input-source')).toBeEnabled();
     expect(await page.evaluate(() => document.querySelector('.audio-card').review.buffer)).toBeNull();
     expect(errors).toEqual([]);
@@ -168,15 +175,44 @@ test('invalid file and unavailable channel fail without capture; replacement and
   await page.addInitScript(() => { window.captureRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.captureRequests++; throw new Error('Unexpected capture'); }; });
   await advanced(page); await page.locator('.input-source').selectOption('local');
   await page.locator('.review-file').setInputFiles({ name: 'bad.wav', mimeType: 'audio/wav', buffer: Buffer.from('not audio') });
-  await listening(page).click(); await expect(page.locator('.audio-error')).toContainText('could not be decoded'); await expect(listening(page)).not.toBeChecked();
-  await page.locator('.review-file').setInputFiles({ name: 'replacement.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+  await expect(page.locator('.audio-error')).toContainText('could not be decoded'); await expect(listening(page)).not.toBeChecked();
+  await page.locator('.calibration-controls > summary').click();
   await page.locator('.calibration-controls input[type=number]').first().fill('3');
-  await listening(page).click(); await expect(page.locator('.audio-error')).toContainText('channel 3 is unavailable'); await expect(listening(page)).not.toBeChecked();
-  await page.locator('.calibration-controls input[type=number]').first().fill('1'); await start(page);
+  await page.locator('.review-file').setInputFiles({ name: 'replacement.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+  await expect(page.locator('.audio-error')).toContainText('channel 3 is unavailable'); await expect(listening(page)).not.toBeChecked();
+  await page.locator('.calibration-controls input[type=number]').first().fill('1'); await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await page.evaluate(() => { window.savedReview = document.querySelector('.audio-card').review; });
   await page.getByRole('link', { name: 'About', exact: true }).click();
   expect(await page.evaluate(() => [savedReview.closed, savedReview.buffer, savedReview.localFile])).toEqual([true, null, null]);
   expect(await page.evaluate(() => captureRequests)).toBe(0);
+});
+
+test('file picker shares the source row; selecting and replacing files starts audio with Listening off', async ({ page }) => {
+  await syntheticAudio(page); await advanced(page);
+  await expect(page.locator('.input-source-controls .review-file')).toBeVisible();
+  const row = await page.locator('.input-source-controls').boundingBox();
+  const file = await page.locator('.review-file').boundingBox();
+  expect(file.y).toBeGreaterThanOrEqual(row.y); expect(file.y + file.height).toBeLessThanOrEqual(row.y + row.height);
+  await start(page); await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
+  await page.evaluate(() => { window.previousContext = testContext; });
+  await page.locator('.review-file').setInputFiles({ name: 'first.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
+  await expect(listening(page)).not.toBeChecked(); await expect(page.locator('.input-source')).toHaveValue('local');
+  expect(await page.evaluate(() => previousContext.state)).toBe('closed');
+  await page.evaluate(() => { window.previousContext = testContext; });
+  await page.locator('.review-file').setInputFiles({ name: 'second.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+  await expect(page.locator('.review-status')).toContainText('second.wav:');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
+  expect(await page.evaluate(() => previousContext.state)).toBe('closed');
+  await page.locator('.input-source').selectOption('microphone');
+  await expect(listening(page)).toBeEnabled(); await expect(listening(page)).not.toBeChecked();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
+  expect(await page.evaluate(() => document.querySelector('.audio-card').review.localFile)).toBeNull();
 });
 
 test('identical decoded PCM produces identical raw loudness and filtered targets in the live worklet', async ({ page }) => {
@@ -184,9 +220,10 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
   const module = new WebAssembly.Module(await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url)));
   await advanced(page); await page.locator('.diagnostics-controls > summary').click();
   await page.locator('.input-source').selectOption('local');
-  await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+  await page.locator('.calibration-controls > summary').click();
   await page.locator('.calibration-controls input[type=number]').first().fill('2');
-  await page.locator('.tone-trace').check(); await start(page);
+  await page.locator('.tone-trace').check();
+  await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave() });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(200);
   const data = await page.evaluate(() => {
     const card = document.querySelector('.audio-card'), report = document.querySelector('#dancinglights').physics.report;

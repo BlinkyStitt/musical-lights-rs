@@ -38,7 +38,8 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
       state: document.querySelector('.audio-card').dataset.audioState,
       error: document.querySelector('.audio-error').textContent,
     }))).toEqual({ checked: true, disabled: false, context: 'running', count: 1, state: 'playing', error: '' });
-    await expect(page.locator('.mic-status')).toHaveText('Listening · Mic on');
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'false');
     const targets = () => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)));
     const rendered = () => page.evaluate(() => {

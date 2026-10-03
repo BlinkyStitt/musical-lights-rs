@@ -118,7 +118,9 @@ for (const rate of [44100, 48000]) {
     await expect(page.getByRole('meter')).toHaveCount(24);
     const bandColors = await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()));
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-    await expect(page.getByText(`Sample rate: 48000 Hz`)).toBeVisible();
+    // Home omits technical input details; capture still uses the output context's rate.
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    expect(await page.evaluate(() => window.audioContexts[0].sampleRate)).toBe(48000);
     await expect.poll(() => page.evaluate(() => window.inputClipped)).toBeGreaterThan(0);
     await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
     await expect(page.locator('#dancinglights > div')).toHaveCount(24);
@@ -209,6 +211,12 @@ for (const colorScheme of ['light', 'dark']) {
       // This geometry/contrast fixture visits all 24 source columns. The idle
       // sine now scrolls them too; freeze scrolling for stationary hover targets.
       await page.locator('.scroll-lights').uncheck();
+      // The switch eases to a stop; wait for the displayed phase to settle.
+      await page.waitForFunction(() => {
+        const view = document.querySelector('#dancinglights').physics;
+        return view?.current && view.previous
+          && view.current[view.layout[20]] === view.previous[view.layout[20]];
+      });
       const card = await page.locator('.audio-card').boundingBox();
       expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
@@ -238,6 +246,11 @@ for (const colorScheme of ['light', 'dark']) {
       }
       await page.mouse.move(0, 0);
       await page.getByRole('checkbox', { name: 'Listening', exact: true }).focus();
+      for (const label of ['Phone motion', 'Scroll lights']) {
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeFocused();
+      }
+      await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
       await page.keyboard.press('Tab');
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
@@ -258,7 +271,7 @@ for (const colorScheme of ['light', 'dark']) {
           return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
         };
         const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.control-note', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
+        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
           const node = document.querySelector(selector);
           let parent = node;
           while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;

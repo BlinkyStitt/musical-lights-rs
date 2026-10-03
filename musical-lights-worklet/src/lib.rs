@@ -5,6 +5,7 @@ use musical_lights_core::audio::{
     browser::{BrowserPresentation, BrowserSnapshot},
     loudness::{Calibration, LoudnessError, LoudnessFrame, LoudnessMeter, SAMPLE_RATE, SoundField},
     partial::{HOP, PartialLoudnessMeter},
+    tempo::TempoEstimator,
     visual::VisualGain,
 };
 
@@ -14,6 +15,12 @@ const TRACE_STRIDE: usize = 364 + SNAPSHOT_SIZE + 48;
 
 const SNAPSHOT_SIZE: usize = BrowserSnapshot::TRANSPORT_LEN;
 
+/// Idle visual adapter; no processor, audio session, or heap allocation needed.
+#[unsafe(no_mangle)]
+pub extern "C" fn preview_level(seconds: f64, band: u32, reduced: u32) -> f64 {
+    musical_lights_core::lights::musical_motion::idle_wave(band as usize, 24, seconds, reduced != 0)
+}
+
 struct AudioProcessor {
     meter: LoudnessMeter,
     partial: PartialLoudnessMeter,
@@ -21,6 +28,7 @@ struct AudioProcessor {
     iso_frame: LoudnessFrame,
     gain: VisualGain,
     display: BrowserPresentation,
+    tempo: TempoEstimator,
     input: [f32; INPUT_CAPACITY],
     snapshot: [f64; SNAPSHOT_SIZE],
     started: bool,
@@ -51,6 +59,7 @@ impl AudioProcessor {
             },
             gain: VisualGain::default(),
             display: BrowserPresentation::new(0.0),
+            tempo: TempoEstimator::default(),
             input: [0.0; INPUT_CAPACITY],
             snapshot: [0.0; SNAPSHOT_SIZE],
             started: false,
@@ -121,6 +130,7 @@ impl AudioProcessor {
             self.latest_sones = self.iso_frame.sones;
             let gain = &mut self.gain;
             let display = &mut self.display;
+            let tempo = &mut self.tempo;
             let iso = &self.iso_frame;
             let reduced = self.reduced;
             let trace = &mut self.trace;
@@ -141,6 +151,7 @@ impl AudioProcessor {
                             spectrum,
                             reduced,
                         );
+                        tempo.push(&display.acoustic.novelty);
                         if let Some(trace) = trace.as_mut() {
                             if *trace_count < TRACE_CAPACITY {
                                 let row = &mut trace[*trace_count * TRACE_STRIDE
@@ -266,6 +277,8 @@ export!(processor_snapshot(handle) -> *const f64, p => { p.display.snapshot.writ
 export!(processor_snapshot_length(handle) -> usize, _p => SNAPSHOT_SIZE);
 export!(processor_process(handle, len: usize, first: u64) -> u32, p => u32::from(p.process(len, first)));
 export!(processor_motion(handle, reduced: u32) -> (), p => { p.reduced = reduced != 0; });
+export!(processor_tempo(handle) -> f32, p => p.tempo.estimate().bpm);
+export!(processor_tempo_confidence(handle) -> f32, p => p.tempo.estimate().confidence);
 export!(processor_sones(handle) -> f64, p => p.latest_sones);
 export!(processor_clipped(handle) -> f64, p => p.clipped as f64);
 export!(processor_error(handle) -> u32, p => p.error_code);

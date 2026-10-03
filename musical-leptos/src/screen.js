@@ -18,6 +18,7 @@ export class VisualizerScreen {
     this.expanded = false;
     this.pageScrollY = 0;
     this.swipe = null;
+    this.suppressedFullscreenPointer = null;
     this.topTapHeight = 64;
     this.visibility = 0;
     this.awake = 'Keeping screen awake…';
@@ -47,19 +48,22 @@ export class VisualizerScreen {
       }
     };
     this.onPointerDown = event => {
+      this.suppressedFullscreenPointer = null;
       this.clearGesture();
       const touch = event.pointerType !== 'mouse';
+      const fullscreenButton = event.target?.closest?.('.fullscreen-button');
       if (this.expanded && event.isPrimary && event.button === 0
-          && event.target?.closest?.('.fullscreen-button')) {
+          && fullscreenButton) {
         // Close before iOS finishes the tap. Otherwise Safari can re-hit-test
         // the same tap against the page revealed below the fullscreen view.
         event.preventDefault();
+        this.suppressedFullscreenPointer = { button: fullscreenButton, id: event.pointerId };
         this.toggleFullscreen();
         return;
       }
       if (this.expanded && event.isPrimary && event.button === 0
           && event.clientY <= this.topTapHeight
-          && !event.target?.closest?.('button, input, summary')) {
+          && !event.target?.closest?.('button, input, label, summary')) {
         // iOS may not deliver a complete captured drag after a viewport
         // gesture. Keep a direct, reliable touch target for leaving the view.
         event.preventDefault();
@@ -68,7 +72,7 @@ export class VisualizerScreen {
       }
       if ((this.expanded || touch) && event.isPrimary && event.button === 0
           && this.element.contains(event.target)
-          && !event.target.closest('button, input, summary')) {
+          && !event.target.closest('button, input, label, summary')) {
         const band = event.target.closest('[data-source-band], [role="meter"]');
         if (!this.expanded && !band) return;
         const index = band ? Number(band.dataset.sourceBand ?? [...this.element.querySelectorAll('[role="meter"]')].indexOf(band)) : -1;
@@ -76,6 +80,20 @@ export class VisualizerScreen {
         if (touch) this.onBand(null);
         // Retain the gesture when the finger crosses a band or its animated fill.
         this.element.setPointerCapture(event.pointerId);
+      }
+    };
+    this.onClick = event => {
+      const pointer = this.suppressedFullscreenPointer;
+      this.suppressedFullscreenPointer = null;
+      // Safari may send a MouseEvent without a pointer ID. In either case,
+      // never consume a click on another control when its pointer stream is absent.
+      const suppress = pointer && event.detail !== 0
+        && event.target?.closest?.('.fullscreen-button') === pointer.button
+        && (!(event.pointerId > 0) || event.pointerId === pointer.id);
+      if (suppress) {
+        // Pointer-down already exited. The compact bar keeps the restored
+        // entry button under the pointer; consuming this click prevents re-entry.
+        event.preventDefault(); event.stopImmediatePropagation();
       }
     };
     this.onPointerMove = event => {
@@ -96,12 +114,18 @@ export class VisualizerScreen {
       this.clearGesture();
       if (swipe.touch && !swipe.moved && swipe.band >= 0) this.onBand(swipe.band);
     };
-    this.onPointerCancel = () => this.clearGesture();
+    this.onPointerCancel = () => {
+      this.suppressedFullscreenPointer = null;
+      this.clearGesture();
+    };
+    // Normal implicit capture release precedes the compatibility click; it
+    // ends a band gesture but must still let Exit consume its own click.
+    this.onLostPointerCapture = () => this.clearGesture();
     this.onTouchStart = event => {
       if (!this.expanded || event.touches.length !== 1) return;
       // Recognition controls share the top tap area with Exit fullscreen.
       // Preserve their native touch/click activation instead of closing it.
-      if (event.target?.closest?.('button, input, summary')
+      if (event.target?.closest?.('button, input, label, summary')
           && !event.target.closest('.fullscreen-button')) return;
       const touch = event.touches[0];
       if (touch.clientY <= this.topTapHeight) {
@@ -125,12 +149,14 @@ export class VisualizerScreen {
     this.document.addEventListener('fullscreenchange', this.onFullscreen);
     this.document.addEventListener('keydown', this.onKey);
     this.document.addEventListener('pointerdown', this.onPointerDown, true);
+    this.document.addEventListener('click', this.onClick, true);
     this.document.addEventListener('pointermove', this.onPointerMove);
     this.document.addEventListener('pointerup', this.onPointerUp, true);
     this.document.addEventListener('pointercancel', this.onPointerCancel);
     this.document.addEventListener('touchstart', this.onTouchStart, { capture: true, passive: false });
     this.document.addEventListener('touchend', this.onTouchEnd, { capture: true, passive: false });
-    this.element.addEventListener('lostpointercapture', this.onPointerCancel);
+    this.document.addEventListener('touchcancel', this.onPointerCancel, true);
+    this.element.addEventListener('lostpointercapture', this.onLostPointerCapture);
     this.window.addEventListener?.('resize', this.onViewportChange);
     this.window.addEventListener?.('orientationchange', this.onViewportChange);
     this.window.visualViewport?.addEventListener?.('resize', this.onViewportChange);
@@ -279,12 +305,15 @@ export class VisualizerScreen {
     this.document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.document.removeEventListener('keydown', this.onKey);
     this.document.removeEventListener('pointerdown', this.onPointerDown, true);
+    this.document.removeEventListener('click', this.onClick, true);
     this.document.removeEventListener('pointermove', this.onPointerMove);
     this.document.removeEventListener('pointerup', this.onPointerUp, true);
     this.document.removeEventListener('pointercancel', this.onPointerCancel);
     this.document.removeEventListener('touchstart', this.onTouchStart, { capture: true, passive: false });
     this.document.removeEventListener('touchend', this.onTouchEnd, { capture: true, passive: false });
-    this.element.removeEventListener('lostpointercapture', this.onPointerCancel);
+    this.document.removeEventListener('touchcancel', this.onPointerCancel, true);
+    this.element.removeEventListener('lostpointercapture', this.onLostPointerCapture);
+    this.suppressedFullscreenPointer = null;
     this.window.removeEventListener?.('resize', this.onViewportChange);
     this.window.removeEventListener?.('orientationchange', this.onViewportChange);
     this.window.visualViewport?.removeEventListener?.('resize', this.onViewportChange);

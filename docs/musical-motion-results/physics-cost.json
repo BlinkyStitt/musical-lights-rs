@@ -1,0 +1,273 @@
+{
+  "node": "v26.8.2",
+  "platform": "darwin",
+  "cpu": "Apple M4 Max",
+  "physicsSha256": "e22122b97cb7cf081086e0ff0ffc21a6866b26fc737c76532763ac7145359c8a",
+  "pcmSha256": "d16367d07889a3ec7c5abcbdd3f7b82a1a542ba50f8a533e8b2d30b0554d9989",
+  "protocol": 7,
+  "bands": 24,
+  "balls": 8,
+  "durationSeconds": 12,
+  "physicsHz": 120,
+  "runs": [
+    {
+      "totalMs": 492.9437259999977,
+      "maxTickMs": 3.728834000000006,
+      "substeps": 15300,
+      "ticks": 1440
+    },
+    {
+      "totalMs": 476.5155290000107,
+      "maxTickMs": 2.0129589999996824,
+      "substeps": 15300,
+      "ticks": 1440
+    },
+    {
+      "totalMs": 473.6982990000097,
+      "maxTickMs": 2.0846250000004147,
+      "substeps": 15300,
+      "ticks": 1440
+    }
+  ],
+  "medianCpuMs": 476.5155290000107,
+  "fullAttacks": [
+    {
+      "height": 0.927803,
+      "overloadTicks": 0,
+      "maxRequestedSubsteps": 88,
+      "trace": [
+        {
+          "ms": 8.333333333333334,
+          "top": 0.02432459406554699,
+          "velocity": 6.6639909744262695,
+          "substeps": 11,
+          "excess": 0
+        },
+        {
+          "ms": 16.666666666666668,
+          "top": 0.143772155046463,
+          "velocity": 21.57245635986328,
+          "substeps": 39,
+          "excess": 0
+        },
+        {
+          "ms": 25,
+          "top": 0.3774479329586029,
+          "velocity": 32.81348419189453,
+          "substeps": 71,
+          "excess": 0
+        },
+        {
+          "ms": 33.333333333333336,
+          "top": 0.6313661336898804,
+          "velocity": 19.989526748657227,
+          "substeps": 86,
+          "excess": 0
+        },
+        {
+          "ms": 41.666666666666664,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 88,
+          "excess": 0
+        },
+        {
+          "ms": 50,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 10,
+          "excess": 0
+        },
+        {
+          "ms": 58.333333333333336,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 66.66666666666667,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 75,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 83.33333333333333,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 91.66666666666667,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 100,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 108.33333333333333,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 9,
+          "excess": 0
+        },
+        {
+          "ms": 116.66666666666667,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 8,
+          "excess": 0
+        },
+        {
+          "ms": 125,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 8,
+          "excess": 0
+        },
+        {
+          "ms": 133.33333333333334,
+          "top": 0.6818029880523682,
+          "velocity": 0,
+          "substeps": 8,
+          "excess": 0
+        }
+      ]
+    },
+    {
+      "height": 2.596923,
+      "overloadTicks": 3,
+      "maxRequestedSubsteps": 318,
+      "trace": [
+        {
+          "ms": 8.333333333333334,
+          "top": 0.07676000893115997,
+          "velocity": 24.36541748046875,
+          "substeps": 34,
+          "excess": 0
+        },
+        {
+          "ms": 16.666666666666668,
+          "top": 0.4899192154407501,
+          "velocity": 75.06873321533203,
+          "substeps": 128,
+          "excess": 0
+        },
+        {
+          "ms": 25,
+          "top": 1.2981843948364258,
+          "velocity": 113.56314086914062,
+          "substeps": 128,
+          "excess": 112
+        },
+        {
+          "ms": 33.333333333333336,
+          "top": 2.176466464996338,
+          "velocity": 68.91219329833984,
+          "substeps": 128,
+          "excess": 166
+        },
+        {
+          "ms": 41.666666666666664,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 128,
+          "excess": 190
+        },
+        {
+          "ms": 50,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 99,
+          "excess": 0
+        },
+        {
+          "ms": 58.333333333333336,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 45,
+          "excess": 0
+        },
+        {
+          "ms": 66.66666666666667,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 39,
+          "excess": 0
+        },
+        {
+          "ms": 75,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 35,
+          "excess": 0
+        },
+        {
+          "ms": 83.33333333333333,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 23,
+          "excess": 0
+        },
+        {
+          "ms": 91.66666666666667,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 21,
+          "excess": 0
+        },
+        {
+          "ms": 100,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 20,
+          "excess": 0
+        },
+        {
+          "ms": 108.33333333333333,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 15,
+          "excess": 0
+        },
+        {
+          "ms": 116.66666666666667,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 15,
+          "excess": 0
+        },
+        {
+          "ms": 125,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 12,
+          "excess": 0
+        },
+        {
+          "ms": 133.33333333333334,
+          "top": 2.3509232997894287,
+          "velocity": 0,
+          "substeps": 11,
+          "excess": 0
+        }
+      ]
+    }
+  ]
+}

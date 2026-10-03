@@ -63,7 +63,13 @@ Run these commands from the named package directory.
 The Leptos build includes the shared Rust rigid-body simulation and locally
 bundled Three.js renderer. See [physics and phone acceptance](docs/physics.md).
 Optional [song recognition](docs/song-recognition.md) uses a Rust Cloudflare
-Worker and a server-side AudD token, with manual capture and local history export.
+Worker and a server-side AudD token, with opt-in microphone capture at most once
+per minute and local history export.
+
+Reusable tempo estimation, idle waves, bar motion, balanced scrolling, sphere drag, and
+contact-pigment history live in `musical-lights-core`, using fixed storage and
+`no_std` math. Browser and physics packages adapt them to their platform. See
+[musical motion evidence and previews](docs/musical-motion-results/README.md).
 
 On macOS, install SDL2 for terminal examples and set its library search path:
 

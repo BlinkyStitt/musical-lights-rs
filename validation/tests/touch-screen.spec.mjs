@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
     Object.defineProperty(document, 'fullscreenEnabled', { value: false });
     window.pointerLog = [];
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'gotpointercapture', 'lostpointercapture']) {
-      document.addEventListener(type, event => pointerLog.push({ type, trusted: event.isTrusted, target: event.target.className, y: event.clientY, primary: event.isPrimary, button: event.button }), true);
+      document.addEventListener(type, event => pointerLog.push({ type, trusted: event.isTrusted, target: event.target.className, y: event.clientY, primary: event.isPrimary, button: event.button, label: event.target.closest('[role=meter]')?.getAttribute('aria-label') }), true);
     }
   });
 });
@@ -26,8 +26,11 @@ async function touchInput(page, context) {
       await send('touchMove', [{ ...point, x: point.x + dx * step / 10, y: point.y + dy * step / 10 }]);
     }
   };
-  const label = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y).closest('[role=meter]').getAttribute('aria-label'), point);
-  return { point, send, move, label };
+  // The bands keep scrolling while the input command crosses the browser
+  // transport. Snapshot the label from native hit testing at pointer-down,
+  // rather than sampling whichever band was at this coordinate beforehand.
+  const labelAtStart = () => page.evaluate(() => pointerLog.findLast(event => event.type === 'pointerdown').label);
+  return { point, send, move, labelAtStart };
 }
 
 test('a browser touch swipe across a live bar exits before release without a frequency readout', async ({ page, context }) => {
@@ -80,9 +83,11 @@ test('a browser touch swipe across a live bar exits before release without a fre
 test('only a completed tap shows a frequency; short and sideways drags do not', async ({ page, context }) => {
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
-  const { point, send, move, label } = await touchInput(page, context);
+  const { point, send, move, labelAtStart } = await touchInput(page, context);
   const readout = page.getByRole('tooltip');
   await send('touchStart', [point]);
+  const label = await labelAtStart();
+  expect(label).toMatch(/^≈ .* Hz$/);
   await expect(readout).toBeHidden();
   await send('touchEnd', []);
   await expect(readout).toHaveText(label);

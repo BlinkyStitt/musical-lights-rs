@@ -49,11 +49,13 @@ for (const path of ['/', '/advanced/?source=bookmark#permissions']) {
     await permissions(page, 'granted');
     await page.goto(`http://127.0.0.1:8101${path}`);
     await expect(page.locator('.microphone-permission')).toHaveText('Microphone access allowed.');
-    await expect(page.locator('.mic-status')).toHaveText('Microphone off · silent sine preview');
+    await expect(page.locator('.mic-status')).toBeEmpty();
     await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
     await page.reload();
     await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
     expect(await page.evaluate(() => window.permissionRequests)).toEqual([]);
+    if (path === '/') { await expect(page.locator('.permission-help')).toBeHidden(); await page.getByRole('link', { name: 'Advanced', exact: true }).click(); await physicsReady(page); }
+    await page.locator('.calibration-controls > summary').click();
     await page.getByText('About microphone and motion access', { exact: true }).click();
     await expect(page.locator('.permission-help')).toContainText('Home Screen app or another browser may have separate permissions');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -123,7 +125,7 @@ test('unsupported permission queries still allow microphone and motion access fr
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'granted');
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
-  await expect(page.locator('.mic-status')).toHaveText('Microphone off · silent sine preview');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'off');
   await page.reload();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'unknown');
@@ -153,7 +155,8 @@ test('missing device APIs are reported as unavailable without disabling test aud
   await expect(page.locator('.motion-status')).toHaveText('Phone motion is unavailable in this browser.');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-  await expect(page.locator('.mic-status')).toHaveText('Digital audio · Mic off');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.mic-status')).toBeEmpty();
   await expect(page.locator('.microphone-permission')).toHaveAttribute('data-state', 'unavailable');
 });

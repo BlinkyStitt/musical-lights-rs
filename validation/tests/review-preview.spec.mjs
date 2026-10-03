@@ -1,11 +1,12 @@
 // Explicit artifact generation; these recordings are not FPS or listening passes.
 import { test, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { physicsReady } from '../physics-state.mjs';
 
 test('record identical music with scrolling enabled and disabled', async ({ page }) => {
   test.skip(process.env.MUSICAL_REVIEW_PREVIEWS !== '1', 'Run explicitly to refresh review artifacts');
-  const output = 'docs/advanced-results', results = [];
+  const output = process.env.MUSICAL_REVIEW_OUTPUT ?? fileURLToPath(new URL('../../docs/advanced-results/', import.meta.url)), results = [];
   await mkdir(output, { recursive: true });
   for (const scrolling of [true, false]) {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -37,7 +38,9 @@ test('record identical music with scrolling enabled and disabled', async ({ page
     await page.locator('.input-source').selectOption('music');
     await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
     await page.locator('.tone-repeat').uncheck();
-    await page.locator('.listening-toggle').check();
+    // Music selection already starts digital playback. Listening controls
+    // only the microphone and must stay off for this recording.
+    await expect(page.locator('.listening-toggle')).not.toBeChecked();
     await page.waitForFunction(() => window.previewResume);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect.poll(() => page.evaluate(() => {
@@ -59,7 +62,7 @@ test('record identical music with scrolling enabled and disabled', async ({ page
     await writeFile(`${output}/${name}.webm`, Buffer.from(recording.bytes));
     await page.screenshot({ path: `${output}/${name}.png` });
     const { bytes, ...metadata } = recording; results.push({ scrolling, ...metadata });
-    await page.keyboard.press('Escape'); await page.locator('.listening-toggle').uncheck();
+    await page.keyboard.press('Escape'); await page.locator('.review-stop').click();
   }
   expect(results[0].identity.pcmSha256).toBe(results[1].identity.pcmSha256);
   expect(results[0].identity.samples).toBe(results[1].identity.samples);

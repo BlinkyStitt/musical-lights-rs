@@ -34,3 +34,5 @@ pub use shazam::{SHAZAM_SCALE_OUT, ShazamScaleBuilder};
 pub use weighting::{AWeighting, FlatWeighting, Weighting};
 
 // TODO: test comparing bark scale and exponential scale
+
+pub mod tempo;

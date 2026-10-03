@@ -134,7 +134,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
     expect(p.messages[0].data.state.length).toBe(99);
-    expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sessionId', 'sones', 'state', 'type']);
+    expect(Object.keys(p.messages[0].data).sort()).toEqual(['calibration', 'clipped', 'sessionId', 'sones', 'state', 'tempo', 'tempoConfidence', 'type']);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));
     expect(p.messages).toHaveLength(2);

@@ -24,6 +24,8 @@ function beginSession(context, card, source) {
         if (card.dataset.audioSession !== String(session.sessionId) || session.closed) return;
         session.state = state;
         card.dataset.audioState = state;
+        const status = card.querySelector('.mic-session-status');
+        if (status) status.textContent = source === 'microphone' ? ({ starting: 'Starting microphone…', interrupted: 'Microphone interrupted.', stopped: reason === 'cleanup' ? '' : 'Microphone stopped.' }[state] ?? '') : '';
         const { publish, close, ...detail } = session;
         card.dispatchEvent(new CustomEvent('audio-session', { detail: { ...detail, reason } }));
     };
@@ -68,7 +70,7 @@ async function requireCurrentRuntime(context) {
         // Bypass the Leptos router: this must load a new document and runtime.
         link.rel = 'external';
         link.textContent = 'Reload updated app';
-        card.querySelector('.audio-error').insertAdjacentElement('afterend', link);
+        card.querySelector('.recovery-notices').append(link);
     }
     link.href = reload.href;
     throw new Error('An updated app is available. Reload it, then start listening again.');
@@ -118,6 +120,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
             card.dispatchEvent(new CustomEvent('tone-trace', { detail: {
                 ...event.data, receivedAt: performance.timeOrigin + performance.now(), receivedAudioTime: context.currentTime,
             } }));
+        if (event.data.type === 'frame' && isCurrentProcessorMessage(node, event.data)) card.dispatchEvent(new CustomEvent('audio-tempo', { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence } }));
         if (event.data.type === 'error') session.publish('interrupted', event.data.message);
     };
     node.port.addEventListener('message', trace);
@@ -188,6 +191,16 @@ export function isCurrentProcessorMessage(node, data) {
 }
 
 const generatedSources = new WeakMap();
+// Bridge the review controls to the single Rust audio-session owner. Review
+// updates file/source state first, then starts inside the same user gesture.
+export class InputControls {
+    constructor(card, onChange) {
+        this.card = card;
+        this.change = ({ detail }) => onChange(detail.source, detail.play);
+        card.addEventListener('review-input', this.change);
+    }
+    close() { this.card.removeEventListener('review-input', this.change); }
+}
 export async function acquireInput(context, selectedChannel) {
     const card = /** @type {HTMLElement} */ (document.querySelector('.audio-card'));
     const sourceKind = card.querySelector('.input-source')?.value ?? 'microphone';
@@ -197,8 +210,10 @@ export async function acquireInput(context, selectedChannel) {
     try {
         await requireCurrentRuntime(context);
         if (!digital) {
+            const ownsInput = () => !session.closed && context.state !== 'closed' && card.isConnected
+                && card.dataset.audioSession === String(session.sessionId);
             const permission = state => {
-                if (!session.closed && card.isConnected && card.dataset.audioSession === String(session.sessionId))
+                if (ownsInput())
                     card.dispatchEvent(new CustomEvent('microphone-access', { detail: state }));
             };
             permission('requesting');
@@ -207,12 +222,19 @@ export async function acquireInput(context, selectedChannel) {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: {
                     autoGainControl: false, echoCancellation: false, noiseSuppression: false,
                 }});
-                permission('granted');
             } catch (error) {
                 // NotAllowedError also covers dismissed prompts and OS restrictions.
                 permission(error.name === 'NotAllowedError' ? 'not-allowed' : 'unknown');
                 throw error;
             }
+            // getUserMedia cannot be aborted. A canceled request can resolve
+            // after a replacement session, so discard it before any consumer
+            // (especially recognition) sees the stream.
+            if (!ownsInput()) {
+                for (const track of stream.getTracks()) track.stop();
+                throw new Error('Audio session has closed');
+            }
+            permission('granted');
             sessions.set(stream, session);
             card.dispatchEvent(new CustomEvent('recognition-input', { detail: { stream } }));
             return stream;
