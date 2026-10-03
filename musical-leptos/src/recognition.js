@@ -4,10 +4,10 @@ const MAX_BYTES = 512 * 1024;
 const COOLDOWN_MS = 60_000;
 const COOLDOWN_KEY = 'musical-lights-recognition-next:v1';
 
-export function recognitionEndpoint(value, pageURL) {
+export function recognitionEndpoint(value, pageURL, baseURL = pageURL) {
   if (!value) return null;
   try {
-    const page = new URL(pageURL), endpoint = new URL(value, page);
+    const page = new URL(pageURL), endpoint = new URL(value, baseURL);
     if (!['http:', 'https:'].includes(endpoint.protocol)) return null;
     // Development and preview builds may use a same-origin mock, never the
     // production service accidentally inherited from index.html.
@@ -133,7 +133,7 @@ export class SongRecognition {
 
   endpoint() {
     const value = document.querySelector('meta[name="musical-lights-recognition"]')?.content;
-    return recognitionEndpoint(value, document.baseURI);
+    return recognitionEndpoint(value, location.href, document.baseURI);
   }
 
   refresh() {

@@ -9,6 +9,8 @@ test('development and previews cannot inherit the live recognition endpoint', ()
     assert.equal(recognitionEndpoint('/recognize', page), new URL('/recognize', page).href);
   }
   assert.equal(recognitionEndpoint(live, 'https://blink.stitthappens.com/advanced/'), live);
+  assert.equal(recognitionEndpoint('/recognize', 'https://preview.example/', 'https://blink.stitthappens.com/'), null);
+  assert.equal(recognitionEndpoint('recognize', 'https://blink.stitthappens.com/advanced/', 'https://blink.stitthappens.com/'), 'https://blink.stitthappens.com/recognize');
   for (const value of ['', 'javascript:alert(1)', 'http://remote.example/recognize'])
     assert.equal(recognitionEndpoint(value, 'https://blink.stitthappens.com/'), null);
 });

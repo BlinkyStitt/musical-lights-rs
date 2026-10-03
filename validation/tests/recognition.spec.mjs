@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { syntheticAudio, physicsReady } from '../physics-state.mjs';
 
-const base = 'http://127.0.0.1:8101';
+const localBase = 'http://127.0.0.1:8101';
+// Published-build checks still replace the endpoint with a same-origin mock.
+// They never submit recordings to the real recognition Worker or AudD.
+const base = (process.env.MUSICAL_LIGHTS_RECOGNITION_URL ?? localBase).replace(/\/$/, '');
 const song = { artist: 'Artist, with "quotes"', title: 'A very long song title that keeps going across the narrow phone display and should scroll smoothly', album: 'Album' };
 
 async function expireLookupCooldown(page) {
@@ -15,6 +18,7 @@ async function expireLookupCooldown(page) {
 }
 
 test('localhost development never uploads to the inherited production endpoint', async ({ page }) => {
+  test.skip(base !== localBase, 'The development-origin guard is checked on localhost.');
   const outbound = [];
   await page.route('https://musical-lights-recognition.satoshiandkin.workers.dev/**', route => {
     outbound.push(route.request().url()); return route.abort();
