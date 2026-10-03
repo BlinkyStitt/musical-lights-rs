@@ -89,3 +89,46 @@ The pinned Linux WebKit build omits MediaRecorder, so it verifies the unavailabl
 state and uses the controlled recorder for UI tests. Native encoding is checked
 in Chromium and macOS WebKit. These checks do not establish real AudD recognition
 quality or physical iPhone behavior.
+
+### One real lookup, explicitly requested
+
+Routine validation and CI use fakes and make no paid lookups. To confirm the
+deployed Worker, its server-side token, and actual AudD matching, run the separate
+smoke test **only when quota is available**. It requires `--live`, sends at most
+one POST, and never retries or follows redirects. No token is needed locally.
+A no-match, wrong song, provider failure or timeout fails the test. Exit codes
+are 0 for an exact artist/title match, 1 for a failed lookup, and 2 for invalid
+arguments or a clip rejected before upload.
+
+Use a known short WAV, M4A, WebM or Ogg excerpt under 512 KiB, with the
+expected catalog artist and title. The licensed listening-review clips have
+not been confirmed in AudD's catalog; they are not recognition ground truth.
+For a reproducible candidate, [AudD's official example](https://docs.audd.io/)
+provides `https://audd.tech/example.mp3` with the documented result
+**Imagine Dragons — Warriors**. Download and convert it locally first
+(requires FFmpeg); these preparation steps make no recognition requests. The
+current example is about five seconds long; longer inputs are trimmed to ten:
+
+```sh
+mkdir -p .cache/recognition-live
+curl --fail --location https://audd.tech/example.mp3 -o .cache/recognition-live/example.mp3
+ffmpeg -y -i .cache/recognition-live/example.mp3 -t 10 -ac 1 -ar 16000 .cache/recognition-live/example.wav
+```
+
+Once quota is available, from the repository root:
+
+```sh
+export PATH="$PWD/.tools/bin:$PATH"
+node validation/recognition-live.mjs --live \
+  --file .cache/recognition-live/example.wav \
+  --artist 'Imagine Dragons' --title 'Warriors' \
+  > .cache/recognition-live/result.json
+```
+
+The report records the endpoint, clip SHA-256, timestamps, HTTP status, expected
+and actual match, and number of Worker requests. It does not store audio or a
+token. One Worker request may be rejected before AudD; the report does not claim
+provider billing attribution. A pass establishes real recognition for that
+clip through the deployed service; microphone capture, browser display and
+physical-iPhone recognition still need their own acceptance checks. Do not add
+this command to routine CI or run it separately in each browser project.
