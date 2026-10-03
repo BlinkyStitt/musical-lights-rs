@@ -1,8 +1,10 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
+use musical_lights_core::lights::bar_motion::Motion;
+use musical_lights_core::lights::musical_motion::{
+    BalancedScroll, remember_pigment, sphere_drag_factor,
+};
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
-mod motion;
-use motion::Motion;
 
 pub const COUNT: usize = 24;
 pub const BALL_COUNT: usize = 8;
@@ -29,12 +31,9 @@ pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
 pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
 pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 4;
 pub const SNAPSHOT_LEN: usize = SCROLL_OFFSET + 1;
-pub const SCROLL_SPEED: f64 = 55.5 / (4.0 * 20.0);
-pub const SCROLL_EASE: f64 = 0.120;
-// Equal travel in both directions removes the conveyor's permanent right bias.
-// The sinusoid reverses gently every eight seconds of enabled simulation time.
-pub const SCROLL_PERIOD: f64 = 16.0;
-pub const SCROLL_PEAK_SPEED: f64 = SCROLL_SPEED * std::f64::consts::FRAC_PI_2;
+pub use musical_lights_core::lights::musical_motion::{
+    SCROLL_EASE, SCROLL_PEAK_SPEED, SCROLL_PERIOD, SCROLL_SPEED,
+};
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,9 +52,9 @@ impl Default for SimulationConfig {
         Self {
             height: 0.6,
             gravity: 9.81,
-            density: 1100.0,
-            restitution: 0.15,
-            friction: 0.20,
+            density: 8.0,
+            restitution: 0.72,
+            friction: 0.12,
             depth: 0.24,
             stroke_seconds: 0.040,
             reduced_stroke_seconds: 0.320,
@@ -168,15 +167,13 @@ pub struct Simulation {
     bar_positions: [f64; COUNT],
     bar_velocities: [f64; COUNT],
     motions: [Motion; COUNT],
+    tempo: f64,
     scroll_phase: f64,
     scroll_speed: f64,
-    scroll_from: f64,
-    scroll_elapsed: f64,
-    scroll_enabled: bool,
-    scroll_clock: f64,
-    scroll_weight: f64,
+    scroll: BalancedScroll,
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; BALL_COUNT],
+    pigments: [f32; BALL_COUNT * 9],
     touching: [[bool; COUNT]; BALL_COUNT],
     ceiling: RigidBodyHandle,
     ceiling_height: f32,
@@ -312,6 +309,7 @@ impl Simulation {
             world.insert(
                 RigidBodyBuilder::dynamic()
                     .translation(spawn[i])
+                    .angular_damping(0.15)
                     .ccd_enabled(true),
                 ColliderBuilder::ball(radius)
                     .user_data((i + 1) as u128)
@@ -328,16 +326,14 @@ impl Simulation {
             bars,
             palette,
             colors: std::array::from_fn(|i| palette[i * COUNT / BALL_COUNT]),
+            pigments: std::array::from_fn(|i| palette[(i / 9) * COUNT / BALL_COUNT][i % 3]),
             bar_positions: [f64::from(BASELINE); COUNT],
             bar_velocities: [0.0; COUNT],
             motions: [Motion::default(); COUNT],
+            tempo: 120.0,
             scroll_phase: 0.0,
             scroll_speed: 0.0,
-            scroll_from: 0.0,
-            scroll_elapsed: SCROLL_EASE,
-            scroll_enabled: false,
-            scroll_clock: 0.0,
-            scroll_weight: 0.0,
+            scroll: BalancedScroll::default(),
             touching: [[false; COUNT]; BALL_COUNT],
             ceiling,
             ceiling_height: config.height,
@@ -383,6 +379,12 @@ impl Simulation {
         self.input = input;
         Ok(())
     }
+    /// Separate from the stable input layout and loudness/target snapshots.
+    pub fn set_tempo(&mut self, bpm: f32) {
+        if bpm.is_finite() {
+            self.tempo = f64::from(bpm.clamp(60.0, 200.0));
+        }
+    }
     pub fn step(&mut self) {
         let gravity = self.input.gravity.map_or(
             Vector::new(0.0, -self.config.gravity, 0.0),
@@ -416,11 +418,6 @@ impl Simulation {
             );
         }
         let enabled = self.input.scrolling && !self.input.reduced_motion;
-        if enabled != self.scroll_enabled {
-            self.scroll_from = self.scroll_weight;
-            self.scroll_elapsed = 0.0;
-            self.scroll_enabled = enabled;
-        }
         let resize_speed = (travel - old_travel).abs() / f64::from(DT);
         let bar_speeds: [f64; COUNT] = std::array::from_fn(|i| {
             let motion = &self.motions[i];
@@ -434,7 +431,7 @@ impl Simulation {
                 })
                 .fold(0.0_f64, f64::max)
                 + resize_speed
-                + SCROLL_PEAK_SPEED * f64::from(PITCH)
+                + SCROLL_PEAK_SPEED * (self.tempo / 120.0) * f64::from(PITCH)
         });
         let ball_speed = self
             .balls
@@ -499,17 +496,8 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
         for substep in 0..substeps {
             self.resize_ceiling();
-            self.scroll_elapsed = (self.scroll_elapsed + f64::from(dt)).min(SCROLL_EASE);
-            let t = self.scroll_elapsed / SCROLL_EASE;
-            let desired = if self.scroll_enabled { 1.0 } else { 0.0 };
-            let weight = self.scroll_from + (desired - self.scroll_from) * t * t * (3.0 - 2.0 * t);
-            let before = self.scroll_clock;
-            self.scroll_clock += (self.scroll_weight + weight) * 0.5 * f64::from(dt);
-            self.scroll_weight = weight;
-            let omega = std::f64::consts::TAU / SCROLL_PERIOD;
-            let distance = SCROLL_PEAK_SPEED / omega
-                * ((omega * self.scroll_clock).sin() - (omega * before).sin());
-            self.scroll_speed = SCROLL_PEAK_SPEED * (omega * self.scroll_clock).cos() * weight;
+            let distance = self.scroll.advance(enabled, self.tempo, f64::from(dt));
+            self.scroll_speed = self.scroll.speed;
             self.scroll_phase = (self.scroll_phase + distance).rem_euclid((COUNT * 3) as f64);
             let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
             for i in 0..COUNT {
@@ -548,7 +536,7 @@ impl Simulation {
                 body.set_enabled(active);
                 body.set_next_kinematic_translation(position);
             }
-            for &(handle, _) in &self.balls {
+            for (i, &(handle, _)) in self.balls.iter().enumerate() {
                 let body = &mut self.world.bodies[handle];
                 let mut acceleration = Vector::from_array(self.input.acceleration);
                 if let Some(pointer) = self.input.pointer {
@@ -561,6 +549,14 @@ impl Simulation {
                 if self.input.reduced_motion {
                     acceleration *= 0.1;
                 }
+                // Sphere Cd=.47, air density=1.225 kg/m³. Implicit quadratic
+                // drag update stays dissipative even for a fast sensor impulse.
+                let radius = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
+                let velocity = body.linvel();
+                body.set_linvel(
+                    velocity * sphere_drag_factor(radius, velocity.length(), body.mass(), dt),
+                    false,
+                );
                 body.reset_forces(false);
                 if acceleration.length_squared() > 0.0 {
                     body.add_force(acceleration * body.mass(), true);
@@ -623,6 +619,13 @@ impl Simulation {
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
                         if touching[j] && !self.touching[i][j] && impulse > 0.0 {
                             // Blend only on contact onset. Resting load cannot keep changing color.
+                            let start = i * 9;
+                            remember_pigment(
+                                (&mut self.pigments[start..start + 9])
+                                    .try_into()
+                                    .expect("fixed pigment history"),
+                                self.palette[j],
+                            );
                             let mass = self.world.bodies[self.balls[i].0].mass();
                             let blend = (impulse / mass * 0.15).clamp(0.0, 0.5);
                             for c in 0..3 {
@@ -805,6 +808,12 @@ impl PhysicsSimulation {
     }
     pub fn step(&mut self) {
         self.0.step();
+    }
+    pub fn set_tempo(&mut self, bpm: f32) {
+        self.0.set_tempo(bpm);
+    }
+    pub fn pigments_ptr(&self) -> *const f32 {
+        self.0.pigments.as_ptr()
     }
     pub fn snapshot_ptr(&self) -> *const f32 {
         self.0.snapshot.values.as_ptr()

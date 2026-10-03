@@ -47,6 +47,7 @@ export class VisualizerScreen {
       }
     };
     this.onPointerDown = event => {
+      this.suppressFullscreenClick = false;
       this.clearGesture();
       const touch = event.pointerType !== 'mouse';
       if (this.expanded && event.isPrimary && event.button === 0
@@ -54,6 +55,7 @@ export class VisualizerScreen {
         // Close before iOS finishes the tap. Otherwise Safari can re-hit-test
         // the same tap against the page revealed below the fullscreen view.
         event.preventDefault();
+        this.suppressFullscreenClick = true;
         this.toggleFullscreen();
         return;
       }
@@ -76,6 +78,15 @@ export class VisualizerScreen {
         if (touch) this.onBand(null);
         // Retain the gesture when the finger crosses a band or its animated fill.
         this.element.setPointerCapture(event.pointerId);
+      }
+    };
+    this.onClick = event => {
+      const suppress = this.suppressFullscreenClick && event.detail !== 0;
+      this.suppressFullscreenClick = false;
+      if (suppress) {
+        // Pointer-down already exited. The compact bar keeps the restored
+        // entry button under the pointer; consuming this click prevents re-entry.
+        event.preventDefault(); event.stopImmediatePropagation();
       }
     };
     this.onPointerMove = event => {
@@ -125,6 +136,7 @@ export class VisualizerScreen {
     this.document.addEventListener('fullscreenchange', this.onFullscreen);
     this.document.addEventListener('keydown', this.onKey);
     this.document.addEventListener('pointerdown', this.onPointerDown, true);
+    this.document.addEventListener('click', this.onClick, true);
     this.document.addEventListener('pointermove', this.onPointerMove);
     this.document.addEventListener('pointerup', this.onPointerUp, true);
     this.document.addEventListener('pointercancel', this.onPointerCancel);
@@ -279,6 +291,7 @@ export class VisualizerScreen {
     this.document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.document.removeEventListener('keydown', this.onKey);
     this.document.removeEventListener('pointerdown', this.onPointerDown, true);
+    this.document.removeEventListener('click', this.onClick, true);
     this.document.removeEventListener('pointermove', this.onPointerMove);
     this.document.removeEventListener('pointerup', this.onPointerUp, true);
     this.document.removeEventListener('pointercancel', this.onPointerCancel);

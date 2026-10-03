@@ -87,3 +87,7 @@ required-features = ["std"]
 [[example]]
 name = "loudness_trace"
 required-features = ["std"]
+
+[[example]]
+name = "tempo_cost"
+required-features = ["std"]

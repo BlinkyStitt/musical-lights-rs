@@ -143,7 +143,7 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .frequency-tooltip { display: flex; align-items: center; gap: .45rem; position: absolute; top: .25rem; left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: .3rem .6rem; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: .75rem; pointer-events: none; }
 .frequency-tooltip[hidden] { display: none; }
 .frequency-swatch { width: .85rem; height: .85rem; flex: none; background: var(--band-color); border: 1px solid currentColor; }
-.audio-card[data-expanded] .frequency-tooltip { top: .75rem; }
+.audio-card[data-expanded] .frequency-tooltip { top: var(--fullscreen-control-bottom, 10rem); }
 .fullscreen-hint { display: none; }
 .audio-card[data-expanded] .fullscreen-hint { display: block; position: absolute; top: .75rem; left: 50%; transform: translateX(-50%); z-index: 2; margin: 0; padding: .3rem .6rem; border-radius: 6px; color: var(--ink); background: var(--surface); font-size: .75rem; white-space: nowrap; pointer-events: none; animation: dismiss-hint 3s step-end forwards; }
 .spectrum-panel:has(.frequency-tooltip:not([hidden])) .fullscreen-hint { visibility: hidden; }
@@ -250,7 +250,7 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
 .audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
 .audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; background: var(--surface); }
-.audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
 .audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
 .audio-card[data-expanded] .fullscreen-hint { display: none; }
 .input-source-controls .control-row { min-width: 0; gap: .5rem; }

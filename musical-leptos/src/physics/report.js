@@ -187,7 +187,8 @@ export class PhoneReport {
     this.host.open = false;
     if (mode === 'normal') this.view.card.scrollIntoView({ block: 'start' });
   }
-  frame(now, cost) {
+  frame(frameTime, cost) {
+    const now = performance.now();
     if (!this.lastDiagnostic || now - this.lastDiagnostic > 1000) {
       const elapsed = now - (this.fpsAt ?? now), frames = this.view.metrics.frames - (this.fpsFrames ?? 0);
       this.query('.diagnostic-fps').textContent = elapsed > 0 ? `${(frames * 1000 / elapsed).toFixed(0)} FPS` : '— FPS';
@@ -206,10 +207,10 @@ export class PhoneReport {
     if (this.costCount < this.renderCosts.length) this.renderCosts[this.costCount++] = cost;
     else this.invalidate('Render report capacity exceeded');
     if (this.previous != null) {
-      if (this.count < this.intervals.length) this.intervals[this.count++] = now - this.previous;
+      if (this.count < this.intervals.length) this.intervals[this.count++] = frameTime - this.previous;
       else this.invalidate('Frame report capacity exceeded');
     }
-    this.previous = now;
+    this.previous = frameTime;
 
     const expanded = this.view.card.hasAttribute('data-expanded');
     if (expanded !== (this.metadata.mode !== 'normal') || innerWidth !== this.metadata.viewport[0]

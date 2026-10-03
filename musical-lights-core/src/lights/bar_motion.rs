@@ -1,8 +1,10 @@
 //! Smooth attacks and gravity-limited releases in normalized bar coordinates.
+use num::Float;
+
 const FALL_GRAVITY: f64 = 2.0; // bar heights / second²
 const FALL_SPEED: f64 = 1.2; // terminal bar heights / second
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct State {
+pub struct State {
     pub position: f64,
     pub velocity: f64,
     pub acceleration: f64,
@@ -41,13 +43,13 @@ impl Segment {
                 + t * (2.0 * c[2] + t * (3.0 * c[3] + t * (4.0 * c[4] + t * 5.0 * c[5]))))
                 / self.duration,
             acceleration: (2.0 * c[2] + t * (6.0 * c[3] + t * (12.0 * c[4] + t * 20.0 * c[5])))
-                / self.duration.powi(2),
+                / Float::powi(self.duration, 2),
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct Motion {
+pub struct Motion {
     pub state: State,
     pub target: f64,
     segments: [Segment; 3],
@@ -143,7 +145,7 @@ impl Motion {
             time -= self.brake_duration;
             let scale = if self.reduced { 0.25 } else { 1.0 };
             let gravity = FALL_GRAVITY * scale;
-            let terminal = FALL_SPEED * scale.sqrt();
+            let terminal = FALL_SPEED * Float::sqrt(scale);
             let speed = (-self.fall_start.velocity).clamp(0.0, terminal);
             let accelerating = time.min((terminal - speed) / gravity);
             let distance = speed * accelerating

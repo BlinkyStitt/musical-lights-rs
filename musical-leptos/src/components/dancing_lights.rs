@@ -442,7 +442,7 @@ pub fn DancingLights(
             </div>
             <Show when=move || advanced>
                 <div class="input-source-controls">
-                <label class="control-row">"Source"<select class="input-source">
+                <label class="control-row">"Source"<select class="input-source" disabled=true>
                     <option value="microphone">"Microphone"</option>
                     <option value="generated">"Test tones"</option>
                     <option value="trumpet">"Jazz Trumpet Loops"</option>

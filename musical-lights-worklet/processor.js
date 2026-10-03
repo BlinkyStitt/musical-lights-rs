@@ -48,7 +48,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         if (!this.pending && currentFrame - this.lastSent >= sampleRate / 240) {
             this.wasm.processor_snapshot(this.processor);
             const state = this.snapshot.slice();
-            const extra = {}, transfer = [state.buffer];
+            const extra = { tempo: this.wasm.processor_tempo(this.processor), tempoConfidence: this.wasm.processor_tempo_confidence(this.processor) }, transfer = [state.buffer];
             if (this.diagnostics) {
                 const stride = this.wasm.processor_trace_stride(this.processor);
                 const trace = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_trace_ptr(this.processor), this.wasm.processor_trace_count(this.processor) * stride).slice();

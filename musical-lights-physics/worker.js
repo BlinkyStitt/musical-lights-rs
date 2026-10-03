@@ -10,6 +10,7 @@ let simulation, config, palette, buffer, timer, lastTime, origin;
 let paused = true, debt = 0, maxDebt = 0, pending = [], publishedTick = -2;
 let input = new Float32Array(38), recording = null, recordingOverflow = false;
 let costs = null, costCount = 0, totalCost = 0, steps = 0;
+let tempo = 120, tempoEvents = null;
 let recordingStart = 0, initialTick = 0, impulseTotals;
 let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
 let batchTicks = 0, batchSubsteps = 0, batchMaxSubsteps = 0;
@@ -44,6 +45,10 @@ function run() {
     while (pending.length && pending[0].tick <= simulation.tick()) {
       const event = pending.shift();
       input.set(event.values);
+      if (event.tempo !== undefined && event.tempo !== tempo) {
+        tempo = event.tempo; simulation.set_tempo(tempo);
+        if (recording && tempoEvents.length < capacity) tempoEvents.push({ tick: simulation.tick(), bpm: tempo });
+      }
       simulation.input(input);
       if (recording) {
         if (recording.length < capacity) recording.push({ tick: simulation.tick(), timestamp: event.timestamp, values: Array.from(input) });
@@ -85,7 +90,7 @@ function publish() {
   output.set(snapshot());
   output.set(impulseTotals, layout[10]);
   impulseTotals.fill(0);
-  postMessage({ type: 'snapshot', buffer, schedulingGap, maxSchedulingGap, batchMs, batchTicks, batchSubsteps, batchMaxSubsteps, maxStepMs, debt, maxDebt, steps, totalCost,
+  postMessage({ type: 'snapshot', buffer, pigments: new Float32Array(wasm.memory.buffer, simulation.pigments_ptr(), layout[21] * 9).slice(), schedulingGap, maxSchedulingGap, batchMs, batchTicks, batchSubsteps, batchMaxSubsteps, maxStepMs, debt, maxDebt, steps, totalCost,
     tick: simulation.tick(), substepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow() }, [buffer]);
   buffer = null;
 }
@@ -95,6 +100,7 @@ function reset(values) {
   simulation = new PhysicsSimulation(config, palette);
   input = new Float32Array(38); input[32] = config[0];
   simulation.input(input);
+  simulation.set_tempo(tempo);
   pending = []; publishedTick = -2; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
   schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;
   batchTicks = 0; batchSubsteps = 0; batchMaxSubsteps = 0;
@@ -119,7 +125,7 @@ self.onmessage = async ({ data }) => {
       case 'pulse': {
         const tick = Math.max(simulation.tick(), Math.ceil((data.timestamp - origin) / stepMs));
         if (pending.length >= 256) throw new Error('Physics input queue is full');
-        pending.push({ tick, timestamp: data.timestamp, values: data.input });
+        pending.push({ tick, timestamp: data.timestamp, values: data.input, tempo: data.tempo });
         break;
       }
       case 'pause':
@@ -132,14 +138,14 @@ self.onmessage = async ({ data }) => {
         if (recording) throw new Error('Finish the phone test before resetting physics');
         reset(data.config); postMessage({ type: 'reset', config: Array.from(config) }); break;
       case 'record':
-        reset(data.config); recording = []; costs = new Float32Array(capacity); costCount = 0; recordingOverflow = false;
+        reset(data.config); recording = []; tempoEvents = [{ tick: simulation.tick(), bpm: tempo }]; costs = new Float32Array(capacity); costCount = 0; recordingOverflow = false;
         recordingStart = absoluteNow(); initialTick = simulation.tick();
         postMessage({ type: 'recording', timestamp: recordingStart, config: Array.from(config) }); break;
       case 'report':
-        postMessage({ type: 'report', inputs: recording, physicsCosts: Array.from(costs.subarray(0, costCount)),
+        postMessage({ type: 'report', inputs: recording, tempoEvents, physicsCosts: Array.from(costs.subarray(0, costCount)),
           recordingOverflow, substepTotal, maxSubsteps, overloadTicks, substepCosts, config: Array.from(config), initialTick, finalTick: simulation.tick(),
           elapsedMs: absoluteNow() - recordingStart, debt, maxDebt, discardedSimulationMs: 0, finalSnapshot: Array.from(snapshot()) });
-        recording = null; costs = null; substepCosts = []; break;
+        recording = null; tempoEvents = null; costs = null; substepCosts = []; break;
       default: throw new Error('Unknown physics worker message');
     }
   } catch (error) {

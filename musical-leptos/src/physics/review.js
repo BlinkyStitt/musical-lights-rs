@@ -93,6 +93,8 @@ export class ListeningReview {
         receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime });
       this.plot();
     });
+    // An early selection must not be lost before the transport binds change.
+    this.source.disabled = false;
   }
   select(play) {
     this.card.querySelector('.tone-status').hidden = this.source.value === 'microphone';
