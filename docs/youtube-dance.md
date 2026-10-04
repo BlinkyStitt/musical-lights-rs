@@ -65,8 +65,8 @@ The worklet adds cue ordinals to existing tempo metadata. Raw loudness,
 filtered-target transport, acoustic traces, and the 38-value physics input
 layout remain unchanged. Physics protocol 8 and phone report v4 record the
 random seed, dance settings, starting ordinal and tempo, and ordered input events
-with their tempo and accent for exact replay with the matching WASM engine. Buffers allocate only when
-recording starts. No alternate timed-reversal engine remains.
+with their tempo and accent for exact replay with the matching WASM engine.
+Buffers allocate only when recording starts. No alternate timed-reversal engine remains.
 
 Floor/ceiling transitions retract the bars before switching collider positions,
 then regrow them over 500 ms. Gravity stays measured/default gravity. Ceiling
@@ -85,30 +85,20 @@ YouTube test uses Google's public iframe-demo video and no recognition upload.
 Run checks from the repository root with pinned tools. Use macOS host access for
 browser commands. Keep the serial startup guard, one worker, and zero retries.
 
-The earlier complete macOS browser run passes 382 checks with zero failures and two
-opt-in skips before the idle pause correction. Core passes 68 tests in each
-of four feature configurations; physics passes 42 tests and the offline harness
-passes 74, including the pause regression. All 61 checks on build `66d4989cc2956f207b347e81` for
-YouTube, musical motion, Advanced controls, keyboard, and Reduced Motion pass
-in Chromium, WebKit, and the iPhone profile. Worklet, Leptos, and reference
-checks pass. The core also compiles for both `thumbv6m-none-eabi` and
-`thumbv7em-none-eabihf` without `std`. All 38 complete acoustic traces match
-the deployed PR #39 WASM bit for bit. Historical fixed-window numeric results
-remain unchanged. See [the evidence record](youtube-dance-results/validation.json)
-for build identities and test boundaries.
+Short landscape fullscreen lets the video and scene shrink to reserve all bottom
+controls. Long song text under Reduced Motion and recovery notices use bounded,
+scrollable regions. The [short landscape image](youtube-dance-results/fullscreen-short-landscape.png)
+shows these regions together with a mock player.
 
-The four review corrections pass 77 offline checks and a 107-check macOS
-browser run. After the final title alignment change, all 47 affected YouTube
-and Advanced checks pass on build `501cd29a6cb45310201cc573`, with no new
-browser crash reports. The combined 568 × 320 layout keeps video, wrapped song
-text, recovery notices, and all controls inside the viewport. The
-[short landscape image](youtube-dance-results/fullscreen-short-landscape.png)
-uses a mock player and long notices under Reduced Motion. Factory reset
-restores 8 kg/m³ and 40 ms after saved 16 kg/m³ and 80 ms settings reload.
-Listening-review plots and exports use the drawn floor/ceiling base. Phone
-report v4 keeps same-tick input, tempo, and accent ordering; worker recordings
-replay exactly at 30, 60, and 120 FPS. See the
-[review evidence](youtube-dance-results/review-fixes.json) for run boundaries.
+Factory reset restores material and stroke settings independently of saved
+preferences. Listening-review plots and exports measure from the last drawn
+floor/ceiling base and enclosure height. Phone report v4 replays each input with
+its tempo and accent in the original order, including updates at the same tick.
+Older recordings require their historical replay tool.
+
+See [PR #40](https://github.com/BlinkyStitt/musical-lights-rs/pull/40) and its CI
+runs for delivery evidence. Browser profiles cannot establish physical iPhone
+speaker routing, real microphone capture, or phone FPS acceptance.
 
 The [portrait](youtube-dance-results/mock-youtube-portrait.png) and
 [landscape](youtube-dance-results/mock-youtube-landscape.png) layout images use a
@@ -117,8 +107,8 @@ comes from the separately invoked real player test. The existing
 [scrolling](musical-motion-results/scrolling-with-audio.mp4) and
 [stationary](musical-motion-results/stationary-with-audio.mp4) previews use
 identical licensed audio packets. Their approximate synchronization does not
-measure output-device latency. The short host render measurements reach about
-60 FPS; they do not satisfy physical-phone FPS acceptance or measure GPU completion.
+measure output-device latency. Digital-music previews do not satisfy
+physical-phone FPS acceptance or measure GPU completion.
 
 ```sh
 export PATH="$PWD/.tools/bin:$PATH"

@@ -578,21 +578,16 @@ permission checks, and the remaining physical-device verification boundaries.
 
 ### YouTube and acoustic-peak dance (2026-10-04)
 
-[The implementation and release record](youtube-dance.md) describes the shared
+[The controls and embedded implementation](youtube-dance.md) describes the shared
 control grid, help labels, reserved fullscreen regions, YouTube ownership, camera
 motion, flight budget, and chance-based direction changes. Reusable policy lives
 in the allocation-free `no_std` core, which also compiles for Cortex-M0 and
 Cortex-M4 targets. Browser and physics adapters retain their own platform work.
 
-[Machine-readable evidence](youtube-dance-results/validation.json) separates
-local checks, mocked browser behavior, live YouTube playback, and missing physical
-evidence. The 38 complete acoustic traces remain bit-identical to the deployed
-PR #39 WASM. The historical fixed-window audit retains its numeric results.
-The separately invoked live YouTube check reaches playback without requesting a
-microphone. It does not prove physical speaker audibility or iPhone capture.
+Use [PR #40](https://github.com/BlinkyStitt/musical-lights-rs/pull/40) and its CI
+runs for shared delivery evidence.
 
-Release remains held until an actual iPhone plays audible YouTube while the real
-microphone drives the lights. Desktop WebKit and its iPhone profile cannot satisfy
-that requirement. Human listening and five-minute diagnostics-off phone FPS
-acceptance remain pending. Routine recognition uses mocks; this change makes no
-live AudD request.
+Physical iPhone playback and capture, human listening, and five-minute
+physical-phone FPS acceptance remain pending. Desktop WebKit and its iPhone
+profile cannot establish those results. Routine recognition uses mocks; this
+change makes no live AudD request.

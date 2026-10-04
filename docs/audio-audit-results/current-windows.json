@@ -1,7 +1,7 @@
 {
   "upstreamRevision": "82de790f79c5b358040861e8bdb906a55009b117",
-  "productionWasmSha256": "161e74dcb79db00abd4b6aa8de0bb2b166987e5dc6ba9770ee9b3b8f91c4a39e",
-  "productionNativeSha256": "effee16e612895b47b54e514b49c3eb297147142ed4dd4b8d2e2bbe4736481c3",
+  "productionWasmSha256": "feca42c046ae90a63e0794ee56bfbccaacae1e7a8e66a11cda8f06f3c54c50a2",
+  "productionNativeSha256": "518607a0fdf4e3f2449c7ce93cf7cbe048874166fb28ca9661672ff8832a2254",
   "productionDspSourceSha256": "19bf90019e71368a333ef6486e00921a5d5538c2e291744038735ca768cabe91",
   "numpyVersion": "2.5.3",
   "sourceSha256": {
