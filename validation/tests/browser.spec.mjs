@@ -246,15 +246,15 @@ for (const colorScheme of ['light', 'dark']) {
       }
       await page.mouse.move(0, 0);
       await page.getByRole('checkbox', { name: 'Listening', exact: true }).focus();
-      for (const label of ['Phone motion', 'Scroll lights']) {
+      for (const selector of ['[data-help="listening-toggle"]', '[data-help="identify-song"]', '.motion-button', '[data-help="motion-button"]', '.scroll-lights', '[data-help="scroll-lights"]', '.video-button', '.fullscreen-button']) {
         await page.keyboard.press('Tab');
-        await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeFocused();
+        await expect(page.locator(selector)).toBeFocused();
       }
       await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
       await page.keyboard.press('Tab');
-      await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeFocused();
-      await page.keyboard.press('Tab');
-      await expect(page.getByRole('tooltip')).toHaveText(await meters[0].getAttribute('aria-label'));
+      await expect(meters[0]).toBeFocused();
+      await expect(page.locator('.control-help')).toBeHidden();
+      await expect(page.locator('#frequency-readout')).toHaveText(await meters[0].getAttribute('aria-label'));
       // Exercise every colored bar through the real audio processor.
       // Include a collection pause before the first live bar attack.
       await page.requestGC();

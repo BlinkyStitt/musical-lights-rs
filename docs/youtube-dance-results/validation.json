@@ -1,0 +1,159 @@
+{
+  "build": {
+    "version": "e3ddbd4b7163f1fa0f3602ed"
+  },
+  "core": {
+    "testsPerFeatureConfiguration": 67,
+    "featureConfigurations": 4,
+    "armNoStdTargets": [
+      "thumbv6m-none-eabi",
+      "thumbv7em-none-eabihf"
+    ],
+    "hardwareExecution": "pending"
+  },
+  "physics": {
+    "passed": 42
+  },
+  "offlineHarness": {
+    "passed": 73
+  },
+  "referenceAudit": "passed; historical numeric results unchanged",
+  "identicalAudio": {
+    "completeTraces": 38,
+    "baselineCommit": "89beb712e384ddb23740e29807f8c6aa5e0c74eb",
+    "baseline": "deployed WASM fetched from blink.stitthappens.com",
+    "bitIdentical": true
+  },
+  "focusedLayout": {
+    "passed": 30,
+    "engines": [
+      "Chromium",
+      "macOS WebKit",
+      "iPhone-profile WebKit on Mac"
+    ],
+    "workers": 1,
+    "retries": 0,
+    "build": {
+      "version": "dbf90b17e318ca1946442efb"
+    }
+  },
+  "liveYouTube": {
+    "passed": 1,
+    "videoId": "M7lc1UVf-VE",
+    "engine": "Chromium on Mac",
+    "playerState": 1,
+    "microphoneRequests": 0,
+    "evidence": "Live iframe API and playback state only; no physical routing or human audibility claim",
+    "build": {
+      "version": "e3ddbd4b7163f1fa0f3602ed"
+    },
+    "verifiedAt": "2026-10-04T07:50:21.419836+00:00"
+  },
+  "fullBrowser": {
+    "passed": 382,
+    "failed": 0,
+    "skipped": 2,
+    "engines": [
+      "Chromium",
+      "macOS WebKit",
+      "iPhone-profile WebKit on Mac"
+    ],
+    "workers": 1,
+    "retries": 0,
+    "serialStartupGuard": true,
+    "macOSCrashGuard": true,
+    "build": {
+      "version": "e3ddbd4b7163f1fa0f3602ed"
+    }
+  },
+  "liveAudD": "not invoked; routine recognition uses mocks",
+  "physicalIPhone": "pending; release held for simultaneous audible YouTube and microphone-driven lights",
+  "humanListening": "pending",
+  "deployment": "not merged or deployed",
+  "focusedKeyboard": {
+    "passed": 14,
+    "engines": [
+      "Chromium",
+      "macOS WebKit"
+    ],
+    "build": {
+      "version": "e3ddbd4b7163f1fa0f3602ed"
+    }
+  },
+  "previews": {
+    "layout": "mock YouTube; portrait and landscape, Reduced Motion",
+    "renderCosts": "../musical-motion-results/chromium-render-cost.json and webkit-spectrum-render-cost.json",
+    "audio": {
+      "build": {
+        "version": "e3ddbd4b7163f1fa0f3602ed"
+      },
+      "identicalPcm": true,
+      "identicalAudioPackets": true,
+      "pcmSha256": "abef497a13d3d30801022eade561d75c1587947840c330f5f264fbd2e5853096",
+      "audioPacketSha256": "SHA256=0db4776005a7be27096f63d5761fc5d74ff8aa078e09aaada116632f4559477d",
+      "durationSeconds": 4,
+      "fpsAcceptanceWorkload": false,
+      "timing": "approximate recording-start clock; not latency evidence"
+    }
+  },
+  "renderCosts": {
+    "chromium": [
+      {
+        "build": {
+          "version": "e3ddbd4b7163f1fa0f3602ed"
+        },
+        "measuredAt": "2026-10-04T07:38:14.026Z",
+        "scrolling": true,
+        "fps": 60.249774062988145,
+        "p95FrameMs": 16.670000000000073,
+        "meanRenderMs": 0.1533402501300163,
+        "debt": 1.7499999999995222,
+        "discardedSimulationMs": 0,
+        "physicalDevice": false
+      },
+      {
+        "build": {
+          "version": "e3ddbd4b7163f1fa0f3602ed"
+        },
+        "measuredAt": "2026-10-04T07:38:20.176Z",
+        "scrolling": false,
+        "fps": 59.380422674052475,
+        "p95FrameMs": 16.670000000000073,
+        "meanRenderMs": 0.09863445588520595,
+        "debt": 2.989990234374085,
+        "discardedSimulationMs": 0,
+        "physicalDevice": false
+      }
+    ],
+    "webkit-spectrum": [
+      {
+        "build": {
+          "version": "e3ddbd4b7163f1fa0f3602ed"
+        },
+        "measuredAt": "2026-10-04T07:43:49.440Z",
+        "scrolling": true,
+        "fps": 60.1024484889596,
+        "p95FrameMs": 25.82000000000062,
+        "meanRenderMs": 0.23618257261406478,
+        "debt": 4.7064615885412096,
+        "discardedSimulationMs": 0,
+        "physicalDevice": false
+      },
+      {
+        "build": {
+          "version": "e3ddbd4b7163f1fa0f3602ed"
+        },
+        "measuredAt": "2026-10-04T07:43:55.579Z",
+        "scrolling": false,
+        "fps": 60.125240126737005,
+        "p95FrameMs": 26.659999999999854,
+        "meanRenderMs": 0.13078838174268756,
+        "debt": 5.59309895833244,
+        "discardedSimulationMs": 0,
+        "physicalDevice": false
+      }
+    ],
+    "boundary": "Short digital-music host runs; draw submission excludes GPU completion and is not phone FPS acceptance"
+  },
+  "ci": "Reported separately in PR #40 checks; local passes do not establish CI success"
+}

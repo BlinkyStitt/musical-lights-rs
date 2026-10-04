@@ -41,6 +41,11 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme, reducedMotion });
     await syntheticAudio(page); await page.goto('http://127.0.0.1:8101'); await startFrozen(page);
+    // Pixel-width sampling needs a frontal camera; exercise the real saved
+    // display setting instead of sampling a moving projected side face.
+    await page.locator('.display-controls > summary').click();
+    await page.locator('.camera-motion').uncheck();
+    await page.locator('.camera-rotation').fill('0');
     await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
     await expect.poll(() => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;

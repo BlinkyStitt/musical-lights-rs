@@ -11,7 +11,7 @@ The SVG ring beside the switch shows waiting, capture and upload phases, with
 an accessible phase description. It updates discretely once per second, has no
 spinning animation, and does not announce a live countdown. Reduced Motion also
 stops title scrolling and wraps the complete artist and song name. Successful
-recognition appears as a single “Artist — Song” line above the normal visualization.
+recognition appears as a single “Artist — Song” line below the normal visualization.
 In fullscreen, the same line travels continuously right to left at 45 pixels per
 second, even for short names, like the hat's text display. There are no recognition
 captions, duplicate success blocks, or exit-hint banner. Errors and no-match

@@ -169,7 +169,10 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     await page.setViewportSize(viewport);
     await expect.poll(async () => (await page.locator('.audio-card').boundingBox()).height).toBe(viewport.height);
     const graph = await page.locator('#dancinglights').boundingBox();
-    expect(graph.height).toBeGreaterThan(viewport.height * .9);
+    const controls = await page.locator('.audio-controls').boundingBox();
+    expect(graph.height).toBeGreaterThan(160);
+    expect(graph.y + graph.height).toBeLessThanOrEqual(controls.y);
+    expect(controls.y + controls.height).toBeLessThanOrEqual(viewport.height);
     await expect(exit).toBeInViewport({ ratio: 1 });
   }
   await page.screenshot({ path: 'test-results/iphone-lights-only.png' });
@@ -193,7 +196,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   expect(errors).toEqual([]);
 });
 
-test('fullscreen frequency labels expire below the controls and keyboard users can reach Exit', async ({ page }) => {
+test('fullscreen frequency labels expire above the bottom controls and keyboard users can reach Exit', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
@@ -204,7 +207,7 @@ test('fullscreen frequency labels expire below the controls and keyboard users c
   await expect(readout).toHaveText(hit.label);
   await expect(readout).toBeInViewport({ ratio: 1 });
   const box = await readout.boundingBox();
-  expect(box.y).toBeGreaterThanOrEqual((await page.locator('.audio-controls').boundingBox()).y + (await page.locator('.audio-controls').boundingBox()).height);
+  expect(box.y + box.height).toBeLessThanOrEqual((await page.locator('.audio-controls').boundingBox()).y);
   await expect(readout).toBeHidden({ timeout: 3500 });
   await expect(page.locator('.fullscreen-hint')).toHaveCount(0);
   // Focus the first bar with the keyboard, then move back to the exit control.

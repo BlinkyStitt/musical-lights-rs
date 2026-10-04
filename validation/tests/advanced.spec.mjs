@@ -17,6 +17,8 @@ function stereoWave() {
   return bytes;
 }
 
+test.describe('Home touch input', () => {
+test.use({ hasTouch: true });
 test('Home has silent sine motion without audio access, and switches support keyboard and touch', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => { window.microphoneRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.microphoneRequests++; throw new Error('Unexpected capture'); }; });
@@ -27,18 +29,19 @@ test('Home has silent sine motion without audio access, and switches support key
   const initial = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)));
   await expect.poll(() => page.evaluate(initial => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)).some((value, i) => Math.abs(value - initial[i]) > .01), initial)).toBe(true);
   expect(await page.evaluate(() => microphoneRequests)).toBe(0);
-  await expect(page.locator('.display-controls, .calibration-controls, .physics-controls, .diagnostics-controls, .diagnostic-fps')).toHaveCount(0);
+  await expect(page.locator('.calibration-controls, .physics-controls, .diagnostics-controls, .diagnostic-fps')).toHaveCount(0);
   const scroll = page.getByRole('checkbox', { name: 'Scroll lights', exact: true });
   await scroll.focus(); await page.keyboard.press('Space'); await expect(scroll).not.toBeChecked();
   await expect(scroll).toBeFocused(); expect(await scroll.evaluate(n => getComputedStyle(n).outlineStyle)).toBe('solid');
   expect(await scroll.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
-  await scroll.locator('..').click(); await expect(scroll).toBeChecked();
+  await scroll.tap(); await expect(scroll).toBeChecked();
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect.poll(() => page.evaluate(() => microphoneRequests)).toBe(1);
   await expect(page.locator('.audio-error')).toContainText('Unexpected capture');
   await expect(page.locator('.diagnostic-fps, .frame-rate')).toHaveCount(0);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   expect(errors).toEqual([]);
+});
 });
 
 test('idle-to-listening transition clears preview meter values for microphone silence', async ({ page }) => {
@@ -93,7 +96,7 @@ test('Display and Input resets are scoped; milliseconds and physics defaults pre
   const view = await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return { tick: v.current[2], height: v.height, radius: v.current[10] }; });
   await page.getByRole('button', { name: 'Reset display', exact: true }).click();
   await expect(page.locator('.scroll-lights')).toBeChecked();
-  await expect(page.locator('.camera-rotation')).toHaveValue('0');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(0);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(view.tick);
   await page.locator('.calibration-controls input[type=number]').first().fill('2');
   await page.locator('.calibration-controls input[type=number]').last().fill('86');

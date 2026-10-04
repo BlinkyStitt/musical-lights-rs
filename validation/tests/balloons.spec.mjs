@@ -158,7 +158,14 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
     await page.setViewportSize(size);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(async () => (await physicsState(page)).height).toBeCloseTo(Math.max(.4, 1.2 * size.height / size.width), 2);
+    await expect.poll(async () => page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      const scene = v.layer.getBoundingClientRect();
+      return Math.abs(v.current[1] - Math.max(.4, 1.2 * scene.height / scene.width));
+    })).toBeLessThan(.005);
+    const scene = await page.locator('.balloon-layer').boundingBox();
+    const controls = await page.locator('.audio-controls').boundingBox();
+    expect(scene.y + scene.height).toBeLessThanOrEqual(controls.y);
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
     await page.keyboard.press('Escape');
   }
@@ -205,7 +212,13 @@ test('physical controls require reset while camera rotation preserves the runnin
   await page.getByRole('button', { name: 'Apply settings and reset' }).click();
   await physicsReady(page);
   await expect.poll(async () => (await physicsState(page)).balls[0].mass).toBeCloseTo(before.balls[0].mass * 2, 6);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(20);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(20);
+  const camera = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { yaw: v.rotation, slider: Number(document.querySelector('.camera-rotation').value) };
+  });
+  expect(Math.abs(camera.yaw - 20)).toBeLessThanOrEqual(5.5);
+  expect(Math.abs(camera.yaw - camera.slider)).toBeLessThan(1);
 });
 
 test('depth shakes and audio bars both move balls while tilt permission is still pending', async ({ page }) => {

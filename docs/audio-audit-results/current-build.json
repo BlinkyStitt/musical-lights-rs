@@ -1,7 +1,7 @@
 {
-  "baselineCommit": "384a775b7c3fee4688c343c49638976fde283d63",
-  "baselineWasmSha256": "381be9dd39492d2b56b6ab127a4978f1be56579434d321730aeb5e43097e164a",
-  "productionWasmSha256": "feca42c046ae90a63e0794ee56bfbccaacae1e7a8e66a11cda8f06f3c54c50a2",
+  "baselineCommit": "89beb712e384ddb23740e29807f8c6aa5e0c74eb",
+  "baselineWasmSha256": "12ea5ce56e9afe2f3b0c1260d1f95b36e41f96823edc8dc0c4c1fba17e546139",
+  "productionWasmSha256": "ef30b43327bd31dbf4920f1d82e67f611f97c7e4e7775aa21daee8745bca6586",
   "node": "v26.8.2",
   "traceProtocolUnchanged": 5,
   "traceBuffersLazy": true,

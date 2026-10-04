@@ -218,7 +218,7 @@ test('song title fits a phone, appears in fullscreen, and respects Reduced Motio
   await expect.poll(() => page.evaluate(() => {
     const status = document.querySelector('.recognition-ring').getBoundingClientRect();
     const strip = document.querySelector('.recognized-song').getBoundingClientRect();
-    return status.bottom <= strip.top;
+    return strip.bottom <= status.top;
   })).toBe(true);
 });
 
@@ -393,10 +393,10 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
       const status = document.querySelector('.recognition-ring').getBoundingClientRect();
         const strip = document.querySelector('.recognized-song').getBoundingClientRect();
       const title = document.querySelector('.song-title').getBoundingClientRect();
-      return { statusAboveSong: status.bottom <= strip.top,
+      return { statusBelowSong: strip.bottom <= status.top,
         titleInsideStrip: title.top >= strip.top && title.bottom <= strip.bottom,
         titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
-    })).toEqual({ statusAboveSong: true, titleInsideStrip: true, titleInsideViewport: true });
+    })).toEqual({ statusBelowSong: true, titleInsideStrip: true, titleInsideViewport: true });
     for (const selector of ['.recognition-ring', '.recognized-song']) {
       await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
     }
@@ -409,7 +409,7 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
   await page.screenshot({ path: testInfo.outputPath('fullscreen-wrapped-song.png') });
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect(page.locator('.recognized-song')).toBeVisible();
-  expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
+  expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().top >= document.querySelector('.spectrum-panel').getBoundingClientRect().bottom)).toBe(true);
 });
 
 for (const reducedMotion of ['no-preference', 'reduce']) {
