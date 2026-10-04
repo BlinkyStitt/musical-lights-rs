@@ -48,7 +48,8 @@ Neither the browser nor Rapier decides whether an acoustic crest qualifies.
 - Travel follows smoothed tempo at two columns per beat: four columns per
   second at 120 BPM. Changes retain continuous position and ease velocity.
 - `IdlePeak` keeps separate synthetic history. Idle motion can draw only after
-  a completed travelling-wave cycle and a qualifying synthetic crest.
+  a completed travelling-wave cycle and a qualifying synthetic crest. Its
+  internal clock excludes Reduced Motion pauses, including when motion resumes.
 - `flight_height` and `release_speed` calculate the shared flight budget and
   `sqrt(2gh)` speed limit. Normal flight reserves 30% of available enclosure
   space after ball clearance; the slider allows 0–50%. Reduced Motion halves
@@ -83,9 +84,12 @@ YouTube test uses Google's public iframe-demo video and no recognition upload.
 Run checks from the repository root with pinned tools. Use macOS host access for
 browser commands. Keep the serial startup guard, one worker, and zero retries.
 
-The final full browser run passes 382 checks with zero failures and two opt-in
-skips. Core passes 67 tests in each of four feature configurations; physics
-passes 42 tests and the offline harness passes 73. Worklet, Leptos, and reference
+The complete macOS browser run passes 382 checks with zero failures and two
+opt-in skips before the idle pause correction. Core passes 68 tests in each
+of four feature configurations; physics passes 42 tests and the offline harness
+passes 74, including the pause regression. All 61 final-build checks for
+YouTube, musical motion, Advanced controls, keyboard, and Reduced Motion pass
+in Chromium, WebKit, and the iPhone profile. Worklet, Leptos, and reference
 checks pass. The core also compiles for both `thumbv6m-none-eabi` and
 `thumbv7em-none-eabihf` without `std`. All 38 complete acoustic traces match
 the deployed PR #39 WASM bit for bit. Historical fixed-window numeric results

@@ -24,3 +24,21 @@ test('idle wave spans every band, travels across the spectrum and emits no attac
   assert.ok(Array.from({ length: 24 }, (_, i) => first[5 + 4 * i]).every(value => value === -1));
   assert.ok(levels(await frame(6)).every((value, i) => Math.abs(value - a[i]) < 1e-12));
 });
+
+test('Reduced Motion time cannot complete an idle cycle or trigger a draw on resume', async () => {
+  const messages = [], self = { postMessage: message => messages.push(message) };
+  const path = new URL('../../musical-leptos/src/physics/demo-worker.js', import.meta.url);
+  const bytes = await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url));
+  runInNewContext((await readFile(path, 'utf8')).replaceAll('import.meta.url', JSON.stringify(path.href)),
+    { self, URL, WebAssembly, fetch: async () => new Response(bytes) });
+  await self.onmessage({ data: { type: 'init' } });
+  const pulse = async (time, reduced = false) => {
+    await self.onmessage({ data: { type: 'pulse', time, reduced } });
+    return messages.at(-1).accentSequence;
+  };
+  for (const [time, reduced] of [[0, false], [1, false], [6, true], [6.01, false], [6.08, false], [10.9, false], [11, false], [11.02, false]]) {
+    assert.equal(await pulse(time, reduced), 0, `Only one second of wave travel precedes the pause; time=${time}`);
+  }
+  assert.equal(await pulse(11.10), 1, 'Six seconds of actual wave motion must still produce a cue');
+  assert.equal(await pulse(11.11), 1, 'One completed cycle must produce only one cue');
+});

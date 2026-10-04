@@ -41,7 +41,8 @@ four columns per second at 120 BPM, twice the initial PR speed. Direction change
 require a qualifying new recent loud attack. One draw gives 90% unchanged, 5%
 horizontal reversal, and 5% floor/ceiling change at the default 10% total chance.
 There is no timed reversal. Idle motion can draw after a completed wave cycle,
-using separate crest history. Position stays continuous through tempo changes. Reduced
+using separate crest history. The core excludes Reduced Motion pauses from that
+cycle clock. Position stays continuous through tempo changes. Reduced
 Motion disables automatic travel. The rate is defined in the shared core, so
 embedded displays and the browser adapter use the same motion.
 

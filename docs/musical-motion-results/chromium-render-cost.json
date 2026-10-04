@@ -1,14 +1,14 @@
 [
   {
     "build": {
-      "version": "e3ddbd4b7163f1fa0f3602ed"
+      "version": "66d4989cc2956f207b347e81"
     },
-    "measuredAt": "2026-10-04T07:38:14.026Z",
+    "measuredAt": "2026-10-04T08:18:15.859Z",
     "scrolling": true,
-    "fps": 60.249774062988145,
+    "fps": 60.13641734160268,
     "p95FrameMs": 16.670000000000073,
-    "meanRenderMs": 0.1533402501300163,
-    "debt": 1.7499999999995222,
+    "meanRenderMs": 0.1656846475799054,
+    "debt": 1.2635091145828614,
     "discardedSimulationMs": 0,
     "bpm": 120,
     "confidence": 0,
@@ -35,14 +35,14 @@
   },
   {
     "build": {
-      "version": "e3ddbd4b7163f1fa0f3602ed"
+      "version": "66d4989cc2956f207b347e81"
     },
-    "measuredAt": "2026-10-04T07:38:20.176Z",
+    "measuredAt": "2026-10-04T08:18:22.009Z",
     "scrolling": false,
-    "fps": 59.380422674052475,
+    "fps": 60.25543824061555,
     "p95FrameMs": 16.670000000000073,
-    "meanRenderMs": 0.09863445588520595,
-    "debt": 2.989990234374085,
+    "meanRenderMs": 0.12555785021506066,
+    "debt": 5.658284505207424,
     "discardedSimulationMs": 0,
     "bpm": 120,
     "confidence": 0,

@@ -1,9 +1,9 @@
 {
   "build": {
-    "version": "e3ddbd4b7163f1fa0f3602ed"
+    "version": "66d4989cc2956f207b347e81"
   },
   "core": {
-    "testsPerFeatureConfiguration": 67,
+    "testsPerFeatureConfiguration": 68,
     "featureConfigurations": 4,
     "armNoStdTargets": [
       "thumbv6m-none-eabi",
@@ -15,7 +15,7 @@
     "passed": 42
   },
   "offlineHarness": {
-    "passed": 73
+    "passed": 74
   },
   "referenceAudit": "passed; historical numeric results unchanged",
   "identicalAudio": {
@@ -64,7 +64,8 @@
     "macOSCrashGuard": true,
     "build": {
       "version": "e3ddbd4b7163f1fa0f3602ed"
-    }
+    },
+    "boundary": "Complete Mac suite before the idle pause correction; final-build focused checks are recorded separately"
   },
   "liveAudD": "not invoked; routine recognition uses mocks",
   "physicalIPhone": "pending; release held for simultaneous audible YouTube and microphone-driven lights",
@@ -94,33 +95,36 @@
       "durationSeconds": 4,
       "fpsAcceptanceWorkload": false,
       "timing": "approximate recording-start clock; not latency evidence"
+    },
+    "layoutBuild": {
+      "version": "66d4989cc2956f207b347e81"
     }
   },
   "renderCosts": {
     "chromium": [
       {
         "build": {
-          "version": "e3ddbd4b7163f1fa0f3602ed"
+          "version": "66d4989cc2956f207b347e81"
         },
-        "measuredAt": "2026-10-04T07:38:14.026Z",
+        "measuredAt": "2026-10-04T08:18:15.859Z",
         "scrolling": true,
-        "fps": 60.249774062988145,
+        "fps": 60.13641734160268,
         "p95FrameMs": 16.670000000000073,
-        "meanRenderMs": 0.1533402501300163,
-        "debt": 1.7499999999995222,
+        "meanRenderMs": 0.1656846475799054,
+        "debt": 1.2635091145828614,
         "discardedSimulationMs": 0,
         "physicalDevice": false
       },
       {
         "build": {
-          "version": "e3ddbd4b7163f1fa0f3602ed"
+          "version": "66d4989cc2956f207b347e81"
         },
-        "measuredAt": "2026-10-04T07:38:20.176Z",
+        "measuredAt": "2026-10-04T08:18:22.009Z",
         "scrolling": false,
-        "fps": 59.380422674052475,
+        "fps": 60.25543824061555,
         "p95FrameMs": 16.670000000000073,
-        "meanRenderMs": 0.09863445588520595,
-        "debt": 2.989990234374085,
+        "meanRenderMs": 0.12555785021506066,
+        "debt": 5.658284505207424,
         "discardedSimulationMs": 0,
         "physicalDevice": false
       }
@@ -128,32 +132,52 @@
     "webkit-spectrum": [
       {
         "build": {
-          "version": "e3ddbd4b7163f1fa0f3602ed"
+          "version": "66d4989cc2956f207b347e81"
         },
-        "measuredAt": "2026-10-04T07:43:49.440Z",
+        "measuredAt": "2026-10-04T08:19:04.056Z",
         "scrolling": true,
-        "fps": 60.1024484889596,
-        "p95FrameMs": 25.82000000000062,
-        "meanRenderMs": 0.23618257261406478,
-        "debt": 4.7064615885412096,
+        "fps": 60.223802645849055,
+        "p95FrameMs": 25.300000000000182,
+        "meanRenderMs": 0.289792531120342,
+        "debt": 1.2199707031245453,
         "discardedSimulationMs": 0,
         "physicalDevice": false
       },
       {
         "build": {
-          "version": "e3ddbd4b7163f1fa0f3602ed"
+          "version": "66d4989cc2956f207b347e81"
         },
-        "measuredAt": "2026-10-04T07:43:55.579Z",
+        "measuredAt": "2026-10-04T08:19:10.204Z",
         "scrolling": false,
-        "fps": 60.125240126737005,
-        "p95FrameMs": 26.659999999999854,
-        "meanRenderMs": 0.13078838174268756,
-        "debt": 5.59309895833244,
+        "fps": 60.19221547314578,
+        "p95FrameMs": 24,
+        "meanRenderMs": 0.196182572614171,
+        "debt": 4.719726562499108,
         "discardedSimulationMs": 0,
         "physicalDevice": false
       }
     ],
     "boundary": "Short digital-music host runs; draw submission excludes GPU completion and is not phone FPS acceptance"
   },
-  "ci": "Reported separately in PR #40 checks; local passes do not establish CI success"
+  "ci": "Reported separately in PR #40 checks; local passes do not establish CI success",
+  "idlePauseRegression": {
+    "failedAgainstPreviousWasm": true,
+    "passesNativeAndWorker": true,
+    "policy": "Core excludes Reduced Motion pauses from completed idle wave cycles"
+  },
+  "finalBuildFocusedBrowser": {
+    "passed": 61,
+    "failed": 0,
+    "engines": [
+      "Chromium",
+      "macOS WebKit",
+      "iPhone-profile WebKit on Mac"
+    ],
+    "workers": 1,
+    "retries": 0,
+    "build": {
+      "version": "66d4989cc2956f207b347e81"
+    },
+    "scope": "YouTube, musical motion, Advanced controls, keyboard and Reduced Motion"
+  }
 }

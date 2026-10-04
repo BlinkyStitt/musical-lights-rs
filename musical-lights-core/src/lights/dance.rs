@@ -48,19 +48,27 @@ impl RecentPeak {
 pub struct IdlePeak {
     peak: RecentPeak,
     cycle: Option<u64>,
+    previous_at: Option<f64>,
+    moving_seconds: f64,
 }
 impl IdlePeak {
     pub fn push(&mut self, seconds: f64, reduced: bool) -> bool {
         if !seconds.is_finite() || seconds < 0.0 {
             return false;
         }
-        let cycle = Float::floor(seconds / if reduced { 12.0 } else { 6.0 }) as u64;
-        if self.cycle.is_some_and(|old| cycle < old) {
+        if self.previous_at.is_some_and(|last| seconds < last) {
             return false;
         }
+        let dt = self.previous_at.map_or(0.0, |last| seconds - last);
+        self.previous_at = Some(seconds);
+        if !reduced {
+            self.moving_seconds += dt;
+        }
+        let cycle = Float::floor(self.moving_seconds / 6.0) as u64;
         let completed = self.cycle.is_some_and(|old| cycle > old);
         self.cycle = Some(cycle);
-        self.peak.push(seconds, 0.75, completed && !reduced)
+        self.peak
+            .push(self.moving_seconds, 0.75, completed && !reduced)
     }
 }
 
@@ -230,5 +238,24 @@ mod tests {
         for i in 0..3000 {
             assert!(!reduced.push(f64::from(i) / 50.0, true));
         }
+    }
+
+    #[test]
+    fn reduced_motion_pauses_the_idle_cycle_clock_without_a_resume_draw() {
+        let mut idle = IdlePeak::default();
+        for (at, reduced) in [
+            (0.0, false),
+            (1.0, false),
+            (6.0, true),
+            (6.01, false),
+            (6.08, false),
+            (10.9, false),
+            (11.0, false),
+            (11.02, false),
+        ] {
+            assert!(!idle.push(at, reduced), "at={at}, reduced={reduced}");
+        }
+        assert!(idle.push(11.10, false));
+        assert!(!idle.push(11.11, false));
     }
 }
