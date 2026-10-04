@@ -1,8 +1,8 @@
 # Controls, recognition, and musical motion
 
-Home and Advanced share Listening, Phone motion, Scroll lights, Identify song,
-and Fullscreen in one wrapping top bar. Microphone startup/interruption/failure
-state stays beside Listening; routine healthy state has no repeated status.
+Home and Advanced share Listening, Identify song, Phone motion, Scroll lights,
+Video, and Fullscreen in one control grid. Labels open help on hover, focus, or
+tap; routine microphone state appears there. Recovery notices remain visible.
 Advanced puts source/file selection and digital transport above the visualization.
 Display, Input & calibration, Physics, Diagnostics and Song history start closed
 below it. Home keeps its educational content and omits FPS. `/advanced` remains
@@ -11,14 +11,15 @@ available; `/phone` retains ordinary not-found behavior.
 Music/file selection starts digital playback with Listening off. Generated tones
 wait for Play audio. PCM and channel selection are preserved. Replacement first
 stops the prior owner and releases buffers; route exit releases the selected file.
-Fullscreen can start the selected microphone and preserves digital playback. Its
-same bar respects safe areas, with one song footer and recovery notices above it.
+Fullscreen can start the selected microphone and preserves digital playback.
+It reserves space for the bottom controls, one song footer, and recovery notices.
+The video sits above the scene in portrait and beside it in landscape.
 Reset actions retain their separate scopes and physics durations use milliseconds.
 
 ## Shared embedded implementation
 
 Reusable calculations live in `musical-lights-core`, with fixed storage and
-`no_std` support: `audio::tempo`, `lights::musical_motion`, and
+`no_std` support: `audio::tempo`, `lights::dance`, `lights::musical_motion`, and
 `lights::bar_motion`. Applications adapt those calculations to hardware or
 Rapier/rendering. The idle travelling wave also lives in the core; its browser
 worker calls a small WASM adapter without creating an audio processor or requesting
@@ -26,18 +27,28 @@ a microphone. The core uses no Web APIs, engine types, or new DSP dependency.
 The new tempo stream leaves loudness/filtered-target transports unchanged.
 
 Firmware can feed each existing 2 ms novelty frame to `TempoEstimator::push`,
-read `estimate()` without allocation, and pass its BPM to `BalancedScroll::advance`
-with the hardware update duration. `idle_wave` takes column count and elapsed
+read `estimate()` without allocation, and pass its BPM to `DanceMotion::advance`
+with the hardware update duration. Feed genuine attacks and unscaled loudness to
+`RecentPeak`; call `DanceMotion::choose` only for an accepted crest. Firmware can
+instead supply its own random draw through `choose_draw`. `IdlePeak` owns separate
+synthetic history. `idle_wave` takes column count and elapsed
 seconds; the bar controller owns fixed arrays. Browser source acquisition,
 permissions, song uploads, Rapier bodies, shaders and light objects stay in their
 platform adapters. The hardware core has no dependency on those packages.
 
 Scrolling follows the smoothed tempo at an average of two columns per beat:
-four columns per second at 120 BPM, twice the initial PR speed. Gentle balanced
-reversals every two beats limit the excursion to two columns, and
-position stays continuous through tempo changes. Reduced
+four columns per second at 120 BPM, twice the initial PR speed. Direction changes
+require a qualifying new recent loud attack. One draw gives 90% unchanged, 5%
+horizontal reversal, and 5% floor/ceiling change at the default 10% total chance.
+There is no timed reversal. Idle motion can draw after a completed wave cycle,
+using separate crest history. The core excludes Reduced Motion pauses from that
+cycle clock. Position stays continuous through tempo changes. Reduced
 Motion disables automatic travel. The rate is defined in the shared core, so
 embedded displays and the browser adapter use the same motion.
+
+See [YouTube and dance controls](../youtube-dance.md) for the current layout,
+flight budget, camera controls, saved preferences, and release evidence. The
+older validation records below describe their recorded revisions.
 
 The estimator aggregates existing 2 ms spectral novelty into a 50 Hz envelope.
 It retains eight seconds (400 f32 values), evaluates after four seconds every

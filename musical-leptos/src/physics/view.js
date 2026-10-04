@@ -50,6 +50,10 @@ export class PhysicsView {
     this.sequence = 0;
     this.input = new Float32Array(38);
     this.tempo = 120;
+    this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
+    this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
+    this.settings = this.card.preferences ?? { chance: 10, flight: 30, cameraMotion: true, cameraAngle: 0 };
+    this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.lastAccentAt = -Infinity;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(72);
     this.timing = { snapshots: [], resizes: [] };
@@ -102,7 +106,7 @@ export class PhysicsView {
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
     this.measure();
-    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden });
+    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics, danceOptions: this.danceOptions() });
     this.graph.physics = this;
     this.animate = frameTime => {
       this.request = null;
@@ -114,14 +118,15 @@ export class PhysicsView {
       this.onFrame(now, false);
       if (this.idle && this.preview && !this.previewPending && now - (this.previewAt ?? -Infinity) >= 1000 / 60) {
         this.previewAt = now; this.previewPending = true;
-        this.preview.postMessage({ type: 'pulse', time: now / 1000, reduced: this.reduced.matches });
+        this.preview.postMessage({ type: 'pulse', time: now / 1000, reduced: this.reduced.matches, direction: this.horizontalDirection ?? 1 });
       }
       this.input[31] = this.reduced.matches ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
-          sequence: ++this.sequence, input: this.input, tempo: this.tempo });
+          sequence: ++this.sequence, input: this.input, tempo: this.tempo, accent: this.accentSerial });
       }
+      this.updateCamera(now);
       if (this.current) this.draw(now);
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
@@ -138,8 +143,25 @@ export class PhysicsView {
     };
     this.previewLevels = new Float32Array(24); this.previewEdges = new Float32Array(24);
     this.idle = !this.card.dataset.audioSession || this.card.dataset.audioState === 'stopped';
-    this.listen(this.card, 'audio-tempo', ({ detail }) => { if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; } });
+    const camera = this.card.querySelector('.camera-rotation');
+    this.listen(camera, 'pointerdown', () => { this.cameraDrag = true; });
+    this.listen(window, 'pointerup', () => { this.cameraDrag = false; });
+    this.listen(window, 'pointercancel', () => { this.cameraDrag = false; });
+    this.listen(camera, 'input', () => { this.cameraBase = Number(camera.value); this.settings.cameraAngle = this.cameraBase; this.setCamera(this.cameraBase); this.card.presentation?.save(); });
+    this.listen(this.card, 'camera-reset', () => { this.cameraBase = 0; this.setCamera(0); });
+    this.listen(this.card, 'display-settings', ({ detail }) => {
+      this.settings = detail;
+      if (detail.cameraAngle !== this.cameraBase) this.cameraBase = detail.cameraAngle;
+      if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
+    });
+    this.listen(this.card, 'audio-tempo', ({ detail }) => {
+      if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; }
+      const difference = (detail.accentSequence ?? 0) - this.audioAccent;
+      if (difference > 0) { this.accentSerial += difference; this.lastAccentAt = performance.now(); }
+      this.audioAccent = detail.accentSequence ?? 0;
+    });
     this.listen(this.card, 'audio-session', ({ detail }) => {
+      if (detail.state === 'starting') this.audioAccent = 0;
       this.idle = detail.state === 'stopped';
       this.card.dataset.preview = String(this.idle);
       if (this.idle) { this.tempo = 120; this.tempoConfidence = 0; this.startPreview(); } else this.stopPreview();
@@ -151,12 +173,15 @@ export class PhysicsView {
     if (this.preview || this.closed) return;
     this.card.dataset.preview = 'true';
     this.preview = new Worker(new URL('./demo-worker.js', import.meta.url), { type: 'module', name: 'silent-sine-preview' });
-    this.previewPending = true;
+    this.previewPending = true; this.idleAccent = 0;
     this.preview.postMessage({ type: 'init' });
     this.preview.onmessage = ({ data }) => {
       this.previewPending = false;
       if (data.type === 'error') { this.stopPreview(); this.notice.show(`Silent preview unavailable: ${data.message}`); return; }
       if (!this.idle || this.closed || data.type !== 'frame') return;
+      const difference = (data.accentSequence ?? 0) - this.idleAccent;
+      if (difference > 0) { this.accentSerial += difference; this.lastAccentAt = performance.now(); }
+      this.idleAccent = data.accentSequence ?? 0;
       for (let i = 0; i < 24; i++) {
         this.previewLevels[i] = data.state[4 + i * 4];
         const elapsed = data.state[0] - data.state[5 + i * 4];
@@ -224,24 +249,39 @@ export class PhysicsView {
     this.positionMeters(this.renderedPhase ?? 0);
   }
   setCamera(degrees) {
-    if (degrees !== this.rotation) this.report?.invalidate('Camera changed during test');
+    if (degrees !== this.rotation && !this.automaticCamera) this.report?.invalidate('Camera changed during test');
     this.rotation = degrees;
     const angle = degrees * Math.PI / 180;
+    if (!Number.isFinite(this.visibleHeight)) return;
     this.camera.position.set(this.width / 2 + Math.sin(angle) * 4, this.visibleHeight / 2, Math.cos(angle) * 4);
     this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0);
+  }
+  danceOptions() { return { chance: this.settings.chance / 100, flight: this.settings.flight / 100, seed: this.seed }; }
+  updateCamera(now) {
+    const moving = this.settings.cameraMotion && !this.reduced.matches && !this.cameraDrag;
+    const age = Number.isFinite(this.lastAccentAt) ? Math.max(0, now - this.lastAccentAt) : 0;
+    const kick = moving ? 1.5 * Math.exp(-age / 250) * Math.sin(age / 35) : 0;
+    const yaw = Math.max(-40, Math.min(40, this.cameraBase + (moving ? 4 * Math.sin(now / 3600) : 0) + kick));
+    this.automaticCamera = true; this.setCamera(yaw); this.automaticCamera = false;
+    if (moving) { this.camera.position.y += Math.sin(now / 4400) * Math.tan(2 * Math.PI / 180) * 4; this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0); }
+    if (!this.cameraDrag && now - (this.sliderAt ?? -Infinity) >= 50) {
+      this.sliderAt = now; this.card.querySelector('.camera-rotation').value = yaw;
+      this.card.querySelector('.camera-angle').textContent = yaw.toFixed(1) + '°';
+    }
   }
   receive(data) {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 7 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
-      this.layout = data.layout; this.config = data.config;
+      if (data.layout[18] !== 8 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
       this.measure();
       if (this.card.dataset.mode === 'advanced') this.report = new PhoneReport(this);
       this.requestSnapshot();
     } else if (data.type === 'snapshot') {
+      this.horizontalDirection = data.horizontalDirection; this.ceilingBars = Boolean(data.ceilingBars); this.card.dataset.barBase = this.ceilingBars ? 'ceiling' : 'floor';
       this.pigments = data.pigments;
       if (this.previous) this.buffers.push(this.previous.buffer);
       this.previous = this.current;
@@ -258,6 +298,7 @@ export class PhysicsView {
       this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
       this.config = data.config;
+      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config); this.card.presentation.save(); }
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
       this.previous = this.current = null; this.makeMeshes();
       this.report?.receive(data);
@@ -292,17 +333,18 @@ export class PhysicsView {
     // Avoid dense subdivisions across all six faces of each long bar.
     const geometry = new RoundedBoxGeometry(pitch - gap, postHeight, this.config[5], 1, radius);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
+    this.barRoof = { value: this.height };
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.defines = { PIXEL_RATIO: Math.min(devicePixelRatio, 2).toFixed(1) };
     material.onBeforeCompile = shader => {
-      Object.assign(shader.uniforms, { halfWidth: { value: (pitch - gap) / 2 }, halfDepth: { value: this.config[5] / 2 }, radius: { value: radius }, postHeight: { value: postHeight } });
+      Object.assign(shader.uniforms, { enclosureHeight: this.barRoof, halfWidth: { value: (pitch - gap) / 2 }, halfDepth: { value: this.config[5] / 2 }, radius: { value: radius }, postHeight: { value: postHeight } });
       shader.vertexShader = 'attribute float edge; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
-      shader.fragmentShader = 'uniform float halfWidth; uniform float halfDepth; uniform float radius; uniform float postHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'uniform float enclosureHeight; uniform float halfWidth; uniform float halfDepth; uniform float radius; uniform float postHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-          if (world.y < 0.0 || world.x < 0.0 || world.x > 1.2) discard;
+          if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
           vec2 q = vec2(abs(local.x) - (halfWidth - radius), local.y - (postHeight * 0.5 - radius));
-          float distance = min(radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)), world.y);
+          float distance = min(radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)), min(world.y, enclosureHeight - world.y));
           float pixel = PIXEL_RATIO * fwidth(distance);
           float front = step(halfDepth - radius - 0.00001, abs(local.z));
           float outline = (1.0 - smoothstep(0.5 * pixel, 1.5 * pixel, distance)) * front;
@@ -331,6 +373,7 @@ export class PhysicsView {
     this.fitEnclosure();
     this.ceiling.position.y = current[this.layout[17]];
     const height = current[this.layout[17]], depth = this.config[5];
+    this.barRoof.value = height;
     const [back, floor, left, right] = this.enclosure.children;
     back.position.set(this.width / 2, height / 2, -depth / 2); back.scale.set(this.width, height, 1);
     floor.rotation.x = -Math.PI / 2; floor.position.set(this.width / 2, 0, 0); floor.scale.set(this.width, depth, 1);
@@ -365,9 +408,9 @@ export class PhysicsView {
     for (let i = 0; i < count; i++) {
       const top = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
       const column = (i + phase) % count;
-      this.object.quaternion.identity(); this.object.scale.setScalar(1);
+      this.object.quaternion.identity(); if (this.ceilingBars) this.object.quaternion.set(1, 0, 0, 0); this.object.scale.setScalar(1);
       for (let copy = 0; copy < 3; copy++) {
-        this.object.position.set((column + 0.5 + (copy === 1 ? -count : copy === 2 ? count : 0)) * pitch, top - postHeight / 2, 0);
+        this.object.position.set((column + 0.5 + (copy === 1 ? -count : copy === 2 ? count : 0)) * pitch, this.ceilingBars ? height - top + postHeight / 2 : top - postHeight / 2, 0);
         this.object.updateMatrix(); this.bars.setMatrixAt(i + copy * count, this.object.matrix);
       }
     }
@@ -376,18 +419,24 @@ export class PhysicsView {
       const glow = this.meshEdges[i];
       if (glow < .05) continue;
       const light = this.attackLights[used++];
-      light.position.set(((i + phase) % count + .5) * pitch, current[barOffset + i] + .025, depth / 2 + .025);
+      light.position.set(((i + phase) % count + .5) * pitch, (this.ceilingBars ? height - current[barOffset + i] - .025 : current[barOffset + i] + .025), depth / 2 + .025);
       light.intensity = .035 * glow;
     }
     while (used < this.attackLights.length) this.attackLights[used++].intensity = 0;
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
+    this.renderedCeilingBars = this.ceilingBars; this.renderedEnclosureHeight = height;
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);
   }
+  renderedHeight(band) {
+    const center = this.bars.instanceMatrix.array[band * 16 + 13];
+    return this.renderedCeilingBars ? this.renderedEnclosureHeight + this.layout[6] / 2 - center : center + this.layout[6] / 2;
+  }
   positionMeters(phase) {
     const count = this.meters.length;
+    this.graph.classList.toggle('ceiling-bars', Boolean(this.ceilingBars));
     const inset = Math.max(0, (1 - this.width / (this.visibleHeight * this.aspect)) * 50);
     if (this.meterPhase === phase && this.meterInset === inset) return;
     this.meterPhase = phase; this.meterInset = inset;

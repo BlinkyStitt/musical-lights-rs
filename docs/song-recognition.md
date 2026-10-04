@@ -10,9 +10,12 @@ uses recognition or requests the microphone.
 The SVG ring beside the switch shows waiting, capture and upload phases, with
 an accessible phase description. It updates discretely once per second, has no
 spinning animation, and does not announce a live countdown. Reduced Motion also
-stops title scrolling. Successful recognition appears once above the normal
-visualization and once in the single fullscreen footer, with no duplicate
-success message. Errors and no-match notices stay beside Identify song.
+stops title scrolling and wraps the complete artist and song name. Successful
+recognition appears as a single “Artist — Song” line below the normal visualization.
+In fullscreen, the same line travels continuously right to left at 45 pixels per
+second, even for short names, like the hat's text display. There are no recognition
+captions, duplicate success blocks, or exit-hint banner. Errors and no-match
+notices stay beside Identify song; microphone recovery stays above the footer.
 
 Switching identification off, stopping the microphone, changing source, hiding
 the page, or leaving the route cancels pending capture/upload. Canceled captures
@@ -92,6 +95,16 @@ The pinned Linux WebKit build omits MediaRecorder, so it verifies the unavailabl
 state and uses the controlled recorder for UI tests. Native encoding is checked
 in Chromium and macOS WebKit. These checks do not establish real AudD recognition
 quality or physical iPhone behavior.
+
+The fullscreen ticker follow-up passes 51 focused Chromium, macOS WebKit and
+iPhone-profile WebKit checks, 14 offline recognition checks, and the Leptos
+build/test/Clippy checks. Ticker checks cover short and long names, constant
+leftward travel, looping, light/dark themes, rotation and Reduced Motion.
+Recognition responses are mocked; physical-phone acceptance remains pending.
+The follow-up also waits for simulated scrolling to settle before checking its
+stopped position, and keeps the injected expensive-tick fixture running until
+snapshots are actually published. Single-tick yield, zero discarded time, debt
+and fullscreen snapshot-age limits remain enforced.
 
 ## Separate live check
 

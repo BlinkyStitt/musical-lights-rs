@@ -17,6 +17,8 @@ function stereoWave() {
   return bytes;
 }
 
+test.describe('Home touch input', () => {
+test.use({ hasTouch: true });
 test('Home has silent sine motion without audio access, and switches support keyboard and touch', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => { window.microphoneRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.microphoneRequests++; throw new Error('Unexpected capture'); }; });
@@ -27,18 +29,19 @@ test('Home has silent sine motion without audio access, and switches support key
   const initial = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)));
   await expect.poll(() => page.evaluate(initial => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)).some((value, i) => Math.abs(value - initial[i]) > .01), initial)).toBe(true);
   expect(await page.evaluate(() => microphoneRequests)).toBe(0);
-  await expect(page.locator('.display-controls, .calibration-controls, .physics-controls, .diagnostics-controls, .diagnostic-fps')).toHaveCount(0);
+  await expect(page.locator('.calibration-controls, .physics-controls, .diagnostics-controls, .diagnostic-fps')).toHaveCount(0);
   const scroll = page.getByRole('checkbox', { name: 'Scroll lights', exact: true });
   await scroll.focus(); await page.keyboard.press('Space'); await expect(scroll).not.toBeChecked();
   await expect(scroll).toBeFocused(); expect(await scroll.evaluate(n => getComputedStyle(n).outlineStyle)).toBe('solid');
   expect(await scroll.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
-  await scroll.locator('..').click(); await expect(scroll).toBeChecked();
+  await scroll.tap(); await expect(scroll).toBeChecked();
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect.poll(() => page.evaluate(() => microphoneRequests)).toBe(1);
   await expect(page.locator('.audio-error')).toContainText('Unexpected capture');
   await expect(page.locator('.diagnostic-fps, .frame-rate')).toHaveCount(0);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   expect(errors).toEqual([]);
+});
 });
 
 test('idle-to-listening transition clears preview meter values for microphone silence', async ({ page }) => {
@@ -52,15 +55,20 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
 });
 
-test('diagnostic plot separates interpolated render geometry and its clock from analysis and physics', async ({ page }) => {
+for (const barBase of ['floor', 'ceiling']) {
+test(`diagnostic plot separates ${barBase} render geometry and its clock from analysis and physics`, async ({ page }) => {
   await advanced(page);
-  const { sample, moves, unverified } = await page.evaluate(() => {
+  const { sample, moves, unverified } = await page.evaluate(barBase => {
     const card = document.querySelector('.audio-card'), review = card.review, view = document.querySelector('#dancinglights').physics;
     review.sessionId = 'clock-regression'; review.samples = [];
     const receivedAt = performance.timeOrigin + performance.now();
     view.renderedAt = receivedAt - 25;
     view.current[view.layout[9] + 8] = .7 * view.height;
-    view.bars.instanceMatrix.array[8 * 16 + 13] = .2 * view.height - view.layout[6] / 2;
+    view.renderedCeilingBars = barBase === 'ceiling'; view.renderedEnclosureHeight = view.height;
+    // A newer physics message may change the base before the next rendered frame.
+    view.ceilingBars = !view.renderedCeilingBars;
+    view.bars.instanceMatrix.array[8 * 16 + 13] = view.renderedCeilingBars
+      ? .8 * view.height + view.layout[6] / 2 : .2 * view.height - view.layout[6] / 2;
     const trace = new Float64Array(511);
     trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
@@ -70,14 +78,40 @@ test('diagnostic plot separates interpolated render geometry and its clock from 
     const sample = review.samples[0];
     card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
-  });
-  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
+  }, barBase);
+  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
   expect(sample.collider).toBeCloseTo(.7, 5); expect(sample.rendered).toBeCloseTo(.2, 5);
   expect(moves).toHaveLength(3);
   expect(moves[0][0]).toBeCloseTo(1.1 / 1.225 * 900, 5);
   expect(moves[1][0]).toBeCloseTo(moves[0][0], 5);
   expect(moves[2][0]).toBe(900); expect(moves[2][1]).toBeCloseTo(200, 3);
   expect(unverified).toMatchObject({ renderedTime: null, renderedTimeConfidence: 'unverified' });
+  await page.locator('.diagnostics-controls > summary').click();
+  const download = page.waitForEvent('download'); await page.locator('.review-export').click();
+  const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
+  expect(exported.diagnosticSamples[0].barBase).toBe(barBase);
+  expect(exported.diagnosticSamples[0].rendered).toBeCloseTo(.2, 5);
+});
+
+}
+
+test('saved Physics settings restore on reload while factory reset retains factory values', async ({ page }) => {
+  await advanced(page); await page.locator('.physics-controls > summary').click();
+  await page.locator('[data-config="2"]').fill('16');
+  await page.locator('[data-config="6"]').fill('80');
+  await page.getByRole('button', { name: 'Apply settings and reset', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.config[2])).toBe(16);
+  await page.reload(); await physicsReady(page); await page.locator('.physics-controls > summary').click();
+  await expect(page.locator('[data-config="2"]')).toHaveValue('16');
+  await expect(page.locator('[data-config="6"]')).toHaveValue('80');
+  const height = await page.evaluate(() => document.querySelector('#dancinglights').physics.height);
+  await page.getByRole('button', { name: 'Restore defaults and reset', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.config[2])).toBe(8);
+  await expect(page.locator('[data-config="6"]')).toHaveValue('40');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.height)).toBe(height);
+  await page.reload(); await physicsReady(page); await page.locator('.physics-controls > summary').click();
+  await expect(page.locator('[data-config="2"]')).toHaveValue('8');
+  await expect(page.locator('[data-config="6"]')).toHaveValue('40');
 });
 
 test('Display and Input resets are scoped; milliseconds and physics defaults preserve enclosure size', async ({ page }) => {
@@ -93,7 +127,7 @@ test('Display and Input resets are scoped; milliseconds and physics defaults pre
   const view = await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return { tick: v.current[2], height: v.height, radius: v.current[10] }; });
   await page.getByRole('button', { name: 'Reset display', exact: true }).click();
   await expect(page.locator('.scroll-lights')).toBeChecked();
-  await expect(page.locator('.camera-rotation')).toHaveValue('0');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(0);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(view.tick);
   await page.locator('.calibration-controls input[type=number]').first().fill('2');
   await page.locator('.calibration-controls input[type=number]').last().fill('86');

@@ -61,20 +61,19 @@ of the release acceleration and half the terminal speed. Reaching the floor
 ends velocity and acceleration immediately, like the hat's falling envelope.
 The shared loudness measurements, gain, filtering and 180 ms flash are unchanged.
 
-Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess upward release velocity is dissipated to limit extra hops to `min(0.08 * enclosure_height, 0.05 m)`, halved for Reduced Motion. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle top is 3 mm above the floor.
+Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess outward release velocity is dissipated. The default flight budget is 30% of available enclosure space after maximum ball clearance; Reduced Motion halves it and caps it at 2.5 cm. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle bar end sits 3 mm inside its active floor or ceiling base.
 
 Large attacks from rest must arrive within 1% of a stable target within 50 ms
 of physics receipt. Stable corrections up to 1% must settle within 150 ms.
 Retarget reversals include braking and are tested separately.
 
-The full pattern scrolls in both directions on a two-second sinusoidal cycle
-at 120 BPM, reversing gently every second. Average absolute travel is four
-columns per second (two columns per beat), scaling with the smoothed tempo;
-peak speed is π/2 times that rate. Equal travel left and right removes permanent
-conveyor bias. The shorter cycle limits the excursion to two columns
-instead of increasing the distance balls are carried toward a wall. A tempo-scaled
-enabled-time clock preserves position through tempo changes and when stopped,
-with a 120 ms smoothstep start/stop transition.
+The full pattern travels at four columns per second at 120 BPM (two columns
+per beat), scaling with smoothed tempo. A qualifying new recent loud attack
+permits one probability draw. At the default chance, 90% leave direction
+unchanged, 5% reverse horizontal travel, and 5% change the floor/ceiling base.
+Time alone never reverses measured-audio direction. Velocity eases with a
+120 ms time constant; stopping uses a 120 ms smoothstep. Position stays
+continuous through tempo changes and stops.
 Disabling scrolling and Reduced Motion stop in place; enabling scrolling resumes there.
 Stopping audio restores the independent idle wave, which obeys the same Scroll
 lights switch. Hidden pages pause simulation.
@@ -84,7 +83,7 @@ the solver and re-enabled before they can contact a ball. Rendering clips
 copies to the enclosure. The 24 accessible meters keep
 source identity while their pointer regions and keyboard focus follow the bars.
 
-The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m below its top. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m beyond its active floor or ceiling base. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
@@ -219,23 +218,35 @@ reset. Phone acceptance also checks snapshot age and displayed tick progress;
 a running worker with a frozen renderer cannot pass on frame rate alone.
 
 **Scroll lights** now continuously translates the collider/visual source
-columns. At 120 BPM it averages four columns per second of absolute travel (two
-columns per beat), with balanced smooth reversals every second of
-tempo-scaled enabled time.
+columns. At 120 BPM it travels four columns per second (two columns per beat).
+Only a genuine attack that sets a new decaying recent loud peak can draw for a
+direction change. The default draw gives 90% unchanged, 5% horizontal reversal,
+and 5% floor/ceiling change. A saved setting changes the total chance while
+keeping equal shares for both axes. No timer changes measured-audio direction.
 Tempo changes integrate into the running phase. Switching scrolling off eases
 to a stop in place; Reduced Motion disables automatic travel. Source colors,
 contacts, accessible labels and audio data keep their source identity.
 
 The separate tempo setter leaves the 38-value held input and 99-value audio
-transport unchanged. Recording optionally includes tick-stamped `tempoEvents`;
-replay applies them before stepping. Historical reports without those events
-use 120 BPM and still require their matching historical engine.
+transport unchanged. New reports include the random seed, starting accent
+ordinal and tempo, dance settings, and tick-stamped input events with their
+tempo and accent in worker application order. Phone report v4 replay applies
+each input and its cue together before stepping, including inputs at the same
+tick. Older report formats require their historical replay tool. Protocol 8
+requires its matching engine.
 
-The fixed-memory estimator, scrolling oscillator, quadratic sphere drag,
+The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
 contact-pigment history, and quintic bar motion are hardware-neutral
 `musical-lights-core` modules, checked with `no_std` and no allocator. Rapier,
 Web APIs, recording ownership and Three.js shading remain application adapters.
 See [implementation and evidence](musical-motion-results/README.md).
+
+Normal flight reserves 30% of available enclosure space after maximum ball
+clearance. The slider allows 0–50%. Reduced Motion halves the flight budget and
+caps it at 2.5 cm. Existing support-release limiting uses the shared core's
+`sqrt(2gh)` release speed. A floor/ceiling change retracts the bars, switches
+colliders outside the room, then regrows them over 500 ms. Gravity remains
+measured/default gravity; ceiling bars can leave balls resting on the floor.
 
 One animation loop interpolates snapshots and updates the accessible audio
 meters. ResizeObserver caches layout measurements. The renderer caps pixel

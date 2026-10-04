@@ -29,6 +29,7 @@ function beginSession(context, card, source) {
         const { publish, close, ...detail } = session;
         card.dispatchEvent(new CustomEvent('audio-session', { detail: { ...detail, reason } }));
     };
+    if (source !== 'microphone') card.presentation?.player?.pauseVideo();
     session.publish('starting', 'start');
     let stateBeforeInterruption = 'starting';
     const stateChanged = () => {
@@ -120,7 +121,9 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
             card.dispatchEvent(new CustomEvent('tone-trace', { detail: {
                 ...event.data, receivedAt: performance.timeOrigin + performance.now(), receivedAudioTime: context.currentTime,
             } }));
-        if (event.data.type === 'frame' && isCurrentProcessorMessage(node, event.data)) card.dispatchEvent(new CustomEvent('audio-tempo', { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence } }));
+        if (event.data.type === 'frame' && isCurrentProcessorMessage(node, event.data)) {
+            card.dispatchEvent(new CustomEvent('audio-tempo', { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence, accentSequence: event.data.accentSequence } }));
+        }
         if (event.data.type === 'error') session.publish('interrupted', event.data.message);
     };
     node.port.addEventListener('message', trace);

@@ -218,9 +218,67 @@ test('song title fits a phone, appears in fullscreen, and respects Reduced Motio
   await expect.poll(() => page.evaluate(() => {
     const status = document.querySelector('.recognition-ring').getBoundingClientRect();
     const strip = document.querySelector('.recognized-song').getBoundingClientRect();
-    return status.bottom <= strip.top;
+    return strip.bottom <= status.top;
   })).toBe(true);
 });
+
+for (const { result, routePath, colorScheme, name } of [
+  { result: { artist: 'Daft Punk', title: 'One More Time' }, routePath: '/', colorScheme: 'dark', name: 'short' },
+  { result: song, routePath: '/advanced', colorScheme: 'light', name: 'long' },
+]) {
+  test(`fullscreen ${name} song is a single continuous artist-title ticker without captions or exit hints`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.emulateMedia({ colorScheme, reducedMotion: 'no-preference' });
+    // Exercise page fullscreen and rotation without resizing a native OS window.
+    await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+    await setup(page, { result, routePath });
+    const text = `${result.artist} — ${result.title}`;
+    await page.getByRole('checkbox', { name: 'Identify song', exact: true }).check();
+    await expect(page.locator('.recognized-song')).toHaveText(text);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'song-scroll');
+    await expect(page.locator('.song-title')).toHaveCSS('animation-direction', 'normal');
+    await expect(page.locator('.song-title')).toHaveCount(1);
+    await expect(page.locator('.song-caption, .fullscreen-hint')).toHaveCount(0);
+    await expect(page.getByText(/^(Last recognized|Recognized|Click Exit fullscreen)$/)).toHaveCount(0);
+    await expect(page.locator('.recognition-status')).toBeEmpty();
+
+    for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }]) {
+      await page.setViewportSize(viewport);
+      // Wait for ResizeObserver to update the measured travel after rotation.
+      await expect.poll(() => page.locator('.song-title').evaluate(title => {
+        const entry = parseFloat(getComputedStyle(title).getPropertyValue('--song-entry'));
+        return entry === title.parentElement.clientWidth;
+      })).toBe(true);
+      const travel = await page.locator('.song-title').evaluate(title => {
+        const animation = title.getAnimations()[0];
+        animation.pause();
+        const duration = animation.effect.getTiming().duration;
+        const xAt = time => {
+          animation.currentTime = time;
+          return new DOMMatrixReadOnly(getComputedStyle(title).transform).m41;
+        };
+        const start = xAt(0), oneSecond = xAt(1000), twoSeconds = xAt(2000), nextLap = xAt(duration + 1000);
+        animation.currentTime = 0;
+        return { start, oneSecond, twoSeconds, nextLap };
+      });
+      expect(travel.start).toBeCloseTo(0, 1);
+      expect(travel.oneSecond).toBeCloseTo(-45, 1);
+      expect(travel.twoSeconds).toBeCloseTo(-90, 1);
+      expect(travel.nextLap).toBeCloseTo(travel.oneSecond, 1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
+      await page.screenshot({ path: testInfo.outputPath(`fullscreen-${name}-ticker-${viewport.width}.png`) });
+    }
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
+    await expect(page.locator('.recognized-song')).toHaveText(text);
+    await expect(page.locator('.song-title')).toBeInViewport({ ratio: 1 });
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await expect(page.locator('.recognized-song')).toHaveText(text);
+  });
+}
 
 test('canceling an upload ignores late recognition and leaves listening active', async ({ page }) => {
   await setup(page);
@@ -335,10 +393,10 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
       const status = document.querySelector('.recognition-ring').getBoundingClientRect();
         const strip = document.querySelector('.recognized-song').getBoundingClientRect();
       const title = document.querySelector('.song-title').getBoundingClientRect();
-      return { statusAboveSong: status.bottom <= strip.top,
+      return { statusBelowSong: strip.bottom <= status.top,
         titleInsideStrip: title.top >= strip.top && title.bottom <= strip.bottom,
         titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
-    })).toEqual({ statusAboveSong: true, titleInsideStrip: true, titleInsideViewport: true });
+    })).toEqual({ statusBelowSong: true, titleInsideStrip: true, titleInsideViewport: true });
     for (const selector of ['.recognition-ring', '.recognized-song']) {
       await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
     }
@@ -351,7 +409,7 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
   await page.screenshot({ path: testInfo.outputPath('fullscreen-wrapped-song.png') });
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect(page.locator('.recognized-song')).toBeVisible();
-  expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
+  expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().top >= document.querySelector('.spectrum-panel').getBoundingClientRect().bottom)).toBe(true);
 });
 
 for (const reducedMotion of ['no-preference', 'reduce']) {

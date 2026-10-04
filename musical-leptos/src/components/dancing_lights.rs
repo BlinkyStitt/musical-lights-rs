@@ -429,7 +429,7 @@ pub fn DancingLights(
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
-                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; click Exit fullscreen to return" }
+                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show video and lights" }
                         on:click=move |_| {
                             if !fullscreen.get_untracked() && input_source.get_untracked() == "microphone" { start(); }
                             screen.with_value(|session| {
@@ -455,8 +455,9 @@ pub fn DancingLights(
                     <button class="review-stop" disabled=move || !starting.get() && !playing.get() on:click=move |_| stop()>"Stop audio"</button>
                 </div>
             </Show>
+            <div class="visual-content">
+            <section class="video-panel" aria-label="YouTube video" hidden></section>
             <div class="spectrum-panel">
-                <p class="fullscreen-hint">"Click Exit fullscreen"</p>
                 <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
                     hidden=move || selected_band.get().is_none()
                     style=move || selected_band.get().map(|index| {
@@ -499,6 +500,11 @@ pub fn DancingLights(
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
+            </div>
+            <div class="camera-controls">
+                <label class="control-row">"Camera angle (degrees)"<input class="camera-rotation" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
+                <output class="camera-angle">"0°"</output>
+            </div>
             <div class="display-note">
                 <p class="display-status">
                     <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>
@@ -508,13 +514,15 @@ pub fn DancingLights(
             <Show when=move || !advanced>
                 <p class="reduced-motion-note">"Reduced Motion disables automatic scrolling."</p>
             </Show>
-            <Show when=move || advanced>
                 <details class="display-controls settings-section">
                     <summary>"Display"</summary>
                     <p class="reduced-motion-note">"Reduced Motion disables automatic scrolling."</p>
-                    <label class="control-row">"Camera angle (degrees)"<input class="camera-rotation" type="range" min="-40" max="40" value="0"/></label>
+                    <label class="control-row">"Direction change chance (%)"<input class="direction-chance" type="number" min="0" max="100" step="1" value="10"/></label>
+                    <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
+                    <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
+            <Show when=move || advanced>
             <details class="calibration-controls settings-section">
                 <summary>"Input & calibration"</summary>
                 <p class="calibration-status">{move || capture_status.get()}</p>

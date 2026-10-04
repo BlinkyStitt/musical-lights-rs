@@ -29,7 +29,7 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     });
     await page.goto(`${origin}${path}`); await physicsReady(page);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
-    const entry = action === 'Fullscreen' ? page.getByRole('button', { name: 'Fullscreen', exact: true }) : listening(page).locator('..');
+    const entry = action === 'Fullscreen' ? page.getByRole('button', { name: 'Fullscreen', exact: true }) : listening(page);
     if (info.project.use.hasTouch) await entry.tap(); else await entry.click();
     await expect.poll(() => page.evaluate(() => ({
       checked: document.querySelector('.listening-toggle').checked,

@@ -575,3 +575,19 @@ not run locally.
 
 See [the mock audit](mock-audit.md) for corrected fixture contracts, native-browser
 permission checks, and the remaining physical-device verification boundaries.
+
+### YouTube and acoustic-peak dance (2026-10-04)
+
+[The controls and embedded implementation](youtube-dance.md) describes the shared
+control grid, help labels, reserved fullscreen regions, YouTube ownership, camera
+motion, flight budget, and chance-based direction changes. Reusable policy lives
+in the allocation-free `no_std` core, which also compiles for Cortex-M0 and
+Cortex-M4 targets. Browser and physics adapters retain their own platform work.
+
+Use [PR #40](https://github.com/BlinkyStitt/musical-lights-rs/pull/40) and its CI
+runs for shared delivery evidence.
+
+Physical iPhone playback and capture, human listening, and five-minute
+physical-phone FPS acceptance remain pending. Desktop WebKit and its iPhone
+profile cannot establish those results. Routine recognition uses mocks; this
+change makes no live AudD request.

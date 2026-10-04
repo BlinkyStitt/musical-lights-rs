@@ -20,8 +20,8 @@ export default defineConfig({
         '--no-proxy-server',
       ] },
     } },
-    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/advanced.spec.mjs', '**/musical-motion.spec.mjs', '**/capture-startup.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs', '**/recognition.spec.mjs'], use: { browserName: 'webkit' } },
-    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/permissions.spec.mjs', '**/capture-startup.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
+    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/advanced.spec.mjs', '**/musical-motion.spec.mjs', '**/capture-startup.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs', '**/recognition.spec.mjs', '**/youtube.spec.mjs'], use: { browserName: 'webkit' } },
+    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/permissions.spec.mjs', '**/capture-startup.spec.mjs', '**/youtube.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
   ],
   webServer: {
     command: 'node server.mjs',

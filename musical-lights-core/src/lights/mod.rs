@@ -24,6 +24,7 @@ pub use matrix::{Layout, SimpleXY, SnakeXY};
 mod rainbow_frame;
 pub use rainbow_frame::fill_rainbow_frame;
 
+pub mod dance;
 pub mod musical_motion;
 
 pub mod bar_motion;

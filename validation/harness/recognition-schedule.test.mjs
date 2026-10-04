@@ -20,7 +20,7 @@ function fixture(t, { status = 200, result = { artist: 'Known artist', title: 'K
   const disk = new Map(), storage = { getItem: key => disk.get(key), setItem: (key, value) => disk.set(key, value), length: 0 };
   const control = Object.assign(Object.create(SongRecognition.prototype), {
     enabled: true, playing: true, input: { stream: {} }, closed: false, job: null,
-    button: {}, status: { textContent: '' },
+    button: {}, status: { textContent: '', dataset: {} },
     ring: { dataset: {}, style: { setProperty() {} }, setAttribute() {} }, progress: {},
     cooldown: new RecognitionCooldown(storage), history: new SongHistory(storage),
     endpoint: () => 'https://fixture.invalid/recognize', renderHistory() {}, showSong() {},

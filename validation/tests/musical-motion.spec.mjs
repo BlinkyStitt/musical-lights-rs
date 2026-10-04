@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { physicsReady } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
-const output = fileURLToPath(new URL('../../docs/musical-motion-results/', import.meta.url));
 
 for (const theme of ['light', 'dark']) {
   test(`shared compact bar, collapsed settings and fullscreen safe layout in ${theme}`, async ({ page }) => {
@@ -12,7 +10,7 @@ for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 320, height: 720 });
     await page.goto(`${origin}/advanced/`); await physicsReady(page);
     const labels = await page.locator('.button-row .setting-switch span').allTextContents();
-    expect(labels).toEqual(['Listening', 'Phone motion', 'Scroll lights', 'Identify song']);
+    expect(labels).toEqual(['Listening', 'Identify song', 'Phone motion', 'Scroll lights']);
     for (const section of ['display', 'calibration', 'physics', 'diagnostics']) expect(await page.locator(`.${section}-controls`).evaluate(n => n.open)).toBe(false);
     expect(await page.locator('.song-history').evaluate(n => n.open)).toBe(false);
     expect(await page.evaluate(() => {
@@ -27,7 +25,7 @@ for (const theme of ['light', 'dark']) {
     await expect(page.locator('.input-source-controls')).toBeHidden();
     for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
-      for (const label of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
+      for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
         const control = page.getByRole('checkbox', { name: label, exact: true });
         await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
         expect(await control.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
@@ -94,6 +92,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
 });
 
 test('identical-audio scrolling, angled lighting and swirl previews record frame cost', async ({ page }, info) => {
+  const output = info.outputPath('previews');
   await mkdir(output, { recursive: true });
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto(`${origin}/advanced/`); await physicsReady(page);

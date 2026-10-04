@@ -94,16 +94,17 @@ export class SongRecognition {
     this.strip = document.createElement('div');
     this.strip.className = 'recognized-song';
     this.strip.hidden = true;
-    this.strip.setAttribute('aria-label', 'Last recognized song');
-    this.strip.innerHTML = '<span class="song-caption">Last recognized</span><div class="song-window"><span class="song-title"></span></div>';
-    card.querySelector('.spectrum-panel').before(this.strip);
+    this.strip.setAttribute('role', 'status');
+    this.strip.setAttribute('aria-atomic', 'true');
+    this.strip.innerHTML = '<div class="song-window"><span class="song-title"></span></div>';
+    card.querySelector('.visual-content').after(this.strip);
     const query = selector => this.tools.querySelector(selector);
     this.control = document.createElement('div'); this.control.className = 'recognition-control';
     this.control.innerHTML = `<label class="setting-switch song-detection"><input type="checkbox" class="identify-song" aria-describedby="recognition-disclosure recognition-progress"><span>Identify song</span></label>
       <svg class="recognition-ring" viewBox="0 0 24 24" role="img" aria-label="Song identification off"><circle class="ring-track" cx="12" cy="12" r="9"/><circle class="ring-progress" cx="12" cy="12" r="9" pathLength="1"/></svg>
       <span id="recognition-progress" class="visually-hidden"></span><p class="recognition-status" role="status"></p>`;
     this.button = this.control.querySelector('.identify-song');
-    const row = card.querySelector('.button-row'); row.insertBefore(this.control, row.querySelector('.fullscreen-button'));
+    const row = card.querySelector('.button-row'); row.insertBefore(this.control, row.querySelector('.listening-toggle').closest('.setting-switch').nextSibling);
     this.status = this.control.querySelector('.recognition-status');
     this.ring = this.control.querySelector('.recognition-ring');
     this.progress = this.control.querySelector('#recognition-progress');
@@ -130,6 +131,7 @@ export class SongRecognition {
     window.addEventListener('storage', this.onStorage);
     this.resize = new ResizeObserver(() => this.measureTitle());
     this.resize.observe(this.strip);
+    this.resize.observe(this.strip.querySelector('.song-title'));
     this.cooldownTimer = setInterval(() => this.refresh(), 1000);
     this.renderHistory(); this.refresh();
   }
@@ -161,6 +163,7 @@ export class SongRecognition {
     this.button.title = !this.playing ? 'Turn on Listening, then identify the music.' : 'Identify microphone audio once per minute.';
     if (!this.job && !this.status.textContent) this.status.textContent = !this.endpoint()
       ? 'Song recognition is not configured yet.' : !supported ? 'Song recognition is unavailable in this browser.' : '';
+    this.status.dataset.routine = String(['Song recognition is not configured yet.', 'Song recognition is unavailable in this browser.'].includes(this.status.textContent));
 
   }
 
@@ -267,18 +270,26 @@ export class SongRecognition {
   showSong(entry) {
     const text = `${entry.artist} — ${entry.title}`;
     const title = this.strip.querySelector('.song-title');
-    if (title.textContent !== text) title.textContent = text;
+    const changed = title.textContent !== text;
+    if (changed) title.textContent = text;
     this.strip.hidden = false;
     this.strip.title = `${text} · ${new Date(entry.sampleStartedAt).toLocaleString()}`;
     this.measureTitle();
+    // Each new song starts at the left edge, then travels continuously left.
+    // Repeated recognition of the same song keeps its current scrolling phase.
+    if (changed) title.getAnimations().forEach(animation => { animation.currentTime = 0; });
   }
 
   measureTitle() {
     const title = this.strip.querySelector('.song-title');
-    const distance = Math.max(0, title.scrollWidth - title.parentElement.clientWidth);
-    this.strip.style.setProperty('--song-travel', `-${distance}px`);
-    this.strip.style.setProperty('--song-duration', `${Math.max(8, distance / 25 + 4)}s`);
-    this.strip.classList.toggle('song-overflow', distance > 0);
+    const width = title.parentElement.clientWidth;
+    const textWidth = title.scrollWidth;
+    const pixelsPerSecond = 45;
+    this.strip.style.setProperty('--song-entry', `${width}px`);
+    this.strip.style.setProperty('--song-travel', `-${textWidth}px`);
+    this.strip.style.setProperty('--song-duration', `${(width + textWidth) / pixelsPerSecond}s`);
+    this.strip.style.setProperty('--song-delay', `-${width / pixelsPerSecond}s`);
+    this.strip.classList.toggle('song-overflow', textWidth > width);
   }
 
   renderHistory() {

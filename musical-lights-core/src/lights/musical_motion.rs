@@ -4,11 +4,8 @@ use num::Float;
 
 /// Average absolute travel at 120 BPM: two columns per beat.
 pub const SCROLL_SPEED: f64 = 4.0;
-/// Four-beat full cycle at 120 BPM; each direction lasts two beats.
-/// The shorter cycle keeps the excursion bounded when increasing travel speed.
-pub const SCROLL_PERIOD: f64 = 2.0;
 pub const SCROLL_EASE: f64 = 0.120;
-pub const SCROLL_PEAK_SPEED: f64 = SCROLL_SPEED * core::f64::consts::FRAC_PI_2;
+pub const SCROLL_PEAK_SPEED: f64 = SCROLL_SPEED;
 
 /// Silent display preview, independent of measured audio and attack envelopes.
 /// A travelling sine covers every column; callers replace it when audio starts.
@@ -19,42 +16,6 @@ pub fn idle_wave(column: usize, columns: usize, seconds: f64, reduced: bool) -> 
     let (period, amplitude) = if reduced { (12.0, 0.15) } else { (6.0, 0.3) };
     0.45 + amplitude
         * Float::sin(core::f64::consts::TAU * (column as f64 / columns as f64 - seconds / period))
-}
-
-#[derive(Default)]
-pub struct BalancedScroll {
-    clock: f64,
-    weight: f64,
-    from: f64,
-    elapsed: f64,
-    enabled: bool,
-    pub speed: f64,
-}
-impl BalancedScroll {
-    /// Integrates tempo into phase; reversals stay continuous through changes.
-    /// Reduced Motion callers pass false. Returns signed column displacement.
-    pub fn advance(&mut self, enabled: bool, bpm: f64, dt: f64) -> f64 {
-        if !dt.is_finite() || dt <= 0.0 || !bpm.is_finite() {
-            return 0.0;
-        }
-        if enabled != self.enabled {
-            self.from = self.weight;
-            self.elapsed = 0.0;
-            self.enabled = enabled;
-        }
-        self.elapsed = (self.elapsed + dt).min(SCROLL_EASE);
-        let t = self.elapsed / SCROLL_EASE;
-        let desired = if enabled { 1.0 } else { 0.0 };
-        let weight = self.from + (desired - self.from) * t * t * (3.0 - 2.0 * t);
-        let before = self.clock;
-        self.clock += (self.weight + weight) * 0.5 * dt * bpm.clamp(60.0, 200.0) / 120.0;
-        self.weight = weight;
-        let omega = core::f64::consts::TAU / SCROLL_PERIOD;
-        self.speed =
-            SCROLL_PEAK_SPEED * Float::cos(omega * self.clock) * weight * bpm.clamp(60.0, 200.0)
-                / 120.0;
-        SCROLL_PEAK_SPEED / omega * (Float::sin(omega * self.clock) - Float::sin(omega * before))
-    }
 }
 
 /// Implicit quadratic sphere drag: Cd=0.47, rho=1.225 kg/m³. Multiplier always
@@ -93,54 +54,6 @@ mod tests {
         assert!((idle_wave(6, 24, 0.0, false) - 0.75).abs() < 1e-12);
         assert!((idle_wave(12, 24, 1.5, false) - 0.75).abs() < 1e-12);
         assert_eq!(idle_wave(0, 0, 0.0, false), 0.0);
-    }
-    #[test]
-    fn balanced_travel_and_tempo_change() {
-        let mut scroll = BalancedScroll::default();
-        for _ in 0..120 {
-            scroll.advance(true, 120.0, 1.0 / 120.0);
-        }
-        let mut distance = 0.0;
-        let mut travel = 0.0;
-        for _ in 0..1920 {
-            let dx = scroll.advance(true, 120.0, 1.0 / 120.0);
-            distance += dx;
-            travel += dx.abs();
-        }
-        assert!(distance.abs() < 1e-8);
-        assert!((travel / 16.0 - 4.0).abs() < 0.001);
-        let dx = scroll.advance(true, 180.0, 1.0 / 120.0);
-        assert!(dx.abs() <= SCROLL_PEAK_SPEED * 1.5 / 120.0);
-        for _ in 0..30 {
-            scroll.advance(false, 180.0, 1.0 / 120.0);
-        }
-        assert_eq!(scroll.advance(false, 180.0, 1.0 / 120.0), 0.0);
-    }
-    #[test]
-    fn scrolling_travels_two_columns_per_beat_across_the_tempo_range() {
-        for bpm in [60.0, 90.0, 120.0, 180.0, 200.0] {
-            let mut scroll = BalancedScroll::default();
-            let dt = 1.0 / 240.0;
-            for _ in 0..240 {
-                scroll.advance(true, bpm, dt);
-            }
-            // Integrate two complete reversal cycles at each tempo. Fractional
-            // final ticks keep the measurement window exact, including 200 BPM.
-            let duration = 2.0 * SCROLL_PERIOD * 120.0 / bpm;
-            let mut remaining = duration;
-            let mut travel = 0.0;
-            let mut displacement = 0.0;
-            while remaining > 1e-12 {
-                let step = remaining.min(dt);
-                let dx = scroll.advance(true, bpm, step);
-                travel += dx.abs();
-                displacement += dx;
-                remaining -= step;
-            }
-            let beats = duration * bpm / 60.0;
-            assert!((travel / beats - 2.0).abs() < 0.001, "{bpm} BPM");
-            assert!(displacement.abs() < 1e-8, "{bpm} BPM");
-        }
     }
     #[test]
     fn drag_is_stable_and_depends_on_size_and_speed() {

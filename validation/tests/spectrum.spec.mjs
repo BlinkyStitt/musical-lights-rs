@@ -12,6 +12,7 @@ for (const width of [320, 375, 1440]) {
     expect(await page.getByRole('meter').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))))
       .toEqual(edges.slice(0, -1).map((edge, i) => `≈ ${edge}–${edges[i + 1]} Hz`));
     await physicsReady(page);
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
     const geometry = await page.evaluate(() => {
       const groups = [...document.querySelectorAll('.bark-group')];
       const meters = [...document.querySelectorAll('.meter')];

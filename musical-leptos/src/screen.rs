@@ -29,10 +29,20 @@ extern "C" {
     fn close(this: &SongRecognition);
 }
 
+#[wasm_bindgen(module = "/src/presentation.js")]
+extern "C" {
+    type Presentation;
+    #[wasm_bindgen(constructor)]
+    fn new(element: &web_sys::HtmlElement) -> Presentation;
+    #[wasm_bindgen(method)]
+    fn close(this: &Presentation);
+}
+
 /// Keep the callback alive until the browser resources have closed.
 pub struct ScreenSession {
     screen: VisualizerScreen,
     songs: SongRecognition,
+    presentation: Presentation,
     _on_change: ScreenChange,
     _on_band: Closure<dyn FnMut(Option<u32>)>,
 }
@@ -53,6 +63,7 @@ impl ScreenSession {
         Self {
             screen,
             songs: SongRecognition::new(element),
+            presentation: Presentation::new(element),
             _on_change: callback,
             _on_band: on_band,
         }
@@ -65,6 +76,7 @@ impl ScreenSession {
 
 impl Drop for ScreenSession {
     fn drop(&mut self) {
+        self.presentation.close();
         self.songs.close();
         self.screen.close();
     }

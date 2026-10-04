@@ -8,6 +8,7 @@ use musical_lights_core::audio::{
     tempo::TempoEstimator,
     visual::VisualGain,
 };
+use musical_lights_core::lights::dance::{IdlePeak, RecentPeak};
 
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
@@ -21,6 +22,18 @@ pub extern "C" fn preview_level(seconds: f64, band: u32, reduced: u32) -> f64 {
     musical_lights_core::lights::musical_motion::idle_wave(band as usize, 24, seconds, reduced != 0)
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn preview_create() -> *mut IdlePeak {
+    Box::into_raw(Box::default())
+}
+/// # Safety
+/// `handle` must be a live pointer returned by `preview_create`, owned by this worker.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn preview_accent(handle: *mut IdlePeak, seconds: f64, reduced: u32) -> u32 {
+    // SAFETY: the preview worker owns this handle for its entire lifetime.
+    unsafe { handle.as_mut() }.is_some_and(|p| p.push(seconds, reduced != 0)) as u32
+}
+
 struct AudioProcessor {
     meter: LoudnessMeter,
     partial: PartialLoudnessMeter,
@@ -29,6 +42,8 @@ struct AudioProcessor {
     gain: VisualGain,
     display: BrowserPresentation,
     tempo: TempoEstimator,
+    peak: RecentPeak,
+    accent_sequence: u32,
     input: [f32; INPUT_CAPACITY],
     snapshot: [f64; SNAPSHOT_SIZE],
     started: bool,
@@ -60,6 +75,8 @@ impl AudioProcessor {
             gain: VisualGain::default(),
             display: BrowserPresentation::new(0.0),
             tempo: TempoEstimator::default(),
+            peak: RecentPeak::default(),
+            accent_sequence: 0,
             input: [0.0; INPUT_CAPACITY],
             snapshot: [0.0; SNAPSHOT_SIZE],
             started: false,
@@ -131,6 +148,8 @@ impl AudioProcessor {
             let gain = &mut self.gain;
             let display = &mut self.display;
             let tempo = &mut self.tempo;
+            let peak = &mut self.peak;
+            let accent_sequence = &mut self.accent_sequence;
             let iso = &self.iso_frame;
             let reduced = self.reduced;
             let trace = &mut self.trace;
@@ -152,6 +171,16 @@ impl AudioProcessor {
                             reduced,
                         );
                         tempo.push(&display.acoustic.novelty);
+                        let at = frame.sample_index as f64 / SAMPLE_RATE as f64;
+                        let attack = display.acoustic.events.contains(&Some(at));
+                        let loud = frame
+                            .short_term_sones
+                            .iter()
+                            .copied()
+                            .fold(0.0_f64, f64::max);
+                        if peak.push(at, loud, attack) {
+                            *accent_sequence = accent_sequence.wrapping_add(1);
+                        }
                         if let Some(trace) = trace.as_mut() {
                             if *trace_count < TRACE_CAPACITY {
                                 let row = &mut trace[*trace_count * TRACE_STRIDE
@@ -299,3 +328,5 @@ pub unsafe extern "C" fn processor_destroy(handle: *mut core::ffi::c_void) {
         drop(Box::from_raw(handle.cast::<AudioProcessor>()));
     }
 }
+
+export!(processor_accent_sequence(handle) -> u32, p => p.accent_sequence);
