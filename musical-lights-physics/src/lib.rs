@@ -1,8 +1,7 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
 use musical_lights_core::lights::bar_motion::Motion;
-use musical_lights_core::lights::musical_motion::{
-    BalancedScroll, remember_pigment, sphere_drag_factor,
-};
+use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
+use musical_lights_core::lights::musical_motion::{remember_pigment, sphere_drag_factor};
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
 
@@ -32,7 +31,7 @@ pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
 pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 4;
 pub const SNAPSHOT_LEN: usize = SCROLL_OFFSET + 1;
 pub use musical_lights_core::lights::musical_motion::{
-    SCROLL_EASE, SCROLL_PEAK_SPEED, SCROLL_PERIOD, SCROLL_SPEED,
+    SCROLL_EASE, SCROLL_PEAK_SPEED, SCROLL_SPEED,
 };
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
@@ -63,7 +62,8 @@ impl Default for SimulationConfig {
 }
 impl SimulationConfig {
     pub fn hop_height(self, reduced: bool) -> f32 {
-        (self.height * 0.08).min(0.05) * if reduced { 0.5 } else { 1.0 }
+        let diameter = SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP);
+        flight_height(self.height - diameter - CLEARANCE, 0.3, reduced)
     }
     pub fn bar_max(self) -> f32 {
         // Keep the same geometry in Reduced Motion: only the release energy changes.
@@ -170,7 +170,12 @@ pub struct Simulation {
     tempo: f64,
     scroll_phase: f64,
     scroll_speed: f64,
-    scroll: BalancedScroll,
+    dance: DanceMotion,
+    flight_fraction: f32,
+    flight_target: f32,
+    accent_sequence: u32,
+    ceiling_bars: bool,
+    flip_elapsed: f64,
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; BALL_COUNT],
     pigments: [f32; BALL_COUNT * 9],
@@ -333,7 +338,12 @@ impl Simulation {
             tempo: 120.0,
             scroll_phase: 0.0,
             scroll_speed: 0.0,
-            scroll: BalancedScroll::default(),
+            dance: DanceMotion::new(1, 0.1),
+            flight_fraction: 0.3,
+            flight_target: 0.3,
+            accent_sequence: 0,
+            ceiling_bars: false,
+            flip_elapsed: 0.5,
             touching: [[false; COUNT]; BALL_COUNT],
             ceiling,
             ceiling_height: config.height,
@@ -380,6 +390,55 @@ impl Simulation {
         Ok(())
     }
     /// Separate from the stable input layout and loudness/target snapshots.
+    /// The active hardware-neutral presentation policy.
+    pub fn configure_dance(
+        &mut self,
+        chance: f64,
+        flight: f32,
+        seed: u32,
+    ) -> Result<(), &'static str> {
+        if !chance.is_finite()
+            || !(0.0..=1.0).contains(&chance)
+            || !flight.is_finite()
+            || !(0.0..=0.5).contains(&flight)
+        {
+            return Err("Invalid dance settings");
+        }
+        if self.tick == 0 {
+            self.dance = DanceMotion::new(seed, chance);
+        } else {
+            self.dance.probability = chance;
+        }
+        self.flight_target = flight;
+        if self.tick == 0 {
+            self.flight_fraction = flight;
+        }
+        Ok(())
+    }
+    pub fn accent(&mut self, sequence: u32) -> Result<(), &'static str> {
+        let count = sequence.saturating_sub(self.accent_sequence);
+        if !self.input.reduced_motion && self.input.scrolling {
+            if count > 256 {
+                return Err("Too many unconsumed motion accents");
+            }
+            for _ in 0..count {
+                self.dance.choose();
+            }
+        }
+        self.accent_sequence = sequence;
+        Ok(())
+    }
+    fn hop_height(&self, reduced: bool) -> f32 {
+        let diameter = SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP);
+        flight_height(
+            self.config.height - diameter - CLEARANCE,
+            self.flight_fraction,
+            reduced,
+        )
+    }
+    fn bar_max(&self) -> f32 {
+        self.config.bar_max() + self.config.hop_height(false) - self.hop_height(false)
+    }
     pub fn set_tempo(&mut self, bpm: f32) {
         if bpm.is_finite() {
             self.tempo = f64::from(bpm.clamp(60.0, 200.0));
@@ -397,7 +456,9 @@ impl Simulation {
                 self.world.bodies[handle].wake_up(true);
             }
         }
-        let old_travel = f64::from(self.config.bar_max() - BASELINE);
+        let old_travel = f64::from(self.bar_max() - BASELINE);
+        self.flight_fraction +=
+            (self.flight_target - self.flight_fraction).clamp(-0.5 * DT / 0.3, 0.5 * DT / 0.3);
         if self.resize_tick < RESIZE_TICKS {
             self.resize_tick += 1;
             let t = self.resize_tick as f32 / RESIZE_TICKS as f32;
@@ -408,7 +469,7 @@ impl Simulation {
             };
         }
         let (max_speed, acceleration) = self.config.motion_limits(self.input.reduced_motion);
-        let travel = f64::from(self.config.bar_max() - BASELINE);
+        let travel = f64::from(self.bar_max() - BASELINE);
         for (i, motion) in self.motions.iter_mut().enumerate() {
             motion.retarget(
                 f64::from(self.input.levels[i]),
@@ -431,6 +492,11 @@ impl Simulation {
                 })
                 .fold(0.0_f64, f64::max)
                 + resize_speed
+                + if self.flip_elapsed < 0.5 {
+                    6.0 * travel
+                } else {
+                    0.0
+                }
                 + SCROLL_PEAK_SPEED * (self.tempo / 120.0) * f64::from(PITCH)
         });
         let ball_speed = self
@@ -471,7 +537,12 @@ impl Simulation {
                         body.is_enabled()
                             && f64::from((body.translation().x - post.translation().x).abs())
                                 <= reach_x + radius + ball_reach
-                            && f64::from(body.translation().y) - radius - ball_reach <= top
+                            && if self.ceiling_bars {
+                                f64::from(body.translation().y) + radius + ball_reach
+                                    >= f64::from(self.ceiling_height) - top
+                            } else {
+                                f64::from(body.translation().y) - radius - ball_reach <= top
+                            }
                     })
                     .then_some(speed)
             })
@@ -496,13 +567,27 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
         for substep in 0..substeps {
             self.resize_ceiling();
-            let distance = self.scroll.advance(enabled, self.tempo, f64::from(dt));
-            self.scroll_speed = self.scroll.speed;
+            let distance = self.dance.advance(enabled, self.tempo, f64::from(dt));
+            self.scroll_speed = self.dance.speed();
+            let desired_ceiling = self.dance.ceiling;
+            if desired_ceiling != self.ceiling_bars && self.flip_elapsed >= 0.5 {
+                self.flip_elapsed = 0.0;
+            }
+            let before_flip = self.flip_elapsed;
+            self.flip_elapsed = (self.flip_elapsed + f64::from(dt)).min(0.5);
+            let switched = before_flip < 0.25 && self.flip_elapsed >= 0.25;
+            if switched {
+                self.ceiling_bars = desired_ceiling;
+                self.supported.fill(false);
+                self.driven.fill(false);
+            }
+            let t = ((self.flip_elapsed - 0.25).abs() / 0.25).clamp(0.0, 1.0);
+            let gate = t * t * (3.0 - 2.0 * t);
             self.scroll_phase = (self.scroll_phase + distance).rem_euclid((COUNT * 3) as f64);
             let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
             for i in 0..COUNT {
                 self.motions[i].advance(f64::from(dt));
-                let next = f64::from(BASELINE) + self.motions[i].state.position * scale;
+                let next = f64::from(BASELINE) + self.motions[i].state.position * scale * gate;
                 self.bar_velocities[i] = (next - self.bar_positions[i]) / f64::from(dt);
                 self.bar_positions[i] = next;
             }
@@ -518,14 +603,19 @@ impl Simulation {
                 let body = &mut self.world.bodies[handle];
                 let position = Vector::new(
                     x as f32,
-                    (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32,
+                    if self.ceiling_bars {
+                        self.ceiling_height - self.bar_positions[i] as f32 + POST_HEIGHT / 2.0
+                    } else {
+                        (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32
+                    },
                     0.0,
                 );
                 // The other two copies are bookkeeping, not active physics.
                 // Enable a full pitch before reaching the enclosure so contact
                 // prediction is ready before any part of the post crosses a wall.
                 let active = (-PITCH..=WIDTH + PITCH).contains(&position.x);
-                if !body.is_enabled()
+                if switched
+                    || !body.is_enabled()
                     || !active
                     || (body.translation().x - position.x).abs() > WIDTH
                 {
@@ -601,7 +691,8 @@ impl Simulation {
                             } else {
                                 -1.0
                             };
-                            m.data.normal.y * sign > 0.1
+                            m.data.normal.y * sign * if self.ceiling_bars { -1.0 } else { 1.0 }
+                                > 0.1
                         });
                     // Collider tags identify the source directly, including wrapped
                     // copies. Walls use zero, balls 1..=BALL_COUNT, bars COUNT+1..=2*COUNT.
@@ -655,17 +746,19 @@ impl Simulation {
             }
             let supported: [bool; BALL_COUNT] = std::array::from_fn(|i| supported & (1 << i) != 0);
             let driven: [bool; BALL_COUNT] = std::array::from_fn(|i| driven & (1 << i) != 0);
-            let release_speed =
-                (2.0 * self.config.gravity * self.config.hop_height(self.input.reduced_motion))
-                    .sqrt();
+            let release_speed = release_speed(
+                self.config.gravity,
+                self.hop_height(self.input.reduced_motion),
+            );
+            let outward = if self.ceiling_bars { -1.0 } else { 1.0 };
             for i in 0..BALL_COUNT {
                 // Remove excess launch energy only after bar support ends. Clamping
                 // a carried ball would drive its supporting collider through it.
                 if self.supported[i] && !supported[i] && self.driven[i] {
                     let body = &mut self.world.bodies[self.balls[i].0];
                     let mut velocity = body.linvel();
-                    if velocity.y > release_speed {
-                        velocity.y = release_speed;
+                    if velocity.y * outward > release_speed {
+                        velocity.y = release_speed * outward;
                         body.set_linvel(velocity, true);
                     }
                 }
@@ -693,7 +786,7 @@ impl Simulation {
                 .fold(0.0_f32, f32::max);
             let bar_top = self.bar_positions.iter().copied().fold(0.0_f64, f64::max) as f32
                 + self.config.height
-                - self.config.bar_max();
+                - self.bar_max();
             self.ceiling_height = self
                 .ceiling_height
                 .min(self.config.height.max(ball_top).max(bar_top));
@@ -702,6 +795,8 @@ impl Simulation {
             .set_translation(Vector::new(0.0, self.ceiling_height, 0.0), false);
     }
     fn write_transforms(&mut self) {
+        let bar_max = self.bar_max();
+        let hop_height = self.hop_height(self.input.reduced_motion);
         let values = &mut self.snapshot.values;
         values[0] = self.tick as f32 / HZ as f32;
         values[1] = self.config.height;
@@ -709,8 +804,8 @@ impl Simulation {
         values[SCROLL_OFFSET] = (self.scroll_phase % COUNT as f64) as f32;
         values[GEOMETRY_OFFSET..SCROLL_OFFSET].copy_from_slice(&[
             self.ceiling_height,
-            self.config.bar_max(),
-            self.config.hop_height(self.input.reduced_motion),
+            bar_max,
+            hop_height,
             MIN_HEIGHT,
         ]);
         for (i, &(handle, _)) in self.balls.iter().enumerate() {
@@ -774,7 +869,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            7.0, // separate measured gravity and linear acceleration
+            8.0, // acoustic-peak direction policy, flight budget, separate SI sensor input
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
@@ -811,6 +906,20 @@ impl PhysicsSimulation {
     }
     pub fn set_tempo(&mut self, bpm: f32) {
         self.0.set_tempo(bpm);
+    }
+    pub fn configure_dance(&mut self, chance: f64, flight: f32, seed: u32) -> Result<(), JsError> {
+        self.0
+            .configure_dance(chance, flight, seed)
+            .map_err(JsError::new)
+    }
+    pub fn accent(&mut self, sequence: u32) -> Result<(), JsError> {
+        self.0.accent(sequence).map_err(JsError::new)
+    }
+    pub fn ceiling_bars(&self) -> bool {
+        self.0.ceiling_bars
+    }
+    pub fn horizontal_direction(&self) -> f64 {
+        self.0.dance.direction
     }
     pub fn pigments_ptr(&self) -> *const f32 {
         self.0.pigments.as_ptr()

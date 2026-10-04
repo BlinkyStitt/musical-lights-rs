@@ -67,8 +67,7 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
             }
         }
     }
-    let expected = SCROLL_SPEED * SCROLL_PERIOD / 4.0
-        * ((110.0 - SCROLL_EASE / 2.0) * std::f64::consts::TAU / SCROLL_PERIOD).sin();
+    let expected = SCROLL_SPEED * (110.0 - SCROLL_EASE);
     assert!((sim.scroll_phase - expected.rem_euclid(72.0)).abs() < 0.001);
     sim.apply(SimulationInput {
         tick: sim.tick,
@@ -1234,7 +1233,7 @@ fn rapid_reversals_with_scrolling_keep_balls_inside_the_enclosure() {
 }
 
 #[test]
-fn balanced_scroll_keeps_balls_from_accumulating_at_the_right_wall() {
+fn unchanged_direction_stays_contained_when_balls_reach_the_wall() {
     let mut sim = world(SimulationConfig::default());
     input(&mut sim, [0.3; COUNT]);
     for _ in 0..HZ * 2 {
@@ -1249,18 +1248,19 @@ fn balanced_scroll_keeps_balls_from_accumulating_at_the_right_wall() {
     let mut min_speed = 0.0_f64;
     let mut max_speed = 0.0_f64;
     let mut worst_center = 0.0_f32;
-    for tick in 0..HZ * 64 {
+    for _ in 0..HZ * 64 {
         sim.step();
         min_speed = min_speed.min(sim.scroll_speed);
         max_speed = max_speed.max(sim.scroll_speed);
         let center = (0..BALL_COUNT).map(|i| position(&sim, i).x).sum::<f32>() / BALL_COUNT as f32;
         worst_center = worst_center.max(center);
-        if tick > HZ * 16 {
-            assert!(center < WIDTH * 0.75, "balls accumulate on right: {center}");
+        for i in 0..BALL_COUNT {
+            let x = position(&sim, i).x;
+            assert!(x >= radius(i) - 0.008 && x <= WIDTH - radius(i) + 0.008);
         }
     }
-    eprintln!("64-second balanced scroll: rightmost mean ball position {worst_center} m");
-    assert!(min_speed < -0.5 && max_speed > 0.5);
+    assert!(worst_center > WIDTH * 0.75);
+    assert!(min_speed >= 0.0 && max_speed > 0.5);
 }
 
 #[test]
@@ -1371,7 +1371,7 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
         ..SimulationInput::default()
     })
     .unwrap();
-    for _ in 0..(HZ as f64 * SCROLL_PERIOD / 8.0) as usize {
+    for _ in 0..(HZ / 4) as usize {
         sim.step();
     }
     let phase = sim.scroll_phase;
@@ -1386,10 +1386,79 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
         ..SimulationInput::default()
     })
     .unwrap();
-    for _ in 0..(HZ as f64 * SCROLL_PERIOD / 8.0) as usize {
+    for _ in 0..(HZ / 4) as usize {
         slow.step();
     }
     let phase = slow.scroll_phase;
     slow.step();
-    assert!((faster / (slow.scroll_phase - phase) - 1.5).abs() < 0.01);
+    let slower = slow.scroll_phase - phase;
+    assert!(faster > slower && faster < slower * 1.5);
+    for _ in 0..HZ {
+        sim.step();
+        slow.step();
+    }
+    let (fast_phase, slow_phase) = (sim.scroll_phase, slow.scroll_phase);
+    sim.step();
+    slow.step();
+    assert!(
+        ((sim.scroll_phase - fast_phase) / (slow.scroll_phase - slow_phase) - 1.5).abs() < 0.01
+    );
+}
+
+#[test]
+fn ceiling_transition_retracts_before_switching_and_preserves_gravity() {
+    let mut sim = world(SimulationConfig::default());
+    sim.apply(SimulationInput {
+        levels: [0.7; COUNT],
+        height: 0.6,
+        scrolling: true,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    for _ in 0..HZ {
+        sim.step();
+    }
+    let gravity = sim.world.gravity;
+    sim.dance.ceiling = true;
+    let mut switched = false;
+    for _ in 0..HZ * 2 {
+        let before = sim.ceiling_bars;
+        sim.step();
+        if before != sim.ceiling_bars {
+            switched = true;
+            assert!(
+                sim.bar_positions
+                    .iter()
+                    .all(|height| *height < f64::from(BASELINE) + 0.001)
+            );
+        }
+        assert_eq!(sim.world.gravity, gravity);
+        for (i, &(handle, _)) in sim.balls.iter().enumerate() {
+            let p = sim.world.bodies[handle].translation();
+            assert!(
+                p.y >= radius(i) - 0.008 && p.y <= sim.ceiling_height - radius(i) + 0.008,
+                "ball {i}: {p:?}"
+            );
+        }
+    }
+    assert!(switched && sim.ceiling_bars);
+    assert!(sim.bar_positions.iter().any(|height| *height > 0.1));
+}
+#[test]
+fn reduced_motion_and_scrolling_off_consume_accents_without_flips() {
+    for reduced in [true, false] {
+        let mut sim = world(SimulationConfig::default());
+        sim.configure_dance(1.0, 0.3, 42).unwrap();
+        sim.apply(SimulationInput {
+            reduced_motion: reduced,
+            scrolling: reduced,
+            height: 0.6,
+            ..SimulationInput::default()
+        })
+        .unwrap();
+        sim.accent(1000).unwrap();
+        assert_eq!(sim.dance.direction, 1.0);
+        assert!(!sim.dance.ceiling);
+        assert_eq!(sim.accent_sequence, 1000);
+    }
 }

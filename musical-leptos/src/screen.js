@@ -62,6 +62,7 @@ export class VisualizerScreen {
         return;
       }
       if (this.expanded && event.isPrimary && event.button === 0
+          && !this.element.classList.contains('video-active')
           && event.clientY <= this.topTapHeight
           && !event.target?.closest?.('button, input, label, summary')) {
         // iOS may not deliver a complete captured drag after a viewport
@@ -72,7 +73,7 @@ export class VisualizerScreen {
       }
       if ((this.expanded || touch) && event.isPrimary && event.button === 0
           && this.element.contains(event.target)
-          && !event.target.closest('button, input, label, summary')) {
+          && !event.target.closest('button, input, label, summary, .video-panel, .control-help, [role=button]')) {
         const band = event.target.closest('[data-source-band], [role="meter"]');
         if (!this.expanded && !band) return;
         const index = band ? Number(band.dataset.sourceBand ?? [...this.element.querySelectorAll('[role="meter"]')].indexOf(band)) : -1;
@@ -128,7 +129,7 @@ export class VisualizerScreen {
       if (event.target?.closest?.('button, input, label, summary')
           && !event.target.closest('.fullscreen-button')) return;
       const touch = event.touches[0];
-      if (touch.clientY <= this.topTapHeight) {
+      if (!this.element.classList.contains('video-active') && touch.clientY <= this.topTapHeight) {
         // Safari can omit the matching pointer stream during viewport changes.
         // Capture the native touch before closing, so it cannot activate the
         // page underneath the fullscreen view.

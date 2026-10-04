@@ -97,14 +97,14 @@ export class SongRecognition {
     this.strip.setAttribute('role', 'status');
     this.strip.setAttribute('aria-atomic', 'true');
     this.strip.innerHTML = '<div class="song-window"><span class="song-title"></span></div>';
-    card.querySelector('.spectrum-panel').before(this.strip);
+    card.querySelector('.visual-content').after(this.strip);
     const query = selector => this.tools.querySelector(selector);
     this.control = document.createElement('div'); this.control.className = 'recognition-control';
     this.control.innerHTML = `<label class="setting-switch song-detection"><input type="checkbox" class="identify-song" aria-describedby="recognition-disclosure recognition-progress"><span>Identify song</span></label>
       <svg class="recognition-ring" viewBox="0 0 24 24" role="img" aria-label="Song identification off"><circle class="ring-track" cx="12" cy="12" r="9"/><circle class="ring-progress" cx="12" cy="12" r="9" pathLength="1"/></svg>
       <span id="recognition-progress" class="visually-hidden"></span><p class="recognition-status" role="status"></p>`;
     this.button = this.control.querySelector('.identify-song');
-    const row = card.querySelector('.button-row'); row.insertBefore(this.control, row.querySelector('.fullscreen-button'));
+    const row = card.querySelector('.button-row'); row.insertBefore(this.control, row.querySelector('.listening-toggle').closest('.setting-switch').nextSibling);
     this.status = this.control.querySelector('.recognition-status');
     this.ring = this.control.querySelector('.recognition-ring');
     this.progress = this.control.querySelector('#recognition-progress');
@@ -163,6 +163,7 @@ export class SongRecognition {
     this.button.title = !this.playing ? 'Turn on Listening, then identify the music.' : 'Identify microphone audio once per minute.';
     if (!this.job && !this.status.textContent) this.status.textContent = !this.endpoint()
       ? 'Song recognition is not configured yet.' : !supported ? 'Song recognition is unavailable in this browser.' : '';
+    this.status.dataset.routine = String(['Song recognition is not configured yet.', 'Song recognition is unavailable in this browser.'].includes(this.status.textContent));
 
   }
 
