@@ -55,15 +55,20 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
 });
 
-test('diagnostic plot separates interpolated render geometry and its clock from analysis and physics', async ({ page }) => {
+for (const barBase of ['floor', 'ceiling']) {
+test(`diagnostic plot separates ${barBase} render geometry and its clock from analysis and physics`, async ({ page }) => {
   await advanced(page);
-  const { sample, moves, unverified } = await page.evaluate(() => {
+  const { sample, moves, unverified } = await page.evaluate(barBase => {
     const card = document.querySelector('.audio-card'), review = card.review, view = document.querySelector('#dancinglights').physics;
     review.sessionId = 'clock-regression'; review.samples = [];
     const receivedAt = performance.timeOrigin + performance.now();
     view.renderedAt = receivedAt - 25;
     view.current[view.layout[9] + 8] = .7 * view.height;
-    view.bars.instanceMatrix.array[8 * 16 + 13] = .2 * view.height - view.layout[6] / 2;
+    view.renderedCeilingBars = barBase === 'ceiling'; view.renderedEnclosureHeight = view.height;
+    // A newer physics message may change the base before the next rendered frame.
+    view.ceilingBars = !view.renderedCeilingBars;
+    view.bars.instanceMatrix.array[8 * 16 + 13] = view.renderedCeilingBars
+      ? .8 * view.height + view.layout[6] / 2 : .2 * view.height - view.layout[6] / 2;
     const trace = new Float64Array(511);
     trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
@@ -73,14 +78,40 @@ test('diagnostic plot separates interpolated render geometry and its clock from 
     const sample = review.samples[0];
     card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
-  });
-  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
+  }, barBase);
+  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
   expect(sample.collider).toBeCloseTo(.7, 5); expect(sample.rendered).toBeCloseTo(.2, 5);
   expect(moves).toHaveLength(3);
   expect(moves[0][0]).toBeCloseTo(1.1 / 1.225 * 900, 5);
   expect(moves[1][0]).toBeCloseTo(moves[0][0], 5);
   expect(moves[2][0]).toBe(900); expect(moves[2][1]).toBeCloseTo(200, 3);
   expect(unverified).toMatchObject({ renderedTime: null, renderedTimeConfidence: 'unverified' });
+  await page.locator('.diagnostics-controls > summary').click();
+  const download = page.waitForEvent('download'); await page.locator('.review-export').click();
+  const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
+  expect(exported.diagnosticSamples[0].barBase).toBe(barBase);
+  expect(exported.diagnosticSamples[0].rendered).toBeCloseTo(.2, 5);
+});
+
+}
+
+test('saved Physics settings restore on reload while factory reset retains factory values', async ({ page }) => {
+  await advanced(page); await page.locator('.physics-controls > summary').click();
+  await page.locator('[data-config="2"]').fill('16');
+  await page.locator('[data-config="6"]').fill('80');
+  await page.getByRole('button', { name: 'Apply settings and reset', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.config[2])).toBe(16);
+  await page.reload(); await physicsReady(page); await page.locator('.physics-controls > summary').click();
+  await expect(page.locator('[data-config="2"]')).toHaveValue('16');
+  await expect(page.locator('[data-config="6"]')).toHaveValue('80');
+  const height = await page.evaluate(() => document.querySelector('#dancinglights').physics.height);
+  await page.getByRole('button', { name: 'Restore defaults and reset', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.config[2])).toBe(8);
+  await expect(page.locator('[data-config="6"]')).toHaveValue('40');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.height)).toBe(height);
+  await page.reload(); await physicsReady(page); await page.locator('.physics-controls > summary').click();
+  await expect(page.locator('[data-config="2"]')).toHaveValue('8');
+  await expect(page.locator('[data-config="6"]')).toHaveValue('40');
 });
 
 test('Display and Input resets are scoped; milliseconds and physics defaults preserve enclosure size', async ({ page }) => {

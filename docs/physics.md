@@ -229,8 +229,11 @@ contacts, accessible labels and audio data keep their source identity.
 
 The separate tempo setter leaves the 38-value held input and 99-value audio
 transport unchanged. New reports include the random seed, starting accent
-ordinal, dance settings, and tick-stamped `motionEvents` and `tempoEvents`;
-replay applies them before stepping. Protocol 8 requires its matching engine.
+ordinal and tempo, dance settings, and tick-stamped input events with their
+tempo and accent in worker application order. Phone report v4 replay applies
+each input and its cue together before stepping, including inputs at the same
+tick. Older report formats require their historical replay tool. Protocol 8
+requires its matching engine.
 
 The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
 contact-pigment history, and quintic bar motion are hardware-neutral

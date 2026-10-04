@@ -10,8 +10,8 @@ let simulation, config, palette, buffer, timer, lastTime, origin;
 let paused = true, debt = 0, maxDebt = 0, pending = [], publishedTick = -2;
 let input = new Float32Array(38), recording = null, recordingOverflow = false;
 let costs = null, costCount = 0, totalCost = 0, steps = 0;
-let tempo = 120, tempoEvents = null;
-let danceOptions = null, motionEvents = null, lastAccent = 0, initialAccent = 0;
+let tempo = 120, initialTempo = 120;
+let danceOptions = null, lastAccent = 0, initialAccent = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
 let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
 let batchTicks = 0, batchSubsteps = 0, batchMaxSubsteps = 0;
@@ -48,15 +48,13 @@ function run() {
       input.set(event.values);
       if (event.tempo !== undefined && event.tempo !== tempo) {
         tempo = event.tempo; simulation.set_tempo(tempo);
-        if (recording && tempoEvents.length < capacity) tempoEvents.push({ tick: simulation.tick(), bpm: tempo });
       }
       simulation.input(input);
       if (event.accent !== undefined && event.accent !== lastAccent) {
         lastAccent = event.accent; simulation.accent(lastAccent);
-        if (recording && motionEvents.length < capacity) motionEvents.push({ tick: simulation.tick(), sequence: lastAccent });
       }
       if (recording) {
-        if (recording.length < capacity) recording.push({ tick: simulation.tick(), timestamp: event.timestamp, values: Array.from(input) });
+        if (recording.length < capacity) recording.push({ tick: simulation.tick(), timestamp: event.timestamp, values: Array.from(input), tempo: event.tempo, accent: event.accent });
         else recordingOverflow = true;
       }
     }
@@ -118,15 +116,17 @@ self.onmessage = async ({ data }) => {
   try {
     await ready;
     switch (data.type) {
-      case 'init':
+      case 'init': {
         palette = data.palette;
-        config = PhysicsSimulation.defaults(); config[0] = data.height;
+        const defaults = Array.from(PhysicsSimulation.defaults());
+        config = new Float32Array(defaults); config[0] = data.height;
         if (data.config?.length === 8) { config = new Float32Array(data.config); config[0] = data.height; }
         danceOptions = data.danceOptions ?? { chance: .1, flight: .3, seed: 1 };
         reset(config); paused = data.paused;
         buffer = null;
-        postMessage({ type: 'ready', config: Array.from(config), layout: Array.from(layout) });
+        postMessage({ type: 'ready', config: Array.from(config), defaults, layout: Array.from(layout) });
         schedule(); break;
+      }
       case 'snapshot':
         if (buffer) throw new Error('Snapshot buffer ownership was duplicated');
         buffer = data.buffer;
@@ -152,14 +152,14 @@ self.onmessage = async ({ data }) => {
         if (recording) throw new Error('Finish the phone test before resetting physics');
         reset(data.config); postMessage({ type: 'reset', config: Array.from(config) }); break;
       case 'record':
-        reset(data.config); recording = []; motionEvents = []; tempoEvents = [{ tick: simulation.tick(), bpm: tempo }]; costs = new Float32Array(capacity); costCount = 0; recordingOverflow = false;
+        reset(data.config); recording = []; initialTempo = tempo; costs = new Float32Array(capacity); costCount = 0; recordingOverflow = false;
         recordingStart = absoluteNow(); initialTick = simulation.tick();
         postMessage({ type: 'recording', timestamp: recordingStart, config: Array.from(config) }); break;
       case 'report':
-        postMessage({ type: 'report', inputs: recording, tempoEvents, motionEvents, danceOptions, initialAccent, physicsCosts: Array.from(costs.subarray(0, costCount)),
+        postMessage({ type: 'report', inputs: recording, initialTempo, danceOptions, initialAccent, physicsCosts: Array.from(costs.subarray(0, costCount)),
           recordingOverflow, substepTotal, maxSubsteps, overloadTicks, substepCosts, config: Array.from(config), initialTick, finalTick: simulation.tick(),
           elapsedMs: absoluteNow() - recordingStart, debt, maxDebt, discardedSimulationMs: 0, finalSnapshot: Array.from(snapshot()) });
-        recording = null; motionEvents = null; tempoEvents = null; costs = null; substepCosts = []; break;
+        recording = null; costs = null; substepCosts = []; break;
       default: throw new Error('Unknown physics worker message');
     }
   } catch (error) {

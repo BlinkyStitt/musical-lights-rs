@@ -88,7 +88,7 @@ export class ListeningReview {
         ? detail.receivedAudioTime + (v.renderedAt - detail.receivedAt) / 1000 : null;
       this.samples.push({ at: trace[row + 364], band: b, raw: trace[row + 291 + b], filtered: trace[row + 368 + 4 * b],
         collider: v.current ? v.current[v.layout[9] + b] / v.height : 0,
-        rendered: (v.bars.instanceMatrix.array[b * 16 + 13] + v.layout[6] / 2) / v.height,
+        rendered: v.renderedHeight(b) / v.renderedEnclosureHeight, barBase: v.renderedCeilingBars ? 'ceiling' : 'floor',
         renderedAt: v.renderedAt, renderedTime, renderedTimeConfidence: renderedTime == null ? 'unverified' : 'host/context estimate',
         receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime });
       this.plot();

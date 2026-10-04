@@ -274,7 +274,7 @@ export class PhysicsView {
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
       if (data.layout[18] !== 8 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
-      this.layout = data.layout; this.config = data.config;
+      this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
       this.measure();
@@ -425,9 +425,14 @@ export class PhysicsView {
     while (used < this.attackLights.length) this.attackLights[used++].intensity = 0;
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
+    this.renderedCeilingBars = this.ceilingBars; this.renderedEnclosureHeight = height;
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);
+  }
+  renderedHeight(band) {
+    const center = this.bars.instanceMatrix.array[band * 16 + 13];
+    return this.renderedCeilingBars ? this.renderedEnclosureHeight + this.layout[6] / 2 - center : center + this.layout[6] / 2;
   }
   positionMeters(phase) {
     const count = this.meters.length;

@@ -31,53 +31,54 @@ test('the built WASM accepts protocol 8 scrolling and stops at its published pha
   } finally { sim.free(); }
 });
 
-test('optional tempo events reproduce complete physical snapshots across render rates', async () => {
+test('ordered input tempo changes reproduce complete physical snapshots across render rates', async () => {
   const config = Array.from(PhysicsSimulation.defaults()), palette = Array(72).fill(.5);
   const layout = Array.from(PhysicsSimulation.layout());
-  const simulate = events => {
-    const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
-    try {
-      const values = Array(38).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
-      sim.input(new Float32Array(values));
-      for (let tick = 0; tick < 200; tick++) {
-        for (const event of events) if (event.tick === tick) sim.set_tempo(event.bpm);
-        sim.step();
+  const values = Array(38).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
+  const inputs = [{ tick: 0, values, tempo: 120 }, { tick: 50, values, tempo: 160 }, { tick: 120, values, tempo: 80 }];
+  const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
+  try {
+    for (let tick = 0; tick < 200; tick++) {
+      for (const event of inputs) if (event.tick === tick) {
+        sim.set_tempo(event.tempo); sim.input(new Float32Array(event.values));
       }
-      return { config, palette, layout, finalTick: sim.tick(), inputs: [{ tick: 0, values }],
-        finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
-    } finally { sim.free(); }
-  };
-  const tempoEvents = [{ tick: 0, bpm: 120 }, { tick: 50, bpm: 160 }, { tick: 120, bpm: 80 }];
-  const changing = { ...simulate(tempoEvents), tempoEvents };
-  assert((await replayReport(changing)).every(result => result.matches));
-  // A constant-tempo recording has no tempo changes to apply.
-  assert((await replayReport(simulate([]))).every(result => result.matches));
-  const missing = { ...changing }; delete missing.tempoEvents;
-  await assert.rejects(replayReport(missing), /Physics replay differs/);
+      sim.step();
+    }
+    const report = { type: 'musical-lights-phone-report-v4', initialTempo: 120,
+      config, palette, layout, inputs, finalTick: sim.tick(),
+      finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
+    assert((await replayReport(report)).every(result => result.matches));
+    const missing = { ...report, inputs: inputs.map(({ tempo, ...event }) => event) };
+    await assert.rejects(replayReport(missing), /Physics replay differs/);
+    await assert.rejects(replayReport({ ...report, type: 'musical-lights-phone-report-v3' }), /matching historical replay/);
+  } finally { sim.free(); }
 });
 
-test('seeded acoustic direction events reproduce floor and ceiling motion at every render rate', async () => {
+test('seeded input accents reproduce floor and ceiling motion at every render rate', async () => {
   const config = Array.from(PhysicsSimulation.defaults()), palette = Array(72).fill(.5);
   const layout = Array.from(PhysicsSimulation.layout());
   const danceOptions = { chance: 1, flight: .3, seed: 1 };
   const initialAccent = 1000;
-  const motionEvents = [{ tick: 60, sequence: 1001 }, { tick: 100, sequence: 1002 },
-    { tick: 140, sequence: 1003 }, { tick: 200, sequence: 1003 }];
   const values = Array(38).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
+  const inputs = [{ tick: 0, values }, { tick: 60, values, accent: 1001 }, { tick: 100, values, accent: 1002 },
+    { tick: 140, values, accent: 1003 }, { tick: 200, values, accent: 1003 }];
   const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
   try {
     sim.configure_dance(danceOptions.chance, danceOptions.flight, danceOptions.seed);
-    sim.accent(initialAccent); sim.input(new Float32Array(values));
+    sim.accent(initialAccent);
     for (let tick = 0; tick < 400; tick++) {
-      for (const event of motionEvents) if (event.tick === tick) sim.accent(event.sequence);
+      for (const event of inputs) if (event.tick === tick) {
+        sim.input(new Float32Array(event.values));
+        if (event.accent !== undefined) sim.accent(event.accent);
+      }
       sim.step();
     }
     assert.equal(sim.ceiling_bars(), true, 'The third seeded draw flips the vertical bars');
-    const report = { config, palette, layout, danceOptions, initialAccent, motionEvents,
-      finalTick: sim.tick(), inputs: [{ tick: 0, values }],
+    const report = { type: 'musical-lights-phone-report-v4', initialTempo: 120,
+      config, palette, layout, danceOptions, initialAccent, inputs, finalTick: sim.tick(),
       finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
     assert((await replayReport(report)).every(result => result.matches));
-    const missing = { ...report }; delete missing.motionEvents;
+    const missing = { ...report, inputs: inputs.map(({ accent, ...event }) => event) };
     await assert.rejects(replayReport(missing), /Physics replay differs/);
   } finally { sim.free(); }
 });

@@ -1,0 +1,56 @@
+{
+  "build": {
+    "version": "501cd29a6cb45310201cc573"
+  },
+  "leptos": "formatting, host test, Clippy, and release build passed",
+  "offlineHarness": {
+    "passed": 77,
+    "runtimeBuild": "5bdfcc97e6f2ced5369ae5c4",
+    "note": "Final change only adjusts CSS title alignment; worker and replay code are unchanged."
+  },
+  "browserBeforeFinalTitleAlignment": {
+    "build": "5bdfcc97e6f2ced5369ae5c4",
+    "passed": 107,
+    "failed": 0,
+    "newCrashReports": 0,
+    "specs": [
+      "youtube",
+      "advanced",
+      "balloons"
+    ]
+  },
+  "browserFinal": {
+    "passed": 47,
+    "failed": 0,
+    "newCrashReports": 0,
+    "specs": [
+      "youtube",
+      "advanced"
+    ],
+    "projects": [
+      "chromium",
+      "webkit-spectrum",
+      "iphone-webkit"
+    ],
+    "workers": 1,
+    "retries": 0,
+    "serialStartupGuard": true
+  },
+  "regressions": [
+    "568x320 YouTube plus long recognized title, recognition status, and recovery notices with Reduced Motion and light/dark themes",
+    "Saved density 16 and attack 80 ms survive reload; factory reset restores density 8 and attack 40 ms across the next reload",
+    "Drawn floor and ceiling diagnostic heights and exports preserve render timing independently of newer physics state",
+    "Production-worker same-tick Scroll lights and Reduced Motion updates retain input/tempo/accent order at 30, 60, and 120 FPS"
+  ],
+  "firstRun": {
+    "build": "6415e0fb00790748c832cc70",
+    "passed": 105,
+    "failed": 2,
+    "newCrashReports": 3,
+    "note": "The added factory reset assertion exposed a float32 field-formatting defect. Later repaired runs pass with the unchanged crash guard."
+  },
+  "ci": "Reported separately in PR #40.",
+  "physicalIPhone": "pending; browser profile checks do not establish audible YouTube plus real microphone capture",
+  "humanListening": "pending",
+  "liveAudD": "not invoked"
+}

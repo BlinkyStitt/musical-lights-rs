@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.js';
 
 export async function replayReport(report) {
+  if (report.type !== 'musical-lights-phone-report-v4')
+    throw new Error('Physics report needs the matching historical replay; recording format differs');
   const wasm = await init({ module_or_path: await readFile(new URL('../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
   if (JSON.stringify(report.layout) !== JSON.stringify(Array.from(PhysicsSimulation.layout())))
     throw new Error('Physics report needs the matching historical engine; geometry layout differs');
@@ -11,13 +13,17 @@ export async function replayReport(report) {
   for (const fps of [30, 60, 120]) {
     const sim = new PhysicsSimulation(new Float32Array(report.config), new Float32Array(report.palette));
     if (report.danceOptions) sim.configure_dance(report.danceOptions.chance, report.danceOptions.flight, report.danceOptions.seed);
+    sim.set_tempo(report.initialTempo);
     sim.accent(report.initialAccent ?? 0);
-    let cursor = 0, tempoCursor = 0, motionCursor = 0;
+    let cursor = 0;
     while (sim.tick() < report.finalTick) {
       for (let i = 0; i < report.layout[1] / fps && sim.tick() < report.finalTick; i++) {
-        while (tempoCursor < (report.tempoEvents?.length ?? 0) && report.tempoEvents[tempoCursor].tick === sim.tick()) sim.set_tempo(report.tempoEvents[tempoCursor++].bpm);
-        while (cursor < report.inputs.length && report.inputs[cursor].tick === sim.tick()) sim.input(new Float32Array(report.inputs[cursor++].values));
-        while (motionCursor < (report.motionEvents?.length ?? 0) && report.motionEvents[motionCursor].tick === sim.tick()) sim.accent(report.motionEvents[motionCursor++].sequence);
+        while (cursor < report.inputs.length && report.inputs[cursor].tick === sim.tick()) {
+          const event = report.inputs[cursor++];
+          if (event.tempo !== undefined) sim.set_tempo(event.tempo);
+          sim.input(new Float32Array(event.values));
+          if (event.accent !== undefined) sim.accent(event.accent);
+        }
         sim.step();
       }
     }

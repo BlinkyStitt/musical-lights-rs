@@ -280,8 +280,8 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: 1; height: auto; min-height: 0; display: flex; }
 .audio-card[data-expanded] #dancinglights { flex: 1; height: auto; min-height: 0; }
 .audio-card[data-expanded] .audio-controls { position: relative; inset: auto; flex: none; order: 10; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
-.audio-card[data-expanded] .recognized-song { position: relative; order: 9; flex: none; margin: 0; }
-.audio-card[data-expanded] .recovery-notices { order: 8; flex: none; }
+.audio-card[data-expanded] .recognized-song { position: relative; order: 9; flex: none; margin: 0; max-height: 16dvh; align-items: flex-start; pointer-events: auto; }
+.audio-card[data-expanded] .recovery-notices { order: 8; flex: none; max-height: 18dvh; }
 .audio-card[data-expanded] .button-row { display: grid; gap: .15rem .5rem; }
 .audio-card[data-expanded] :is(.camera-controls, .display-controls, .video-form) { display: none; }
 .audio-card[data-expanded].video-editing .video-form { display: flex; }
@@ -294,8 +294,9 @@ nav { flex-wrap: wrap; }
   .camera-controls .control-row { flex-wrap: wrap; }
 }
 @media (orientation: landscape) {
-  .audio-card[data-expanded].video-active > .visual-content { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; min-height: 200px; }
-  .audio-card[data-expanded].video-active .youtube-frame { height: 100%; min-height: 200px; }
+  .audio-card[data-expanded].video-active > .visual-content { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; min-height: 0; }
+  .audio-card[data-expanded].video-active :is(.video-panel, .youtube-frame, .youtube-frame iframe) { min-height: 0; }
+  .audio-card[data-expanded].video-active .youtube-frame { height: 100%; aspect-ratio: auto; }
   .audio-card[data-expanded].video-active .video-panel { padding: 0 .5rem 0 0; display: flex; flex-direction: column; }
   .audio-card[data-expanded].video-active .youtube-frame { flex: 1; }
 }
@@ -311,5 +312,6 @@ nav { flex-wrap: wrap; }
 .button-row .recognition-control { display: grid; grid-template-columns: minmax(0, 1fr) 18px; align-items: center; gap: .25rem; }
 .button-row .recognition-control .recognition-status { grid-column: 1 / -1; }
 .button-row .recognition-ring { width: 18px; height: 18px; }
+.audio-card[data-expanded] .recognition-status { max-height: 12dvh; overflow: auto; }
 .recognition-status[data-routine="true"] { display: none; }
 .ceiling-bars .meter-track { inset: var(--plot-baseline) 0 var(--balloon-headroom); }

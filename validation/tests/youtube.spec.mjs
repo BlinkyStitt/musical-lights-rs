@@ -64,6 +64,48 @@ for (const path of ['/', '/advanced/']) {
     expect(await page.evaluate(() => navigator.audioSession.type)).toBe('auto');
   });
 }
+for (const reducedMotion of ['reduce', 'no-preference']) {
+  test(`short landscape keeps YouTube, recognition, recovery and all controls visible with ${reducedMotion}`, async ({ page }, info) => {
+    await page.emulateMedia({ reducedMotion, colorScheme: reducedMotion === 'reduce' ? 'light' : 'dark' });
+    await page.setViewportSize({ width: 568, height: 320 });
+    await setup(page); await load(page);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+    await page.evaluate(() => {
+      const card = document.querySelector('.audio-card');
+      const song = card.querySelector('.recognized-song'); song.hidden = false;
+      song.querySelector('.song-title').textContent = 'An artist with a very long name — A song title long enough to wrap across many lines on a small landscape screen. '.repeat(4);
+      const recognition = card.querySelector('.recognition-status'); delete recognition.dataset.routine;
+      recognition.textContent = 'No song recognized. Try again during a clearer part of the song.';
+      card.querySelector('.audio-error').textContent = 'Microphone capture was interrupted. Turn Listening off and on to restart when the microphone is available. '.repeat(3);
+    });
+    await expect.poll(() => page.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const video = rect('.youtube-frame iframe'), scene = rect('.balloon-layer');
+      const recovery = rect('.recovery-notices'), song = rect('.recognized-song'), controls = rect('.audio-controls');
+      return { videoVisible: video.width > 0 && video.height > 0,
+        sceneVisible: scene.height > 0, separated: video.right <= scene.left,
+        sceneAboveNotices: scene.bottom <= recovery.top, noticesAboveSong: recovery.bottom <= song.top,
+        songAboveControls: song.bottom <= controls.top, controlsFit: controls.bottom <= innerHeight,
+        widthFits: document.documentElement.scrollWidth <= innerWidth };
+    })).toEqual({ videoVisible: true, sceneVisible: true, separated: true, sceneAboveNotices: true,
+      noticesAboveSong: true, songAboveControls: true, controlsFit: true, widthFits: true });
+    for (const name of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
+      const control = page.getByRole('checkbox', { name, exact: true });
+      await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
+      expect(await control.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
+    if (reducedMotion === 'reduce') {
+      expect(await page.locator('.recognized-song').evaluate(n => n.querySelector('.song-window').getBoundingClientRect().top >= n.getBoundingClientRect().top)).toBe(true);
+    }
+    await page.screenshot({ path: info.outputPath('short-landscape-youtube-notices.png') });
+    // The reserved regions must not intercept the exit gesture.
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+  });
+}
 test('speaker playback and microphone capture share an audio session, and stopping Listening leaves playback active', async ({ page }) => {
   await setup(page); await load(page); await page.evaluate(() => window.videoPlayer.playVideo());
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');

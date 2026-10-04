@@ -58,13 +58,14 @@ Neither the browser nor Rapier decides whether an acoustic crest qualifies.
 The browser stores display preferences and applied physics settings locally.
 It restores no microphone permission, live listening, sensor session, or opted-in
 recognition. Storage failure retains usable session settings. Display reset
-restores defaults; Input and Physics keep their separate reset scopes.
+restores defaults; Input and Physics keep their separate reset scopes. Factory
+physics defaults stay distinct from saved settings across reloads.
 
 The worklet adds cue ordinals to existing tempo metadata. Raw loudness,
 filtered-target transport, acoustic traces, and the 38-value physics input
-layout remain unchanged. Physics protocol 8 and phone report v3 record the
-random seed, dance settings, starting ordinal, and applied motion/tempo events
-for exact replay with the matching WASM engine. Buffers allocate only when
+layout remain unchanged. Physics protocol 8 and phone report v4 record the
+random seed, dance settings, starting ordinal and tempo, and ordered input events
+with their tempo and accent for exact replay with the matching WASM engine. Buffers allocate only when
 recording starts. No alternate timed-reversal engine remains.
 
 Floor/ceiling transitions retract the bars before switching collider positions,
@@ -84,10 +85,10 @@ YouTube test uses Google's public iframe-demo video and no recognition upload.
 Run checks from the repository root with pinned tools. Use macOS host access for
 browser commands. Keep the serial startup guard, one worker, and zero retries.
 
-The complete macOS browser run passes 382 checks with zero failures and two
+The earlier complete macOS browser run passes 382 checks with zero failures and two
 opt-in skips before the idle pause correction. Core passes 68 tests in each
 of four feature configurations; physics passes 42 tests and the offline harness
-passes 74, including the pause regression. All 61 final-build checks for
+passes 74, including the pause regression. All 61 checks on build `66d4989cc2956f207b347e81` for
 YouTube, musical motion, Advanced controls, keyboard, and Reduced Motion pass
 in Chromium, WebKit, and the iPhone profile. Worklet, Leptos, and reference
 checks pass. The core also compiles for both `thumbv6m-none-eabi` and
@@ -95,6 +96,19 @@ checks pass. The core also compiles for both `thumbv6m-none-eabi` and
 the deployed PR #39 WASM bit for bit. Historical fixed-window numeric results
 remain unchanged. See [the evidence record](youtube-dance-results/validation.json)
 for build identities and test boundaries.
+
+The four review corrections pass 77 offline checks and a 107-check macOS
+browser run. After the final title alignment change, all 47 affected YouTube
+and Advanced checks pass on build `501cd29a6cb45310201cc573`, with no new
+browser crash reports. The combined 568 × 320 layout keeps video, wrapped song
+text, recovery notices, and all controls inside the viewport. The
+[short landscape image](youtube-dance-results/fullscreen-short-landscape.png)
+uses a mock player and long notices under Reduced Motion. Factory reset
+restores 8 kg/m³ and 40 ms after saved 16 kg/m³ and 80 ms settings reload.
+Listening-review plots and exports use the drawn floor/ceiling base. Phone
+report v4 keeps same-tick input, tempo, and accent ordering; worker recordings
+replay exactly at 30, 60, and 120 FPS. See the
+[review evidence](youtube-dance-results/review-fixes.json) for run boundaries.
 
 The [portrait](youtube-dance-results/mock-youtube-portrait.png) and
 [landscape](youtube-dance-results/mock-youtube-landscape.png) layout images use a
@@ -115,8 +129,9 @@ ML_LIVE_YOUTUBE=1 node validation/node_modules/@playwright/test/cli.js test yout
 node validation/musical-previews.mjs
 ```
 
-Release remains held pending a physical iPhone test with audible YouTube and
-simultaneous real microphone-driven lights. Test normal, portrait fullscreen,
+Physical iPhone acceptance remains pending for audible YouTube with
+simultaneous real microphone-driven lights. This is a verification limit,
+not a merge gate. Test normal, portrait fullscreen,
 landscape fullscreen, rotation lock, Reduced Motion, tilt, shake, and independent
 Listening shutdown. Record the device, iOS version, browser, audible output,
 capture state, and observed musical response. Desktop WebKit and its iPhone
