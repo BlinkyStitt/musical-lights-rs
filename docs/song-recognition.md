@@ -101,6 +101,10 @@ iPhone-profile WebKit checks, 14 offline recognition checks, and the Leptos
 build/test/Clippy checks. Ticker checks cover short and long names, constant
 leftward travel, looping, light/dark themes, rotation and Reduced Motion.
 Recognition responses are mocked; physical-phone acceptance remains pending.
+The follow-up also waits for simulated scrolling to settle before checking its
+stopped position, and keeps the injected expensive-tick fixture running until
+snapshots are actually published. Single-tick yield, zero discarded time, debt
+and fullscreen snapshot-age limits remain enforced.
 
 ## Separate live check
 
