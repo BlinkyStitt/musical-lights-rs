@@ -429,7 +429,7 @@ pub fn DancingLights(
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
-                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights; click Exit fullscreen to return" }
+                        title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show only the lights" }
                         on:click=move |_| {
                             if !fullscreen.get_untracked() && input_source.get_untracked() == "microphone" { start(); }
                             screen.with_value(|session| {
@@ -456,7 +456,6 @@ pub fn DancingLights(
                 </div>
             </Show>
             <div class="spectrum-panel">
-                <p class="fullscreen-hint">"Click Exit fullscreen"</p>
                 <div class="frequency-tooltip" id="frequency-readout" role="tooltip"
                     hidden=move || selected_band.get().is_none()
                     style=move || selected_band.get().map(|index| {
