@@ -197,7 +197,7 @@ test('fullscreen frequency labels expire below the controls and keyboard users c
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto('http://127.0.0.1:8101');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
-  await expect(page.locator('.fullscreen-hint')).toBeHidden();
+  await expect(page.locator('.fullscreen-hint')).toHaveCount(0);
   const hit = await meterPoint(page, page.getByRole('meter').nth(12));
   await page.touchscreen.tap(hit.x, hit.y);
   const readout = page.getByRole('tooltip');
@@ -206,7 +206,7 @@ test('fullscreen frequency labels expire below the controls and keyboard users c
   const box = await readout.boundingBox();
   expect(box.y).toBeGreaterThanOrEqual((await page.locator('.audio-controls').boundingBox()).y + (await page.locator('.audio-controls').boundingBox()).height);
   await expect(readout).toBeHidden({ timeout: 3500 });
-  await expect(page.locator('.fullscreen-hint')).toBeHidden();
+  await expect(page.locator('.fullscreen-hint')).toHaveCount(0);
   // Focus the first bar with the keyboard, then move back to the exit control.
   await page.getByRole('meter').first().focus();
   await page.keyboard.press('Shift+Tab');

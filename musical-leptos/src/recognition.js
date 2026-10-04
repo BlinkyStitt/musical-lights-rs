@@ -94,8 +94,9 @@ export class SongRecognition {
     this.strip = document.createElement('div');
     this.strip.className = 'recognized-song';
     this.strip.hidden = true;
-    this.strip.setAttribute('aria-label', 'Last recognized song');
-    this.strip.innerHTML = '<span class="song-caption">Last recognized</span><div class="song-window"><span class="song-title"></span></div>';
+    this.strip.setAttribute('role', 'status');
+    this.strip.setAttribute('aria-atomic', 'true');
+    this.strip.innerHTML = '<div class="song-window"><span class="song-title"></span></div>';
     card.querySelector('.spectrum-panel').before(this.strip);
     const query = selector => this.tools.querySelector(selector);
     this.control = document.createElement('div'); this.control.className = 'recognition-control';
@@ -130,6 +131,7 @@ export class SongRecognition {
     window.addEventListener('storage', this.onStorage);
     this.resize = new ResizeObserver(() => this.measureTitle());
     this.resize.observe(this.strip);
+    this.resize.observe(this.strip.querySelector('.song-title'));
     this.cooldownTimer = setInterval(() => this.refresh(), 1000);
     this.renderHistory(); this.refresh();
   }
@@ -267,18 +269,26 @@ export class SongRecognition {
   showSong(entry) {
     const text = `${entry.artist} — ${entry.title}`;
     const title = this.strip.querySelector('.song-title');
-    if (title.textContent !== text) title.textContent = text;
+    const changed = title.textContent !== text;
+    if (changed) title.textContent = text;
     this.strip.hidden = false;
     this.strip.title = `${text} · ${new Date(entry.sampleStartedAt).toLocaleString()}`;
     this.measureTitle();
+    // Each new song starts at the left edge, then travels continuously left.
+    // Repeated recognition of the same song keeps its current scrolling phase.
+    if (changed) title.getAnimations().forEach(animation => { animation.currentTime = 0; });
   }
 
   measureTitle() {
     const title = this.strip.querySelector('.song-title');
-    const distance = Math.max(0, title.scrollWidth - title.parentElement.clientWidth);
-    this.strip.style.setProperty('--song-travel', `-${distance}px`);
-    this.strip.style.setProperty('--song-duration', `${Math.max(8, distance / 25 + 4)}s`);
-    this.strip.classList.toggle('song-overflow', distance > 0);
+    const width = title.parentElement.clientWidth;
+    const textWidth = title.scrollWidth;
+    const pixelsPerSecond = 45;
+    this.strip.style.setProperty('--song-entry', `${width}px`);
+    this.strip.style.setProperty('--song-travel', `-${textWidth}px`);
+    this.strip.style.setProperty('--song-duration', `${(width + textWidth) / pixelsPerSecond}s`);
+    this.strip.style.setProperty('--song-delay', `-${width / pixelsPerSecond}s`);
+    this.strip.classList.toggle('song-overflow', textWidth > width);
   }
 
   renderHistory() {

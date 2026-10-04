@@ -144,10 +144,6 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .frequency-tooltip[hidden] { display: none; }
 .frequency-swatch { width: .85rem; height: .85rem; flex: none; background: var(--band-color); border: 1px solid currentColor; }
 .audio-card[data-expanded] .frequency-tooltip { top: var(--fullscreen-control-bottom, 10rem); }
-.fullscreen-hint { display: none; }
-.audio-card[data-expanded] .fullscreen-hint { display: block; position: absolute; top: .75rem; left: 50%; transform: translateX(-50%); z-index: 2; margin: 0; padding: .3rem .6rem; border-radius: 6px; color: var(--ink); background: var(--surface); font-size: .75rem; white-space: nowrap; pointer-events: none; animation: dismiss-hint 3s step-end forwards; }
-.spectrum-panel:has(.frequency-tooltip:not([hidden])) .fullscreen-hint { visibility: hidden; }
-@keyframes dismiss-hint { to { visibility: hidden; } }
 
 .calibration-status { margin: .25rem 0; font-size: .8rem; }
 .calibration-controls { margin-top: .5rem; font-size: .875rem; }
@@ -173,13 +169,12 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .song-history summary { cursor: pointer; min-height: 44px; padding: .7rem 0; }
 .song-history li { padding: .3rem 0; overflow-wrap: anywhere; }
 .recognized-song { display: flex; gap: .75rem; align-items: center; min-width: 0; padding: .5rem; margin-bottom: .5rem; font-size: .85rem; background: var(--surface); color: var(--ink); border-radius: 6px; }
-.song-caption { flex: none; font-size: .7rem; color: var(--muted); }
-.song-window { min-width: 0; overflow: hidden; }
+.song-window { flex: 1; min-width: 0; overflow: hidden; }
 .song-title { display: block; width: max-content; white-space: nowrap; }
-.song-overflow .song-title { animation: song-scroll var(--song-duration) linear infinite alternate; }
-@keyframes song-scroll { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(var(--song-travel)); } }
+.song-overflow .song-title, .audio-card[data-expanded] .song-title { animation: song-scroll var(--song-duration) var(--song-delay) linear infinite; }
+@keyframes song-scroll { from { transform: translateX(var(--song-entry)); } to { transform: translateX(var(--song-travel)); } }
 @media (prefers-reduced-motion: reduce) {
-  .song-title, .song-overflow .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
+  .song-title, .song-overflow .song-title, .audio-card[data-expanded] .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
 }
 .audio-card[data-expanded] .song-tools { position: relative; order: 1; flex: none; z-index: 3; margin: 0; pointer-events: none; }
 .audio-card[data-expanded] .song-tools > :not(.recognition-status, .recognition-cooldown) { display: none; }
@@ -249,10 +244,9 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .fullscreen-button { position: static; min-height: 44px; }
 .audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
 .audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
-.audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; background: var(--surface); }
+.audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; border-radius: 0; padding: .35rem 0; background: none; font-size: clamp(1rem, 3.5vw, 1.4rem); font-weight: 600; text-shadow: 0 0 4px var(--plot), 0 0 8px var(--plot); }
 .audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
 .audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
-.audio-card[data-expanded] .fullscreen-hint { display: none; }
 .input-source-controls .control-row { min-width: 0; gap: .5rem; }
 .input-source-controls :is(select, input) { min-height: 44px; min-width: 0; max-width: 100%; font: inherit; }
 .input-source-controls select { flex: 1; width: 10rem; }
