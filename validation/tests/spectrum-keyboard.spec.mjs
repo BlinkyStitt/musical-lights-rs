@@ -81,8 +81,13 @@ test('arrows reach every sample across group boundaries and Home/End clamp at en
   await expectSample(page, 23);
   await page.keyboard.press('Home');
   await expectSample(page, 0);
+});
 
+test('modified keys and vertical arrows preserve selection and remain available to the browser', async ({ page }) => {
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
+  await page.keyboard.press('Tab');
   await page.getByRole('meter').nth(13).focus();
+  await expectSample(page, 13);
   // Modified keys and vertical arrows remain available to the browser and AT.
   await page.evaluate(() => {
     window.spectrumKeys = [];
