@@ -40,7 +40,11 @@ class ArtifactTests(unittest.TestCase):
                 ),
             ),
             patch.dict(
-                os.environ, GITHUB_RUN_ID="123", GITHUB_REPOSITORY="owner/lights"
+                os.environ,
+                GITHUB_RUN_ID="123",
+                GITHUB_RUN_ATTEMPT="1",
+                GITHUB_REPOSITORY="owner/lights",
+                GITHUB_EVENT_PATH="",
             ),
         ):
             ci.pack(self.bundle, self.inventory, self.root)
