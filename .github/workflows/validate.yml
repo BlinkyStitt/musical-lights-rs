@@ -3,9 +3,13 @@ on:
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'musical-lights-core/**'
       - 'validation/**'
-      - '.github/workflows/**'
+      - '!validation/demos.config.mjs'
+      - '!validation/tests/other-apps.spec.mjs'
+      - '.github/workflows/validate.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-leptos/**'
@@ -14,9 +18,13 @@ on:
       - 'docs/audio-audit-results/**'
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'musical-lights-core/**'
       - 'validation/**'
-      - '.github/workflows/**'
+      - '!validation/demos.config.mjs'
+      - '!validation/tests/other-apps.spec.mjs'
+      - '.github/workflows/validate.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-leptos/**'
@@ -26,35 +34,84 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  actions: read
 jobs:
-  core:
-    name: rust (core)
-    runs-on: ubuntu-latest
+  plan:
+    name: Site plan
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: site-plan-${{ github.ref }}
+      cancel-in-progress: true
+    outputs:
+      reuse: ${{ steps.plan.outputs.reuse }}
+      run_id: ${{ steps.plan.outputs.run_id }}
+      artifact_id: ${{ steps.plan.outputs.artifact_id }}
+      tree: ${{ steps.plan.outputs.tree }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: Cache Rust dependencies and builds
+      - uses: actions/cache@v6.1.0
+        id: ci-tools
+        with:
+          path: .tools
+          key: ci-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
+      - run: python3 validation/install_tools.py ci
+        if: steps.ci-tools.outputs.cache-hit != 'true'
+      - run: .tools/bin/actionlint .github/workflows/*.yml
+      - run: python3 -m unittest discover -s validation/tooling -v
+      - run: python3 -m unittest discover -s validation/notification_tests -v
+      - name: Resolve exact validated source tree
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 validation/ci.py plan
+  core:
+    name: rust (core)
+    needs: plan
+    if: needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: site-core-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Cache workspace dependencies and builds
         uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            musical-lights-core/target
-          key: core-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-${{ github.sha }}
+            target
+          key: core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            core-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-
-      - name: Check deployment notification behavior
-        run: python3 -m unittest discover -s validation/notification_tests -v
+            core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
       - run: python3 validation/validate.py core
   web:
-    runs-on: ubuntu-latest
+    name: Build website
+    needs: plan
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: site-build-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Restore exact validated bundle
+        if: needs.plan.outputs.reuse == 'true'
+        uses: actions/download-artifact@v8.0.1
+        with:
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: .ci/site
+          merge-multiple: true
+      - name: Verify and restore compiled packages
+        if: needs.plan.outputs.reuse == 'true'
+        env:
+          PRODUCER_RUN: ${{ needs.plan.outputs.run_id }}
+        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
       - name: Cache Rust dependencies and builds
+        if: needs.plan.outputs.reuse != 'true'
         uses: actions/cache@v6.1.0
         with:
           path: |
@@ -63,68 +120,192 @@ jobs:
             musical-lights-physics/target
             musical-lights-worklet/target
             musical-leptos/target
-          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ github.sha }}
+          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-
+      - name: Cache renderer package downloads
+        if: needs.plan.outputs.reuse != 'true'
+        uses: actions/cache@v6.1.0
+        with:
+          path: .cache/npm
+          key: renderer-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('musical-leptos/package-lock.json') }}
       - uses: actions/setup-node@v7.0.0
+        if: needs.plan.outputs.reuse != 'true'
         with:
           node-version: '26.8.2'
           cache: npm
           cache-dependency-path: validation/package-lock.json
       - name: Install Rust
+        if: needs.plan.outputs.reuse != 'true'
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown
-      - name: Check tool download handling
-        run: python3 -m unittest discover -s validation/tooling -v
       - name: Cache pinned web tools
+        if: needs.plan.outputs.reuse != 'true'
         id: web-tools
         uses: actions/cache@v6.1.0
         with:
           path: .tools
           key: site-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
       - run: python3 validation/install_tools.py site
-        if: steps.web-tools.outputs.cache-hit != 'true'
-      - run: python3 validation/validate.py physics worklet leptos
-      - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium webkit && npm run test:site
-        env:
-          DEBUG: pw:browser
+        if: needs.plan.outputs.reuse != 'true' && steps.web-tools.outputs.cache-hit != 'true'
+      - name: Validate and build compiled packages once
+        if: needs.plan.outputs.reuse != 'true'
+        run: python3 validation/validate.py physics worklet leptos
+      - name: Run offline checks and collect full browser inventory
+        if: needs.plan.outputs.reuse != 'true'
+        working-directory: validation
+        run: |
+          npm ci --ignore-scripts
+          node --test harness/*.test.mjs
+          mkdir -p ../.ci
+          npx playwright test --project chromium --project chromium-permissions --project webkit-spectrum --project iphone-webkit --list --reporter=json > ../.ci/inventory.json
+      - name: Record compiled bundle and digests
+        if: needs.plan.outputs.reuse != 'true'
+        run: python3 validation/ci.py pack .ci/site .ci/inventory.json
       - uses: actions/upload-artifact@v7.0.1
-        if: always()
         with:
-          name: browser-validation
-          path: validation/test-results/
-          if-no-files-found: ignore
-      # Package the exact directory exercised by the browser suite. PRs also
-      # produce the artifact so packaging is checked before a main deployment.
-      - name: Package validated website
-        uses: actions/upload-pages-artifact@v5.0.0
-        with:
-          path: ./musical-leptos/dist
+          name: site-build-${{ github.run_attempt }}
+          path: .ci/site
           include-hidden-files: true
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
   loudness-reference:
-    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: site-reference-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: Cache Rust dependencies and builds
+      - name: Cache workspace dependencies and builds
         uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            musical-lights-core/target
-          key: reference-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-${{ github.sha }}
+            target
+          key: reference-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            reference-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-core/Cargo.lock') }}-
+            reference-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.14.7'
-      - name: Install reference environment tool
+      - name: Install locked reference environment tool
         run: python3 -m pip install uv==0.10.5
+      - name: Cache locked Python downloads
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: reference-uv-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/loudness/uv.lock') }}
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal
       - run: python3 validation/validate.py reference
+  browser:
+    name: Browser (${{ matrix.name }})
+    needs: [plan, web]
+    if: needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: site-browser-${{ matrix.name }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: chromium-1
+            projects: --project chromium --project chromium-permissions
+            shard: 1/2
+            browsers: chromium
+          - name: chromium-2
+            projects: --project chromium --project chromium-permissions
+            shard: 2/2
+            browsers: chromium
+          - name: webkit
+            projects: --project webkit-spectrum --project iphone-webkit
+            shard: 1/1
+            browsers: webkit
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: site-build-${{ github.run_attempt }}
+          path: .ci/site
+      - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '26.8.2'
+          cache: npm
+          cache-dependency-path: validation/package-lock.json
+      - name: Install exact browser and run isolated shard
+        working-directory: validation
+        env:
+          PROJECTS: ${{ matrix.projects }}
+          SHARD: ${{ matrix.shard }}
+          BROWSERS: ${{ matrix.browsers }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
+          DEBUG: pw:browser
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps "$BROWSERS"
+          read -r -a projects <<< "$PROJECTS"
+          npx playwright test "${projects[@]}" --shard="$SHARD" --reporter=list,./browser-process-reporter.mjs,json
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: browser-report-${{ matrix.name }}
+          path: validation/test-results/
+          retention-days: ${{ job.status == 'failure' && 7 || 2 }}
+          overwrite: true
+          if-no-files-found: error
+  validated:
+    name: Validated website
+    needs: [plan, core, web, loudness-reference, browser]
+    if: >-
+      ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.web.result == 'success' &&
+          (needs.plan.outputs.reuse == 'true' ||
+           (needs.core.result == 'success' && needs.loudness-reference.result == 'success' && needs.browser.result == 'success')) }}
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: site-validated-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: site-build-${{ github.run_attempt }}
+          path: .ci/site
+      - name: Verify producer and byte digests
+        env:
+          PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
+        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
+      - uses: actions/download-artifact@v8.0.1
+        if: needs.plan.outputs.reuse != 'true'
+        with:
+          pattern: browser-report-*
+          path: .ci/reports
+      - name: Require complete browser coverage
+        if: needs.plan.outputs.reuse != 'true'
+        run: python3 validation/ci.py coverage .ci/site/inventory.json .ci/reports
+      - name: Retain exact fully validated bundle
+        if: needs.plan.outputs.reuse != 'true'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: validated-site-${{ needs.plan.outputs.tree }}
+          path: .ci/site
+          include-hidden-files: true
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+      - name: Package the tested website
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: musical-leptos/dist
+          include-hidden-files: true
+          retention-days: 1
   pages:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [core, web, loudness-reference]
+    needs: validated
     outputs:
       deployed: ${{ steps.deployment.outcome == 'success' }}
       page_url: ${{ steps.deployment.outputs.page_url }}
@@ -135,7 +316,7 @@ jobs:
     concurrency:
       group: github-pages
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -162,8 +343,8 @@ jobs:
     if: >-
       ${{ always() && !cancelled() && github.ref == 'refs/heads/main' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    needs: [core, web, loudness-reference, pages]
-    runs-on: ubuntu-latest
+    needs: [plan, core, web, loudness-reference, browser, validated, pages]
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v7.0.1

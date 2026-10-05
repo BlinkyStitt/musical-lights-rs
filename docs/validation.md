@@ -2,44 +2,70 @@
 
 ## Website deployment
 
-The workflows separate deployment from independent applications and firmware:
+Website validation builds physics, the worklet and Leptos once. The build job
+runs the offline harness and records the complete browser test inventory. Two
+isolated Chromium shards and one WebKit/iPhone-profile job download that same
+compiled bundle. Each retains the serial startup/crash guard, one worker, zero
+retries and every existing assertion. The final job compares the reports with
+the inventory: omitted, duplicated, incomplete or failed tests stop publication.
+Core and loudness-reference checks run alongside the build and browser jobs.
 
-- `validate.yml` (Website validation and deployment): core, physics, audio
-  worklet, Leptos, loudness references, and the production browser suite. Pages
-  waits only for `core`, `web`, and `loudness-reference` on current `main`.
-- `other-apps.yml`: terminal, Dioxus, and standalone WASM validation. The two
-  demo browser checks run separately, retaining their assertions and using a
-  demo artifact for server readiness.
-- `firmware.yml`: Feather, STM32, ESP Embassy, and ESP-IDF validation. Failures
-  remain visible in this workflow and do not gate website deployment.
+The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
+test inventory, and file digests. Its provenance records the Git source tree,
+workflow digest, runner platform/image, producer run/attempt and source commit.
+PRs always perform fresh validation. After a merge or manual dispatch, the plan
+can reuse an unexpired artifact only from a successful same-repository PR run
+of this workflow with all required validation jobs passed. It verifies the
+source tree, build inputs, producer/commit relationship and every file digest.
+Fork artifacts, failed or incomplete runs, changed inputs, corrupt files and
+expired artifacts cannot replace validation. A miss performs the complete
+pinned build and checks. Reuse does not modify the tested files or relabel their
+embedded build identity: the deployment run records its own main commit and
+links to the original producer.
 
-Path filters cover each workflow's packages and shared dependencies/tooling.
-Shared core changes run all three workflows. Workflow changes also run all
-three; each supports manual dispatch for a complete check of its targets.
-Superseded PR runs cancel within their workflow, while main validation runs
-remain independent. Only the Pages job receives deployment permissions.
+Pages receives the exact validated `dist`, waits for the validation barrier,
+and checks current main before publishing. Publishing stays serialized and is
+not canceled by newer validation. Per-job concurrency cancels superseded PR and
+main validation; the latest-main check also prevents stale queued publication.
+Deployment notifications retain failure, cancellation and superseded-run rules.
+Only Pages receives Pages/OIDC permissions; artifact lookup/download uses read
+permissions. See the GitHub
+[artifact deployment workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-The web job packages the exact `musical-leptos/dist` used by passing browser
-checks as `github-pages`, including on PRs. Pages deploys the same-run artifact
-without rebuilding. Deployments remain serialized, and queued stale revisions
-skip publishing after checking the current main SHA. See GitHub's
-[build/deploy artifact workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+Independent consumers remain separate: `other-apps.yml` validates terminal,
+Dioxus and standalone WASM; `firmware.yml` validates Feather, STM32, ESP Embassy
+and ESP-IDF. A change selector runs only affected consumers. Core, shared
+validation/build tooling and pinned Cargo configuration changes reach all
+consumers. Manual dispatch includes every target. Browser-only test changes do
+not rebuild unrelated firmware or terminal applications.
 
-Pinned tool caches are separated by site, demos, and ESP installers. The site's
-installer excludes Dioxus, so its downloads cannot block deployment. The `web`
-installer group remains the complete local browser toolchain. Rust dependency
-and build caches are scoped by job/target, platform, toolchain, lockfiles and
-revision; npm downloads use the validation lockfile. Missing caches take the
-normal pinned build path. Browser/test failures are never retried or ignored.
+Rust caches use the actual workspace `target` and root `Cargo.lock` for core
+and reference jobs. Standalone packages cache their own target directories.
+Keys include platform, pinned toolchain, lockfiles and Rust/build inputs, so
+JavaScript/test-only commits do not create new copies of identical Rust caches.
+Cargo still validates/rebuilds restored inputs. Tool caches remain separated
+by site, demos, ESP installers and the pinned actionlint checker. Locked Python
+reference downloads and npm downloads are also cached. Missing caches take the
+normal pinned installation/build path; test failures are never retried or ignored.
+Closed same-repository PRs remove only their `refs/pull/<number>/merge` caches.
+They do not remove default-branch caches.
 
-`python3 validation/validate.py browser` still runs all browser projects locally.
-For the workflow subsets, run `npm run test:site` or `npm run test:demos` from
-`validation` (with repository-pinned tools and macOS host access). All projects
-retain the serial startup guard, one worker, and zero retries.
+Temporary build and Pages artifacts last one day. Fully validated bundles last
+seven days, successful browser reports two days, and failed reports seven days.
+Standard GitHub-hosted runners remain free for this public repository; these
+changes do not require larger runners, paid images or increased cache storage.
+Docker image pulls and browser downloads are not used as substitutes for the
+isolated test jobs: the measured dominant cost is test execution.
 
-Validate workflow changes with `actionlint .github/workflows/*.yml`.
-Run installer regressions with `python3 -m unittest discover -s validation/tooling -v`.
-The `reference` target includes installer and test lint/type checks.
+For local checks, `python3 validation/validate.py browser` still runs all projects.
+`npm run test:site` and `npm run test:demos` retain their complete local subsets.
+Run from the repository root with pinned tools and macOS host access. To check
+workflow syntax, install the pinned checker with
+`python3 validation/install_tools.py ci`, then run
+`.tools/bin/actionlint .github/workflows/*.yml`.
+Run provenance, coverage, change-selector, installer and publication regressions
+with `python3 -m unittest discover -s validation/tooling -v`; the reference
+target includes their lint/type checks.
 
 ## Controls and embedded musical motion (2026-10-03)
 

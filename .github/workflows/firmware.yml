@@ -3,11 +3,14 @@ on:
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'musical-lights-core/**'
+      - 'validation/ci.py'
       - 'validation/validate.py'
       - 'validation/install_tools.py'
       - 'validation/tooling/**'
-      - '.github/workflows/**'
+      - '.github/workflows/firmware.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-feather-m0/**'
@@ -16,11 +19,14 @@ on:
       - 'musical-adafruit-sparkle-idf/**'
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'musical-lights-core/**'
+      - 'validation/ci.py'
       - 'validation/validate.py'
       - 'validation/install_tools.py'
       - 'validation/tooling/**'
-      - '.github/workflows/**'
+      - '.github/workflows/firmware.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-feather-m0/**'
@@ -31,15 +37,29 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  changes:
+    name: Affected firmware
+    runs-on: ubuntu-24.04
+    outputs:
+      rust: ${{ steps.changes.outputs.rust }}
+      esp: ${{ steps.changes.outputs.esp }}
+      rust_matrix: ${{ steps.changes.outputs.rust_matrix }}
+      esp_matrix: ${{ steps.changes.outputs.esp_matrix }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: changes
+        run: python3 validation/ci.py changes
   rust:
-    runs-on: ubuntu-latest
+    name: rust (${{ matrix.package }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      matrix:
-        package: [feather, stm32]
+      matrix: ${{ fromJSON(needs.changes.outputs.rust_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
@@ -48,22 +68,23 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            musical-feather-m0/target
-            musical-stm32/target
-          key: firmware-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-feather-m0/Cargo.lock', 'musical-stm32/Cargo.lock') }}-${{ github.sha }}
+            ${{ matrix.directory }}/target
+          key: firmware-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', format('{0}/src/**/*.rs', matrix.directory), format('{0}/Cargo.toml', matrix.directory), format('{0}/build.rs', matrix.directory), '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            firmware-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-feather-m0/Cargo.lock', 'musical-stm32/Cargo.lock') }}-
+            firmware-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target thumbv6m-none-eabi,thumbv7em-none-eabihf
       - run: python3 validation/validate.py ${{ matrix.package }}
   esp:
+    name: esp (${{ matrix.package }})
+    needs: changes
+    if: needs.changes.outputs.esp == 'true'
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      matrix:
-        package: [esp-embassy, esp-idf]
+      matrix: ${{ fromJSON(needs.changes.outputs.esp_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
@@ -72,11 +93,10 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            musical-adafruit-sparkle-embassy/target
-            musical-adafruit-sparkle-idf/target
-          key: esp-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles('musical-adafruit-sparkle-embassy/Cargo.lock', 'musical-adafruit-sparkle-idf/Cargo.lock') }}-${{ github.sha }}
+            ${{ matrix.directory }}/target
+          key: esp-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', format('{0}/src/**/*.rs', matrix.directory), format('{0}/Cargo.toml', matrix.directory), format('{0}/build.rs', matrix.directory), '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            esp-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles('musical-adafruit-sparkle-embassy/Cargo.lock', 'musical-adafruit-sparkle-idf/Cargo.lock') }}-
+            esp-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.14.7'
