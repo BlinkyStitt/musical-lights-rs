@@ -428,7 +428,7 @@ pub fn DancingLights(
                     <div class="scroll-controls">
                     <SettingSwitch label="Scroll lights" class="scroll-lights"
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
-                    <output class="tempo-readout" aria-label="Estimated tempo" title="Estimated musical tempo">"120 BPM"</output>
+                    <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" title="Estimated musical tempo">"120 BPM"</output>
                     </div>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()

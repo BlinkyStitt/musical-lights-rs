@@ -102,6 +102,7 @@ test('Advanced saves bounded direction endpoints and curve without starting audi
   await page.locator('.display-reset').click();
   expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.directionOdds)).toEqual([60, 200, .05, .5, 1]);
   await expect(page.locator('.tempo-readout')).toHaveText(/\d+ BPM/);
+  await expect(page.locator('.tempo-readout')).toHaveAttribute('aria-live', 'off');
   await expect(page.locator('.listening-toggle')).not.toBeChecked();
 });
 
