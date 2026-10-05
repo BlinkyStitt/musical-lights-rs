@@ -25,7 +25,7 @@ for (const width of [320, 375, 1440]) {
       return {
         guideDifference: Math.abs(guide.y + guide.height / 2 - graph.y - (1 - new THREE.Vector3(0, view.current[view.layout[17] + 1], 0).project(view.camera).y) * graph.height / 2),
         headroom: (track.top - graph.top) / graph.height,
-        expectedHeadroom: 1 - view.current[view.layout[17]+1] / view.visibleHeight,
+        expectedHeadroom: (1 - new THREE.Vector3(0, view.current[view.layout[17]+1], 0).project(view.camera).y) / 2,
         hitRegionError: Math.max(...meters.map((node,i) => {
           const box=node.getBoundingClientRect();
           const column = (i + view.renderedPhase) % 24;

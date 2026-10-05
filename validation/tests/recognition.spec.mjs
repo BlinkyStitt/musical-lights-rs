@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { syntheticAudio, physicsReady } from '../physics-state.mjs';
+import { syntheticAudio, physicsReady, normalView } from '../physics-state.mjs';
 
 const localBase = 'http://127.0.0.1:8101';
 // Published-build checks still replace the endpoint with a same-origin mock.
@@ -77,6 +77,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, cap
     await route.fulfill({ status, json: { result } });
   });
   await page.goto(base + routePath); await physicsReady(page);
+  await normalView(page);
   await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   if (allowUnavailable && await page.evaluate(() => typeof MediaRecorder === 'undefined')) {

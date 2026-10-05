@@ -22,14 +22,21 @@ test('paired physical bars and both Quiet/Loud guides follow the rotated camera'
       const v = document.querySelector('#dancinglights').physics;
       const base = document.querySelector('meta[name="musical-lights-assets"]').content;
       const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+      v.draw(performance.now());
       const graph = v.graph.getBoundingClientRect(), h = v.current[v.layout[17]], max = v.current[v.layout[17] + 1];
-      return [...v.graph.querySelector('.meter-guide').children].map((node, i) => {
+      const guides = [...v.graph.querySelector('.meter-guide').children].map((node, i) => {
         const point = new THREE.Vector3(0, [h - .003, h - max, max, .003][i], 0).project(v.camera);
         const box = node.getBoundingClientRect();
         return Math.abs(box.y + box.height / 2 - graph.y - (1 - point.y) * graph.height / 2);
       });
+      const corners = Array.from({ length: 8 }, (_, i) => {
+        const point = new THREE.Vector3(i & 1 ? v.width : 0, i & 2 ? h : 0, (i & 4 ? 1 : -1) * v.config[5] / 2).project(v.camera);
+        return Math.max(Math.abs(point.x), Math.abs(point.y));
+      });
+      return { guides, corners };
     });
-    expect(Math.max(...alignment)).toBeLessThan(1.5);
+    expect(Math.max(...alignment.guides)).toBeLessThan(1.5);
+    expect(Math.max(...alignment.corners)).toBeLessThan(1);
   }
 });
 

@@ -18,13 +18,16 @@ test('mirror geometry accepts triangle soup, keeps shader defines and reverses o
   room.update(1.2, .6, .24);
   assert.equal(room.walls.children.length, 6); assert.equal(room.meshes.length, 4);
   assert.equal(mirrorCells().length, 17);
+  const depths = mirrorCells().map(cell => cell.reduce((sum, n) => sum + Math.abs(n), 0));
+  assert.deepEqual(depths, depths.toSorted((a, b) => a - b));
   const staged = room.sources.find(s => s.kind === 'bars');
   assert.equal(staged.capacity, 4);
   assert.equal(staged.matrices[12], Math.fround(.6));
   assert.equal(staged.matrices[28], Math.fround(.6));
   assert(staged.matrices.slice(32).every(v => v === 0));
-  assert.deepEqual(Array.from(room.meshes[2].mesh.geometry.index.array.slice(0, 3)), [0, 1, 2]);
-  assert.deepEqual(Array.from(room.meshes[3].mesh.geometry.index.array.slice(0, 3)), [0, 2, 1]);
+  assert.deepEqual(Array.from(room.meshes[2].mesh.geometry.index.array.slice(0, 3)), [0, 2, 1]);
+  assert.deepEqual(Array.from(room.meshes[3].mesh.geometry.index.array.slice(0, 3)), [0, 1, 2]);
+  assert.equal(room.meshes[2].mesh.geometry.index.count, 36);
   for (const { mesh } of room.meshes) {
     assert.equal(mesh.material.defines.PIXEL_RATIO, '2.0');
     assert(mesh.instanceMatrix.array.every(Number.isFinite));

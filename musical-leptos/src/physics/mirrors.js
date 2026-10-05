@@ -13,7 +13,8 @@ export function mirrorCells() {
   }
   for (let z = -8; z < 0; z++) cells.push([0, 0, z]);
   cells.push([0, 0, 1]);
-  return cells;
+  // Draw nearby images first so the depth buffer rejects hidden deep copies.
+  return cells.sort((a, b) => a.reduce((n, x) => n + Math.abs(x), 0) - b.reduce((n, x) => n + Math.abs(x), 0));
 }
 
 export class MirrorRoom {
@@ -38,10 +39,10 @@ export class MirrorRoom {
         const group = cells.filter(cell => Math.abs(cell[0] + cell[1] + cell[2]) % 2 === Number(odd));
         // Virtual images are smaller and fading. Keep physical balls detailed,
         // but use a smaller sphere grid for their reflected copies.
-        const geometry = kind === 'balls' ? new THREE.SphereGeometry(1, 12, 8) : source.geometry.clone();
-        // RoundedBoxGeometry supplies triangle soup; use one indexed contract
-        // for reflected geometry before reversing triangle winding.
-        if (!geometry.index) geometry.setIndex(Array.from({ length: geometry.attributes.position.count }, (_, i) => i));
+        const size = source.geometry.boundingBox.getSize(new THREE.Vector3());
+        // Mirror bars use 12 triangles. Their existing distance shader clips
+        // the rounded front silhouette; physical bars retain their curved mesh.
+        const geometry = kind === 'balls' ? new THREE.SphereGeometry(1, 12, 8) : new THREE.BoxGeometry(size.x, size.y, size.z);
         // A reflection reverses winding. Reverse indices once for odd cells;
         // all instance matrices remain the original proper rigid transforms.
         if (odd) {
@@ -102,6 +103,8 @@ export class MirrorRoom {
             float enterRoom = max(max(entry.x, entry.y), entry.z);
             float leaveRoom = min(min(exit.x, exit.y), exit.z);
             if (leaveRoom < max(enterRoom, 0.0) || leaveRoom > 1.00001) discard;`);
+          if (kind === 'bars') shader.fragmentShader = shader.fragmentShader.replace('float pixel =',
+            'if (distance < 0.0) discard; float pixel =');
           shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
             'outgoingLight *= reflectionGain;\n#include <opaque_fragment>');
         };

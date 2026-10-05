@@ -316,7 +316,7 @@ nav { flex-wrap: wrap; }
 .recognition-status[data-routine="true"] { display: none; }
 .paired-bars .meter-track { inset: var(--balloon-headroom) 0 var(--plot-baseline); }
 .paired-bars::before { display: none; }
-.paired-bars .meter-guide { inset-block: 0; display: block; }
+.paired-bars .meter-guide { inset-block: 0; display: block; width: 2.3rem; }
 .paired-bars .meter-guide > span { position: absolute; transform: translateY(-50%); }
 .tempo-readout { align-self: center; justify-self: end; color: var(--muted); font-size: .68rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .direction-config { border: 1px solid var(--line); border-radius: 8px; padding: .65rem; }

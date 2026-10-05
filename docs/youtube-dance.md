@@ -86,7 +86,9 @@ measured concert-ball material model.
 The browser unfolds a bounded set of reflected images inside six inward-facing
 mirror surfaces. Exterior faces stay transparent. Perspective views show depth
 and the scene through either side. Four instanced reflection meshes share the
-bar and ball materials, contact pigments and attack highlights. Odd reflections
+bar and ball materials, contact pigments and attack highlights. Reflected bars
+use twelve triangles and their distance shader retains the rounded front
+silhouette. Nearby images draw first to limit hidden work. Odd reflections
 reverse triangle winding; instance matrices retain proper positive scales.
 There are no recursive cameras, reflection textures, shadow maps or bloom.
 The faint coating and fading copies approximate an infinity mirror room rather

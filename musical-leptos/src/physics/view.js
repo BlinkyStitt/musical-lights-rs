@@ -244,22 +244,33 @@ export class PhysicsView {
     const key = `${visibleHeight}/${visibleWidth}/${barMax}`;
     if (key === this.geometryKey) return;
     this.geometryKey = key; this.visibleHeight = visibleHeight;
-    this.camera.fov = 2 * Math.atan(visibleHeight / 8) * 180 / Math.PI; this.camera.aspect = this.aspect;
+    this.camera.aspect = this.aspect;
     this.camera.near = 0.01; this.camera.far = 200;
     this.camera.updateProjectionMatrix(); this.setCamera(this.rotation ?? 0);
-    const side = Math.max(0, (1 - this.width / visibleWidth) * 50);
-    this.graph.style.setProperty('--plot-side-inset', `${side}%`);
-    this.graph.style.setProperty('--balloon-headroom', `${100 * (1 - barMax / visibleHeight)}%`);
-    this.graph.style.setProperty('--plot-baseline', `${100 * .003 / visibleHeight}%`);
     this.positionMeters(this.renderedPhase ?? 0);
   }
-  setCamera(degrees) {
+  fitCamera() {
+    this.camera.updateMatrixWorld();
+    const depth = this.config?.[5] ?? .24;
+    let tangent = 0;
+    // Fit all eight room corners, including the near faces and camera pitch.
+    // A 2D field of view crops those faces under perspective projection.
+    for (let i = 0; i < 8; i++) {
+      const point = this.pointerPoint.set(i & 1 ? this.width : 0, i & 2 ? this.visibleHeight : 0,
+        i & 4 ? depth / 2 : -depth / 2).applyMatrix4(this.camera.matrixWorldInverse);
+      tangent = Math.max(tangent, Math.abs(point.y) / -point.z, Math.abs(point.x) / (-point.z * this.aspect));
+    }
+    const fov = 2 * Math.atan(tangent * 1.015) * 180 / Math.PI;
+    if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+  }
+  setCamera(degrees, verticalOffset = 0) {
     if (degrees !== this.rotation && !this.automaticCamera) this.report?.invalidate('Camera changed during test');
     this.rotation = degrees;
     const angle = degrees * Math.PI / 180;
     if (!Number.isFinite(this.visibleHeight)) return;
-    this.camera.position.set(this.width / 2 + Math.sin(angle) * 4, this.visibleHeight / 2, Math.cos(angle) * 4);
+    this.camera.position.set(this.width / 2 + Math.sin(angle) * 4, this.visibleHeight / 2 + verticalOffset, Math.cos(angle) * 4);
     this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0);
+    this.fitCamera();
   }
   danceOptions() { return { odds: this.settings.directionOdds, flight: this.settings.flight / 100, seed: this.seed }; }
   updateCamera(now) {
@@ -267,8 +278,9 @@ export class PhysicsView {
     const age = Number.isFinite(this.lastAccentAt) ? Math.max(0, now - this.lastAccentAt) : 0;
     const kick = moving ? 1.5 * Math.exp(-age / 250) * Math.sin(age / 35) : 0;
     const yaw = Math.max(-40, Math.min(40, this.cameraBase + (moving ? 4 * Math.sin(now / 3600) : 0) + kick));
-    this.automaticCamera = true; this.setCamera(yaw); this.automaticCamera = false;
-    if (moving) { this.camera.position.y += Math.sin(now / 4400) * Math.tan(2 * Math.PI / 180) * 4; this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0); }
+    this.automaticCamera = true;
+    this.setCamera(yaw, moving ? Math.sin(now / 4400) * Math.tan(2 * Math.PI / 180) * 4 : 0);
+    this.automaticCamera = false;
     if (!this.cameraDrag && now - (this.sliderAt ?? -Infinity) >= 50) {
       this.sliderAt = now; this.card.querySelector('.camera-rotation').value = yaw;
       this.card.querySelector('.camera-angle').textContent = yaw.toFixed(1) + '°';
@@ -449,11 +461,19 @@ export class PhysicsView {
     const guide = this.graph.querySelector('.meter-guide');
     for (const [i, y] of [height - .003, height - maximum, maximum, .003].entries()) {
       this.pointerPoint.set(0, y, 0).project(this.camera);
-      if (guide?.children[i]) guide.children[i].style.top = `${(1 - this.pointerPoint.y) * 50}%`;
+      const top = (1 - this.pointerPoint.y) * 50;
+      if (guide?.children[i]) guide.children[i].style.top = `${top}%`;
+      if (i === 2) this.graph.style.setProperty('--balloon-headroom', `${top}%`);
+      if (i === 3) this.graph.style.setProperty('--plot-baseline', `${100 - top}%`);
     }
-    const inset = Math.max(0, (1 - this.width / (this.visibleHeight * this.aspect)) * 50);
-    if (this.meterPhase === phase && this.meterInset === inset && this.meterRotation === this.rotation) return;
+    this.pointerPoint.set(0, height / 2, 0).project(this.camera);
+    const inset = (this.pointerPoint.x + 1) * 50;
+    this.graph.style.setProperty('--plot-side-inset', `${inset}%`);
+    const projection = this.camera.projectionMatrix.elements[0], eyeHeight = this.camera.position.y;
+    if (this.meterPhase === phase && this.meterInset === inset && this.meterRotation === this.rotation
+      && this.meterProjection === projection && this.meterEyeHeight === eyeHeight && this.meterHeight === height) return;
     this.meterPhase = phase; this.meterInset = inset; this.meterRotation = this.rotation;
+    this.meterProjection = projection; this.meterEyeHeight = eyeHeight; this.meterHeight = height;
     const wrapped = phase > .00001;
     if (wrapped !== this.wrappedLabels) {
       this.wrappedLabels = wrapped;
