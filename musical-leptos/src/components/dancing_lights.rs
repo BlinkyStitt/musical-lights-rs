@@ -425,8 +425,11 @@ pub fn DancingLights(
                     </p>
                     <SettingSwitch label="Phone motion" class="motion-button"
                         checked=Signal::derive(|| false) on_change=Callback::new(|_| {})/>
+                    <div class="scroll-controls">
                     <SettingSwitch label="Scroll lights" class="scroll-lights"
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
+                    <output class="tempo-readout" aria-label="Estimated tempo" title="Estimated musical tempo">"120 BPM"</output>
+                    </div>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
                         title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show video and lights" }
@@ -495,7 +498,7 @@ pub fn DancingLights(
                             </div>
                         }
                     }).collect_view()}
-                    <span class="meter-guide" aria-hidden="true"><span>"LOUD"</span><span>"QUIET"</span></span>
+                    <span class="meter-guide" aria-hidden="true"><span>"QUIET"</span><span>"LOUD"</span><span>"LOUD"</span><span>"QUIET"</span></span>
                     <span class="balloon-layer" aria-hidden="true" node_ref=canvas_layer></span>
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
@@ -517,7 +520,15 @@ pub fn DancingLights(
                 <details class="display-controls settings-section">
                     <summary>"Display"</summary>
                     <p class="reduced-motion-note">"Reduced Motion disables automatic scrolling."</p>
-                    <label class="control-row">"Direction change chance (%)"<input class="direction-chance" type="number" min="0" max="100" step="1" value="10"/></label>
+                    <fieldset class="direction-config"><legend>"Direction changes on new loud attacks"</legend>
+                        <label class="control-row">"Slow tempo (BPM)"<input class="direction-slow-bpm" type="number" min="60" max="200" value="60"/></label>
+                        <label class="control-row">"Slow tempo chance (%)"<input class="direction-low-chance" type="number" min="0" max="100" step="1" value="5"/></label>
+                        <label class="control-row">"Fast tempo (BPM)"<input class="direction-fast-bpm" type="number" min="60" max="200" value="200"/></label>
+                        <label class="control-row">"Fast tempo chance (%)"<input class="direction-high-chance" type="number" min="0" max="100" step="1" value="50"/></label>
+                        <label class="control-row">"Curve exponent"<input class="direction-curve" type="number" min="0.25" max="4" step="0.25" value="1"/></label>
+                        <p>"1 is linear. Higher values delay the increase; lower values raise the chance sooner. A new attack must exceed the recent loudness peak before any probability draw."</p>
+                        <p class="direction-error" role="status"></p>
+                    </fieldset>
                     <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>

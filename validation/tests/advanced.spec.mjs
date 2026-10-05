@@ -55,20 +55,19 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
 });
 
-for (const barBase of ['floor', 'ceiling']) {
-test(`diagnostic plot separates ${barBase} render geometry and its clock from analysis and physics`, async ({ page }) => {
+for (const end of ['bottom', 'top']) {
+test(`diagnostic plot separates ${end} render geometry and its clock from analysis and physics`, async ({ page }) => {
   await advanced(page);
-  const { sample, moves, unverified } = await page.evaluate(barBase => {
+  const { sample, moves, unverified } = await page.evaluate(end => {
     const card = document.querySelector('.audio-card'), review = card.review, view = document.querySelector('#dancinglights').physics;
     review.sessionId = 'clock-regression'; review.samples = [];
     const receivedAt = performance.timeOrigin + performance.now();
     view.renderedAt = receivedAt - 25;
     view.current[view.layout[9] + 8] = .7 * view.height;
-    view.renderedCeilingBars = barBase === 'ceiling'; view.renderedEnclosureHeight = view.height;
-    // A newer physics message may change the base before the next rendered frame.
-    view.ceilingBars = !view.renderedCeilingBars;
-    view.bars.instanceMatrix.array[8 * 16 + 13] = view.renderedCeilingBars
-      ? .8 * view.height + view.layout[6] / 2 : .2 * view.height - view.layout[6] / 2;
+    view.renderedEnclosureHeight = view.height;
+    view.bars.instanceMatrix.array[8 * 16 + 13] = .2 * view.height - view.layout[6] / 2;
+    view.bars.instanceMatrix.array[(8 + 72) * 16 + 13] = .8 * view.height + view.layout[6] / 2;
+    if (Math.abs(view.renderedHeight(8, end === 'top' ? 1 : 0) / view.height - .2) > 1e-5) throw Error('Wrong rendered end');
     const trace = new Float64Array(511);
     trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
@@ -78,8 +77,8 @@ test(`diagnostic plot separates ${barBase} render geometry and its clock from an
     const sample = review.samples[0];
     card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
-  }, barBase);
-  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
+  }, end);
+  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase: 'both', renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
   expect(sample.collider).toBeCloseTo(.7, 5); expect(sample.rendered).toBeCloseTo(.2, 5);
   expect(moves).toHaveLength(3);
   expect(moves[0][0]).toBeCloseTo(1.1 / 1.225 * 900, 5);
@@ -89,7 +88,7 @@ test(`diagnostic plot separates ${barBase} render geometry and its clock from an
   await page.locator('.diagnostics-controls > summary').click();
   const download = page.waitForEvent('download'); await page.locator('.review-export').click();
   const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
-  expect(exported.diagnosticSamples[0].barBase).toBe(barBase);
+  expect(exported.diagnosticSamples[0].barBase).toBe('both');
   expect(exported.diagnosticSamples[0].rendered).toBeCloseTo(.2, 5);
 });
 

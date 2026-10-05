@@ -12,7 +12,7 @@ test('Leptos renders routes and 24 meters without the temporary counter', async 
   await expect(page.getByRole('button', { name: /Click me|counter/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Pause display|Resume display/i })).toHaveCount(0);
   await expect(page.getByText('Every band has room')).toHaveCount(0);
-  await expect(page.locator('.meter-guide')).toHaveText('LOUDQUIET');
+  await expect(page.locator('.meter-guide')).toHaveText('QUIETLOUDLOUDQUIET');
   await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Old Arduino Code' })).toBeVisible();

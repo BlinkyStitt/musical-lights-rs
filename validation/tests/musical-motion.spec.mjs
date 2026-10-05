@@ -65,7 +65,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     // Isolate one prescribed bar and sample its physical side face. The old
     // XY-only outline painted this entire face black, even under fill light.
     const count = v.bars.count, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, 0);
-    const hidden = [v.balls, v.enclosure, v.ceiling]; hidden.forEach(n => { n.visible = false; });
+    const hidden = [v.balls, v.enclosure, v.ceiling, v.mirrors.frame, ...v.mirrors.meshes.map(({ mesh }) => mesh)]; hidden.forEach(n => { n.visible = false; });
     const object = new THREE.Object3D(); object.position.set(.6, .3 - v.layout[6] / 2, 0); object.updateMatrix();
     v.bars.count = 1; v.bars.setMatrixAt(0, object.matrix); v.bars.instanceMatrix.needsUpdate = true;
     const point = new THREE.Vector3(.6 + (v.layout[3] - v.layout[4]) / 2, .12, 0).project(v.camera);
@@ -79,7 +79,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
       attacks: v.attackLights.length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
-  expect(state.barsLit).toBe(true); expect(state.walls).toBe(4); expect(state.attacks).toBe(4); expect(state.shadows).toBe(false);
+  expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(4); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);
   expect(state.attackOnly).toBeGreaterThan(state.dark + 100);
   expect(state.sideBrightness).toBeGreaterThan(30);

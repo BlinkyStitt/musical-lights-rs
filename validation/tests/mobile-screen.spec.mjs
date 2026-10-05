@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { physicsReady, physicsState } from '../physics-state.mjs';
+import { normalView, physicsReady, physicsState } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
 test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }) => {
@@ -19,7 +19,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   // Use the real generated-audio pipeline to raise the bars. Silent input can
   // leave every ball at rest before a slower browser reaches the Stop button.
   await page.goto('http://127.0.0.1:8101/advanced/');
-  await physicsReady(page);
+  await physicsReady(page); await normalView(page);
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
@@ -85,6 +85,7 @@ test('a tapped band shows its color and frequency above the graph for three seco
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   await expect(page.getByRole('meter')).toHaveCount(24);
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
@@ -145,6 +146,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
     };
   });
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   const expand = page.getByRole('button', { name: 'Fullscreen', exact: true });
   await expect(expand).toBeEnabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
@@ -199,6 +201,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
 test('fullscreen frequency labels expire above the bottom controls and keyboard users can reach Exit', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.locator('.fullscreen-hint')).toHaveCount(0);
   const hit = await meterPoint(page, page.getByRole('meter').nth(12));
@@ -227,6 +230,7 @@ test('a rejected native fullscreen request still expands the page and Escape exi
     Element.prototype.requestFullscreen = async () => { throw new DOMException('Denied', 'NotAllowedError'); };
   });
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
@@ -243,6 +247,7 @@ test('browser back closes the expanded view and restores the page', async ({ pag
   });
   await page.goto('http://127.0.0.1:8101/about');
   await page.getByRole('link', { name: 'Home', exact: true }).tap();
+  await physicsReady(page); await normalView(page);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   await page.goBack();
@@ -254,7 +259,7 @@ test('browser back closes the expanded view and restores the page', async ({ pag
 test('fullscreen transitions keep live audio and bounded simulation delay', async ({ page }) => {
   await page.addInitScript(() => { Object.defineProperty(document, 'fullscreenEnabled', { value: false }); });
   await page.setViewportSize({width:390,height:844});
-  await page.goto('http://127.0.0.1:8101/advanced/');await physicsReady(page);
+  await page.goto('http://127.0.0.1:8101/advanced/');await physicsReady(page); await normalView(page);
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
   await page.locator('.review-start').click();

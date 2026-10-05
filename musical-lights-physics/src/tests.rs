@@ -53,7 +53,7 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
                 .iter()
                 .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
                 .count()
-                <= COUNT + 2
+                <= 2 * (COUNT + 2)
         );
         for (i, (h, _)) in sim.bars.iter().enumerate() {
             let x = sim.world.bodies[*h].translation().x;
@@ -801,7 +801,7 @@ fn invalid_inputs_and_configuration_leave_state_unchanged() {
 fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
-    let top = 0.2;
+    let top = 0.1;
     let bar = &mut sim.world.bodies[sim.bars[12].0];
     bar.set_translation(Vector::new(0.625, top - POST_HEIGHT / 2.0, 0.0), true);
     sim.bar_positions[12] = f64::from(top);
@@ -1406,7 +1406,7 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
 }
 
 #[test]
-fn ceiling_transition_retracts_before_switching_and_preserves_gravity() {
+fn paired_bars_move_inward_together_and_leave_ball_clearance() {
     let mut sim = world(SimulationConfig::default());
     sim.apply(SimulationInput {
         levels: [0.7; COUNT],
@@ -1415,24 +1415,19 @@ fn ceiling_transition_retracts_before_switching_and_preserves_gravity() {
         ..SimulationInput::default()
     })
     .unwrap();
-    for _ in 0..HZ {
-        sim.step();
-    }
     let gravity = sim.world.gravity;
-    sim.dance.ceiling = true;
-    let mut switched = false;
     for _ in 0..HZ * 2 {
-        let before = sim.ceiling_bars;
         sim.step();
-        if before != sim.ceiling_bars {
-            switched = true;
-            assert!(
-                sim.bar_positions
-                    .iter()
-                    .all(|height| *height < f64::from(BASELINE) + 0.001)
-            );
-        }
         assert_eq!(sim.world.gravity, gravity);
+        for band in 0..COUNT {
+            let floor = sim.world.bodies[sim.bars[band].0].translation().y + POST_HEIGHT / 2.0;
+            let roof = sim.world.bodies[sim.bars[band + COUNT * 3].0]
+                .translation()
+                .y
+                - POST_HEIGHT / 2.0;
+            assert!((floor + roof - sim.ceiling_height).abs() < 1e-5);
+            assert!(roof - floor >= radius(4) * 2.0);
+        }
         for (i, &(handle, _)) in sim.balls.iter().enumerate() {
             let p = sim.world.bodies[handle].translation();
             assert!(
@@ -1441,14 +1436,15 @@ fn ceiling_transition_retracts_before_switching_and_preserves_gravity() {
             );
         }
     }
-    assert!(switched && sim.ceiling_bars);
-    assert!(sim.bar_positions.iter().any(|height| *height > 0.1));
+    let expected = f64::from(BASELINE) + 0.7 * f64::from(sim.bar_max() - BASELINE);
+    assert!((sim.bar_positions[0] - expected).abs() < 1e-5);
 }
 #[test]
 fn reduced_motion_and_scrolling_off_consume_accents_without_flips() {
     for reduced in [true, false] {
         let mut sim = world(SimulationConfig::default());
-        sim.configure_dance(1.0, 0.3, 42).unwrap();
+        sim.configure_dance(DirectionOdds::default().values(), 0.3, 42)
+            .unwrap();
         sim.apply(SimulationInput {
             reduced_motion: reduced,
             scrolling: reduced,
@@ -1458,7 +1454,37 @@ fn reduced_motion_and_scrolling_off_consume_accents_without_flips() {
         .unwrap();
         sim.accent(1000).unwrap();
         assert_eq!(sim.dance.direction, 1.0);
-        assert!(!sim.dance.ceiling);
         assert_eq!(sim.accent_sequence, 1000);
     }
+}
+
+#[test]
+fn roof_bar_deflects_inward_and_reports_its_source_pigment() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        ..SimulationConfig::default()
+    });
+    isolate(&mut sim, &[0]);
+    let mut levels = [0.0; COUNT];
+    levels[12] = 0.6;
+    input(&mut sim, levels);
+    for _ in 0..HZ {
+        sim.step();
+    }
+    let tip = sim.ceiling_height - sim.bar_positions[12] as f32;
+    place(
+        &mut sim,
+        0,
+        Vector::new(0.625, tip - radius(0) - 0.02, 0.0),
+        Vector::new(0.0, 1.0, 0.0),
+    );
+    let mut impulse = 0.0;
+    let mut inward = false;
+    for _ in 0..HZ / 3 {
+        sim.step();
+        impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
+        inward |= velocity(&sim, 0).y < -0.1;
+    }
+    assert!(impulse > 0.0 && inward);
+    assert_eq!(&sim.pigments[..3], &sim.palette[12]);
 }

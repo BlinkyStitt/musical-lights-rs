@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady, syntheticAudio } from '../physics-state.mjs';
+import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 async function setup(page, path = '/') {
@@ -20,7 +20,7 @@ async function setup(page, path = '/') {
   });
   await page.route('https://www.youtube-nocookie.com/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><body style="background:#142b40;color:white">Mock YouTube player</body>' }));
   await page.route('https://www.youtube.com/**', route => route.abort());
-  await page.goto(origin + path); await physicsReady(page);
+  await page.goto(origin + path); await physicsReady(page); await normalView(page);
 }
 async function load(page) {
   await page.getByRole('button', { name: 'Video', exact: true }).click();
@@ -128,10 +128,10 @@ test('help labels explain state without toggling; preferences restore without st
   await expect(page.locator('.control-help')).toContainText('Microphone: off');
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   await page.keyboard.press('Escape'); await expect(page.locator('.control-help')).toBeHidden();
-  await page.locator('.display-controls > summary').click(); await page.locator('.direction-chance').fill('24'); await page.locator('.direction-chance').dispatchEvent('change');
+  await page.locator('.display-controls > summary').click(); await page.locator('.direction-high-chance').fill('24'); await page.locator('.direction-high-chance').dispatchEvent('change');
   await page.locator('.camera-motion').uncheck(); await page.locator('.camera-rotation').fill('25'); await page.locator('.scroll-lights').uncheck();
-  await page.reload(); await physicsReady(page); await page.locator('.display-controls > summary').click();
-  await expect(page.locator('.direction-chance')).toHaveValue('24');
+  await page.reload(); await physicsReady(page); await normalView(page); await page.locator('.display-controls > summary').click();
+  await expect(page.locator('.direction-high-chance')).toHaveValue('24');
   await expect(page.locator('.camera-motion')).not.toBeChecked(); await expect(page.locator('.scroll-lights')).not.toBeChecked();
   await expect(page.locator('.camera-rotation')).toHaveValue('25');
   expect(await page.evaluate(() => window.micRequests)).toBe(0);

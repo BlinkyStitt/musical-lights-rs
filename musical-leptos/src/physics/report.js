@@ -91,7 +91,7 @@ export class PhoneReport {
           tops: Array.from(view.current.slice(view.layout[9], view.layout[10])),
           velocities: Array.from(view.current.slice(view.layout[14], view.layout[15])),
           targets: Array.from(view.input.slice(0, 24)), scrollingEnabled: view.input[33] === 1, scrollPhase: view.current[view.layout[20]], renderedPhase: view.renderedPhase, debtMs: view.metrics.debt,
-          barBase: view.renderedCeilingBars ? 'ceiling' : 'floor',
+          barBase: 'both',
           renderedTops: Array.from({ length: 24 }, (_, i) => view.renderedHeight(i)) });
       }
       this.query('.tone-export').disabled = false;
@@ -241,7 +241,7 @@ export class PhoneReport {
       const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
       const snapshotProgressDriftMs = firstProgress && lastProgress
         ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v4',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v5',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,

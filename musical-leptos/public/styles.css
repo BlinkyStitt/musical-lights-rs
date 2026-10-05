@@ -314,4 +314,15 @@ nav { flex-wrap: wrap; }
 .button-row .recognition-ring { width: 18px; height: 18px; }
 .audio-card[data-expanded] .recognition-status { max-height: 12dvh; overflow: auto; }
 .recognition-status[data-routine="true"] { display: none; }
-.ceiling-bars .meter-track { inset: var(--plot-baseline) 0 var(--balloon-headroom); }
+.paired-bars .meter-track { inset: var(--balloon-headroom) 0 var(--plot-baseline); }
+.paired-bars::before { display: none; }
+.paired-bars .meter-guide { inset-block: 0; display: block; }
+.paired-bars .meter-guide > span { position: absolute; transform: translateY(-50%); }
+.tempo-readout { align-self: center; justify-self: end; color: var(--muted); font-size: .68rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.direction-config { border: 1px solid var(--line); border-radius: 8px; padding: .65rem; }
+.direction-config p { font-size: .78rem; color: var(--muted); }
+.direction-error:empty { display: none; }
+
+.scroll-controls { position: relative; min-height: 44px; }
+.scroll-controls .setting-switch { padding-bottom: .55rem; }
+.scroll-controls .tempo-readout { position: absolute; left: 1.7rem; bottom: 0; font-size: .62rem; line-height: 1; }

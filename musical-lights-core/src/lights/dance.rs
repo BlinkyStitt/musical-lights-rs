@@ -1,13 +1,12 @@
 //! Hardware-neutral, allocation-free musical direction and flight policy.
 //! Loudness is unscaled sones; times are seconds, travel is in columns.
-use super::musical_motion::{SCROLL_EASE, SCROLL_SPEED};
+use super::musical_motion::{DirectionOdds, SCROLL_EASE, SCROLL_SPEED};
 use num::Float;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DirectionChoice {
     Unchanged,
     Horizontal,
-    Vertical,
 }
 
 /// One decision per acoustic crest, including attacks spread across bands.
@@ -76,24 +75,24 @@ impl IdlePeak {
 pub struct DanceMotion {
     random: u32,
     pub direction: f64,
-    pub ceiling: bool,
+    pub tempo: f64,
+    pub odds: DirectionOdds,
     speed: f64,
     enabled: bool,
     stop_from: f64,
     stop_elapsed: f64,
-    pub probability: f64,
 }
 impl DanceMotion {
-    pub fn new(seed: u32, probability: f64) -> Self {
+    pub fn new(seed: u32) -> Self {
         Self {
             random: seed.max(1),
             direction: 1.0,
-            ceiling: false,
+            tempo: 120.0,
+            odds: DirectionOdds::default(),
             speed: 0.0,
             enabled: false,
             stop_from: 0.0,
             stop_elapsed: SCROLL_EASE,
-            probability: probability.clamp(0.0, 1.0),
         }
     }
     pub fn choose(&mut self) -> DirectionChoice {
@@ -105,23 +104,20 @@ impl DanceMotion {
     /// Exposed for embedded callers with their own source of randomness.
     pub fn choose_draw(&mut self, draw: f64) -> DirectionChoice {
         if !draw.is_finite()
-            || !self.probability.is_finite()
             || !(0.0..1.0).contains(&draw)
-            || draw >= self.probability
+            || draw >= self.odds.probability(self.tempo)
         {
             DirectionChoice::Unchanged
-        } else if draw < self.probability / 2.0 {
+        } else {
             self.direction = -self.direction;
             DirectionChoice::Horizontal
-        } else {
-            self.ceiling = !self.ceiling;
-            DirectionChoice::Vertical
         }
     }
     pub fn advance(&mut self, enabled: bool, bpm: f64, dt: f64) -> f64 {
         if !dt.is_finite() || dt <= 0.0 || !bpm.is_finite() {
             return 0.0;
         }
+        self.tempo = bpm.clamp(60.0, 200.0);
         if !enabled {
             if self.enabled {
                 self.stop_from = self.speed;
@@ -168,26 +164,23 @@ pub fn release_speed(gravity: f32, height: f32) -> f32 {
 mod tests {
     use super::*;
     #[test]
-    fn one_draw_has_exclusive_equal_axes() {
-        let mut motion = DanceMotion::new(1, 0.1);
-        assert_eq!(motion.choose_draw(0.0), DirectionChoice::Horizontal);
+    fn one_draw_uses_the_tempo_scaled_horizontal_probability() {
+        let mut motion = DanceMotion::new(1);
+        motion.tempo = 60.0;
         assert_eq!(motion.choose_draw(0.04999), DirectionChoice::Horizontal);
-        assert_eq!(motion.choose_draw(0.05), DirectionChoice::Vertical);
-        assert_eq!(motion.choose_draw(0.09999), DirectionChoice::Vertical);
-        assert_eq!(motion.choose_draw(0.1), DirectionChoice::Unchanged);
+        assert_eq!(motion.choose_draw(0.05), DirectionChoice::Unchanged);
+        motion.tempo = 200.0;
+        assert_eq!(motion.choose_draw(0.49999), DirectionChoice::Horizontal);
+        assert_eq!(motion.choose_draw(0.5), DirectionChoice::Unchanged);
         assert_eq!(motion.choose_draw(f64::NAN), DirectionChoice::Unchanged);
-        motion.probability = 0.0;
-        assert_eq!(motion.choose_draw(0.0), DirectionChoice::Unchanged);
-        motion.probability = f64::NAN;
-        assert_eq!(motion.choose_draw(0.0), DirectionChoice::Unchanged);
     }
     #[test]
     fn seeded_decisions_reproduce_and_travel_never_reverses_without_an_event() {
-        let (mut a, mut b) = (DanceMotion::new(123, 0.1), DanceMotion::new(123, 0.1));
+        let (mut a, mut b) = (DanceMotion::new(123), DanceMotion::new(123));
         for _ in 0..1000 {
             assert_eq!(a.choose(), b.choose());
         }
-        let mut a = DanceMotion::new(123, 0.1);
+        let mut a = DanceMotion::new(123);
         let mut travel = 0.0;
         for _ in 0..1200 {
             let dx = a.advance(true, 120.0, 1.0 / 120.0);
