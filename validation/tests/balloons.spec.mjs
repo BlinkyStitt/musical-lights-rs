@@ -123,11 +123,13 @@ for (const width of [375, 1440]) {
         return previous + (current - previous) * v.renderAlpha;
       });
       return { expected, ballInstances: v.balls.count, barInstances: v.bars.count, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
-        tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
+        tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2),
+        roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedEnclosureHeight + v.layout[6] / 2 - a[(i + 72) * 16 + 13]) };
     });
-    expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(72);
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(7);
+    expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(14);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
+    render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
     await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
@@ -308,6 +310,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await page.locator('[data-config="5"]').fill('0.36');
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
+  await expect(page.locator('.direction-curve')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.diagnostics-controls > summary').click();
@@ -315,6 +318,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sequence)).toBeGreaterThan(sequence + 24);
   await page.getByRole('button', { name: 'End test early' }).click();
   await expect(page.getByRole('button', { name: 'Export test report' })).toBeEnabled();
+  await expect(page.locator('.direction-curve')).toBeEnabled();
   const report = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.result);
   expect(report.accepted).toBe(false); expect(report.invalidReasons).toContain('Test ended before five minutes');
   expect(report.inputs.length).toBeGreaterThan(20); expect(report.finalTick).toBeGreaterThan(40);

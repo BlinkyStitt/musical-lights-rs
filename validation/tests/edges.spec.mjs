@@ -51,14 +51,20 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       const v = document.querySelector('#dancinglights').physics;
       return v.current[v.layout[9]] / (v.current[v.layout[17] + 1]);
     })).toBeGreaterThan(.39);
-    const pixels = await page.evaluate(() => {
+    const pixels = await page.evaluate(async () => {
+      const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+      const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
       const v = document.querySelector('#dancinglights').physics;
       // Read the actual rendered pixels. Rendering immediately avoids a cleared default buffer.
       v.draw(performance.now());
       const gl = v.renderer.getContext(), height = gl.drawingBufferHeight, width = gl.drawingBufferWidth;
       const values = new Uint8Array(width * 4);
-      gl.readPixels(0, Math.floor(height * .08), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, values);
-      return { width, side: Math.max(0,(1-v.width/(v.camera.right-v.camera.left))/2)*width, plotWidth: v.width/(v.camera.right-v.camera.left)*width, ratio: v.renderer.getPixelRatio(), row: Array.from(values), colors: Array.from(v.bars.instanceColor.array), edges: Array.from(v.edges) };
+      const interior = new THREE.Vector3(v.width / 2, v.renderedHeight(0) / 2, v.config[5] / 2).project(v.camera);
+      gl.readPixels(0, Math.floor((interior.y + 1) * height / 2), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, values);
+      // Sample the actual front face under perspective, rather than an
+      // orthographic camera width. The depth moves this face toward the eye.
+      const projectedX = x => (new THREE.Vector3(x, 0, v.config[5] / 2).project(v.camera).x + 1) * width / 2;
+      return { width, side: projectedX(0), plotWidth: projectedX(v.width) - projectedX(0), ratio: v.renderer.getPixelRatio(), row: Array.from(values), colors: Array.from(v.bars.instanceColor.array), edges: Array.from(v.edges) };
     });
     expect(pixels.edges).toEqual(Array(24).fill(reducedMotion === 'reduce' ? .5 : 1));
     const rgb = x => pixels.row.slice(x * 4, x * 4 + 3);
