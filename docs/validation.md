@@ -617,3 +617,21 @@ Physical iPhone playback and capture, human listening, and five-minute
 physical-phone FPS acceptance remain pending. Desktop WebKit and its iPhone
 profile cannot establish those results. Routine recognition uses mocks; this
 change makes no live AudD request.
+
+### Paired bars and mirror-room validation
+
+`mirrors.spec.mjs` checks actual GPU pixels at front and oblique camera angles,
+transparent exterior faces, bounded draw calls, matched per-end bar extents,
+projected Quiet/Loud guides, saved probability curves and mobile default entry
+without capture. Short landscape combines a mock video, a long recognition
+ticker, a recovery notice and all bottom controls. Each GPU check saves frame
+cost and front/side images. These measurements describe the browser host, not
+a physical iPhone. The offline mirror test covers non-indexed rounded geometry,
+odd reflection winding, shader defines and disposal. Native physics covers
+ceiling-bar collision, inward bounce, pigments and safe enclosure resize.
+
+The core owns the bounded tempo-to-odds curve and paired stroke calculation.
+The browser owns mirrors. Physics protocol 9 and phone report v5 preserve
+ordered input, tempo and accent events for exact replay. Historical recordings
+need their matching historical engine. Raw loudness, filtered targets and the
+fixed-window reference audit retain their existing contracts.

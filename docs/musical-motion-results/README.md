@@ -38,8 +38,10 @@ platform adapters. The hardware core has no dependency on those packages.
 
 Scrolling follows the smoothed tempo at an average of two columns per beat:
 four columns per second at 120 BPM, twice the initial PR speed. Direction changes
-require a qualifying new recent loud attack. One draw gives 90% unchanged, 5%
-horizontal reversal, and 5% floor/ceiling change at the default 10% total chance.
+require a qualifying new recent loud attack. The default horizontal reversal chance
+rises from 5% at 60 BPM to 50% at 200 BPM. Advanced Display exposes the BPM
+thresholds, probabilities and curve exponent. Both bar banks now grow inward
+together; they do not alternate between floor and ceiling.
 There is no timed reversal. Idle motion can draw after a completed wave cycle,
 using separate crest history. The core excludes Reduced Motion pauses from that
 cycle clock. Position stays continuous through tempo changes. Reduced
