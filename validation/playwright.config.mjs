@@ -9,7 +9,11 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [['list'], ['./browser-process-reporter.mjs']],
-  use: { headless: true, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
+  // Continuous GPU readbacks for the trace filmstrip compete with realtime
+  // audio on software renderers. Keep DOM/source traces, failure screenshots
+  // and the explicit pixel/image assertions without recording that filmstrip.
+  use: { headless: true, screenshot: 'only-on-failure',
+    trace: { mode: 'retain-on-failure', screenshots: false, snapshots: true, sources: true } },
   projects: [
     { name: 'chromium', testIgnore: ['**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: { browserName: 'chromium' } },
     { name: 'other-apps', testMatch: '**/other-apps.spec.mjs', use: { browserName: 'chromium' } },

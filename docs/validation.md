@@ -640,3 +640,9 @@ The browser owns mirrors. Physics protocol 9 and phone report v5 preserve
 ordered input, tempo and accent events for exact replay. Historical recordings
 need their matching historical engine. Raw loudness, filtered targets and the
 fixed-window reference audit retain their existing contracts.
+
+Browser traces retain DOM snapshots and source code. They omit the continuous
+screenshot filmstrip because GPU readbacks compete with realtime audio on
+software renderers. Failure screenshots and explicit GPU pixel comparisons,
+layout screenshots and preview images remain enabled. This reduces diagnostic
+recording work without changing browser assertions, deadlines or retries.
