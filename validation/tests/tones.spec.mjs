@@ -197,7 +197,9 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
   await expect(page.locator('.review-start')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   for (let cycle = 0; cycle < 6; cycle++) {
-    await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
+    const pause = page.getByRole('button', { name: 'Pause playback', exact: true });
+    await expect(pause).toBeEnabled();
+    await pause.press('Enter');
     // Use measured ISO loudness to prove that pause supplies silence while
     // the analysis clock continues, then that resume restores the signal.
     // Wait in the page so six cycles do not pay repeated protocol round trips
@@ -206,14 +208,14 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
       const r = document.querySelector('#dancinglights').physics.report, c = r.toneChunks.at(-1);
       return c?.values[c.values.length - c.stride + 1] < .01;
     }, null, { timeout: 10000 });
-    await page.getByRole('button', { name: 'Resume playback', exact: true }).click();
+    await page.getByRole('button', { name: 'Resume playback', exact: true }).press('Enter');
     await page.waitForFunction(() => {
       const r = document.querySelector('#dancinglights').physics.report, c = r.toneChunks.at(-1);
       return c?.values[c.values.length - c.stride + 1] > 1
         && document.querySelector('[role="alert"]').textContent.trim() === '';
     }, null, { timeout: 5000 });
   }
-  await page.locator('.review-stop').click();
+  await page.locator('.review-stop').press('Enter');
 });
 
 test('a naturally ended tone restarts and ignores the replaced source callback', async ({ page }) => {

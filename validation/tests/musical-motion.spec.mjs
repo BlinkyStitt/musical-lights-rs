@@ -116,6 +116,9 @@ test('identical-audio scrolling, angled lighting and swirl previews record frame
     const scroll = page.locator('.scroll-lights');
     if (await scroll.isChecked() !== scrolling) await scroll.press('Space');
     await expect(scroll).toBeChecked({ checked: scrolling });
+    // The source publishes playing before Rust finishes attaching its input.
+    // Keyboard activation, unlike click(), does not wait for an enabled button.
+    await expect(page.locator('.review-replay')).toBeEnabled();
     await page.locator('.review-replay').press('Enter');
     await page.waitForFunction(expected => {
       const card = document.querySelector('.audio-card');
