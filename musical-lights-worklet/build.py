@@ -29,6 +29,7 @@ def main():
         output / "loudness.wasm",
     )
     shutil.copyfile(root / "processor.js", output / "processor.js")
+    shutil.copyfile(root / "pcm-playback.js", output / "pcm-playback.js")
     shutil.copyfile(
         root.parent / "licenses/GPL-3.0-loudness.txt", output / "GPL-3.0-loudness.txt"
     )

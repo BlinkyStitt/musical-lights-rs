@@ -646,3 +646,22 @@ screenshot filmstrip because GPU readbacks compete with realtime audio on
 software renderers. Failure screenshots and explicit GPU pixel comparisons,
 layout screenshots and preview images remain enabled. This reduces diagnostic
 recording work without changing browser assertions, deadlines or retries.
+
+
+Digital playback uses `pcm-playback.js`, a browser AudioWorklet source. It copies
+48 kHz decoded Float32 PCM with an integer sample cursor. Pause supplies zeros
+and holds that cursor; resume, repeat and replay use the same connected graph.
+Transport acknowledgements carry the actual render frame and cursor, so the
+output-clock timeline follows the audio thread rather than UI command timing.
+Microphone capture and the core loudness model keep their existing paths.
+
+The former native buffer source could interpolate PCM at fractional startup
+clocks. A controlled Linux WebKit comparison found 35 changed samples, including
+zeros changed to approximately 6e-15, and different raw loudness values. With the
+integer source, all five tested startup clocks preserved PCM and raw results
+exactly. These isolated Linux x64 emulation checks establish sample preservation,
+not phone performance. The offline harness executes the production source across
+chunk boundaries, loop seams, pause/resume, replay and natural completion. Live
+browser checks compare observed release-worklet input with decoded PCM and retain
+exact raw loudness and filtered-target assertions. End tests use a shorter PCM
+fixture with the real processor and its real completion acknowledgement.

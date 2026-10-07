@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { acquireInput, releaseInput } from '../../musical-leptos/src/audio_setup.js';
+import { playbackFixture } from '../pcm-playback-fixture.mjs';
 
 // Load the production modules through the same runtime asset URLs as the app.
 // Only the generated build metadata and browser/audio dependencies are fixtures.
@@ -49,15 +50,31 @@ function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat 
     currentTime: 10, sampleRate: 48000, state: 'running', baseLatency: 0, outputLatency: .2,
     destination: node(), createGain: node, createConstantSource: node,
     createMediaStreamDestination: () => ({ ...node(), stream }),
-    createBuffer: (channels, length, rate) => ({ duration: length / rate, copyToChannel: data => assert.deepEqual(data, pcm) }),
+    audioWorklet: { addModule: async () => {} },
+    createBuffer: (channels, length, rate) => ({ duration: length / rate, getChannelData: () => pcm, copyToChannel: data => assert.deepEqual(data, pcm) }),
     createBufferSource: () => { const source = node(); sources.push(source); return source; },
+  });
+  global('AudioWorkletNode', class {
+    constructor(context, name, { processorOptions }) {
+      assert.equal(name, 'pcm-playback');
+      this.port = { close() {}, postMessage: data => { this.advance(); this.player.command(data); this.player.render(0); } };
+      this.player = playbackFixture(processorOptions.pcm, processorOptions.repeat, Math.round(context.currentTime * context.sampleRate), data => this.port.onmessage?.({ data }));
+      this.advance = () => {
+        const end = Math.round(context.currentTime * context.sampleRate);
+        while (this.player.frame < end) this.player.render(Math.min(128, end - this.player.frame));
+        this.player.render(0);
+      };
+      sources.push(this);
+    }
+    connect() {}
+    disconnect() {}
   });
   let playback;
   card.addEventListener('review-playback', ({ detail }) => { playback = detail; });
   t.after(() => { releaseInput(stream); assert.equal(timers.size, 0); });
   return { context, card, sources, controls, decodes: () => decodes, microphoneRequests: () => microphoneRequests,
     click: selector => controls[selector].dispatchEvent(new Event('click')),
-    read: time => { context.currentTime = time; for (const timer of timers) timer(); return playback; } };
+    read: time => { context.currentTime = time; for (const source of sources) source.advance(); for (const timer of timers) timer(); return playback; } };
 }
 
 for (const kind of ['music', 'trumpet', 'local']) {
@@ -105,7 +122,7 @@ test('output clock crosses repeat boundaries after the audible iteration finishe
 
 test('natural end allows output to drain to the endpoint without sticking at duration minus latency', async t => {
   const f = fixture(t, { repeat: false }); await acquireInput(f.context, 0);
-  f.context.currentTime = 16; f.sources[0].onended();
+  f.read(16);
   position(f.read(16.1), 6, 5.9, 'ended');
   position(f.read(16.3), 6, 6, 'ended');
   position(f.read(20), 6, 6, 'ended');
