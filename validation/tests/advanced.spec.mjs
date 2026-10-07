@@ -191,10 +191,14 @@ for (const clip of ['trumpet', 'music', 'local']) {
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(0);
     const identity = await page.evaluate(() => document.querySelector('.audio-card').review.identity);
     expect(identity.pcmSha256).toMatch(/^[a-f0-9]{64}$/); expect(identity.channels).toBe(clip === 'local' ? 2 : 1);
-    await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
+    // Exercise native keyboard transport without repeated pointer movement
+    // and layout-stability checks competing with the realtime audio graph.
+    await expect(page.getByRole('button', { name: 'Pause playback', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Pause playback', exact: true }).press('Enter');
     await expect(page.getByRole('button', { name: 'Resume playback', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Resume playback', exact: true }).click();
-    await page.locator('.review-replay').click();
+    await page.getByRole('button', { name: 'Resume playback', exact: true }).press('Enter');
+    await expect(page.locator('.review-replay')).toBeEnabled();
+    await page.locator('.review-replay').press('Enter');
     await page.locator('.review-device').fill('Mac test output'); await page.locator('.review-notes').fill('Automated playback check; human accents, swells and decay judgments pending.');
     await page.locator('.review-note').click();
     const download = page.waitForEvent('download'); await page.locator('.review-export').click();
@@ -204,7 +208,8 @@ for (const clip of ['trumpet', 'music', 'local']) {
     expect(report.sessions[0].timing.length).toBeGreaterThan(0); expect(report.diagnosticSamples.length).toBeGreaterThan(0);
     expect(await page.evaluate(() => captureRequests)).toBe(0);
     expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(false);
-    await page.locator('.review-stop').click();
+    await expect(page.locator('.review-stop')).toBeEnabled();
+    await page.locator('.review-stop').press('Enter');
     await expect(page.locator('.input-source')).toBeEnabled();
     expect(await page.evaluate(() => document.querySelector('.audio-card').review.buffer)).toBeNull();
     expect(errors).toEqual([]);

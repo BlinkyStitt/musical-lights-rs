@@ -96,29 +96,29 @@ test('identical-audio scrolling, angled lighting and swirl previews record frame
   await mkdir(output, { recursive: true });
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
-  await page.locator('.input-source').selectOption('trumpet');
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await page.locator('.display-controls > summary').press('Enter');
   await page.locator('.camera-rotation').fill('25');
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   // Warm the renderer once, then measure the same fresh four seconds of PCM
   // in each trial. Native keyboard controls avoid repeated hover/stability waits.
-  await page.waitForTimeout(2000);
-  await page.evaluate(() => {
+  await page.evaluate(() => new Promise(resolve => {
     window.previewSourceStarts = 0;
     document.querySelector('.audio-card').addEventListener('audio-session', ({ detail }) => {
       if (detail.reason === 'source start') window.previewSourceStarts++;
     });
-  });
+    setTimeout(resolve, 2000);
+  }));
+  await page.locator('.input-source').selectOption('trumpet');
+  await page.waitForFunction(() => document.querySelector('.audio-card').dataset.audioState === 'playing'
+    && !document.querySelector('.review-replay').disabled, null, { timeout: 5000 });
+  const build = JSON.parse(await readFile(new URL('../../musical-leptos/dist/build.json', import.meta.url), 'utf8'));
   const measurements = [];
-  let replay = 0;
+  let replay = 1; // The initial source start is observed before either replay.
   for (const scrolling of [true, false]) {
     const scroll = page.locator('.scroll-lights');
-    if (await scroll.isChecked() !== scrolling) await scroll.press('Space');
+    if (!scrolling) await scroll.press('Space');
     await expect(scroll).toBeChecked({ checked: scrolling });
-    // The source publishes playing before Rust finishes attaching its input.
-    // Keyboard activation, unlike click(), does not wait for an enabled button.
-    await expect(page.locator('.review-replay')).toBeEnabled();
+    // Startup above waits for input attachment before native keyboard replay.
     await page.locator('.review-replay').press('Enter');
     await page.waitForFunction(expected => {
       const card = document.querySelector('.audio-card');
@@ -134,15 +134,15 @@ test('identical-audio scrolling, angled lighting and swirl previews record frame
         else { const sorted = times.toSorted((a, b) => a - b); resolve({ fps: times.length * 1000 / (now - start),
           p95FrameMs: sorted[Math.ceil(sorted.length * .95) - 1], meanRenderMs: (v.metrics.renderMs - cost) / (v.metrics.frames - frames),
           debt: v.metrics.debt, discardedSimulationMs: v.metrics.discardedSimulationMs, bpm: v.tempo, confidence: v.tempoConfidence,
-          clip: v.card.review.identity, diagnostics: v.card.dataset.toneDiagnostics, physicalDevice: false }); }
+          clip: v.card.review.identity, diagnostics: v.card.dataset.toneDiagnostics, audioState: v.card.dataset.audioState, physicalDevice: false }); }
       }; requestAnimationFrame(sample);
     }));
-    const build = JSON.parse(await readFile(new URL('../../musical-leptos/dist/build.json', import.meta.url), 'utf8'));
     measurements.push({ build, measuredAt: new Date().toISOString(), scrolling, ...metrics });
     await page.screenshot({ path: `${output}/${info.project.name}-${scrolling ? 'scrolling' : 'stationary'}-angled-swirl.png` });
   }
   expect(measurements[0].clip.pcmSha256).toBe(measurements[1].clip.pcmSha256);
   expect(measurements.every(m => m.diagnostics === 'false' && m.discardedSimulationMs === 0)).toBe(true);
+  expect(measurements.every(m => m.audioState === 'playing')).toBe(true);
   await writeFile(`${output}/${info.project.name}-render-cost.json`, JSON.stringify(measurements, null, 2) + '\n');
 });
 
