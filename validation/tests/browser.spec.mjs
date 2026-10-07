@@ -176,53 +176,56 @@ test('leaving the view while permission is pending releases the late stream', as
   await expect.poll(() => page.evaluate(() => window.audioContexts.every(c => c.state === 'closed'))).toBe(true);
 });
 
+async function prepareSpectrum(page, width, colorScheme) {
+  await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+  if (width === 375) {
+    // Keep layout and input checks under slow scheduling as well.
+    const cpu = await page.context().newCDPSession(page);
+    await cpu.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  }
+  await page.emulateMedia({ colorScheme });
+  await page.addInitScript(() => {
+    MediaDevices.prototype.getUserMedia = async () => {
+      // Keep all 24 bands in the noise fixture even when a headset makes
+      // the device's default context run at a lower sample rate.
+      const context = new AudioContext({ sampleRate: 48000 });
+      const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+      const samples = buffer.getChannelData(0);
+      let seed = 1;
+      for (let i = 0; i < samples.length; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        samples[i] = (seed / 2 ** 32 - 0.5) * 0.6;
+      }
+      const source = context.createBufferSource(); source.buffer = buffer; source.loop = true;
+      const destination = context.createMediaStreamDestination();
+      source.connect(destination); source.start(); await context.resume();
+      window.noiseContext = context;
+      return destination.stream;
+    };
+  });
+  await page.goto(leptos);
+  // This geometry/contrast fixture visits all 24 source columns. The idle
+  // sine now scrolls them too; freeze scrolling for stationary hover targets.
+  await page.locator('.scroll-lights').uncheck();
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.camera-motion').uncheck();
+  await page.locator('.display-controls > summary').click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // The switch eases to a stop; wait for the displayed phase to settle.
+  await page.waitForFunction(() => {
+    const view = document.querySelector('#dancinglights').physics;
+    return view?.current && view.previous
+      && view.current[view.layout[20]] === view.previous[view.layout[20]];
+  });
+}
+
 for (const colorScheme of ['light', 'dark']) {
   for (const width of [375, 768, 1440]) {
     test(`spectrum is centered and readable at ${width}px in ${colorScheme} mode`, async ({ page }) => {
-      // This case checks 24 hovers, live audio, contrast, screenshots, and theme
-      // changes. Allow the full sequence on software GPUs; each state assertion
-      // still has its normal five-second deadline. Phone FPS has a separate gate.
+      // Keep geometry/24 hovers/keyboard separate from live audio and images.
+      // Each assertion retains its normal deadline on software GPUs.
       test.setTimeout(60_000);
-      await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
-      if (width === 375) {
-        // Keep layout and input checks under slow scheduling as well.
-        const cpu = await page.context().newCDPSession(page);
-        await cpu.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-      }
-      await page.emulateMedia({ colorScheme });
-      await page.addInitScript(() => {
-        MediaDevices.prototype.getUserMedia = async () => {
-          // Keep all 24 bands in the noise fixture even when a headset makes
-          // the device's default context run at a lower sample rate.
-          const context = new AudioContext({ sampleRate: 48000 });
-          const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
-          const samples = buffer.getChannelData(0);
-          let seed = 1;
-          for (let i = 0; i < samples.length; i++) {
-            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-            samples[i] = (seed / 2 ** 32 - 0.5) * 0.6;
-          }
-          const source = context.createBufferSource(); source.buffer = buffer; source.loop = true;
-          const destination = context.createMediaStreamDestination();
-          source.connect(destination); source.start(); await context.resume();
-          window.noiseContext = context;
-          return destination.stream;
-        };
-      });
-      await page.goto(leptos);
-      // This geometry/contrast fixture visits all 24 source columns. The idle
-      // sine now scrolls them too; freeze scrolling for stationary hover targets.
-      await page.locator('.scroll-lights').uncheck();
-      await page.locator('.display-controls > summary').click();
-      await page.locator('.camera-motion').uncheck();
-      await page.locator('.display-controls > summary').click();
-      await page.evaluate(() => window.scrollTo(0, 0));
-      // The switch eases to a stop; wait for the displayed phase to settle.
-      await page.waitForFunction(() => {
-        const view = document.querySelector('#dancinglights').physics;
-        return view?.current && view.previous
-          && view.current[view.layout[20]] === view.previous[view.layout[20]];
-      });
+      await prepareSpectrum(page, width, colorScheme);
       const card = await page.locator('.audio-card').boundingBox();
       expect(Math.abs(card.x + card.width / 2 - width / 2)).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
@@ -263,6 +266,10 @@ for (const colorScheme of ['light', 'dark']) {
       await expect(meters[0]).toBeFocused();
       await expect(page.locator('.control-help')).toBeHidden();
       await expect(page.locator('#frequency-readout')).toHaveText(await meters[0].getAttribute('aria-label'));
+    });
+    test(`spectrum audio, contrast and theme changes at ${width}px in ${colorScheme} mode`, async ({ page }) => {
+      test.setTimeout(60_000);
+      await prepareSpectrum(page, width, colorScheme);
       // Exercise every colored bar through the real audio processor.
       // Include a collection pause before the first live bar attack.
       await page.requestGC();

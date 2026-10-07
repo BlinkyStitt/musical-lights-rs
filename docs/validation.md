@@ -647,6 +647,13 @@ software renderers. Failure screenshots and explicit GPU pixel comparisons,
 layout screenshots and preview images remain enabled. This reduces diagnostic
 recording work without changing browser assertions, deadlines or retries.
 
+Layout and keyboard checks run separately from live noise, contrast images and
+theme changes at each viewport and theme. This keeps all 24 hover checks and
+the existing assertion deadlines within focused test cases. Preview sampling
+starts at the source-start event from the native Replay gesture. Each trial
+records four seconds of the same PCM, after a real rendered frame, without a
+fixed warm-up sleep or protocol calls consuming the measurement interval.
+
 
 Digital playback uses `pcm-playback.js`, a browser AudioWorklet source. It copies
 48 kHz decoded Float32 PCM with an integer sample cursor. Pause supplies zeros
