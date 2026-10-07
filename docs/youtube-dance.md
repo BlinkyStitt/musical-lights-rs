@@ -89,16 +89,19 @@ and the scene through either side. Four instanced reflection meshes share the
 bar and ball materials, contact pigments and attack highlights. Reflected bars
 use twelve triangles and their distance shader retains the rounded front
 silhouette. Nearby images draw first to limit hidden work. A ray/box
-intersection masks each mirror portal. Odd reflections reverse triangle winding; instance matrices retain proper positive scales.
+intersection masks each mirror portal. Odd reflections reverse triangle
+winding; instance matrices retain proper positive scales.
 There are no recursive cameras, reflection textures, shadow maps or bloom.
 The faint coating and fading copies approximate an infinity mirror room rather
 than tracing every light path. The scene uses at most 200,000 drawing-buffer
-pixels, with a maximum pixel ratio of two. Shader boundaries use the actual render scale after each resize;
+pixels, with a maximum pixel ratio of two. Shader boundaries use the actual
+render scale after each resize;
 HTML controls and text retain their native resolution. GPU cost must be
 measured separately from worker physics cost. Physical embedded mirrors
 require no rendering code in core.
 
-Quiet/Loud guides project both banks through the current camera. A small BPM
+Quiet/Loud guides project both banks through the current camera. The camera
+reserves space for their labels so all four remain visible at oblique angles. A small BPM
 readout beside Scroll lights uses the smoothed estimate and shows uncertainty
 in its help text. It does not announce every update.
 

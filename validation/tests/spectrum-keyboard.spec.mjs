@@ -10,17 +10,27 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole('checkbox', { name: 'Scroll lights' }).uncheck();
 });
 
+function sampleState(index) {
+  if (index === 'record-keys') {
+    window.keyboardSamples = [];
+    document.addEventListener('keyup', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const selected = [...document.querySelectorAll('.meter')].indexOf(document.activeElement);
+      window.keyboardSamples.push(sampleState(selected));
+    });
+    return;
+  }
+  const meters = [...document.querySelectorAll('.meter')], meter = meters[index];
+  return { focused: meters.indexOf(document.activeElement),
+    tabStops: meters.flatMap((node, i) => node.getAttribute('tabindex') === '0' ? [i] : []),
+    negativeTabStops: meters.filter(node => node.getAttribute('tabindex') === '-1').length,
+    labelMatches: document.querySelector('#frequency-readout').textContent.trim() === meter.getAttribute('aria-label'),
+    describedBy: meter.getAttribute('aria-describedby') };
+}
+function expectedSample(index) { return { focused: index, tabStops: [index], negativeTabStops: 23,
+  labelMatches: true, describedBy: 'frequency-readout' }; }
 async function expectSample(page, index) {
-  // Read one coherent browser state instead of seven protocol round trips per key.
-  await expect.poll(() => page.evaluate(index => {
-    const meters = [...document.querySelectorAll('.meter')], meter = meters[index];
-    return { focused: meters.indexOf(document.activeElement),
-      tabStops: meters.flatMap((node, i) => node.getAttribute('tabindex') === '0' ? [i] : []),
-      negativeTabStops: meters.filter(node => node.getAttribute('tabindex') === '-1').length,
-      labelMatches: document.querySelector('#frequency-readout').textContent.trim() === meter.getAttribute('aria-label'),
-      describedBy: meter.getAttribute('aria-describedby') };
-  }, index)).toEqual({ focused: index, tabStops: [index], negativeTabStops: 23,
-    labelMatches: true, describedBy: 'frequency-readout' });
+  await expect.poll(() => page.evaluate(sampleState, index)).toEqual(expectedSample(index));
 }
 
 test('spectrum has one Tab stop, direct exits, and remembers the last focused sample', async ({ page }) => {
@@ -60,27 +70,19 @@ test('spectrum has one Tab stop, direct exits, and remembers the last focused sa
 test('arrows reach every sample across group boundaries and Home/End clamp at endpoints', async ({ page }) => {
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
   await page.keyboard.press('Tab');
-  await page.keyboard.press('ArrowLeft');
-  await expectSample(page, 0);
-  await page.keyboard.press('Home');
-  await expectSample(page, 0);
-  for (let index = 1; index < 24; index++) {
-    await page.keyboard.press('ArrowRight');
-    await expectSample(page, index);
+  // Capture each native key's resulting state inside the page. This preserves
+  // every intermediate assertion without a second protocol round trip per key.
+  await page.evaluate(sampleState, 'record-keys');
+  const steps = [['ArrowLeft', 0], ['Home', 0],
+    ...Array.from({ length: 23 }, (_, i) => ['ArrowRight', i + 1]),
+    ['ArrowRight', 23], ['End', 23],
+    ...Array.from({ length: 23 }, (_, i) => ['ArrowLeft', 22 - i]),
+    ['End', 23], ['Home', 0]];
+  for (const [n, [key]] of steps.entries()) {
+    await page.keyboard.press(key);
+    if (n === 24) await expect(page.getByRole('tooltip')).toHaveText('≈ 12000–15500 Hz');
   }
-  await expect(page.getByRole('tooltip')).toHaveText('≈ 12000–15500 Hz');
-  await page.keyboard.press('ArrowRight');
-  await expectSample(page, 23);
-  await page.keyboard.press('End');
-  await expectSample(page, 23);
-  for (let index = 22; index >= 0; index--) {
-    await page.keyboard.press('ArrowLeft');
-    await expectSample(page, index);
-  }
-  await page.keyboard.press('End');
-  await expectSample(page, 23);
-  await page.keyboard.press('Home');
-  await expectSample(page, 0);
+  expect(await page.evaluate(() => window.keyboardSamples)).toEqual(steps.map(([, index]) => expectedSample(index)));
 });
 
 test('modified keys and vertical arrows preserve selection and remain available to the browser', async ({ page }) => {

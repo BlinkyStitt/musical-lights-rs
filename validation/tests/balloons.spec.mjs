@@ -433,10 +433,18 @@ test('phone acceptance rejects frozen snapshots despite 60 FPS and a current wor
 
 test('wrapped pointer surfaces and keyboard focus retain the source frequency', async ({ page }) => {
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  // This fixture needs a stationary hover surface. Camera motion has its own
+  // tests; stop it through the saved setting instead of forcing an unstable hit.
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.camera-motion').uncheck();
   const last = await page.getByRole('meter').last().getAttribute('aria-label');
   await page.locator('.scroll-lights').check();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.4);
-  await page.locator('.scroll-lights').uncheck(); await page.waitForTimeout(350);
+  await page.locator('.scroll-lights').uncheck();
+  await page.waitForFunction(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.previous && v.current[v.layout[20]] === v.previous[v.layout[20]];
+  });
   // Host speed can carry more than one band past the seam before Stop arrives.
   // Select the actual clipped copy, retaining its immutable source identity.
   const wrapped = await page.locator('.bark-copy').evaluateAll(nodes =>

@@ -33,10 +33,15 @@ test('paired physical bars and both Quiet/Loud guides follow the rotated camera'
         const point = new THREE.Vector3(i & 1 ? v.width : 0, i & 2 ? h : 0, (i & 4 ? 1 : -1) * v.config[5] / 2).project(v.camera);
         return Math.max(Math.abs(point.x), Math.abs(point.y));
       });
-      return { guides, corners };
+      const labelsVisible = [...v.graph.querySelector('.meter-guide').children].every(node => {
+        const box = node.getBoundingClientRect();
+        return box.x >= graph.x && box.right <= graph.right && box.y >= graph.y && box.bottom <= graph.bottom;
+      });
+      return { guides, corners, labelsVisible };
     });
     expect(Math.max(...alignment.guides)).toBeLessThan(1.5);
     expect(Math.max(...alignment.corners)).toBeLessThan(1);
+    expect(alignment.labelsVisible).toBe(true);
   }
 });
 

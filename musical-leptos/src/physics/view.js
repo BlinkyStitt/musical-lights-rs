@@ -259,12 +259,17 @@ export class PhysicsView {
     this.camera.updateMatrixWorld();
     const depth = this.config?.[5] ?? .24;
     let tangent = 0;
+    // Reserve space for the projected Quiet/Loud labels around the room.
+    // Fit the geometry inside those CSS gutters; keep labels on their true
+    // projected coordinates instead of clamping them away from the bar bases.
+    const horizontal = Math.max(.5, 1 - 84 / this.canvasWidth);
+    const vertical = Math.max(.5, 1 - 24 / this.canvasHeight);
     // Fit all eight room corners, including the near faces and camera pitch.
     // A 2D field of view crops those faces under perspective projection.
     for (let i = 0; i < 8; i++) {
       const point = this.pointerPoint.set(i & 1 ? this.width : 0, i & 2 ? this.visibleHeight : 0,
         i & 4 ? depth / 2 : -depth / 2).applyMatrix4(this.camera.matrixWorldInverse);
-      tangent = Math.max(tangent, Math.abs(point.y) / -point.z, Math.abs(point.x) / (-point.z * this.aspect));
+      tangent = Math.max(tangent, Math.abs(point.y) / (-point.z * vertical), Math.abs(point.x) / (-point.z * this.aspect * horizontal));
     }
     const fov = 2 * Math.atan(tangent * 1.015) * 180 / Math.PI;
     if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
