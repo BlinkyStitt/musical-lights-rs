@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { meterPoint } from '../meter-input.mjs';
+import { meterPoint, meterPoints } from '../meter-input.mjs';
 const leptos = 'http://127.0.0.1:8101';
 
 test('Leptos renders routes and 24 meters without the temporary counter', async ({ page }) => {
@@ -211,6 +211,10 @@ for (const colorScheme of ['light', 'dark']) {
       // This geometry/contrast fixture visits all 24 source columns. The idle
       // sine now scrolls them too; freeze scrolling for stationary hover targets.
       await page.locator('.scroll-lights').uncheck();
+      await page.locator('.display-controls > summary').click();
+      await page.locator('.camera-motion').uncheck();
+      await page.locator('.display-controls > summary').click();
+      await page.evaluate(() => window.scrollTo(0, 0));
       // The switch eases to a stop; wait for the displayed phase to settle.
       await page.waitForFunction(() => {
         const view = document.querySelector('#dancinglights').physics;
@@ -232,8 +236,9 @@ for (const colorScheme of ['light', 'dark']) {
       expect(first.y).toBeLessThan(controls.y + controls.height + 64);
       const description = await page.locator('.intro').boundingBox();
       expect(description.y).toBeGreaterThan(first.y + first.height);
-      for (const meter of meters) {
-        const { x, y, label } = await meterPoint(page, meter);
+      // Scrolling and camera motion are off for this geometry fixture. Read
+      // all native hit points once instead of scrolling the same graph 24 times.
+      for (const { x, y, label } of await meterPoints(page)) {
         await page.mouse.move(x, y);
         // Check visibility, text, and bounds together without waiting through
         // several software-rendered frames for separate protocol calls.

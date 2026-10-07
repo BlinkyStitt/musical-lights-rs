@@ -81,7 +81,7 @@ export class PhoneReport {
       const count = detail.trace.length / detail.traceStride;
       if (this.toneRows + count <= 50000) {
         this.toneChunks.push({ sessionId: detail.sessionId, receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime,
-          workletAudioTime: detail.audioTime, stride: detail.traceStride, values: detail.trace });
+          workletAudioTime: detail.audioTime, inputStartSample: detail.inputStartSample, stride: detail.traceStride, values: detail.trace });
         this.toneRows += count;
       } else this.toneDropped += count;
       this.toneWorkletDropped = detail.traceDropped;
@@ -203,6 +203,12 @@ export class PhoneReport {
     if (this.startMs == null) return;
     const elapsed = now - this.startMs;
     if (elapsed < 15000) { this.previous = null; this.metadata.viewport = [innerWidth, innerHeight]; return; }
+    if (this.view.sceneVisible === false) {
+      this.invalidate('Visualizer left the viewport during test');
+      this.previous = null;
+      if (elapsed >= 315000) this.finish(false);
+      return;
+    }
     this.maxSnapshotAgeMs = Math.max(this.maxSnapshotAgeMs, this.view.metrics.snapshotAgeMs);
     if (this.costCount < this.renderCosts.length) this.renderCosts[this.costCount++] = cost;
     else this.invalidate('Render report capacity exceeded');

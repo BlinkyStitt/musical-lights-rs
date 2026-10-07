@@ -91,6 +91,10 @@ use twelve triangles and their distance shader retains the rounded front
 silhouette. Nearby images draw first to limit hidden work. A ray/box
 intersection masks each mirror portal. Odd reflections reverse triangle
 winding; instance matrices retain proper positive scales.
+Each reflection draw uses a conservative scissor around the projected room.
+The scene stops drawing outside the viewport while audio analysis and physics
+continue. A phone report rejects offscreen intervals instead of counting them
+as accepted rendering performance.
 There are no recursive cameras, reflection textures, shadow maps or bloom.
 The faint coating and fading copies approximate an infinity mirror room rather
 than tracing every light path. The scene uses at most 200,000 drawing-buffer

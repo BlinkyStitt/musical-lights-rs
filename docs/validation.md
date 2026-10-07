@@ -629,6 +629,11 @@ cost and front/side images. These measurements describe the browser host, not
 a physical iPhone. The offline mirror test covers non-indexed rounded geometry,
 odd reflection winding, shader defines and disposal. Native physics covers
 ceiling-bar collision, inward bounce, pigments and safe enclosure resize.
+The scissor regression compares every rendered pixel with the unrestricted
+ray portal at five camera angles. Another test checks that offscreen audio and
+physics continue while drawing stops. The phone-clock harness rejects those
+offscreen intervals for FPS acceptance. Live PCM checks use the recorded first
+input sample clock and require exact raw loudness and filtered targets.
 
 The core owns the bounded tempo-to-odds curve and paired stroke calculation.
 The browser owns mirrors. Physics protocol 9 and phone report v5 preserve

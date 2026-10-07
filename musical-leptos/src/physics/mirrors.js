@@ -23,6 +23,8 @@ export class MirrorRoom {
     this.extent = { value: new THREE.Vector3(width, 1, 1) };
     this.meshes = [];
     this.sources = [];
+    this.corner = new THREE.Vector3(); this.viewport = new THREE.Vector4();
+    this.savedScissor = new THREE.Vector4();
     const cells = mirrorCells();
     for (const [kind, source] of [['balls', balls], ['bars', bars]]) {
       // Wrapped bar instances outside the real room are physics bookkeeping.
@@ -112,6 +114,28 @@ export class MirrorRoom {
         mesh.frustumCulled = false;
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * group.length * 3), 3);
+        mesh.onBeforeRender = (renderer, scene, camera) => {
+          renderer.getScissor(this.savedScissor); this.savedScissorTest = renderer.getScissorTest();
+          renderer.getCurrentViewport(this.viewport);
+          let minX = 1, minY = 1, maxX = -1, maxY = -1;
+          const extent = this.extent.value;
+          for (let i = 0; i < 8; i++) {
+            this.corner.set(i & 1 ? extent.x : 0, i & 2 ? extent.y : 0, (i & 4 ? .5 : -.5) * extent.z).project(camera);
+            minX = Math.min(minX, this.corner.x); minY = Math.min(minY, this.corner.y);
+            maxX = Math.max(maxX, this.corner.x); maxY = Math.max(maxY, this.corner.y);
+          }
+          // The ray portal can show images only inside the projected room.
+          // Reject its exterior before fragment shading, with a pixel of extra
+          // coverage for antialiasing. Respect offscreen render-target viewports.
+          const v = this.viewport, ratio = renderer.getPixelRatio();
+          const left = Math.max(v.x, Math.floor(v.x + (minX + 1) * v.z / 2) - 1);
+          const bottom = Math.max(v.y, Math.floor(v.y + (minY + 1) * v.w / 2) - 1);
+          const right = Math.min(v.x + v.z, Math.ceil(v.x + (maxX + 1) * v.z / 2) + 1);
+          const top = Math.min(v.y + v.w, Math.ceil(v.y + (maxY + 1) * v.w / 2) + 1);
+          renderer.setScissor(left / ratio, bottom / ratio, Math.max(0, right - left) / ratio, Math.max(0, top - bottom) / ratio);
+          renderer.setScissorTest(true);
+        };
+        mesh.onAfterRender = renderer => { renderer.setScissor(this.savedScissor); renderer.setScissorTest(this.savedScissorTest); };
         this.meshes.push({ mesh, staged, copies: group.length }); scene.add(mesh);
       }
     }

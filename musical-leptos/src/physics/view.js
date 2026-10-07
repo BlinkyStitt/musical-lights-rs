@@ -103,6 +103,9 @@ export class PhysicsView {
     this.listeners = [];
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
+    this.sceneVisible = true;
+    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; });
+    this.visibilityObserver.observe(layer);
     this.controls = this.card.querySelector('.audio-controls'); this.observer.observe(this.controls);
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
     this.listen(document, 'visibilitychange', () => { if (document.hidden) this.report?.invalidate('Page hidden during test'); this.pause(); });
@@ -136,10 +139,11 @@ export class PhysicsView {
         if (readout) { readout.textContent = `${Math.round(this.tempo)} BPM`; readout.title = this.idle ? 'Silent preview tempo' : this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'Tempo estimate uncertain; using the smoothed fallback'; }
       }
       this.updateCamera(now);
-      if (this.current) this.draw(now);
+      const rendered = this.current && this.sceneVisible;
+      if (rendered) this.draw(now);
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
-      this.metrics.frames++; this.metrics.renderMs += cost;
+      if (rendered) { this.metrics.frames++; this.metrics.renderMs += cost; }
       this.report?.frame(frameTime, cost);
       this.notice.sample(this.metrics, now, 1000 / (this.layout?.[1] ?? 120));
       if (!this.lastStatus || now - this.lastStatus > 1000) {
@@ -532,7 +536,7 @@ export class PhysicsView {
   close() {
     this.closed = true; this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
-    this.observer.disconnect(); this.motion.close(); this.report?.close();
+    this.observer.disconnect(); this.visibilityObserver.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();
     for (const copy of this.copies) copy.remove();
     this.canvas.removeEventListener('webglcontextlost', this.contextLost);

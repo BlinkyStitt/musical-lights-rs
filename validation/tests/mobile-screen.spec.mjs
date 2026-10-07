@@ -271,7 +271,7 @@ test('fullscreen transitions keep live audio and bounded simulation delay', asyn
   await page.evaluate(()=>{
     const v=document.querySelector('#dancinglights').physics;
     window.transitionIdentity={worker:v.worker,renderer:v.renderer,session:v.report.audioState.sessionId};
-    window.transitionBefore={...v.metrics};window.transitionFrames=[];window.transitionRunning=true;
+    v.recordTiming=true;window.transitionBefore={...v.metrics};window.transitionFrames=[];window.transitionRunning=true;
     let previous=performance.now();
     const record=now=>{transitionFrames.push({frame:now-previous,height:v.current[1],requested:v.input[32],debt:v.metrics.debt,age:v.metrics.snapshotAgeMs});previous=now;if(transitionRunning)requestAnimationFrame(record)};
     requestAnimationFrame(record);

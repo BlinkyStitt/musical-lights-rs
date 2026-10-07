@@ -272,15 +272,16 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
       for (let i = 0; i < chunk.values.length; i += chunk.stride) out.push(Array.from(chunk.values.subarray(i, i + chunk.stride)));
       return out;
     });
-    return { pcm: Array.from(card.review.buffer.getChannelData(1)), rows: rows.slice(0, 200), dropped: report.toneWorkletDropped };
+    return { pcm: Array.from(card.review.buffer.getChannelData(1)), rows: rows.slice(0, 200), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
   });
-  const expected = flashTrace(module, Float32Array.from(data.pcm));
+  expect(Number.isSafeInteger(data.firstSample)).toBe(true);
+  const expected = flashTrace(module, Float32Array.from(data.pcm), false, { firstSample: data.firstSample });
   expect(data.rows).toHaveLength(200);
   // Diagnostic delivery has bounded storage and can report dropped rows.
   // Match the original audio sample timestamps, never shifted traces or IPC
   // array positions. Raw loudness and filtered targets must remain exact.
   const bySample = new Map(expected.map(row => [row[0], row]));
-  let previous = -96, missing = 0;
+  let previous = data.firstSample - 96, missing = 0;
   for (const row of data.rows) {
     expect(row[0]).toBeGreaterThan(previous);
     expect((row[0] - previous) % 96).toBe(0);

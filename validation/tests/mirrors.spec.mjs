@@ -149,3 +149,46 @@ test('phone opens expanded without capture and keeps video, notices, song and Ex
     }
   } finally { await context.close(); }
 });
+
+
+test('mirror scissor preserves every pixel against the unrestricted ray portal', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  const differences = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const hooks = v.mirrors.meshes.map(({mesh}) => [mesh.onBeforeRender, mesh.onAfterRender]);
+    const target = new THREE.WebGLRenderTarget(240,160), pixels = new Uint8Array(240*160*4), results=[];
+    const render=()=>{v.renderer.setRenderTarget(target);v.renderer.render(v.scene,v.camera);v.renderer.readRenderTargetPixels(target,0,0,240,160,pixels);return pixels.slice();};
+    try {
+      for(const angle of [-40,-20,0,20,40]) {
+        v.setCamera(angle,angle<0?-.14:.14);v.draw(performance.now());
+        const actual=render();
+        v.mirrors.meshes.forEach(({mesh})=>{mesh.onBeforeRender=()=>{};mesh.onAfterRender=()=>{};});
+        const expected=render();
+        v.mirrors.meshes.forEach(({mesh},i)=>{[mesh.onBeforeRender,mesh.onAfterRender]=hooks[i];});
+        results.push({angle,changed:actual.reduce((n,value,i)=>n+Number(value!==expected[i]),0)});
+      }
+    } finally {v.renderer.setRenderTarget(null);target.dispose();v.mirrors.meshes.forEach(({mesh},i)=>{[mesh.onBeforeRender,mesh.onAfterRender]=hooks[i];});}
+    return results;
+  });
+  for(const result of differences) expect(result.changed,JSON.stringify(result)).toBe(0);
+});
+
+test('offscreen rendering stops while audio and physics keep running', async ({ page }) => {
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.sceneVisible)).toBe(true);
+  await page.locator('footer').scrollIntoViewIfNeeded();
+  await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.sceneVisible)).toBe(false);
+  const before=await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;return {frames:v.metrics.frames,tick:v.current[2]};});
+  await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(before.tick+20);
+  expect(await page.evaluate(()=>document.querySelector('#dancinglights').physics.metrics.frames)).toBe(before.frames);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.metrics.frames)).toBeGreaterThan(before.frames);
+});
