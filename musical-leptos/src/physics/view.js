@@ -80,7 +80,10 @@ export class PhysicsView {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // Bound fragment work on large and high-density displays. CSS controls
+    // and text keep their native resolution. Physical and reflected edges
+    // share the actual render scale, including after fullscreen resizes.
+    this.pixelRatio = { value: 1 };
     this.renderer.localClippingEnabled = true;
     this.layer.append(this.renderer.domElement);
     this.renderer.domElement.setAttribute('aria-label', '8 rigid balls, matching top and bottom audio bars, and an infinity mirror box');
@@ -229,6 +232,9 @@ export class PhysicsView {
     if (this.input[32] !== this.height && this.timing.resizes.length < 5000) this.timing.resizes.push({ at: performance.now(), from: this.input[32], to: this.height });
     this.input[32] = this.height;
     if (box.width !== this.canvasWidth || box.height !== this.canvasHeight) {
+      const ratio = Math.min(devicePixelRatio, 2, Math.sqrt(200000 / (box.width * box.height)));
+      this.pixelRatio.value = ratio;
+      this.renderer.setPixelRatio(ratio);
       this.renderer.setSize(box.width, box.height, false);
       this.canvasWidth = box.width; this.canvasHeight = box.height;
     }
@@ -352,18 +358,17 @@ export class PhysicsView {
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     this.barRoof = { value: this.height };
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
-    material.defines = { PIXEL_RATIO: Math.min(devicePixelRatio, 2).toFixed(1) };
     material.onBeforeCompile = shader => {
-      Object.assign(shader.uniforms, { enclosureHeight: this.barRoof, halfWidth: { value: (pitch - gap) / 2 }, halfDepth: { value: this.config[5] / 2 }, radius: { value: radius }, postHeight: { value: postHeight } });
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, halfWidth: { value: (pitch - gap) / 2 }, halfDepth: { value: this.config[5] / 2 }, radius: { value: radius }, postHeight: { value: postHeight } });
       shader.vertexShader = 'uniform float enclosureHeight; attribute float edge; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', visiblePostProjection);
-      shader.fragmentShader = 'uniform float enclosureHeight; uniform float halfWidth; uniform float halfDepth; uniform float radius; uniform float postHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; uniform float halfDepth; uniform float radius; uniform float postHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
           vec2 q = vec2(abs(local.x) - (halfWidth - radius), local.y - (postHeight * 0.5 - radius));
           float distance = min(radius - (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)), min(world.y, enclosureHeight - world.y));
-          float pixel = PIXEL_RATIO * fwidth(distance);
+          float pixel = pixelRatio * fwidth(distance);
           float front = step(halfDepth - radius - 0.00001, abs(local.z));
           float outline = (1.0 - smoothstep(0.5 * pixel, 1.5 * pixel, distance)) * front;
           float inner = (1.0 - smoothstep(1.5 * pixel, 2.5 * pixel, distance)) * front;

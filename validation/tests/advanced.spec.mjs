@@ -156,8 +156,15 @@ test('audio and motion switches stop independently and route exit closes both pl
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await listening(page).uncheck();
   await expect(page.getByRole('checkbox', { name: 'Phone motion', exact: true })).toBeChecked();
-  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } })));
-  await expect.poll(() => page.evaluate(() => Array.from(savedView.input.slice(24, 27)))).toEqual([-5, -6, -7]);
+  // Read the force in the page's next frame, before its 150 ms sensor expiry.
+  // A separate protocol request can arrive after that expiry on a busy runner.
+  const force = await page.evaluate(() => new Promise(resolve => {
+    requestAnimationFrame(() => {
+      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } }));
+      requestAnimationFrame(() => resolve(Array.from(savedView.input.slice(24, 27))));
+    });
+  }));
+  expect(force).toEqual([-5, -6, -7]);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   expect(await page.evaluate(() => [savedView.closed, savedView.motion.closed, savedView.preview, testContext.state])).toEqual([true, true, null, 'closed']);
@@ -265,15 +272,26 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
       for (let i = 0; i < chunk.values.length; i += chunk.stride) out.push(Array.from(chunk.values.subarray(i, i + chunk.stride)));
       return out;
     });
-    return { pcm: Array.from(card.review.buffer.getChannelData(1)), rows: rows.slice(0, 200) };
+    return { pcm: Array.from(card.review.buffer.getChannelData(1)), rows: rows.slice(0, 200), dropped: report.toneWorkletDropped };
   });
   const expected = flashTrace(module, Float32Array.from(data.pcm));
   expect(data.rows).toHaveLength(200);
-  for (let n = 0; n < data.rows.length; n++) {
-    expect(data.rows[n].slice(1, 266)).toEqual(Array.from(expected[n].slice(1, 266)));
-    expect(data.rows[n].slice(267, 316)).toEqual(Array.from(expected[n].slice(267, 316)));
-    for (let b = 0; b < 24; b++) expect(data.rows[n][368 + b * 4]).toBe(expected[n][368 + b * 4]);
+  // Diagnostic delivery has bounded storage and can report dropped rows.
+  // Match the original audio sample timestamps, never shifted traces or IPC
+  // array positions. Raw loudness and filtered targets must remain exact.
+  const bySample = new Map(expected.map(row => [row[0], row]));
+  let previous = -96, missing = 0;
+  for (const row of data.rows) {
+    expect(row[0]).toBeGreaterThan(previous);
+    expect((row[0] - previous) % 96).toBe(0);
+    missing += (row[0] - previous) / 96 - 1; previous = row[0];
+    const reference = bySample.get(row[0]);
+    expect(reference, `audio sample ${row[0]}`).toBeDefined();
+    expect(row.slice(1, 266)).toEqual(Array.from(reference.slice(1, 266)));
+    expect(row.slice(267, 316)).toEqual(Array.from(reference.slice(267, 316)));
+    for (let b = 0; b < 24; b++) expect(row[368 + b * 4]).toBe(reference[368 + b * 4]);
   }
+  expect(data.dropped).toBeGreaterThanOrEqual(missing);
   const raw = data.rows.at(-1).slice(291, 315);
   expect(raw.indexOf(Math.max(...raw))).toBe(16); // Channel 2's 3.4 kHz, not channel 1's 250 Hz.
 });

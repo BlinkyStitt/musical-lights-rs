@@ -161,6 +161,19 @@ test('mouse and touch readouts do not replace keyboard selection and touch clean
   await page.keyboard.press('Tab');
 
   const touch = await meterPoint(page, page.getByRole('meter').nth(20));
+  // Measure from the native tap, not from later automation round trips. Slow
+  // hosts can consume the readout deadline before a protocol-side sleep starts.
+  await page.evaluate(() => {
+    window.readoutTiming = new Promise(resolve => document.addEventListener('pointerup', () => {
+      const start = performance.now(), samples = [];
+      const sample = () => {
+        const node = document.querySelector('#frequency-readout');
+        samples.push({ elapsed: performance.now() - start, visible: Boolean(node?.getBoundingClientRect().height) });
+      };
+      setTimeout(sample, 2000);
+      setTimeout(() => { sample(); resolve(samples); }, 3100);
+    }, { once: true, capture: true }));
+  });
   await page.touchscreen.tap(touch.x, touch.y);
   await expect(page.getByRole('tooltip')).toHaveText(touch.label);
   const selection = await page.locator('.meter[tabindex="0"]').getAttribute('aria-label');
@@ -169,9 +182,13 @@ test('mouse and touch readouts do not replace keyboard selection and touch clean
   const focusedLabel = await page.evaluate(() => document.activeElement.getAttribute('role') === 'meter'
     ? document.activeElement.getAttribute('aria-label') : '≈ 2000–2320 Hz');
   expect(selection).toBe(focusedLabel);
-  await page.waitForTimeout(2000);
-  await expect(page.getByRole('tooltip')).toBeVisible();
-  await expect(page.getByRole('tooltip')).toBeHidden({ timeout: 1500 });
+  const timing = await page.evaluate(() => window.readoutTiming);
+  expect(timing.map(sample => sample.visible)).toEqual([true, false]);
+  expect(timing[0].elapsed).toBeGreaterThanOrEqual(1900);
+  expect(timing[0].elapsed).toBeLessThan(2900);
+  expect(timing[1].elapsed).toBeGreaterThanOrEqual(3000);
+  expect(timing[1].elapsed).toBeLessThan(3600);
+  await expect(page.getByRole('tooltip')).toBeHidden();
   await expect(page.locator('.meter[tabindex="0"]')).toHaveAttribute('aria-label', selection);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
   await page.keyboard.press('Tab');

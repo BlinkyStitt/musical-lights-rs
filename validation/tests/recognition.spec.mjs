@@ -301,7 +301,9 @@ test('canceling an upload ignores late recognition and leaves listening active',
 });
 
 test('hiding the page cancels capture without a lookup', async ({ page }) => {
-  const uploads = await setup(page);
+  // This checks cancellation during capture, so retain the real ten-second
+  // window instead of racing the fixture's 300 ms successful-lookup timer.
+  const uploads = await setup(page, { captureMs: 10_000 });
   await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.recorder?.state)).toBe('recording');
   await page.evaluate(() => {

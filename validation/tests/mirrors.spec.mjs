@@ -64,13 +64,14 @@ test('six one-way faces show bounded mirror images and preserve source pixels at
       }
       const normals = v.enclosure.children.map(wall => new THREE.Vector3(0, 0, 1).applyQuaternion(wall.quaternion).toArray());
       const result = { changes, sourcePixels, normals, walls: v.enclosure.children.length,
-        passes, targets: v.mirrors.meshes.length,
+        passes, targets: v.mirrors.meshes.length, pixels: v.canvas.width * v.canvas.height,
         negativeScales: v.mirrors.meshes.some(({ mesh }) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array).determinant() < 0) };
       v.renderer.setRenderTarget(null); target.dispose(); v.cameraBase = 0; v.setCamera(0); return result;
     }, angle);
     expect(state.changes).toBeGreaterThan(150);
     expect(state.sourcePixels).toBeGreaterThan(200);
     expect(state.walls).toBe(6); expect(state.targets).toBe(4); expect(state.negativeScales).toBe(false);
+    expect(state.pixels).toBeLessThanOrEqual(200000);
     expect(state.passes).toBeLessThanOrEqual(14);
     expect(state.normals[4][0]).toBeCloseTo(1); expect(state.normals[5][0]).toBeCloseTo(-1);
     await info.attach(`mirror-${angle}.json`, { body: JSON.stringify(state), contentType: 'application/json' });
