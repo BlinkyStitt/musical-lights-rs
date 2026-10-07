@@ -192,7 +192,9 @@ for (const colorScheme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme });
       await page.addInitScript(() => {
         MediaDevices.prototype.getUserMedia = async () => {
-          const context = new AudioContext();
+          // Keep all 24 bands in the noise fixture even when a headset makes
+          // the device's default context run at a lower sample rate.
+          const context = new AudioContext({ sampleRate: 48000 });
           const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
           const samples = buffer.getChannelData(0);
           let seed = 1;

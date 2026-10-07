@@ -196,22 +196,27 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
   await page.locator('.review-start').click();
   await expect(page.locator('.review-start')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
+  const pause = page.getByRole('button', { name: 'Pause playback', exact: true });
+  await expect(pause).toBeEnabled();
+  await pause.focus();
   for (let cycle = 0; cycle < 6; cycle++) {
-    const pause = page.getByRole('button', { name: 'Pause playback', exact: true });
-    await expect(pause).toBeEnabled();
-    await pause.press('Enter');
+    // The same transport button keeps focus as its label changes. Send the
+    // user's repeated keys without refocusing and scrolling it each time.
+    await page.keyboard.press('Enter');
     // Use measured ISO loudness to prove that pause supplies silence while
     // the analysis clock continues, then that resume restores the signal.
     // Wait in the page so six cycles do not pay repeated protocol round trips
     // while the native analysis release runs. Keep the measured thresholds.
     await page.waitForFunction(() => {
       const r = document.querySelector('#dancinglights').physics.report, c = r.toneChunks.at(-1);
-      return c?.values[c.values.length - c.stride + 1] < .01;
+      return c?.values[c.values.length - c.stride + 1] < .01
+        && document.querySelector('.tone-pause').textContent === 'Resume playback';
     }, null, { timeout: 10000 });
-    await page.getByRole('button', { name: 'Resume playback', exact: true }).press('Enter');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => {
       const r = document.querySelector('#dancinglights').physics.report, c = r.toneChunks.at(-1);
       return c?.values[c.values.length - c.stride + 1] > 1
+        && document.querySelector('.tone-pause').textContent === 'Pause playback'
         && document.querySelector('[role="alert"]').textContent.trim() === '';
     }, null, { timeout: 5000 });
   }
