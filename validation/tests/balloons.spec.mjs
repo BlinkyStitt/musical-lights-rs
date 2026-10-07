@@ -14,7 +14,10 @@ test('a subpixel seam fragment uses its visible wrapped copy for native hover', 
     // Hold one real rendered pointer layout at the seam. This is a geometry
     // fixture, independent of worker timing and frame-rate acceptance.
     cancelAnimationFrame(view.request); view.request = null;
-    view.positionMeters(1.99999);
+    // A later enclosure snapshot reprojects the stored rendered phase.
+    // Keep that state consistent with the pointer geometry held by this fixture.
+    view.renderedPhase = 1.99999;
+    view.positionMeters(view.renderedPhase);
   });
   const meter = page.getByRole('meter').nth(22);
   expect((await meter.boundingBox()).width).toBeLessThan(1);
