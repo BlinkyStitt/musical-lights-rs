@@ -462,7 +462,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
 
     await expect(page.locator('.audio-error')).toHaveText('Microphone input ended. Restart listening.');
     await expectUncoveredNotice('.audio-error', 'microphone-failure');
-    await page.clock.runFor(4000);
+    // This checks the recovery timer after capture has stopped. Advance the
+    // elapsed time without rendering hundreds of unrelated idle frames.
+    await page.clock.fastForward(4000);
     await expect(page.locator('.audio-error')).toBeEmpty();
     await expect(page.locator('.audio-stopped')).toHaveText('Audio stopped. Turn on Listening or use Play audio to restart.');
     await expectUncoveredNotice('.audio-stopped', 'microphone-restart');
@@ -477,8 +479,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
 
 test('two opted-in tabs share one upload reservation without duplicate spending', async ({ page, context }) => {
   const second = await context.newPage();
-  const firstUploads = await setup(page, { captureMs: 1200 });
-  const secondUploads = await setup(second, { captureMs: 1200 });
+  const [firstUploads, secondUploads] = await Promise.all([
+    setup(page, { captureMs: 1200 }), setup(second, { captureMs: 1200 }),
+  ]);
   await Promise.all([
     page.getByRole('checkbox', { name: 'Identify song', exact: true }).check(),
     second.getByRole('checkbox', { name: 'Identify song', exact: true }).check(),
@@ -486,8 +489,10 @@ test('two opted-in tabs share one upload reservation without duplicate spending'
   await expect.poll(() => firstUploads.length + secondUploads.length).toBe(1);
   await page.waitForTimeout(1500);
   expect(firstUploads.length + secondUploads.length).toBe(1);
-  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
-  await second.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
+  await Promise.all([
+    page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck(),
+    second.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck(),
+  ]);
   await second.close();
 });
 

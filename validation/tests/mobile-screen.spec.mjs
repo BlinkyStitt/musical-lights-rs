@@ -16,13 +16,16 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       } });
     }
   });
-  // Use the real generated-audio pipeline to raise the bars. Silent input can
-  // leave every ball at rest before a slower browser reaches the Stop button.
+  // Use a strong, steady 150 Hz source beneath the largest ball. The multi-tone phone
+  // exercise does not guarantee a strong bar under any particular ball.
   await page.goto('http://127.0.0.1:8101/advanced/');
   await physicsReady(page); await normalView(page);
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
+  await page.locator('.tone-kind').selectOption('stationary');
+  await page.locator('.tone-frequency').fill('150');
+  await page.locator('.tone-level').fill('-20');
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
   await page.locator('.review-start').click();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
@@ -31,9 +34,14 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
-  // This test needs an airborne ball at Stop. The narrow, masking-aware
-  // display intentionally does not raise half the bars for six active tones.
-  await expect.poll(async () => (await physicsState(page)).balls.some(ball => ball.position[1] > ball.radius + .1)).toBe(true);
+  // Match the paired stroke instead of assuming the former 10 cm single-bank
+  // lift. Observe every frame; sparse protocol polling can miss a short flight.
+  await page.waitForFunction(() => {
+    const { current, layout } = document.querySelector('#dancinglights').physics;
+    const clearance = current[layout[17] + 1] * .5;
+    return Array.from({ length: layout[21] }, (_, i) => 3 + i * layout[8])
+      .some(offset => current[offset + 1] > current[offset + 7] + clearance);
+  }, null, { timeout: 5000 });
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   const box = await page.locator('#dancinglights canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -44,7 +52,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
     // Capture at the actual Stop event so protocol latency cannot consume the
     // fall before its starting height is measured.
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    window.physicsAtStop = { tick: current[2], balls: Array.from({ length: layout[21] }, (_, i) => {
+    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], balls: Array.from({ length: layout[21] }, (_, i) => {
       const offset = 3 + i * layout[8];
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
@@ -53,14 +61,16 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   // protocol round trip/tap can arrive after that transient has already ended.
   await page.waitForFunction(button => {
     const { current, layout } = document.querySelector('#dancinglights').physics;
+    const clearance = current[layout[17] + 1] * .5;
     const elevated = Array.from({ length: layout[21] }, (_, i) => 3 + i * layout[8])
-      .some(offset => current[offset + 1] > current[offset + 7] + .1);
+      .some(offset => current[offset + 1] > current[offset + 7] + clearance);
     if (!elevated) return false;
     button.click();
     return true;
   }, await stop.elementHandle(), { timeout: 5000 });
   const stopped = await page.evaluate(() => window.physicsAtStop);
-  expect(stopped.balls.some(ball => ball.y > ball.radius + .1)).toBe(true);
+  expect(stopped.barMax).toBeGreaterThan(0);
+  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.barMax * .5)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
   await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();

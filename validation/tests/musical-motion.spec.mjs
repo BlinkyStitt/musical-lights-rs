@@ -98,14 +98,30 @@ test('identical-audio scrolling, angled lighting and swirl previews record frame
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
   await page.locator('.input-source').selectOption('trumpet');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
-  await page.locator('.display-controls > summary').click();
+  await page.locator('.display-controls > summary').press('Enter');
   await page.locator('.camera-rotation').fill('25');
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  // Warm the renderer once, then measure the same fresh four seconds of PCM
+  // in each trial. Native keyboard controls avoid repeated hover/stability waits.
+  await page.waitForTimeout(2000);
+  await page.evaluate(() => {
+    window.previewSourceStarts = 0;
+    document.querySelector('.audio-card').addEventListener('audio-session', ({ detail }) => {
+      if (detail.reason === 'source start') window.previewSourceStarts++;
+    });
+  });
   const measurements = [];
+  let replay = 0;
   for (const scrolling of [true, false]) {
-    await page.locator('.scroll-lights').setChecked(scrolling);
-    await page.locator('.review-replay').click();
-    await page.waitForTimeout(2000);
+    const scroll = page.locator('.scroll-lights');
+    if (await scroll.isChecked() !== scrolling) await scroll.press('Space');
+    await expect(scroll).toBeChecked({ checked: scrolling });
+    await page.locator('.review-replay').press('Enter');
+    await page.waitForFunction(expected => {
+      const card = document.querySelector('.audio-card');
+      // Replay replaces its buffer source inside the existing audio session.
+      return window.previewSourceStarts === expected && card.dataset.audioState === 'playing';
+    }, ++replay, { timeout: 5000 });
     const metrics = await page.evaluate(() => new Promise(resolve => {
       const v = document.querySelector('#dancinglights').physics;
       const start = performance.now(), frames = v.metrics.frames, cost = v.metrics.renderMs, times = [];

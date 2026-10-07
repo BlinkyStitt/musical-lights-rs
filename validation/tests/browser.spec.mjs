@@ -242,12 +242,13 @@ for (const colorScheme of ['light', 'dark']) {
         await page.mouse.move(x, y);
         // Check visibility, text, and bounds together without waiting through
         // several software-rendered frames for separate protocol calls.
-        await expect.poll(() => page.locator('#frequency-readout').evaluate(node => {
+        await page.waitForFunction(label => {
+          const node = document.querySelector('#frequency-readout');
           const box = node.getBoundingClientRect(), style = getComputedStyle(node);
-          return { text: node.textContent.trim(), visible: box.width > 0 && box.height > 0
-            && style.visibility !== 'hidden' && style.display !== 'none',
-            inside: box.x >= 0 && box.right <= innerWidth };
-        })).toEqual({ text: label, visible: true, inside: true });
+          return node.textContent.trim() === label && box.width > 0 && box.height > 0
+            && style.visibility !== 'hidden' && style.display !== 'none'
+            && box.x >= 0 && box.right <= innerWidth;
+        }, label, { timeout: 5000 });
       }
       await page.mouse.move(0, 0);
       await page.getByRole('checkbox', { name: 'Listening', exact: true }).focus();
