@@ -304,7 +304,11 @@ jobs:
           include-hidden-files: true
           retention-days: 1
   pages:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Reuse skips ancestor test jobs. Check the validated result explicitly
+    # instead of GitHub's implicit success() check across all ancestors.
+    if: >-
+      ${{ !cancelled() && needs.validated.result == 'success' &&
+          github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     needs: validated
     outputs:
       deployed: ${{ steps.deployment.outcome == 'success' }}
