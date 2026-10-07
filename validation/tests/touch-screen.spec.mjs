@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { physicsReady, normalView } from '../physics-state.mjs';
 
 test.use({ viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true });
 
@@ -49,6 +50,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
     };
   });
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect.poll(() => page.getByRole('meter').nth(4).getAttribute('aria-valuenow')).toMatch(/^[3-9]\d$|^100$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
@@ -82,6 +84,7 @@ test('a browser touch swipe across a live bar exits before release without a fre
 
 test('only a completed tap shows a frequency; short and sideways drags do not', async ({ page, context }) => {
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   const { point, send, move, labelAtStart } = await touchInput(page, context);
   const readout = page.getByRole('tooltip');
@@ -105,6 +108,7 @@ test('only a completed tap shows a frequency; short and sideways drags do not', 
 
 test('canceled and multi-touch gestures cannot exit or select a band', async ({ page, context }) => {
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   const { point, send, move } = await touchInput(page, context);
   await send('touchStart', [point]);
@@ -128,6 +132,7 @@ test('canceled and multi-touch gestures cannot exit or select a band', async ({ 
 
 test('touch scrolling the normal page does not trigger a band tap', async ({ page, context }) => {
   await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page); await normalView(page);
   const { point, send, move } = await touchInput(page, context);
   await send('touchStart', [point]);
   await move(0, -100);

@@ -16,7 +16,7 @@ test('phone progress and sensor ages use the worker clock while FPS keeps frame 
     metadata: { scrolling: false, mode: 'normal', viewport: [390, 844], sessionId: 1 },
     audioState: { source: 'generated', kind: 'exercise', state: 'playing', repeat: true, diagnostics: false, sessionId: 1 },
     invalidate: reason => { throw Error(reason); },
-    view: { metrics: { frames: 1, snapshotAgeMs: 2, physicsSteps: 1800, debt: 0 },
+    view: { sceneVisible: true, metrics: { frames: 1, snapshotAgeMs: 2, physicsSteps: 1800, debt: 0 },
       card: { querySelector: query, hasAttribute: () => false }, input: new Float32Array(38),
       motion: { state: 'active', readings: { at: 15100, motionEvents: 1, orientationEvents: 0 } } },
   });
@@ -27,4 +27,9 @@ test('phone progress and sensor ages use the worker clock while FPS keeps frame 
   report.frame(15066.67, .2);
   assert.equal(report.count, 1);
   assert.ok(Math.abs(report.intervals[0] - 16.67) < 1e-4);
+  const reasons = []; report.invalidate = reason => reasons.push(reason);
+  report.view.sceneVisible = false; monotonic = 15159;
+  report.frame(15083.34, .2);
+  assert.deepEqual(reasons, ['Visualizer left the viewport during test']);
+  assert.equal(report.count, 1); assert.equal(report.previous, null);
 });

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { syntheticAudio, physicsReady } from '../physics-state.mjs';
+import { syntheticAudio, physicsReady, normalView } from '../physics-state.mjs';
 
 const localBase = 'http://127.0.0.1:8101';
 // Published-build checks still replace the endpoint with a same-origin mock.
@@ -77,6 +77,7 @@ async function setup(page, { realRecorder = false, allowUnavailable = false, cap
     await route.fulfill({ status, json: { result } });
   });
   await page.goto(base + routePath); await physicsReady(page);
+  await normalView(page);
   await expect(page.getByRole('checkbox', { name: 'Identify song', exact: true })).toBeDisabled();
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   if (allowUnavailable && await page.evaluate(() => typeof MediaRecorder === 'undefined')) {
@@ -300,7 +301,9 @@ test('canceling an upload ignores late recognition and leaves listening active',
 });
 
 test('hiding the page cancels capture without a lookup', async ({ page }) => {
-  const uploads = await setup(page);
+  // This checks cancellation during capture, so retain the real ten-second
+  // window instead of racing the fixture's 300 ms successful-lookup timer.
+  const uploads = await setup(page, { captureMs: 10_000 });
   await page.getByRole('checkbox', { name: 'Identify song', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.recorder?.state)).toBe('recording');
   await page.evaluate(() => {
@@ -459,7 +462,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
 
     await expect(page.locator('.audio-error')).toHaveText('Microphone input ended. Restart listening.');
     await expectUncoveredNotice('.audio-error', 'microphone-failure');
-    await page.clock.runFor(4000);
+    // This checks the recovery timer after capture has stopped. Advance the
+    // elapsed time without rendering hundreds of unrelated idle frames.
+    await page.clock.fastForward(4000);
     await expect(page.locator('.audio-error')).toBeEmpty();
     await expect(page.locator('.audio-stopped')).toHaveText('Audio stopped. Turn on Listening or use Play audio to restart.');
     await expectUncoveredNotice('.audio-stopped', 'microphone-restart');
@@ -474,8 +479,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
 
 test('two opted-in tabs share one upload reservation without duplicate spending', async ({ page, context }) => {
   const second = await context.newPage();
-  const firstUploads = await setup(page, { captureMs: 1200 });
-  const secondUploads = await setup(second, { captureMs: 1200 });
+  const [firstUploads, secondUploads] = await Promise.all([
+    setup(page, { captureMs: 1200 }), setup(second, { captureMs: 1200 }),
+  ]);
   await Promise.all([
     page.getByRole('checkbox', { name: 'Identify song', exact: true }).check(),
     second.getByRole('checkbox', { name: 'Identify song', exact: true }).check(),
@@ -483,8 +489,10 @@ test('two opted-in tabs share one upload reservation without duplicate spending'
   await expect.poll(() => firstUploads.length + secondUploads.length).toBe(1);
   await page.waitForTimeout(1500);
   expect(firstUploads.length + secondUploads.length).toBe(1);
-  await page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
-  await second.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck();
+  await Promise.all([
+    page.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck(),
+    second.getByRole('checkbox', { name: 'Identify song', exact: true }).uncheck(),
+  ]);
   await second.close();
 });
 

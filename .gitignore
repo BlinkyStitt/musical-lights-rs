@@ -9,6 +9,7 @@
 /.tools
 **/__pycache__/
 /.cache/
+/.ci/
 **/.venv/
 
 /musical-leptos/node_modules/

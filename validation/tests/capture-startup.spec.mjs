@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady } from '../physics-state.mjs';
+import { normalView, physicsReady } from '../physics-state.mjs';
 const origin = (process.env.MUSICAL_LIGHTS_CAPTURE_URL ?? 'http://127.0.0.1:8101').replace(/\/$/, '');
 const listening = page => page.getByRole('checkbox', { name: 'Listening', exact: true });
 
@@ -27,7 +27,7 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
         return destination.stream;
       };
     });
-    await page.goto(`${origin}${path}`); await physicsReady(page);
+    await page.goto(`${origin}${path}`); await physicsReady(page); await normalView(page);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
     const entry = action === 'Fullscreen' ? page.getByRole('button', { name: 'Fullscreen', exact: true }) : listening(page);
     if (info.project.use.hasTouch) await entry.tap(); else await entry.click();

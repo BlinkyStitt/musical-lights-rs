@@ -33,6 +33,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         }
         const samples = channels[this.channel];
         if (!samples) { this.fail(`Input channel ${this.channel + 1} is unavailable.`); return false; }
+        if (!this.started) this.inputStartSample = currentFrame;
         this.started = true;
         for (let offset = 0; offset < samples.length;) {
             const length = Math.min(samples.length - offset, this.input.length);
@@ -56,6 +57,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
                 extra.trace = trace; extra.traceStride = stride;
                 extra.traceDropped = this.wasm.processor_trace_dropped(this.processor);
                 extra.audioTime = currentFrame / sampleRate;
+                extra.inputStartSample = this.inputStartSample;
                 this.wasm.processor_trace_clear(this.processor);
                 transfer.push(trace.buffer);
             }

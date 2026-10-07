@@ -1,7 +1,9 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
 use musical_lights_core::lights::bar_motion::Motion;
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
-use musical_lights_core::lights::musical_motion::{remember_pigment, sphere_drag_factor};
+use musical_lights_core::lights::musical_motion::{
+    DirectionOdds, paired_bar_extent, remember_pigment, sphere_drag_factor,
+};
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
 
@@ -67,10 +69,12 @@ impl SimulationConfig {
     }
     pub fn bar_max(self) -> f32 {
         // Keep the same geometry in Reduced Motion: only the release energy changes.
-        self.height
-            - SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP)
-            - self.hop_height(false)
-            - CLEARANCE
+        paired_bar_extent(
+            self.height,
+            SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP)
+                + self.hop_height(false)
+                + CLEARANCE,
+        )
     }
     pub fn motion_limits(self, reduced: bool) -> (f64, f64) {
         let height = f64::from(self.bar_max() - BASELINE);
@@ -163,7 +167,7 @@ pub struct Simulation {
     pub tick: u64,
     world: PhysicsWorld,
     balls: [(RigidBodyHandle, ColliderHandle); BALL_COUNT],
-    bars: [(RigidBodyHandle, ColliderHandle); COUNT * 3],
+    bars: [(RigidBodyHandle, ColliderHandle); COUNT * 6],
     bar_positions: [f64; COUNT],
     bar_velocities: [f64; COUNT],
     motions: [Motion; COUNT],
@@ -174,8 +178,6 @@ pub struct Simulation {
     flight_fraction: f32,
     flight_target: f32,
     accent_sequence: u32,
-    ceiling_bars: bool,
-    flip_elapsed: f64,
     palette: [[f32; 3]; COUNT],
     colors: [[f32; 3]; BALL_COUNT],
     pigments: [f32; BALL_COUNT * 9],
@@ -184,8 +186,8 @@ pub struct Simulation {
     ceiling_height: f32,
     resize_from: f32,
     resize_tick: u32,
-    supported: [bool; BALL_COUNT],
-    driven: [bool; BALL_COUNT],
+    supported: [[bool; BALL_COUNT]; 2],
+    driven: [[bool; BALL_COUNT]; 2],
     input: SimulationInput,
     snapshot: SimulationSnapshot,
 }
@@ -264,7 +266,11 @@ impl Simulation {
                 RigidBodyBuilder::kinematic_position_based().translation(Vector::new(
                     ((i % COUNT) as f32 + 0.5) * PITCH + ((i / COUNT + 1) % 3) as f32 * WIDTH
                         - WIDTH,
-                    BASELINE - POST_HEIGHT / 2.0,
+                    if i < COUNT * 3 {
+                        BASELINE - POST_HEIGHT / 2.0
+                    } else {
+                        config.height - BASELINE + POST_HEIGHT / 2.0
+                    },
                     0.0,
                 )),
                 // Rapier adds the rounding radius outside the cuboid's half extents.
@@ -274,7 +280,7 @@ impl Simulation {
                     config.depth / 2.0 - CORNER,
                     CORNER,
                 )
-                .user_data((COUNT + 1 + i % COUNT) as u128)
+                .user_data((COUNT + 1 + (i / (COUNT * 3)) * COUNT + i % COUNT) as u128)
                 .friction(config.friction)
                 .restitution(config.restitution),
             )
@@ -338,19 +344,17 @@ impl Simulation {
             tempo: 120.0,
             scroll_phase: 0.0,
             scroll_speed: 0.0,
-            dance: DanceMotion::new(1, 0.1),
+            dance: DanceMotion::new(1),
             flight_fraction: 0.3,
             flight_target: 0.3,
             accent_sequence: 0,
-            ceiling_bars: false,
-            flip_elapsed: 0.5,
             touching: [[false; COUNT]; BALL_COUNT],
             ceiling,
             ceiling_height: config.height,
             resize_from: config.height,
             resize_tick: RESIZE_TICKS,
-            supported: [false; BALL_COUNT],
-            driven: [false; BALL_COUNT],
+            supported: [[false; BALL_COUNT]; 2],
+            driven: [[false; BALL_COUNT]; 2],
             input: SimulationInput {
                 height: config.height,
                 ..SimulationInput::default()
@@ -393,22 +397,19 @@ impl Simulation {
     /// The active hardware-neutral presentation policy.
     pub fn configure_dance(
         &mut self,
-        chance: f64,
+        odds: [f64; 5],
         flight: f32,
         seed: u32,
     ) -> Result<(), &'static str> {
-        if !chance.is_finite()
-            || !(0.0..=1.0).contains(&chance)
-            || !flight.is_finite()
-            || !(0.0..=0.5).contains(&flight)
-        {
+        if !flight.is_finite() || !(0.0..=0.5).contains(&flight) {
             return Err("Invalid dance settings");
         }
+        let odds = DirectionOdds::new(odds)?;
         if self.tick == 0 {
-            self.dance = DanceMotion::new(seed, chance);
-        } else {
-            self.dance.probability = chance;
+            self.dance = DanceMotion::new(seed);
         }
+        self.dance.odds = odds;
+        self.dance.tempo = self.tempo;
         self.flight_target = flight;
         if self.tick == 0 {
             self.flight_fraction = flight;
@@ -437,11 +438,12 @@ impl Simulation {
         )
     }
     fn bar_max(&self) -> f32 {
-        self.config.bar_max() + self.config.hop_height(false) - self.hop_height(false)
+        self.config.bar_max() + (self.config.hop_height(false) - self.hop_height(false)) * 0.5
     }
     pub fn set_tempo(&mut self, bpm: f32) {
         if bpm.is_finite() {
             self.tempo = f64::from(bpm.clamp(60.0, 200.0));
+            self.dance.tempo = self.tempo;
         }
     }
     pub fn step(&mut self) {
@@ -492,11 +494,6 @@ impl Simulation {
                 })
                 .fold(0.0_f64, f64::max)
                 + resize_speed
-                + if self.flip_elapsed < 0.5 {
-                    6.0 * travel
-                } else {
-                    0.0
-                }
                 + SCROLL_PEAK_SPEED * (self.tempo / 120.0) * f64::from(PITCH)
         });
         let ball_speed = self
@@ -537,7 +534,7 @@ impl Simulation {
                         body.is_enabled()
                             && f64::from((body.translation().x - post.translation().x).abs())
                                 <= reach_x + radius + ball_reach
-                            && if self.ceiling_bars {
+                            && if copy >= COUNT * 3 {
                                 f64::from(body.translation().y) + radius + ball_reach
                                     >= f64::from(self.ceiling_height) - top
                             } else {
@@ -569,25 +566,11 @@ impl Simulation {
             self.resize_ceiling();
             let distance = self.dance.advance(enabled, self.tempo, f64::from(dt));
             self.scroll_speed = self.dance.speed();
-            let desired_ceiling = self.dance.ceiling;
-            if desired_ceiling != self.ceiling_bars && self.flip_elapsed >= 0.5 {
-                self.flip_elapsed = 0.0;
-            }
-            let before_flip = self.flip_elapsed;
-            self.flip_elapsed = (self.flip_elapsed + f64::from(dt)).min(0.5);
-            let switched = before_flip < 0.25 && self.flip_elapsed >= 0.25;
-            if switched {
-                self.ceiling_bars = desired_ceiling;
-                self.supported.fill(false);
-                self.driven.fill(false);
-            }
-            let t = ((self.flip_elapsed - 0.25).abs() / 0.25).clamp(0.0, 1.0);
-            let gate = t * t * (3.0 - 2.0 * t);
             self.scroll_phase = (self.scroll_phase + distance).rem_euclid((COUNT * 3) as f64);
             let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
             for i in 0..COUNT {
                 self.motions[i].advance(f64::from(dt));
-                let next = f64::from(BASELINE) + self.motions[i].state.position * scale * gate;
+                let next = f64::from(BASELINE) + self.motions[i].state.position * scale;
                 self.bar_velocities[i] = (next - self.bar_positions[i]) / f64::from(dt);
                 self.bar_positions[i] = next;
             }
@@ -596,14 +579,14 @@ impl Simulation {
                 let x = ((i as f64
                     + 0.5
                     + self.scroll_phase
-                    + (copy / COUNT + 1) as f64 * COUNT as f64)
+                    + (copy / COUNT % 3 + 1) as f64 * COUNT as f64)
                     .rem_euclid((COUNT * 3) as f64)
                     - COUNT as f64)
                     * f64::from(PITCH);
                 let body = &mut self.world.bodies[handle];
                 let position = Vector::new(
                     x as f32,
-                    if self.ceiling_bars {
+                    if copy >= COUNT * 3 {
                         self.ceiling_height - self.bar_positions[i] as f32 + POST_HEIGHT / 2.0
                     } else {
                         (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32
@@ -614,8 +597,7 @@ impl Simulation {
                 // Enable a full pitch before reaching the enclosure so contact
                 // prediction is ready before any part of the post crosses a wall.
                 let active = (-PITCH..=WIDTH + PITCH).contains(&position.x);
-                if switched
-                    || !body.is_enabled()
+                if !body.is_enabled()
                     || !active
                     || (body.translation().x - position.x).abs() > WIDTH
                 {
@@ -658,10 +640,16 @@ impl Simulation {
             let roof_contact = self.balls.iter().enumerate().any(|(i, (h, _))| {
                 let b = &self.world.bodies[*h];
                 b.is_enabled()
-                    && b.translation().y
-                        + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
-                        + b.linvel().y.max(0.0) * dt
-                        >= self.ceiling_height - CLEARANCE
+                    && self.bars[COUNT * 3..].iter().any(|(post, _)| {
+                        let post = &self.world.bodies[*post];
+                        post.is_enabled()
+                            && (post.translation().x - b.translation().x).abs()
+                                <= PITCH / 2.0 + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                            && b.translation().y
+                                + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                                + b.linvel().y.max(0.0) * dt
+                                >= post.translation().y - POST_HEIGHT / 2.0 - CLEARANCE
+                    })
             });
             self.world
                 .integration_parameters
@@ -671,9 +659,9 @@ impl Simulation {
                 .integration_parameters
                 .num_internal_stabilization_iterations = if roof_contact { 8 } else { 1 };
             self.world.step();
-            let mut supported = 0_u32;
-            let mut driven = 0_u32;
-            let mut supports = [0_u32; BALL_COUNT];
+            let mut supported = [0_u32; 2];
+            let mut driven = [0_u32; 2];
+            let mut supports = [[0_u32; BALL_COUNT]; 2];
             for (i, &(_, collider)) in self.balls.iter().enumerate() {
                 let mut touching = [false; COUNT];
                 for pair in self.world.narrow_phase.contact_pairs_with(collider) {
@@ -684,28 +672,34 @@ impl Simulation {
                     } else {
                         pair.collider1
                     };
-                    let upward = pair.has_any_active_contact()
-                        && pair.manifolds.iter().any(|m| {
-                            let sign = if pair.collider2 == collider {
-                                1.0
-                            } else {
-                                -1.0
-                            };
-                            m.data.normal.y * sign * if self.ceiling_bars { -1.0 } else { 1.0 }
-                                > 0.1
-                        });
-                    // Collider tags identify the source directly, including wrapped
-                    // copies. Walls use zero, balls 1..=BALL_COUNT, bars COUNT+1..=2*COUNT.
+                    let contact_y = pair
+                        .manifolds
+                        .iter()
+                        .map(|m| {
+                            m.data.normal.y
+                                * if pair.collider2 == collider {
+                                    1.0
+                                } else {
+                                    -1.0
+                                }
+                        })
+                        .fold(0.0_f32, |a, b| if b.abs() > a.abs() { b } else { a });
+                    let active = pair.has_any_active_contact();
+                    // One tag per source and end, including the wrapped copies.
                     let tag = self.world.colliders[other].user_data as usize;
-                    if upward && (1..=BALL_COUNT).contains(&tag) {
-                        supports[i] |= 1 << (tag - 1);
+                    for (end, sign) in [1.0, -1.0].iter().enumerate() {
+                        if active && contact_y * sign > 0.1 && (1..=BALL_COUNT).contains(&tag) {
+                            supports[end][i] |= 1 << (tag - 1);
+                        }
                     }
                     if tag > COUNT {
-                        let j = tag - COUNT - 1;
-                        supported |= u32::from(upward) << i;
-                        driven |=
-                            u32::from(upward && impulse > 0.0 && self.bar_velocities[j] > 0.0) << i;
-                        touching[j] =
+                        let end = (tag - COUNT - 1) / COUNT;
+                        let j = (tag - COUNT - 1) % COUNT;
+                        let inward = active && contact_y * if end == 0 { 1.0 } else { -1.0 } > 0.1;
+                        supported[end] |= u32::from(inward) << i;
+                        driven[end] |=
+                            u32::from(inward && impulse > 0.0 && self.bar_velocities[j] > 0.0) << i;
+                        touching[j] |=
                             pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
                         if touching[j] && !self.touching[i][j] && impulse > 0.0 {
@@ -728,43 +722,42 @@ impl Simulation {
                 }
                 self.touching[i] = touching;
             }
-            let previous_driven = self
-                .driven
-                .iter()
-                .enumerate()
-                .fold(0_u32, |mask, (i, &value)| mask | (u32::from(value) << i));
-            for _ in 0..BALL_COUNT {
-                let before = (supported, driven);
-                for (i, &support) in supports.iter().enumerate() {
-                    supported |= u32::from(support & before.0 != 0) << i;
-                    driven |=
-                        u32::from(support & (before.1 | (before.0 & previous_driven)) != 0) << i;
-                }
-                if before == (supported, driven) {
-                    break;
-                }
-            }
-            let supported: [bool; BALL_COUNT] = std::array::from_fn(|i| supported & (1 << i) != 0);
-            let driven: [bool; BALL_COUNT] = std::array::from_fn(|i| driven & (1 << i) != 0);
-            let release_speed = release_speed(
+            let release = release_speed(
                 self.config.gravity,
                 self.hop_height(self.input.reduced_motion),
             );
-            let outward = if self.ceiling_bars { -1.0 } else { 1.0 };
-            for i in 0..BALL_COUNT {
-                // Remove excess launch energy only after bar support ends. Clamping
-                // a carried ball would drive its supporting collider through it.
-                if self.supported[i] && !supported[i] && self.driven[i] {
-                    let body = &mut self.world.bodies[self.balls[i].0];
-                    let mut velocity = body.linvel();
-                    if velocity.y * outward > release_speed {
-                        velocity.y = release_speed * outward;
-                        body.set_linvel(velocity, true);
+            for (end, inward) in [1.0, -1.0].iter().enumerate() {
+                let previous_driven = self.driven[end]
+                    .iter()
+                    .enumerate()
+                    .fold(0_u32, |mask, (i, &value)| mask | (u32::from(value) << i));
+                for _ in 0..BALL_COUNT {
+                    let before = (supported[end], driven[end]);
+                    for (i, &support) in supports[end].iter().enumerate() {
+                        supported[end] |= u32::from(support & before.0 != 0) << i;
+                        driven[end] |=
+                            u32::from(support & (before.1 | (before.0 & previous_driven)) != 0)
+                                << i;
+                    }
+                    if before == (supported[end], driven[end]) {
+                        break;
                     }
                 }
-                self.driven[i] = supported[i] && (driven[i] || self.driven[i]);
+                for i in 0..BALL_COUNT {
+                    let support = supported[end] & (1 << i) != 0;
+                    if self.supported[end][i] && !support && self.driven[end][i] {
+                        let body = &mut self.world.bodies[self.balls[i].0];
+                        let mut velocity = body.linvel();
+                        if velocity.y * inward > release {
+                            velocity.y = release * inward;
+                            body.set_linvel(velocity, true);
+                        }
+                    }
+                    self.driven[end][i] =
+                        support && (driven[end] & (1 << i) != 0 || self.driven[end][i]);
+                    self.supported[end][i] = support;
+                }
             }
-            self.supported = supported;
         }
         self.tick += 1;
         self.write_transforms();
@@ -783,10 +776,11 @@ impl Simulation {
                         + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
                         + CLEARANCE
                 })
-                .fold(0.0_f32, f32::max);
-            let bar_top = self.bar_positions.iter().copied().fold(0.0_f64, f64::max) as f32
+                .fold(0.0_f32, f32::max)
+                + self.bar_positions.iter().copied().fold(0.0_f64, f64::max) as f32;
+            let bar_top = 2.0 * self.bar_positions.iter().copied().fold(0.0_f64, f64::max) as f32
                 + self.config.height
-                - self.bar_max();
+                - 2.0 * self.bar_max();
             self.ceiling_height = self
                 .ceiling_height
                 .min(self.config.height.max(ball_top).max(bar_top));
@@ -869,7 +863,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            8.0, // acoustic-peak direction policy, flight budget, separate SI sensor input
+            9.0, // paired inward bars, tempo-scaled peak direction policy
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
@@ -907,16 +901,18 @@ impl PhysicsSimulation {
     pub fn set_tempo(&mut self, bpm: f32) {
         self.0.set_tempo(bpm);
     }
-    pub fn configure_dance(&mut self, chance: f64, flight: f32, seed: u32) -> Result<(), JsError> {
+    pub fn configure_dance(&mut self, odds: &[f64], flight: f32, seed: u32) -> Result<(), JsError> {
         self.0
-            .configure_dance(chance, flight, seed)
+            .configure_dance(
+                odds.try_into()
+                    .map_err(|_| JsError::new("Expected five direction settings"))?,
+                flight,
+                seed,
+            )
             .map_err(JsError::new)
     }
     pub fn accent(&mut self, sequence: u32) -> Result<(), JsError> {
         self.0.accent(sequence).map_err(JsError::new)
-    }
-    pub fn ceiling_bars(&self) -> bool {
-        self.0.ceiling_bars
     }
     pub fn horizontal_direction(&self) -> f64 {
         self.0.dance.direction

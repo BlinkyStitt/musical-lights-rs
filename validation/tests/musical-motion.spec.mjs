@@ -65,7 +65,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     // Isolate one prescribed bar and sample its physical side face. The old
     // XY-only outline painted this entire face black, even under fill light.
     const count = v.bars.count, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, 0);
-    const hidden = [v.balls, v.enclosure, v.ceiling]; hidden.forEach(n => { n.visible = false; });
+    const hidden = [v.balls, v.enclosure, v.ceiling, v.mirrors.frame, ...v.mirrors.meshes.map(({ mesh }) => mesh)]; hidden.forEach(n => { n.visible = false; });
     const object = new THREE.Object3D(); object.position.set(.6, .3 - v.layout[6] / 2, 0); object.updateMatrix();
     v.bars.count = 1; v.bars.setMatrixAt(0, object.matrix); v.bars.instanceMatrix.needsUpdate = true;
     const point = new THREE.Vector3(.6 + (v.layout[3] - v.layout[4]) / 2, .12, 0).project(v.camera);
@@ -79,7 +79,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
       attacks: v.attackLights.length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
-  expect(state.barsLit).toBe(true); expect(state.walls).toBe(4); expect(state.attacks).toBe(4); expect(state.shadows).toBe(false);
+  expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(4); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);
   expect(state.attackOnly).toBeGreaterThan(state.dark + 100);
   expect(state.sideBrightness).toBeGreaterThan(30);
@@ -96,34 +96,51 @@ test('identical-audio scrolling, angled lighting and swirl previews record frame
   await mkdir(output, { recursive: true });
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
-  await page.locator('.input-source').selectOption('trumpet');
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
-  await page.locator('.display-controls > summary').click();
+  await page.locator('.display-controls > summary').press('Enter');
   await page.locator('.camera-rotation').fill('25');
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  // Wait for a real draw at the requested angle, rather than a fixed sleep.
+  // Register the sampler before each native Replay gesture so protocol work
+  // cannot consume part of the four-second measurement interval.
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.metrics.frames > 0);
+  await page.locator('.input-source').selectOption('trumpet');
+  await page.waitForFunction(() => document.querySelector('.audio-card').dataset.audioState === 'playing'
+    && !document.querySelector('.review-replay').disabled, null, { timeout: 5000 });
+  const build = JSON.parse(await readFile(new URL('../../musical-leptos/dist/build.json', import.meta.url), 'utf8'));
   const measurements = [];
   for (const scrolling of [true, false]) {
-    await page.locator('.scroll-lights').setChecked(scrolling);
-    await page.locator('.review-replay').click();
-    await page.waitForTimeout(2000);
-    const metrics = await page.evaluate(() => new Promise(resolve => {
-      const v = document.querySelector('#dancinglights').physics;
-      const start = performance.now(), frames = v.metrics.frames, cost = v.metrics.renderMs, times = [];
-      let previous = start;
-      const sample = now => { times.push(now - previous); previous = now;
-        if (now - start < 4000) requestAnimationFrame(sample);
-        else { const sorted = times.toSorted((a, b) => a - b); resolve({ fps: times.length * 1000 / (now - start),
-          p95FrameMs: sorted[Math.ceil(sorted.length * .95) - 1], meanRenderMs: (v.metrics.renderMs - cost) / (v.metrics.frames - frames),
-          debt: v.metrics.debt, discardedSimulationMs: v.metrics.discardedSimulationMs, bpm: v.tempo, confidence: v.tempoConfidence,
-          clip: v.card.review.identity, diagnostics: v.card.dataset.toneDiagnostics, physicalDevice: false }); }
-      }; requestAnimationFrame(sample);
-    }));
-    const build = JSON.parse(await readFile(new URL('../../musical-leptos/dist/build.json', import.meta.url), 'utf8'));
+    const scroll = page.locator('.scroll-lights');
+    if (!scrolling) await scroll.press('Space');
+    await expect(scroll).toBeChecked({ checked: scrolling });
+    await page.evaluate(() => {
+      window.previewMeasurement = new Promise(resolve => {
+        const card = document.querySelector('.audio-card');
+        const begin = ({ detail }) => {
+          if (detail.reason !== 'source start') return;
+          card.removeEventListener('audio-session', begin);
+          const v = document.querySelector('#dancinglights').physics;
+          const start = performance.now(), frames = v.metrics.frames, cost = v.metrics.renderMs, times = [];
+          let previous = start;
+          const sample = now => { times.push(now - previous); previous = now;
+            if (now - start < 4000) requestAnimationFrame(sample);
+            else { const sorted = times.toSorted((a, b) => a - b); resolve({ fps: times.length * 1000 / (now - start),
+              p95FrameMs: sorted[Math.ceil(sorted.length * .95) - 1], meanRenderMs: (v.metrics.renderMs - cost) / (v.metrics.frames - frames),
+              debt: v.metrics.debt, discardedSimulationMs: v.metrics.discardedSimulationMs, bpm: v.tempo, confidence: v.tempoConfidence,
+              clip: v.card.review.identity, diagnostics: v.card.dataset.toneDiagnostics, audioState: v.card.dataset.audioState,
+              startState: detail.state, physicalDevice: false }); }
+          }; requestAnimationFrame(sample);
+        };
+        card.addEventListener('audio-session', begin);
+      });
+    });
+    await page.locator('.review-replay').press('Enter');
+    const metrics = await page.evaluate(() => window.previewMeasurement);
     measurements.push({ build, measuredAt: new Date().toISOString(), scrolling, ...metrics });
     await page.screenshot({ path: `${output}/${info.project.name}-${scrolling ? 'scrolling' : 'stationary'}-angled-swirl.png` });
   }
   expect(measurements[0].clip.pcmSha256).toBe(measurements[1].clip.pcmSha256);
   expect(measurements.every(m => m.diagnostics === 'false' && m.discardedSimulationMs === 0)).toBe(true);
+  expect(measurements.every(m => m.startState === 'playing' && m.audioState === 'playing')).toBe(true);
   await writeFile(`${output}/${info.project.name}-render-cost.json`, JSON.stringify(measurements, null, 2) + '\n');
 });
 

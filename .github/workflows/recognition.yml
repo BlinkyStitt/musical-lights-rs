@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   worker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.0.0
@@ -30,7 +30,9 @@ jobs:
             ~/.cargo/git
             musical-recognition-worker/target
             .tools/worker
-          key: recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}
+          key: recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}-${{ hashFiles('musical-recognition-worker/src/**/*.rs', 'musical-recognition-worker/Cargo.toml') }}
+          restore-keys: |
+            recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}
       - name: Install pinned Worker tools
         run: |
           if [ ! -x .tools/worker/bin/worker-build ]; then

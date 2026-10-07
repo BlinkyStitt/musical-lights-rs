@@ -81,7 +81,7 @@ export class PhoneReport {
       const count = detail.trace.length / detail.traceStride;
       if (this.toneRows + count <= 50000) {
         this.toneChunks.push({ sessionId: detail.sessionId, receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime,
-          workletAudioTime: detail.audioTime, stride: detail.traceStride, values: detail.trace });
+          workletAudioTime: detail.audioTime, inputStartSample: detail.inputStartSample, stride: detail.traceStride, values: detail.trace });
         this.toneRows += count;
       } else this.toneDropped += count;
       this.toneWorkletDropped = detail.traceDropped;
@@ -91,7 +91,7 @@ export class PhoneReport {
           tops: Array.from(view.current.slice(view.layout[9], view.layout[10])),
           velocities: Array.from(view.current.slice(view.layout[14], view.layout[15])),
           targets: Array.from(view.input.slice(0, 24)), scrollingEnabled: view.input[33] === 1, scrollPhase: view.current[view.layout[20]], renderedPhase: view.renderedPhase, debtMs: view.metrics.debt,
-          barBase: view.renderedCeilingBars ? 'ceiling' : 'floor',
+          barBase: 'both',
           renderedTops: Array.from({ length: 24 }, (_, i) => view.renderedHeight(i)) });
       }
       this.query('.tone-export').disabled = false;
@@ -169,7 +169,7 @@ export class PhoneReport {
     if (mode !== 'normal' && !expanded) this.view.card.querySelector('.fullscreen-button').click();
     const config = this.readConfig(); if (!config) return;
     this.intervals = new Float32Array(60000); this.renderCosts = new Float32Array(60000);
-    for (const selector of ['.direction-chance', '.flight-height', '.camera-motion', '.display-reset']) this.query(selector).disabled = true;
+    for (const selector of ['.direction-config', '.flight-height', '.camera-motion', '.display-reset']) this.query(selector).disabled = true;
     this.active = true; this.invalid = []; this.result = null; this.count = 0; this.costCount = 0; this.progress = [];
     this.previous = null; this.startMs = null; this.lastProgress = 0;
     this.maxSnapshotAgeMs = 0;
@@ -203,6 +203,12 @@ export class PhoneReport {
     if (this.startMs == null) return;
     const elapsed = now - this.startMs;
     if (elapsed < 15000) { this.previous = null; this.metadata.viewport = [innerWidth, innerHeight]; return; }
+    if (this.view.sceneVisible === false) {
+      this.invalidate('Visualizer left the viewport during test');
+      this.previous = null;
+      if (elapsed >= 315000) this.finish(false);
+      return;
+    }
     this.maxSnapshotAgeMs = Math.max(this.maxSnapshotAgeMs, this.view.metrics.snapshotAgeMs);
     if (this.costCount < this.renderCosts.length) this.renderCosts[this.costCount++] = cost;
     else this.invalidate('Render report capacity exceeded');
@@ -241,7 +247,7 @@ export class PhoneReport {
       const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
       const snapshotProgressDriftMs = firstProgress && lastProgress
         ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v4',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v5',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,
@@ -259,7 +265,7 @@ export class PhoneReport {
   finish(early) {
     if (!this.active) return;
     if (early) this.invalidate('Test ended before five minutes');
-    for (const selector of ['.direction-chance', '.flight-height', '.camera-motion', '.display-reset']) this.query(selector).disabled = false;
+    for (const selector of ['.direction-config', '.flight-height', '.camera-motion', '.display-reset']) this.query(selector).disabled = false;
     this.active = false; this.view.worker.postMessage({ type: 'report' });
     this.query('.phone-start').disabled = false; this.query('.phone-finish').disabled = true;
     this.query('.physics-reset').disabled = false;

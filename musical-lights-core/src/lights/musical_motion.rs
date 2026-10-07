@@ -7,6 +7,56 @@ pub const SCROLL_SPEED: f64 = 4.0;
 pub const SCROLL_EASE: f64 = 0.120;
 pub const SCROLL_PEAK_SPEED: f64 = SCROLL_SPEED;
 
+/// Two equal inward strokes share the room and leave the requested free space.
+/// Hardware can use the same geometry with physical mirrors; no rendering APIs.
+pub fn paired_bar_extent(height: f32, reserved: f32) -> f32 {
+    if !height.is_finite() || !reserved.is_finite() {
+        return 0.0;
+    }
+    (height.max(0.0) - reserved.max(0.0)).max(0.0) * 0.5
+}
+
+/// Allocation-free direction policy. Defaults: 5% at 60 BPM, 50% at 200 BPM.
+/// The curve is an exponent: 1 is linear, >1 delays the increase, <1 advances it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DirectionOdds {
+    values: [f64; 5],
+}
+impl Default for DirectionOdds {
+    fn default() -> Self {
+        Self {
+            values: [60.0, 200.0, 0.05, 0.5, 1.0],
+        }
+    }
+}
+impl DirectionOdds {
+    pub fn values(self) -> [f64; 5] {
+        self.values
+    }
+    pub fn new(values: [f64; 5]) -> Result<Self, &'static str> {
+        let [slow, fast, low, high, curve] = values;
+        if !values.iter().all(|v| v.is_finite())
+            || !(60.0..=200.0).contains(&slow)
+            || !(60.0..=200.0).contains(&fast)
+            || slow >= fast
+            || !(0.0..=1.0).contains(&low)
+            || !(low..=1.0).contains(&high)
+            || !(0.25..=4.0).contains(&curve)
+        {
+            return Err("Invalid direction probability curve");
+        }
+        Ok(Self { values })
+    }
+    pub fn probability(self, bpm: f64) -> f64 {
+        if !bpm.is_finite() {
+            return 0.0;
+        }
+        let [slow, fast, low, high, curve] = self.values;
+        let t = ((bpm.clamp(60.0, 200.0) - slow) / (fast - slow)).clamp(0.0, 1.0);
+        low + (high - low) * Float::powf(t, curve)
+    }
+}
+
 /// Silent display preview, independent of measured audio and attack envelopes.
 /// A travelling sine covers every column; callers replace it when audio starts.
 pub fn idle_wave(column: usize, columns: usize, seconds: f64, reduced: bool) -> f64 {
@@ -42,6 +92,45 @@ pub fn remember_pigment(history: &mut [f32; 9], pigment: [f32; 3]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn paired_strokes_leave_the_reserved_room() {
+        let extent = paired_bar_extent(0.6, 0.24);
+        assert!((extent * 2.0 + 0.24 - 0.6).abs() < 1e-6);
+        assert_eq!(paired_bar_extent(0.1, 0.2), 0.0);
+        assert_eq!(paired_bar_extent(f32::NAN, 0.0), 0.0);
+    }
+    #[test]
+    fn direction_chance_scales_with_bounded_music_tempo() {
+        for (bpm, expected) in [
+            (0.0, 0.05),
+            (60.0, 0.05),
+            (130.0, 0.275),
+            (200.0, 0.5),
+            (999.0, 0.5),
+        ] {
+            assert!((DirectionOdds::default().probability(bpm) - expected).abs() < 1e-12);
+        }
+        assert_eq!(DirectionOdds::default().probability(f64::NAN), 0.0);
+    }
+    #[test]
+    fn direction_curves_preserve_endpoints_and_reject_invalid_settings() {
+        for exponent in [0.25, 1.0, 4.0] {
+            let odds = DirectionOdds::new([80.0, 180.0, 0.1, 0.7, exponent]).unwrap();
+            assert_eq!(odds.probability(60.0), 0.1);
+            assert_eq!(odds.probability(200.0), 0.7);
+            assert!(
+                (odds.probability(130.0) - (0.1 + 0.6 * Float::powf(0.5, exponent))).abs() < 1e-12
+            );
+        }
+        for settings in [
+            [200.0, 60.0, 0.05, 0.5, 1.0],
+            [60.0, 201.0, 0.05, 0.5, 1.0],
+            [60.0, 200.0, 0.6, 0.5, 1.0],
+            [60.0, 200.0, 0.05, 0.5, 0.0],
+        ] {
+            assert!(DirectionOdds::new(settings).is_err());
+        }
+    }
     #[test]
     fn idle_wave_covers_all_columns_and_travels_smoothly() {
         for column in 0..24 {

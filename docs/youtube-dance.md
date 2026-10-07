@@ -19,8 +19,10 @@ This API selection does not prove that an actual iPhone routes both streams.
 
 Fullscreen portrait reserves separate video, visualizer, song ticker, recovery,
 and bottom control regions. Landscape places video and visualizer side by side.
-Balls and bars stay inside the scene, outside the controls. The player has a
-minimum 200 × 200 pixel region. Listening and Identify song occupy the first
+Balls and bars stay inside the scene, outside the controls. The player uses a 200-pixel minimum in tall views and shares the available
+height with the scene on short landscape screens. Mobile opens in this expanded
+layout without microphone capture or a native fullscreen request. Exit returns
+to the normal page; the next viewport resize does not reopen it. Listening and Identify song occupy the first
 two grid cells. Native switches keep 44-pixel touch targets and keyboard focus.
 Tap, hover, or focus a label to read help without changing its switch; Escape
 closes the box. Microphone state and routine recognition availability appear
@@ -41,10 +43,12 @@ Neither the browser nor Rapier decides whether an acoustic crest qualifies.
 - `RecentPeak` consumes genuine attacks and unscaled loudness. An eight-second
   decaying recent maximum gates decisions. A 60 ms crest group joins attacks
   across frequency bands into one decision.
-- `DanceMotion` consumes one seeded draw per accepted crest. At the default
-  10% total chance, the outcomes are 90% unchanged, 5% horizontal reversal,
-  and 5% floor/ceiling change. Changing the total chance preserves equal axis
-  shares. Time alone never reverses measured-audio direction.
+- `DanceMotion` consumes one seeded draw per accepted crest. Only horizontal direction changes. The default probability rises from 5%
+  at 60 BPM to 50% at 200 BPM, with bounded endpoints. Advanced Display exposes
+  both BPM thresholds, both odds and a curve exponent from 0.25 to 4. The
+  default exponent 1 is linear; higher values delay the increase and lower
+  values raise it sooner. A new loud attack still gates every draw. Time alone
+  never reverses measured-audio direction.
 - Travel follows smoothed tempo at two columns per beat: four columns per
   second at 120 BPM. Changes retain continuous position and ease velocity.
 - `IdlePeak` keeps separate synthetic history. Idle motion can draw only after
@@ -63,17 +67,47 @@ physics defaults stay distinct from saved settings across reloads.
 
 The worklet adds cue ordinals to existing tempo metadata. Raw loudness,
 filtered-target transport, acoustic traces, and the 38-value physics input
-layout remain unchanged. Physics protocol 8 and phone report v4 record the
+layout remain unchanged. Physics protocol 9 and phone report v5 record the
 random seed, dance settings, starting ordinal and tempo, and ordered input events
 with their tempo and accent for exact replay with the matching WASM engine.
 Buffers allocate only when recording starts. No alternate timed-reversal engine remains.
 
-Floor/ceiling transitions retract the bars before switching collider positions,
-then regrow them over 500 ms. Gravity stays measured/default gravity. Ceiling
-bars can leave balls resting on the floor. Beach-ball density, restitution,
+Matching floor and ceiling banks grow inward together. Each bank receives half
+the former single-bank stroke after ball and flight clearance. The 24 published
+bar extents apply to each end; raw loudness and targets retain their original
+values. Both banks collide with balls and contribute their source pigments.
+Gravity stays measured/default gravity. Beach-ball density, restitution,
 friction, angular damping, quadratic drag, containment, and contact pigments
 retain the existing prototype assumptions. This is a visual model, not a
 measured concert-ball material model.
+
+## One-way mirror box
+
+The browser unfolds a bounded set of reflected images inside six inward-facing
+mirror surfaces. Exterior faces stay transparent. Perspective views show depth
+and the scene through either side. Four instanced reflection meshes share the
+bar and ball materials, contact pigments and attack highlights. Reflected bars
+use twelve triangles and their distance shader retains the rounded front
+silhouette. Nearby images draw first to limit hidden work. A ray/box
+intersection masks each mirror portal. Odd reflections reverse triangle
+winding; instance matrices retain proper positive scales.
+Each reflection draw uses a conservative scissor around the projected room.
+The scene stops drawing outside the viewport while audio analysis and physics
+continue. A phone report rejects offscreen intervals instead of counting them
+as accepted rendering performance.
+There are no recursive cameras, reflection textures, shadow maps or bloom.
+The faint coating and fading copies approximate an infinity mirror room rather
+than tracing every light path. The scene uses at most 200,000 drawing-buffer
+pixels, with a maximum pixel ratio of two. Shader boundaries use the actual
+render scale after each resize;
+HTML controls and text retain their native resolution. GPU cost must be
+measured separately from worker physics cost. Physical embedded mirrors
+require no rendering code in core.
+
+Quiet/Loud guides project both banks through the current camera. The camera
+reserves space for their labels so all four remain visible at oblique angles. A small BPM
+readout beside Scroll lights uses the smoothed estimate and shows uncertainty
+in its help text. It does not announce every update.
 
 ## Verification and release boundary
 
@@ -92,11 +126,11 @@ shows these regions together with a mock player.
 
 Factory reset restores material and stroke settings independently of saved
 preferences. Listening-review plots and exports measure from the last drawn
-floor/ceiling base and enclosure height. Phone report v4 replays each input with
+paired bar bases and enclosure height. Phone report v5 replays each input with
 its tempo and accent in the original order, including updates at the same tick.
 Older recordings require their historical replay tool.
 
-See [PR #40](https://github.com/BlinkyStitt/musical-lights-rs/pull/40) and its CI
+See [PR #41](https://github.com/BlinkyStitt/musical-lights-rs/pull/41) and its CI
 runs for delivery evidence. Browser profiles cannot establish physical iPhone
 speaker routing, real microphone capture, or phone FPS acceptance.
 

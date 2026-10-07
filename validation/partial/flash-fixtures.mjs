@@ -16,7 +16,7 @@ export function flashPCM(kind, frequency, amplitude = .02) {
   });
 }
 
-export function flashTrace(module, pcm, reduced = false, { calibration = 2, chunk = 128 } = {}) {
+export function flashTrace(module, pcm, reduced = false, { calibration = 2, chunk = 128, firstSample = 0 } = {}) {
   const w = new WebAssembly.Instance(module).exports;
   const h = w.processor_create(1, calibration, Number(reduced)), rows = [];
   w.processor_trace_enable(h, 1);
@@ -28,7 +28,7 @@ export function flashTrace(module, pcm, reduced = false, { calibration = 2, chun
     for (let at = 0; at < pcm.length; at += chunk) {
       const block = pcm.subarray(at, at + chunk);
       new Float32Array(w.memory.buffer, w.processor_input(h), block.length).set(block);
-      assert.equal(w.processor_process(h, block.length, BigInt(at)), 1);
+      assert.equal(w.processor_process(h, block.length, BigInt(firstSample + at)), 1);
       const data = new Float64Array(w.memory.buffer, w.processor_trace_ptr(h), stride * w.processor_trace_count(h));
       for (let j = 0; j < data.length; j += stride) rows.push(data.slice(j, j + stride));
       w.processor_trace_clear(h);

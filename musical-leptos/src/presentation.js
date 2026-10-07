@@ -1,20 +1,26 @@
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
-export const DEFAULT_SETTINGS = Object.freeze({ version: 1, chance: 10, flight: 30,
+export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
   cameraMotion: true, cameraAngle: 0, scrolling: true, youtubeLink: '' });
 export function readSettings(storage) {
-  const defaults = { ...DEFAULT_SETTINGS };
+  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds] };
   try {
     const saved = JSON.parse(storage.getItem(SETTINGS_KEY));
     if (saved?.version !== 1) return defaults;
-    for (const [key, min, max] of [['chance', 0, 100], ['flight', 0, 50], ['cameraAngle', -40, 40]]) {
+    for (const [key, min, max] of [['flight', 0, 50], ['cameraAngle', -40, 40]]) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
+    if (validDirectionOdds(saved.directionOdds)) defaults.directionOdds = [...saved.directionOdds];
     for (const key of ['cameraMotion', 'scrolling']) if (typeof saved[key] === 'boolean') defaults[key] = saved[key];
     if (typeof saved.youtubeLink === 'string' && saved.youtubeLink.length <= 2048) defaults.youtubeLink = saved.youtubeLink;
     if (Array.isArray(saved.physics) && saved.physics.length === 8 && saved.physics.every((v, i) => Number.isFinite(v) && v >= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.04, 2], [.32, 4]][i][0] && v <= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.04, 2], [.32, 4]][i][1])) defaults.physics = saved.physics;
   } catch { /* Private browsing still has session settings. */ }
   return defaults;
+}
+export function validDirectionOdds(v) {
+  return Array.isArray(v) && v.length === 5 && v.every(Number.isFinite)
+    && v[0] >= 60 && v[1] <= 200 && v[0] < v[1]
+    && v[2] >= 0 && v[3] <= 1 && v[2] <= v[3] && v[4] >= .25 && v[4] <= 4;
 }
 export function parseYouTube(value) {
   const url = new URL(value.trim());
@@ -52,7 +58,7 @@ const explanations = {
   'listening-toggle': 'Listening uses your microphone to drive the lights. It does not play the microphone through your speakers.',
   'identify-song': 'While enabled, Identify song uploads a 10-second microphone recording at most once per minute. Turn it off to cancel. Recognition is separate from YouTube playback.',
   'motion-button': 'Phone motion lets measured tilt and shaking move the balls. It needs a separate sensor permission and works independently of Listening.',
-  'scroll-lights': 'Scroll lights moves the bands at two columns per beat. A qualifying new loud attack has a configurable chance to change direction. Reduced Motion disables automatic movement.',
+  'scroll-lights': 'Scroll lights moves the bands at two columns per beat. Only a new attack above the recent loudness peak can change direction. The default chance rises from 5% at 60 BPM to 50% at 200 BPM; Advanced Display settings control the thresholds, odds and curve. Reduced Motion disables automatic movement.',
 };
 export class Presentation {
   constructor(card) {
@@ -78,14 +84,23 @@ export class Presentation {
     this.listen(window, 'resize', () => this.positionHelp());
     this.listen(card, 'audio-session', ({ detail }) => { this.microphoneActive = detail.source === 'microphone' && !['stopped', 'ended'].includes(detail.state); this.updateAudioType(); if (this.anchor?.dataset.help === 'listening-toggle') this.showHelp(this.anchor, 'listening-toggle'); });
     this.listen(card, 'microphone-access', ({ detail }) => { this.permission = detail; });
-    for (const [selector, key, checkbox] of [['.direction-chance', 'chance'], ['.flight-height', 'flight'], ['.camera-motion', 'cameraMotion', true], ['.scroll-lights', 'scrolling', true]]) {
+    for (const [selector, key, checkbox] of [['.flight-height', 'flight'], ['.camera-motion', 'cameraMotion', true], ['.scroll-lights', 'scrolling', true]]) {
       const node = card.querySelector(selector); if (!node) continue;
       if (checkbox) node.checked = this.settings[key]; else node.value = this.settings[key];
       if (key === 'scrolling') node.dispatchEvent(new Event('change', { bubbles: true }));
       this.listen(node, 'change', () => { const value = checkbox ? node.checked : Number(node.value); if (!checkbox && (!node.validity.valid || !Number.isFinite(value))) return; this.settings[key] = value; this.save(); });
     }
+    this.oddsInputs = ['.direction-slow-bpm', '.direction-fast-bpm', '.direction-low-chance', '.direction-high-chance', '.direction-curve'].map(s => card.querySelector(s));
+    const writeOdds = () => this.oddsInputs.forEach((node, i) => { node.value = this.settings.directionOdds[i] * (i === 2 || i === 3 ? 100 : 1); });
+    writeOdds();
+    for (const node of this.oddsInputs) this.listen(node, 'change', () => {
+      const odds = this.oddsInputs.map((n, i) => Number(n.value) / (i === 2 || i === 3 ? 100 : 1));
+      const valid = this.oddsInputs.every(n => n.validity.valid && n.value !== '') && validDirectionOdds(odds);
+      card.querySelector('.direction-error').textContent = valid ? '' : 'Use increasing BPM thresholds from 60 to 200, increasing odds from 0 to 100%, and a curve from 0.25 to 4.';
+      if (valid) { this.settings.directionOdds = odds; this.save(); }
+    });
     card.querySelector('.camera-rotation').value = this.settings.cameraAngle;
-    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { chance: 10, flight: 30, cameraMotion: true, cameraAngle: 0, scrolling: true }); for (const [sel, key] of [['.direction-chance', 'chance'], ['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
     this.save(false);
     if (this.settings.youtubeLink) this.loadVideo(this.settings.youtubeLink);
     card.presentation = this;

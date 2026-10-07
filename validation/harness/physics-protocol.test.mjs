@@ -5,9 +5,9 @@ import init, { PhysicsSimulation } from '../../musical-lights-physics/pkg/physic
 import { replayReport } from '../replay-physics.mjs';
 const wasm = await init({ module_or_path: await readFile(new URL('../../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
 
-test('the built WASM accepts protocol 8 scrolling and stops at its published phase', () => {
+test('the built WASM accepts protocol 9 scrolling and stops at its published phase', () => {
   const layout = PhysicsSimulation.layout();
-  assert.equal(layout[18], 8, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
+  assert.equal(layout[18], 9, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
   assert.equal(layout[0], 24);
   assert.equal(layout[21], 8);
   assert.equal(layout[9], 3 + 8 * layout[8]);
@@ -44,7 +44,7 @@ test('ordered input tempo changes reproduce complete physical snapshots across r
       }
       sim.step();
     }
-    const report = { type: 'musical-lights-phone-report-v4', initialTempo: 120,
+    const report = { type: 'musical-lights-phone-report-v5', initialTempo: 120,
       config, palette, layout, inputs, finalTick: sim.tick(),
       finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
     assert((await replayReport(report)).every(result => result.matches));
@@ -54,27 +54,29 @@ test('ordered input tempo changes reproduce complete physical snapshots across r
   } finally { sim.free(); }
 });
 
-test('seeded input accents reproduce floor and ceiling motion at every render rate', async () => {
+test('seeded loud-attack accents reproduce paired bar motion at every render rate', async () => {
   const config = Array.from(PhysicsSimulation.defaults()), palette = Array(72).fill(.5);
   const layout = Array.from(PhysicsSimulation.layout());
-  const danceOptions = { chance: 1, flight: .3, seed: 1 };
+  const danceOptions = { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1 };
   const initialAccent = 1000;
   const values = Array(38).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
   const inputs = [{ tick: 0, values }, { tick: 60, values, accent: 1001 }, { tick: 100, values, accent: 1002 },
     { tick: 140, values, accent: 1003 }, { tick: 200, values, accent: 1003 }];
   const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
   try {
-    sim.configure_dance(danceOptions.chance, danceOptions.flight, danceOptions.seed);
+    sim.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed);
     sim.accent(initialAccent);
     for (let tick = 0; tick < 400; tick++) {
       for (const event of inputs) if (event.tick === tick) {
         sim.input(new Float32Array(event.values));
         if (event.accent !== undefined) sim.accent(event.accent);
+        if (tick === 60) assert.equal(sim.horizontal_direction(), -1, 'The first accepted seeded draw reverses');
+        if (tick === 100) assert.equal(sim.horizontal_direction(), 1, 'The second accepted draw reverses again');
+        if (tick === 140) assert.equal(sim.horizontal_direction(), 1, 'The third draw exceeds the tempo-scaled chance');
       }
       sim.step();
     }
-    assert.equal(sim.ceiling_bars(), true, 'The third seeded draw flips the vertical bars');
-    const report = { type: 'musical-lights-phone-report-v4', initialTempo: 120,
+    const report = { type: 'musical-lights-phone-report-v5', initialTempo: 120,
       config, palette, layout, danceOptions, initialAccent, inputs, finalTick: sim.tick(),
       finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
     assert((await replayReport(report)).every(result => result.matches));

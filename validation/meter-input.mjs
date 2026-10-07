@@ -1,9 +1,7 @@
-// A source can split across the seam into a fragment below one CSS pixel.
-// Choose its wider pointer surface and verify the native hit keeps that source.
-export async function meterPoint(page, meter) {
-  // Scroll the fixed graph, not a source column moving with the idle/live phase.
-  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
-  return meter.evaluate(meter => {
+// Resolve native hit points from one coherent layout. A source can split at
+// the seam; choose its wider pointer surface and retain its source identity.
+function hitPoints(meters) {
+  return meters.map(meter => {
     const graph = meter.closest('#dancinglights');
     const index = [...graph.querySelectorAll('[role=meter]')].indexOf(meter);
     const copy = graph.querySelector(`.bark-copy[data-source-band="${index}"]`);
@@ -17,4 +15,12 @@ export async function meterPoint(page, meter) {
     }
     throw new Error('Input point must hit the requested spectrum source');
   });
+}
+export async function meterPoint(page, meter) {
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  return (await meter.evaluateAll(hitPoints))[0];
+}
+export async function meterPoints(page) {
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  return page.getByRole('meter').evaluateAll(hitPoints);
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseYouTube, readSettings, SETTINGS_KEY } from '../../musical-leptos/src/presentation.js';
+import { parseYouTube, readSettings, SETTINGS_KEY, validDirectionOdds } from '../../musical-leptos/src/presentation.js';
 
 test('YouTube links select one video and preserve start times without accepting arbitrary origins', () => {
   for (const url of ['https://youtu.be/abcDEF012_-?t=1m23s', 'https://www.youtube.com/watch?v=abcDEF012_-&t=83', 'https://m.youtube.com/shorts/abcDEF012_-?start=83', 'https://www.youtube.com/embed/abcDEF012_-?start=83']) {
@@ -10,11 +10,16 @@ test('YouTube links select one video and preserve start times without accepting 
 });
 test('stored display settings restore valid preferences without restoring live permissions', () => {
   const read = saved => readSettings({ getItem(key) { assert.equal(key, SETTINGS_KEY); return JSON.stringify(saved); } });
-  assert.equal(read({ version: 1, chance: 42, cameraAngle: -20, cameraMotion: false }).chance, 42);
+  assert.deepEqual(read({ version: 1, directionOdds: [80, 180, .1, .6, 2], cameraAngle: -20, cameraMotion: false }).directionOdds, [80, 180, .1, .6, 2]);
   assert.equal(read({ version: 1, cameraMotion: false }).cameraMotion, false);
-  assert.equal(read({ version: 1, chance: -1, flight: 99, cameraAngle: '20' }).chance, 10);
+  assert.deepEqual(read({ version: 1, directionOdds: [200, 60, .5, .05, 1], flight: 99, cameraAngle: '20' }).directionOdds, [60, 200, .05, .5, 1]);
   assert.equal(read({ version: 1, physics: [0.6, -1, 8, .72, .12, .24, .04, .32] }).physics, undefined);
-  assert.equal(read({ version: 2, chance: 99 }).chance, 10);
+  assert.deepEqual(read({ version: 2, directionOdds: [80, 180, .1, .6, 2] }).directionOdds, [60, 200, .05, .5, 1]);
   assert.equal(read({ version: 1, listening: true, identify: true }).listening, undefined);
   assert.equal(readSettings({ getItem() { throw Error('denied'); } }).flight, 30);
+});
+
+test('direction endpoints and curve reject inverted, non-finite and out-of-music-range configurations', () => {
+  for (const v of [[60, 200, .05, .5, 1], [80, 180, 0, 1, .25]]) assert(validDirectionOdds(v));
+  for (const v of [[59, 200, .05, .5, 1], [60, 201, .05, .5, 1], [60, 60, .05, .5, 1], [60, 200, .6, .5, 1], [60, 200, .05, .5, 0], [60, 200, .05, .5, NaN]]) assert(!validDirectionOdds(v));
 });

@@ -1,12 +1,19 @@
 import { expect } from '@playwright/test';
 
+// Explicitly leave the mobile default when a fixture tests the normal page.
+export async function normalView(page) {
+  const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+  if (await exit.isVisible()) await exit.click();
+}
 export async function physicsReady(page) {
   await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('#dancinglights')?.physics?.current))).toBe(true);
-  const tick = await page.evaluate(() => document.querySelector('#dancinglights').physics.current[2]);
+  // A reset restarts the simulation tick. Wait for a fresh, advancing snapshot
+  // on the host clock rather than comparing it with the previous world's tick.
+  const received = await page.evaluate(() => document.querySelector('#dancinglights').physics.received);
   await expect.poll(() => page.evaluate(() => {
     const view = document.querySelector('#dancinglights').physics;
-    return view.ready && !view.closed && !view.lost && !view.notice.persistent ? view.current?.[2] : -1;
-  })).toBeGreaterThan(tick);
+    return view.ready && !view.closed && !view.lost && !view.notice.persistent && view.current?.[2] > 0 ? view.received : -1;
+  })).toBeGreaterThan(received);
 }
 export async function physicsState(page) {
   return page.evaluate(() => {

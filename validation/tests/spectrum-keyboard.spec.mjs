@@ -10,17 +10,27 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole('checkbox', { name: 'Scroll lights' }).uncheck();
 });
 
+function sampleState(index) {
+  if (index === 'record-keys') {
+    window.keyboardSamples = [];
+    document.addEventListener('keyup', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const selected = [...document.querySelectorAll('.meter')].indexOf(document.activeElement);
+      window.keyboardSamples.push(sampleState(selected));
+    });
+    return;
+  }
+  const meters = [...document.querySelectorAll('.meter')], meter = meters[index];
+  return { focused: meters.indexOf(document.activeElement),
+    tabStops: meters.flatMap((node, i) => node.getAttribute('tabindex') === '0' ? [i] : []),
+    negativeTabStops: meters.filter(node => node.getAttribute('tabindex') === '-1').length,
+    labelMatches: document.querySelector('#frequency-readout').textContent.trim() === meter.getAttribute('aria-label'),
+    describedBy: meter.getAttribute('aria-describedby') };
+}
+function expectedSample(index) { return { focused: index, tabStops: [index], negativeTabStops: 23,
+  labelMatches: true, describedBy: 'frequency-readout' }; }
 async function expectSample(page, index) {
-  // Read one coherent browser state instead of seven protocol round trips per key.
-  await expect.poll(() => page.evaluate(index => {
-    const meters = [...document.querySelectorAll('.meter')], meter = meters[index];
-    return { focused: meters.indexOf(document.activeElement),
-      tabStops: meters.flatMap((node, i) => node.getAttribute('tabindex') === '0' ? [i] : []),
-      negativeTabStops: meters.filter(node => node.getAttribute('tabindex') === '-1').length,
-      labelMatches: document.querySelector('#frequency-readout').textContent.trim() === meter.getAttribute('aria-label'),
-      describedBy: meter.getAttribute('aria-describedby') };
-  }, index)).toEqual({ focused: index, tabStops: [index], negativeTabStops: 23,
-    labelMatches: true, describedBy: 'frequency-readout' });
+  await expect.poll(() => page.evaluate(sampleState, index)).toEqual(expectedSample(index));
 }
 
 test('spectrum has one Tab stop, direct exits, and remembers the last focused sample', async ({ page }) => {
@@ -60,27 +70,19 @@ test('spectrum has one Tab stop, direct exits, and remembers the last focused sa
 test('arrows reach every sample across group boundaries and Home/End clamp at endpoints', async ({ page }) => {
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
   await page.keyboard.press('Tab');
-  await page.keyboard.press('ArrowLeft');
-  await expectSample(page, 0);
-  await page.keyboard.press('Home');
-  await expectSample(page, 0);
-  for (let index = 1; index < 24; index++) {
-    await page.keyboard.press('ArrowRight');
-    await expectSample(page, index);
+  // Capture each native key's resulting state inside the page. This preserves
+  // every intermediate assertion without a second protocol round trip per key.
+  await page.evaluate(sampleState, 'record-keys');
+  const steps = [['ArrowLeft', 0], ['Home', 0],
+    ...Array.from({ length: 23 }, (_, i) => ['ArrowRight', i + 1]),
+    ['ArrowRight', 23], ['End', 23],
+    ...Array.from({ length: 23 }, (_, i) => ['ArrowLeft', 22 - i]),
+    ['End', 23], ['Home', 0]];
+  for (const [n, [key]] of steps.entries()) {
+    await page.keyboard.press(key);
+    if (n === 24) await expect(page.getByRole('tooltip')).toHaveText('≈ 12000–15500 Hz');
   }
-  await expect(page.getByRole('tooltip')).toHaveText('≈ 12000–15500 Hz');
-  await page.keyboard.press('ArrowRight');
-  await expectSample(page, 23);
-  await page.keyboard.press('End');
-  await expectSample(page, 23);
-  for (let index = 22; index >= 0; index--) {
-    await page.keyboard.press('ArrowLeft');
-    await expectSample(page, index);
-  }
-  await page.keyboard.press('End');
-  await expectSample(page, 23);
-  await page.keyboard.press('Home');
-  await expectSample(page, 0);
+  expect(await page.evaluate(() => window.keyboardSamples)).toEqual(steps.map(([, index]) => expectedSample(index)));
 });
 
 test('modified keys and vertical arrows preserve selection and remain available to the browser', async ({ page }) => {
@@ -161,6 +163,19 @@ test('mouse and touch readouts do not replace keyboard selection and touch clean
   await page.keyboard.press('Tab');
 
   const touch = await meterPoint(page, page.getByRole('meter').nth(20));
+  // Measure from the native tap, not from later automation round trips. Slow
+  // hosts can consume the readout deadline before a protocol-side sleep starts.
+  await page.evaluate(() => {
+    window.readoutTiming = new Promise(resolve => document.addEventListener('pointerup', () => {
+      const start = performance.now(), samples = [];
+      const sample = () => {
+        const node = document.querySelector('#frequency-readout');
+        samples.push({ elapsed: performance.now() - start, visible: Boolean(node?.getBoundingClientRect().height) });
+      };
+      setTimeout(sample, 2000);
+      setTimeout(() => { sample(); resolve(samples); }, 3100);
+    }, { once: true, capture: true }));
+  });
   await page.touchscreen.tap(touch.x, touch.y);
   await expect(page.getByRole('tooltip')).toHaveText(touch.label);
   const selection = await page.locator('.meter[tabindex="0"]').getAttribute('aria-label');
@@ -169,9 +184,13 @@ test('mouse and touch readouts do not replace keyboard selection and touch clean
   const focusedLabel = await page.evaluate(() => document.activeElement.getAttribute('role') === 'meter'
     ? document.activeElement.getAttribute('aria-label') : '≈ 2000–2320 Hz');
   expect(selection).toBe(focusedLabel);
-  await page.waitForTimeout(2000);
-  await expect(page.getByRole('tooltip')).toBeVisible();
-  await expect(page.getByRole('tooltip')).toBeHidden({ timeout: 1500 });
+  const timing = await page.evaluate(() => window.readoutTiming);
+  expect(timing.map(sample => sample.visible)).toEqual([true, false]);
+  expect(timing[0].elapsed).toBeGreaterThanOrEqual(1900);
+  expect(timing[0].elapsed).toBeLessThan(2900);
+  expect(timing[1].elapsed).toBeGreaterThanOrEqual(3000);
+  expect(timing[1].elapsed).toBeLessThan(3600);
+  await expect(page.getByRole('tooltip')).toBeHidden();
   await expect(page.locator('.meter[tabindex="0"]')).toHaveAttribute('aria-label', selection);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
   await page.keyboard.press('Tab');

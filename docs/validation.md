@@ -2,44 +2,70 @@
 
 ## Website deployment
 
-The workflows separate deployment from independent applications and firmware:
+Website validation builds physics, the worklet and Leptos once. The build job
+runs the offline harness and records the complete browser test inventory. Two
+isolated Chromium shards and one WebKit/iPhone-profile job download that same
+compiled bundle. Each retains the serial startup/crash guard, one worker, zero
+retries and every existing assertion. The final job compares the reports with
+the inventory: omitted, duplicated, incomplete or failed tests stop publication.
+Core and loudness-reference checks run alongside the build and browser jobs.
 
-- `validate.yml` (Website validation and deployment): core, physics, audio
-  worklet, Leptos, loudness references, and the production browser suite. Pages
-  waits only for `core`, `web`, and `loudness-reference` on current `main`.
-- `other-apps.yml`: terminal, Dioxus, and standalone WASM validation. The two
-  demo browser checks run separately, retaining their assertions and using a
-  demo artifact for server readiness.
-- `firmware.yml`: Feather, STM32, ESP Embassy, and ESP-IDF validation. Failures
-  remain visible in this workflow and do not gate website deployment.
+The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
+test inventory, and file digests. Its provenance records the Git source tree,
+workflow digest, runner platform/image, producer run/attempt and source commit.
+PRs always perform fresh validation. After a merge or manual dispatch, the plan
+can reuse an unexpired artifact only from a successful same-repository PR run
+of this workflow with all required validation jobs passed. It verifies the
+source tree, build inputs, producer/commit relationship and every file digest.
+Fork artifacts, failed or incomplete runs, changed inputs, corrupt files and
+expired artifacts cannot replace validation. A miss performs the complete
+pinned build and checks. Reuse does not modify the tested files or relabel their
+embedded build identity: the deployment run records its own main commit and
+links to the original producer.
 
-Path filters cover each workflow's packages and shared dependencies/tooling.
-Shared core changes run all three workflows. Workflow changes also run all
-three; each supports manual dispatch for a complete check of its targets.
-Superseded PR runs cancel within their workflow, while main validation runs
-remain independent. Only the Pages job receives deployment permissions.
+Pages receives the exact validated `dist`, waits for the validation barrier,
+and checks current main before publishing. Publishing stays serialized and is
+not canceled by newer validation. Per-job concurrency cancels superseded PR and
+main validation; the latest-main check also prevents stale queued publication.
+Deployment notifications retain failure, cancellation and superseded-run rules.
+Only Pages receives Pages/OIDC permissions; artifact lookup/download uses read
+permissions. See the GitHub
+[artifact deployment workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-The web job packages the exact `musical-leptos/dist` used by passing browser
-checks as `github-pages`, including on PRs. Pages deploys the same-run artifact
-without rebuilding. Deployments remain serialized, and queued stale revisions
-skip publishing after checking the current main SHA. See GitHub's
-[build/deploy artifact workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+Independent consumers remain separate: `other-apps.yml` validates terminal,
+Dioxus and standalone WASM; `firmware.yml` validates Feather, STM32, ESP Embassy
+and ESP-IDF. A change selector runs only affected consumers. Core, shared
+validation/build tooling and pinned Cargo configuration changes reach all
+consumers. Manual dispatch includes every target. Browser-only test changes do
+not rebuild unrelated firmware or terminal applications.
 
-Pinned tool caches are separated by site, demos, and ESP installers. The site's
-installer excludes Dioxus, so its downloads cannot block deployment. The `web`
-installer group remains the complete local browser toolchain. Rust dependency
-and build caches are scoped by job/target, platform, toolchain, lockfiles and
-revision; npm downloads use the validation lockfile. Missing caches take the
-normal pinned build path. Browser/test failures are never retried or ignored.
+Rust caches use the actual workspace `target` and root `Cargo.lock` for core
+and reference jobs. Standalone packages cache their own target directories.
+Keys include platform, pinned toolchain, lockfiles and Rust/build inputs, so
+JavaScript/test-only commits do not create new copies of identical Rust caches.
+Cargo still validates/rebuilds restored inputs. Tool caches remain separated
+by site, demos, ESP installers and the pinned actionlint checker. Locked Python
+reference downloads and npm downloads are also cached. Missing caches take the
+normal pinned installation/build path; test failures are never retried or ignored.
+Closed same-repository PRs remove only their `refs/pull/<number>/merge` caches.
+They do not remove default-branch caches.
 
-`python3 validation/validate.py browser` still runs all browser projects locally.
-For the workflow subsets, run `npm run test:site` or `npm run test:demos` from
-`validation` (with repository-pinned tools and macOS host access). All projects
-retain the serial startup guard, one worker, and zero retries.
+Temporary build and Pages artifacts last one day. Fully validated bundles last
+seven days, successful browser reports two days, and failed reports seven days.
+Standard GitHub-hosted runners remain free for this public repository; these
+changes do not require larger runners, paid images or increased cache storage.
+Docker image pulls and browser downloads are not used as substitutes for the
+isolated test jobs: the measured dominant cost is test execution.
 
-Validate workflow changes with `actionlint .github/workflows/*.yml`.
-Run installer regressions with `python3 -m unittest discover -s validation/tooling -v`.
-The `reference` target includes installer and test lint/type checks.
+For local checks, `python3 validation/validate.py browser` still runs all projects.
+`npm run test:site` and `npm run test:demos` retain their complete local subsets.
+Run from the repository root with pinned tools and macOS host access. To check
+workflow syntax, install the pinned checker with
+`python3 validation/install_tools.py ci`, then run
+`.tools/bin/actionlint .github/workflows/*.yml`.
+Run provenance, coverage, change-selector, installer and publication regressions
+with `python3 -m unittest discover -s validation/tooling -v`; the reference
+target includes their lint/type checks.
 
 ## Controls and embedded musical motion (2026-10-03)
 
@@ -591,3 +617,58 @@ Physical iPhone playback and capture, human listening, and five-minute
 physical-phone FPS acceptance remain pending. Desktop WebKit and its iPhone
 profile cannot establish those results. Routine recognition uses mocks; this
 change makes no live AudD request.
+
+### Paired bars and mirror-room validation
+
+`mirrors.spec.mjs` checks actual GPU pixels at front and oblique camera angles,
+transparent exterior faces, bounded draw calls, matched per-end bar extents,
+projected Quiet/Loud guides, saved probability curves and mobile default entry
+without capture. Short landscape combines a mock video, a long recognition
+ticker, a recovery notice and all bottom controls. Each GPU check saves frame
+cost and front/side images. These measurements describe the browser host, not
+a physical iPhone. The offline mirror test covers non-indexed rounded geometry,
+odd reflection winding, shader defines and disposal. Native physics covers
+ceiling-bar collision, inward bounce, pigments and safe enclosure resize.
+The scissor regression compares every rendered pixel with the unrestricted
+ray portal at five camera angles. Another test checks that offscreen audio and
+physics continue while drawing stops. The phone-clock harness rejects those
+offscreen intervals for FPS acceptance. Live PCM checks use the recorded first
+input sample clock and require exact raw loudness and filtered targets.
+
+The core owns the bounded tempo-to-odds curve and paired stroke calculation.
+The browser owns mirrors. Physics protocol 9 and phone report v5 preserve
+ordered input, tempo and accent events for exact replay. Historical recordings
+need their matching historical engine. Raw loudness, filtered targets and the
+fixed-window reference audit retain their existing contracts.
+
+Browser traces retain DOM snapshots and source code. They omit the continuous
+screenshot filmstrip because GPU readbacks compete with realtime audio on
+software renderers. Failure screenshots and explicit GPU pixel comparisons,
+layout screenshots and preview images remain enabled. This reduces diagnostic
+recording work without changing browser assertions, deadlines or retries.
+
+Layout and keyboard checks run separately from live noise, contrast images and
+theme changes at each viewport and theme. This keeps all 24 hover checks and
+the existing assertion deadlines within focused test cases. Preview sampling
+starts at the source-start event from the native Replay gesture. Each trial
+records four seconds of the same PCM, after a real rendered frame, without a
+fixed warm-up sleep or protocol calls consuming the measurement interval.
+
+
+Digital playback uses `pcm-playback.js`, a browser AudioWorklet source. It copies
+48 kHz decoded Float32 PCM with an integer sample cursor. Pause supplies zeros
+and holds that cursor; resume, repeat and replay use the same connected graph.
+Transport acknowledgements carry the actual render frame and cursor, so the
+output-clock timeline follows the audio thread rather than UI command timing.
+Microphone capture and the core loudness model keep their existing paths.
+
+The former native buffer source could interpolate PCM at fractional startup
+clocks. A controlled Linux WebKit comparison found 35 changed samples, including
+zeros changed to approximately 6e-15, and different raw loudness values. With the
+integer source, all five tested startup clocks preserved PCM and raw results
+exactly. These isolated Linux x64 emulation checks establish sample preservation,
+not phone performance. The offline harness executes the production source across
+chunk boundaries, loop seams, pause/resume, replay and natural completion. Live
+browser checks compare observed release-worklet input with decoded PCM and retain
+exact raw loudness and filtered-target assertions. End tests use a shorter PCM
+fixture with the real processor and its real completion acknowledgement.

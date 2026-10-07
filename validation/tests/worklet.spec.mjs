@@ -8,7 +8,7 @@ import { flashPCM, flashTrace, flashSummary } from '../partial/flash-fixtures.mj
 const bytes = await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url));
 const module = new WebAssembly.Module(bytes);
 const source = await readFile(new URL('../../musical-lights-worklet/processor.js', import.meta.url), 'utf8');
-function processor(channel = 0) {
+function processor(channel = 0, diagnostics = false) {
   const messages = [];
   const scope = { currentFrame: 0, sampleRate: 48000, WebAssembly, Float32Array, Float64Array,
     AudioWorkletProcessor: class { port = { postMessage(data, transfer = []) {
@@ -20,7 +20,7 @@ function processor(channel = 0) {
     registerProcessor: (_, value) => { scope.Processor = value; },
   };
   vm.runInNewContext(source, scope);
-  const value = new scope.Processor({ processorOptions: { module, channel, reducedMotion: false } });
+  const value = new scope.Processor({ processorOptions: { module, channel, diagnostics, reducedMotion: false } });
   return { value, scope, messages, push(samples, extra) {
     const ok = value.process([extra ? [samples, extra] : [samples]]);
     scope.currentFrame += samples.length;
@@ -268,3 +268,20 @@ for (const fixture of heldOut) {
     }
   });
 }
+
+
+test('diagnostics retain the actual nonzero input sample origin', () => {
+  const p = processor(0, true); p.scope.currentFrame = 1024;
+  const pcm = tone(4096, 3400, .02), rows = [];
+  for (let at = 0; at < pcm.length; at += 128) {
+    p.value.pending = false;
+    expect(p.push(pcm.subarray(at, at + 128))).toBe(true);
+  }
+  for (const { data } of p.messages) {
+    expect(data.inputStartSample).toBe(1024);
+    for (let at = 0; at < data.trace.length; at += data.traceStride) rows.push(Array.from(data.trace.slice(at, at + data.traceStride)));
+  }
+  const reference = flashTrace(module, pcm, false, { firstSample: 1024 });
+  expect(rows.length).toBeGreaterThan(0);
+  for (const row of rows) expect(row).toEqual(Array.from(reference.find(expected => expected[266] === row[266])));
+});

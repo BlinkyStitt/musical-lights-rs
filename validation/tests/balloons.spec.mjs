@@ -14,7 +14,10 @@ test('a subpixel seam fragment uses its visible wrapped copy for native hover', 
     // Hold one real rendered pointer layout at the seam. This is a geometry
     // fixture, independent of worker timing and frame-rate acceptance.
     cancelAnimationFrame(view.request); view.request = null;
-    view.positionMeters(1.99999);
+    // A later enclosure snapshot reprojects the stored rendered phase.
+    // Keep that state consistent with the pointer geometry held by this fixture.
+    view.renderedPhase = 1.99999;
+    view.positionMeters(view.renderedPhase);
   });
   const meter = page.getByRole('meter').nth(22);
   expect((await meter.boundingBox()).width).toBeLessThan(1);
@@ -123,11 +126,13 @@ for (const width of [375, 1440]) {
         return previous + (current - previous) * v.renderAlpha;
       });
       return { expected, ballInstances: v.balls.count, barInstances: v.bars.count, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
-        tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2) };
+        tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2),
+        roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedEnclosureHeight + v.layout[6] / 2 - a[(i + 72) * 16 + 13]) };
     });
-    expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(72);
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(7);
+    expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(14);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
+    render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
     await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
@@ -308,6 +313,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await page.locator('[data-config="5"]').fill('0.36');
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
+  await expect(page.locator('.direction-curve')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.diagnostics-controls > summary').click();
@@ -315,6 +321,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sequence)).toBeGreaterThan(sequence + 24);
   await page.getByRole('button', { name: 'End test early' }).click();
   await expect(page.getByRole('button', { name: 'Export test report' })).toBeEnabled();
+  await expect(page.locator('.direction-curve')).toBeEnabled();
   const report = await page.evaluate(() => document.querySelector('#dancinglights').physics.report.result);
   expect(report.accepted).toBe(false); expect(report.invalidReasons).toContain('Test ended before five minutes');
   expect(report.inputs.length).toBeGreaterThan(20); expect(report.finalTick).toBeGreaterThan(40);
@@ -429,10 +436,18 @@ test('phone acceptance rejects frozen snapshots despite 60 FPS and a current wor
 
 test('wrapped pointer surfaces and keyboard focus retain the source frequency', async ({ page }) => {
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  // This fixture needs a stationary hover surface. Camera motion has its own
+  // tests; stop it through the saved setting instead of forcing an unstable hit.
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.camera-motion').uncheck();
   const last = await page.getByRole('meter').last().getAttribute('aria-label');
   await page.locator('.scroll-lights').check();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase)).toBeGreaterThan(.4);
-  await page.locator('.scroll-lights').uncheck(); await page.waitForTimeout(350);
+  await page.locator('.scroll-lights').uncheck();
+  await page.waitForFunction(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.previous && v.current[v.layout[20]] === v.previous[v.layout[20]];
+  });
   // Host speed can carry more than one band past the seam before Stop arrives.
   // Select the actual clipped copy, retaining its immutable source identity.
   const wrapped = await page.locator('.bark-copy').evaluateAll(nodes =>

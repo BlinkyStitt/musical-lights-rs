@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.js';
 
 export async function replayReport(report) {
-  if (report.type !== 'musical-lights-phone-report-v4')
+  if (report.type !== 'musical-lights-phone-report-v5')
     throw new Error('Physics report needs the matching historical replay; recording format differs');
   const wasm = await init({ module_or_path: await readFile(new URL('../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
   if (JSON.stringify(report.layout) !== JSON.stringify(Array.from(PhysicsSimulation.layout())))
@@ -12,7 +12,7 @@ export async function replayReport(report) {
   const results = [];
   for (const fps of [30, 60, 120]) {
     const sim = new PhysicsSimulation(new Float32Array(report.config), new Float32Array(report.palette));
-    if (report.danceOptions) sim.configure_dance(report.danceOptions.chance, report.danceOptions.flight, report.danceOptions.seed);
+    if (report.danceOptions) sim.configure_dance(new Float64Array(report.danceOptions.odds), report.danceOptions.flight, report.danceOptions.seed);
     sim.set_tempo(report.initialTempo);
     sim.accent(report.initialAccent ?? 0);
     let cursor = 0;

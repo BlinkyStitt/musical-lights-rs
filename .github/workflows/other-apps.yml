@@ -3,9 +3,19 @@ on:
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'musical-lights-core/**'
-      - 'validation/**'
-      - '.github/workflows/**'
+      - 'validation/ci.py'
+      - 'validation/validate.py'
+      - 'validation/install_tools.py'
+      - 'validation/tooling/**'
+      - 'validation/demos.config.mjs'
+      - 'validation/tests/other-apps.spec.mjs'
+      - 'validation/browser-*'
+      - 'validation/server.mjs'
+      - 'validation/package*.json'
+      - '.github/workflows/other-apps.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-terminal/**'
@@ -13,9 +23,19 @@ on:
       - 'musical-wasm/**'
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'musical-lights-core/**'
-      - 'validation/**'
-      - '.github/workflows/**'
+      - 'validation/ci.py'
+      - 'validation/validate.py'
+      - 'validation/install_tools.py'
+      - 'validation/tooling/**'
+      - 'validation/demos.config.mjs'
+      - 'validation/tests/other-apps.spec.mjs'
+      - 'validation/browser-*'
+      - 'validation/server.mjs'
+      - 'validation/package*.json'
+      - '.github/workflows/other-apps.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-terminal/**'
@@ -25,11 +45,23 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  changes:
+    name: Affected other-apps
+    runs-on: ubuntu-24.04
+    outputs:
+      terminal: ${{ steps.changes.outputs.terminal }}
+      demos: ${{ steps.changes.outputs.demos }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: changes
+        run: python3 validation/ci.py changes
   terminal:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.terminal == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
@@ -39,16 +71,18 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             musical-terminal/target
-          key: terminal-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-${{ github.sha }}
+          key: terminal-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-terminal/src/**/*.rs', 'musical-terminal/examples/**/*.rs', 'musical-terminal/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            terminal-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-
+            terminal-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
       - name: Install terminal libraries
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsdl2-dev
       - run: python3 validation/validate.py terminal
   demos:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.demos == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
@@ -59,9 +93,9 @@ jobs:
             ~/.cargo/git
             musical-dioxus/target
             musical-wasm/target
-          key: demos-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-dioxus/Cargo.lock', 'musical-wasm/Cargo.lock') }}-${{ github.sha }}
+          key: demos-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-dioxus/Cargo.lock', 'musical-wasm/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-dioxus/src/**/*.rs', 'musical-wasm/src/**/*.rs', 'musical-dioxus/Cargo.toml', 'musical-wasm/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            demos-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-dioxus/Cargo.lock', 'musical-wasm/Cargo.lock') }}-
+            demos-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-dioxus/Cargo.lock', 'musical-wasm/Cargo.lock') }}-
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '26.8.2'
@@ -87,3 +121,4 @@ jobs:
           name: demo-browser-validation
           path: validation/test-results/
           if-no-files-found: ignore
+          retention-days: ${{ job.status == 'failure' && 7 || 2 }}

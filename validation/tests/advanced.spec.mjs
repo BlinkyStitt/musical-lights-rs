@@ -55,20 +55,19 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
 });
 
-for (const barBase of ['floor', 'ceiling']) {
-test(`diagnostic plot separates ${barBase} render geometry and its clock from analysis and physics`, async ({ page }) => {
+for (const end of ['bottom', 'top']) {
+test(`diagnostic plot separates ${end} render geometry and its clock from analysis and physics`, async ({ page }) => {
   await advanced(page);
-  const { sample, moves, unverified } = await page.evaluate(barBase => {
+  const { sample, moves, unverified } = await page.evaluate(end => {
     const card = document.querySelector('.audio-card'), review = card.review, view = document.querySelector('#dancinglights').physics;
     review.sessionId = 'clock-regression'; review.samples = [];
     const receivedAt = performance.timeOrigin + performance.now();
     view.renderedAt = receivedAt - 25;
     view.current[view.layout[9] + 8] = .7 * view.height;
-    view.renderedCeilingBars = barBase === 'ceiling'; view.renderedEnclosureHeight = view.height;
-    // A newer physics message may change the base before the next rendered frame.
-    view.ceilingBars = !view.renderedCeilingBars;
-    view.bars.instanceMatrix.array[8 * 16 + 13] = view.renderedCeilingBars
-      ? .8 * view.height + view.layout[6] / 2 : .2 * view.height - view.layout[6] / 2;
+    view.renderedEnclosureHeight = view.height;
+    view.bars.instanceMatrix.array[8 * 16 + 13] = .2 * view.height - view.layout[6] / 2;
+    view.bars.instanceMatrix.array[(8 + 72) * 16 + 13] = .8 * view.height + view.layout[6] / 2;
+    if (Math.abs(view.renderedHeight(8, end === 'top' ? 1 : 0) / view.height - .2) > 1e-5) throw Error('Wrong rendered end');
     const trace = new Float64Array(511);
     trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
@@ -78,8 +77,8 @@ test(`diagnostic plot separates ${barBase} render geometry and its clock from an
     const sample = review.samples[0];
     card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
-  }, barBase);
-  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase, renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
+  }, end);
+  expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase: 'both', renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
   expect(sample.collider).toBeCloseTo(.7, 5); expect(sample.rendered).toBeCloseTo(.2, 5);
   expect(moves).toHaveLength(3);
   expect(moves[0][0]).toBeCloseTo(1.1 / 1.225 * 900, 5);
@@ -89,7 +88,7 @@ test(`diagnostic plot separates ${barBase} render geometry and its clock from an
   await page.locator('.diagnostics-controls > summary').click();
   const download = page.waitForEvent('download'); await page.locator('.review-export').click();
   const exported = JSON.parse(await readFile(await (await download).path(), 'utf8'));
-  expect(exported.diagnosticSamples[0].barBase).toBe(barBase);
+  expect(exported.diagnosticSamples[0].barBase).toBe('both');
   expect(exported.diagnosticSamples[0].rendered).toBeCloseTo(.2, 5);
 });
 
@@ -157,8 +156,15 @@ test('audio and motion switches stop independently and route exit closes both pl
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await listening(page).uncheck();
   await expect(page.getByRole('checkbox', { name: 'Phone motion', exact: true })).toBeChecked();
-  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } })));
-  await expect.poll(() => page.evaluate(() => Array.from(savedView.input.slice(24, 27)))).toEqual([-5, -6, -7]);
+  // Read the force in the page's next frame, before its 150 ms sensor expiry.
+  // A separate protocol request can arrive after that expiry on a busy runner.
+  const force = await page.evaluate(() => new Promise(resolve => {
+    requestAnimationFrame(() => {
+      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } }));
+      requestAnimationFrame(() => resolve(Array.from(savedView.input.slice(24, 27))));
+    });
+  }));
+  expect(force).toEqual([-5, -6, -7]);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   expect(await page.evaluate(() => [savedView.closed, savedView.motion.closed, savedView.preview, testContext.state])).toEqual([true, true, null, 'closed']);
@@ -185,10 +191,14 @@ for (const clip of ['trumpet', 'music', 'local']) {
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(0);
     const identity = await page.evaluate(() => document.querySelector('.audio-card').review.identity);
     expect(identity.pcmSha256).toMatch(/^[a-f0-9]{64}$/); expect(identity.channels).toBe(clip === 'local' ? 2 : 1);
-    await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
+    // Exercise native keyboard transport without repeated pointer movement
+    // and layout-stability checks competing with the realtime audio graph.
+    await expect(page.getByRole('button', { name: 'Pause playback', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Pause playback', exact: true }).press('Enter');
     await expect(page.getByRole('button', { name: 'Resume playback', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Resume playback', exact: true }).click();
-    await page.locator('.review-replay').click();
+    await page.getByRole('button', { name: 'Resume playback', exact: true }).press('Enter');
+    await expect(page.locator('.review-replay')).toBeEnabled();
+    await page.locator('.review-replay').press('Enter');
     await page.locator('.review-device').fill('Mac test output'); await page.locator('.review-notes').fill('Automated playback check; human accents, swells and decay judgments pending.');
     await page.locator('.review-note').click();
     const download = page.waitForEvent('download'); await page.locator('.review-export').click();
@@ -198,7 +208,8 @@ for (const clip of ['trumpet', 'music', 'local']) {
     expect(report.sessions[0].timing.length).toBeGreaterThan(0); expect(report.diagnosticSamples.length).toBeGreaterThan(0);
     expect(await page.evaluate(() => captureRequests)).toBe(0);
     expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(false);
-    await page.locator('.review-stop').click();
+    await expect(page.locator('.review-stop')).toBeEnabled();
+    await page.locator('.review-stop').press('Enter');
     await expect(page.locator('.input-source')).toBeEnabled();
     expect(await page.evaluate(() => document.querySelector('.audio-card').review.buffer)).toBeNull();
     expect(errors).toEqual([]);
@@ -249,16 +260,24 @@ test('file picker shares the source row; selecting and replacing files starts au
   expect(await page.evaluate(() => document.querySelector('.audio-card').review.localFile)).toBeNull();
 });
 
-test('identical decoded PCM produces identical raw loudness and filtered targets in the live worklet', async ({ page }) => {
+test('identical decoded PCM produces identical raw loudness and filtered targets in the live worklet', async ({ page }, info) => {
   const { flashTrace } = await import('../partial/flash-fixtures.mjs');
+  const { observePCM } = await import('../pcm-probe.mjs');
+  await observePCM(page, await readFile(new URL('../../musical-lights-worklet/pkg/processor.js', import.meta.url), 'utf8'));
   const module = new WebAssembly.Module(await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url)));
   await advanced(page); await page.locator('.diagnostics-controls > summary').click();
   await page.locator('.input-source').selectOption('local');
   await page.locator('.calibration-controls > summary').click();
   await page.locator('.calibration-controls input[type=number]').first().fill('2');
   await page.locator('.tone-trace').check();
+  await page.evaluate(() => {
+    document.querySelector('.audio-card').addEventListener('tone-trace', ({ detail }) => {
+      if (detail.observedPCM) window.observedPCM = Array.from(detail.observedPCM);
+    });
+  });
   await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave() });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(200);
+  await page.waitForFunction(() => window.observedPCM);
   const data = await page.evaluate(() => {
     const card = document.querySelector('.audio-card'), report = document.querySelector('#dancinglights').physics.report;
     const rows = report.toneChunks.flatMap(chunk => {
@@ -266,15 +285,30 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
       for (let i = 0; i < chunk.values.length; i += chunk.stride) out.push(Array.from(chunk.values.subarray(i, i + chunk.stride)));
       return out;
     });
-    return { pcm: Array.from(card.review.buffer.getChannelData(1)), rows: rows.slice(0, 200) };
+    return { pcm: Array.from(card.review.buffer.getChannelData(1)), observedPCM: window.observedPCM, rows: rows.slice(0, 200), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
   });
-  const expected = flashTrace(module, Float32Array.from(data.pcm));
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(info.outputPath('pcm-boundary.json'), JSON.stringify(data));
+  expect(data.observedPCM).toEqual(data.pcm.slice(0, data.observedPCM.length));
+  expect(Number.isSafeInteger(data.firstSample)).toBe(true);
+  const expected = flashTrace(module, Float32Array.from(data.pcm), false, { firstSample: data.firstSample });
   expect(data.rows).toHaveLength(200);
-  for (let n = 0; n < data.rows.length; n++) {
-    expect(data.rows[n].slice(1, 266)).toEqual(Array.from(expected[n].slice(1, 266)));
-    expect(data.rows[n].slice(267, 316)).toEqual(Array.from(expected[n].slice(267, 316)));
-    for (let b = 0; b < 24; b++) expect(data.rows[n][368 + b * 4]).toBe(expected[n][368 + b * 4]);
+  // Diagnostic delivery has bounded storage and can report dropped rows.
+  // Match the original audio sample timestamps, never shifted traces or IPC
+  // array positions. Raw loudness and filtered targets must remain exact.
+  const bySample = new Map(expected.map(row => [row[0], row]));
+  let previous = data.firstSample - 96, missing = 0;
+  for (const row of data.rows) {
+    expect(row[0]).toBeGreaterThan(previous);
+    expect((row[0] - previous) % 96).toBe(0);
+    missing += (row[0] - previous) / 96 - 1; previous = row[0];
+    const reference = bySample.get(row[0]);
+    expect(reference, `audio sample ${row[0]}`).toBeDefined();
+    expect(row.slice(1, 266)).toEqual(Array.from(reference.slice(1, 266)));
+    expect(row.slice(267, 316)).toEqual(Array.from(reference.slice(267, 316)));
+    for (let b = 0; b < 24; b++) expect(row[368 + b * 4]).toBe(reference[368 + b * 4]);
   }
+  expect(data.dropped).toBeGreaterThanOrEqual(missing);
   const raw = data.rows.at(-1).slice(291, 315);
   expect(raw.indexOf(Math.max(...raw))).toBe(16); // Channel 2's 3.4 kHz, not channel 1's 250 Hz.
 });

@@ -8,6 +8,10 @@ test.afterEach(async ({ page }, info) => {
       error: document.querySelector('.audio-error')?.textContent,
       context: window.exerciseContext?.state,
       audioTime: window.exerciseContext?.currentTime,
+      events: window.audioEvents,
+      focus: document.activeElement?.className,
+      rows: document.querySelector('#dancinglights')?.physics?.report?.toneRows,
+      lastISO: document.querySelector('#dancinglights')?.physics?.report?.toneChunks.at(-1)?.values.slice(-511, -508),
     })).catch(error => String(error)));
   }
 });
@@ -41,13 +45,10 @@ for (const stage of ['warmup', 'measurement']) {
       if (action === 'stop') await page.locator('.review-stop').click();
       if (action === 'interruption') await page.evaluate(() => window.exerciseContext.suspend());
       if (action === 'end') {
-        // Turn looping off in the source, without the UI's change event, so
-        // this exercises the natural AudioBufferSourceNode ended callback.
+        // Stop repeating the short fixture in the actual PCM processor.
+        // Its real end acknowledgement invalidates the acceptance workload.
         await page.evaluate(() => {
-          window.exerciseSource.loop = false;
-          // Reach the actual buffer end promptly even when realtime audio
-          // advances slowly on a contended host; do not synthesize onended.
-          window.exerciseSource.playbackRate.value = 64;
+          window.exerciseSource.port.postMessage({ type: 'repeat', repeat: false, sequence: 0 });
         });
       }
       await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid.length), { timeout: 10000 }).toBeGreaterThan(0);
@@ -58,13 +59,25 @@ for (const stage of ['warmup', 'measurement']) {
     });
   }
 }
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    const create = AudioContext.prototype.createBufferSource;
-    AudioContext.prototype.createBufferSource = function () {
-      const source = create.call(this); window.exerciseSource = source; window.exerciseContext = this; return source;
+test.beforeEach(async ({ page }, info) => {
+  await page.addInitScript(shortEnd => {
+    const Context = window.AudioContext, Worklet = window.AudioWorkletNode;
+    window.AudioContext = class extends Context {
+      constructor(...args) { super(...args); window.exerciseContext = this; }
     };
-  });
+    window.AudioWorkletNode = class extends Worklet {
+      constructor(context, name, options) {
+        // Bound only the end-test fixture duration; retain the real processor,
+        // output graph and natural completion message.
+        if (name === 'pcm-playback' && shortEnd)
+          options.processorOptions.pcm = options.processorOptions.pcm.slice(0, 96000);
+        super(context, name, options);
+        if (name === 'pcm-playback') window.exerciseSource = this;
+      }
+    };
+    window.audioEvents = [];
+    document.addEventListener('audio-session', ({ detail }) => window.audioEvents.push(detail), true);
+  }, /end invalidates|naturally ended/.test(info.title));
 });
 
 test('each microphone session resets diagnostics and rejects stale tone packets', async ({ page }) => {
@@ -160,13 +173,13 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
   });
 }
 
-test('an old source ended callback cannot end a resumed session', async ({ page }) => {
+test('a stale completion message cannot end a resumed session', async ({ page }) => {
   await acceptancePage(page);
-  await page.evaluate(() => { window.oldEnded = window.exerciseSource.onended; });
+  await page.evaluate(() => { window.oldCompletion = window.exerciseSource.port.onmessage; });
   await page.locator('.tone-pause').click();
   await page.locator('.tone-pause').click();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
-  await page.evaluate(() => window.oldEnded());
+  await page.evaluate(() => window.oldCompletion({ data: { type: 'transport', sequence: 0, frame: 0, positionFrame: 0, state: 'ended', repeat: false } }));
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await page.locator('.phone-start').click();
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.active)).toBe(true);
@@ -196,30 +209,40 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
   await page.locator('.review-start').click();
   await expect(page.locator('.review-start')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
+  const pause = page.getByRole('button', { name: 'Pause playback', exact: true });
+  await expect(pause).toBeEnabled();
+  await pause.focus();
   for (let cycle = 0; cycle < 6; cycle++) {
-    await page.getByRole('button', { name: 'Pause playback', exact: true }).click();
+    // The same transport button keeps focus as its label changes. Send the
+    // user's repeated keys without refocusing and scrolling it each time.
+    await page.keyboard.press('Enter');
     // Use measured ISO loudness to prove that pause supplies silence while
     // the analysis clock continues, then that resume restores the signal.
-    await expect.poll(() => page.evaluate(() => {
+    // Wait in the page so six cycles do not pay repeated protocol round trips
+    // while the native analysis release runs. Keep the measured thresholds.
+    await page.waitForFunction(() => {
       const r = document.querySelector('#dancinglights').physics.report, c = r.toneChunks.at(-1);
-      return c?.values[c.values.length - c.stride + 1];
-    }), { timeout: 10000 }).toBeLessThan(.01);
-    await page.getByRole('button', { name: 'Resume playback', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => {
+      return c?.values[c.values.length - c.stride + 1] < .01
+        && document.querySelector('.tone-pause').textContent === 'Resume playback';
+    }, null, { timeout: 10000 });
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => {
       const r = document.querySelector('#dancinglights').physics.report, c = r.toneChunks.at(-1);
-      return c?.values[c.values.length - c.stride + 1];
-    })).toBeGreaterThan(1);
-    await expect(page.getByRole('alert')).toBeEmpty();
+      return c?.values[c.values.length - c.stride + 1] > 1
+        && document.querySelector('.tone-pause').textContent === 'Pause playback'
+        && document.querySelector('[role="alert"]').textContent.trim() === '';
+    }, null, { timeout: 5000 });
   }
-  await page.locator('.review-stop').click();
+  await page.locator('.review-stop').press('Enter');
 });
 
-test('a naturally ended tone restarts and ignores the replaced source callback', async ({ page }) => {
+test('a naturally ended tone restarts and ignores the preceding completion', async ({ page }) => {
   await acceptancePage(page, false);
-  await page.evaluate(() => { window.oldEnded = window.exerciseSource.onended; window.exerciseSource.playbackRate.value = 64; });
+  await page.evaluate(() => { window.oldCompletion = window.exerciseSource.port.onmessage; });
   await expect(page.locator('.tone-pause')).toHaveText('Replay');
-  await page.locator('.tone-pause').click();
-  await page.evaluate(() => window.oldEnded());
+  await page.locator('.tone-repeat').check();
+  await page.locator('.tone-pause').press('Enter');
+  await page.evaluate(() => window.oldCompletion({ data: { type: 'transport', sequence: 0, frame: 0, positionFrame: 0, state: 'ended', repeat: false } }));
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await expect(page.getByRole('alert')).toBeEmpty();

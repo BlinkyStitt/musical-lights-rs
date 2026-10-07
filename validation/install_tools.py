@@ -41,9 +41,28 @@ def download(url: str, destination: Path) -> None:
                 time.sleep(2**attempt)
 
 
+def install_archive(url, binaries, bindir):
+    with tempfile.TemporaryDirectory() as directory:
+        archive = Path(directory) / "tools.tar.gz"
+        download(url, archive)
+        with tarfile.open(archive) as package:
+            for binary in binaries:
+                member = next(
+                    m
+                    for m in package.getmembers()
+                    if m.isfile() and Path(m.name).name == binary
+                )
+                source = package.extractfile(member)
+                if source is None:
+                    raise ValueError(f"Missing binary {binary}")
+                with source, (bindir / binary).open("wb") as destination:
+                    shutil.copyfileobj(source, destination)
+                (bindir / binary).chmod(0o755)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("group", choices=["web", "site", "demos", "esp"])
+    parser.add_argument("group", choices=["web", "site", "demos", "esp", "ci"])
     args = parser.parse_args()
     machine = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64"}[
         platform.machine()
@@ -52,7 +71,15 @@ def main():
     target = f"{machine}-{system}"
     bindir = ROOT / ".tools/bin"
     bindir.mkdir(parents=True, exist_ok=True)
-    if args.group == "esp":
+    if args.group == "ci":
+        archive_system = {"Darwin": "darwin", "Linux": "linux"}[platform.system()]
+        archive_machine = {"aarch64": "arm64", "x86_64": "amd64"}[machine]
+        install_archive(
+            f"https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_{archive_system}_{archive_machine}.tar.gz",
+            ["actionlint"],
+            bindir,
+        )
+    elif args.group == "esp":
         download(
             f"https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-{target}",
             bindir / "espup",
@@ -117,25 +144,11 @@ def main():
                 release for release in releases if release[0] != "trunk-rs/trunk"
             ]
         for repository, tag, asset, binaries in releases:
-            with tempfile.TemporaryDirectory() as directory:
-                archive = Path(directory) / asset
-                download(
-                    f"https://github.com/{repository}/releases/download/{tag}/{asset}",
-                    archive,
-                )
-                with tarfile.open(archive) as package:
-                    for binary in binaries:
-                        member = next(
-                            m
-                            for m in package.getmembers()
-                            if m.isfile() and Path(m.name).name == binary
-                        )
-                        source = package.extractfile(member)
-                        if source is None:
-                            raise ValueError(f"Missing binary {binary} in {asset}")
-                        with source, (bindir / binary).open("wb") as destination:
-                            shutil.copyfileobj(source, destination)
-                        (bindir / binary).chmod(0o755)
+            install_archive(
+                f"https://github.com/{repository}/releases/download/{tag}/{asset}",
+                binaries,
+                bindir,
+            )
     print(f"Add {bindir} to PATH")
 
 

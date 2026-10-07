@@ -162,6 +162,7 @@ export class VisualizerScreen {
     this.window.addEventListener?.('orientationchange', this.onViewportChange);
     this.window.visualViewport?.addEventListener?.('resize', this.onViewportChange);
     this.orientation?.addEventListener?.('change', this.onViewportChange);
+    if (this.window.matchMedia?.('(pointer: coarse) and (max-width: 900px)').matches) this.setExpanded(true);
     this.acquireLock();
   }
 

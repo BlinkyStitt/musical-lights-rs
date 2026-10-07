@@ -140,8 +140,11 @@ Optional v5 diagnostics attach at most 64 rows of 511 f64 values. Offsets are
 partial sones, 315: gain, 316: novelty, 340: summed log magnitudes, 364: browser
 snapshot (99 values), 463: 24 acoustic event timestamps (-1 means none),
 487: 24 cumulative visual suppression counts. Historical v1–v4 layouts remain readable through `trace-layout.mjs`.
-Every packet has its session identifier; lost rows are counted. Recording is
-bounded to 50,000 rows and 25,000 physics snapshots. Every input start resets
+Every packet has its session identifier; lost rows are counted. Each recording
+also has the first input sample's absolute AudioContext clock. The
+context can run before its input connects, so that clock need not start at zero.
+PCM replay uses this recorded origin and the original sample timestamps.
+Recording is bounded to 50,000 rows and 25,000 physics snapshots. Every input start resets
 buffers and source metadata, including microphone restarts; stale sessions are
 rejected. Diagnostics must be off for phone FPS acceptance.
 

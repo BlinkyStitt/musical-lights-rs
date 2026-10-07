@@ -8,14 +8,17 @@ export async function staticPreview(context, url) {
   const root=resolve('musical-leptos/dist');
   // AudioWorklet module fetches bypass Playwright routing. Supply the exact
   // built script through a Blob URL; its actual processor and WASM still run.
-  await context.addInitScript(source => {
+  const runtime = await runtimeRoot(root);
+  const sources = Object.fromEntries(await Promise.all(['processor.js', 'pcm-playback.js'].map(async name => [name, await readFile(resolve(runtime, 'loudness', name), 'utf8')])));
+  await context.addInitScript(sources => {
     const prototype=AudioWorklet.prototype, add=prototype.addModule;
     prototype.addModule=async function(url,options) {
-      if(new URL(url,document.baseURI).pathname.endsWith('/loudness/processor.js') === false) return add.call(this,url,options);
-      const local=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
+      const path = new URL(url,document.baseURI).pathname, name = path.split('/').at(-1);
+      if(!path.endsWith('/loudness/' + name) || !sources[name]) return add.call(this,url,options);
+      const local=URL.createObjectURL(new Blob([sources[name]],{type:'text/javascript'}));
       try {return await add.call(this,local,options);} finally {URL.revokeObjectURL(local);}
     };
-  }, await readFile(resolve(await runtimeRoot(root),'loudness/processor.js'),'utf8'));
+  }, sources);
   const types={'.html':'text/html','.js':'text/javascript','.wasm':'application/wasm','.css':'text/css','.png':'image/png','.ico':'image/x-icon'};
   await context.route('https://musical-lights.test/**',async route=>{
     let path=resolve(root,`.${decodeURIComponent(new URL(route.request().url()).pathname)}`);
