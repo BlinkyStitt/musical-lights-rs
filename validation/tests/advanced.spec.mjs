@@ -260,16 +260,24 @@ test('file picker shares the source row; selecting and replacing files starts au
   expect(await page.evaluate(() => document.querySelector('.audio-card').review.localFile)).toBeNull();
 });
 
-test('identical decoded PCM produces identical raw loudness and filtered targets in the live worklet', async ({ page }) => {
+test('identical decoded PCM produces identical raw loudness and filtered targets in the live worklet', async ({ page }, info) => {
   const { flashTrace } = await import('../partial/flash-fixtures.mjs');
+  const { observePCM } = await import('../pcm-probe.mjs');
+  await observePCM(page, await readFile(new URL('../../musical-lights-worklet/pkg/processor.js', import.meta.url), 'utf8'));
   const module = new WebAssembly.Module(await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url)));
   await advanced(page); await page.locator('.diagnostics-controls > summary').click();
   await page.locator('.input-source').selectOption('local');
   await page.locator('.calibration-controls > summary').click();
   await page.locator('.calibration-controls input[type=number]').first().fill('2');
   await page.locator('.tone-trace').check();
+  await page.evaluate(() => {
+    document.querySelector('.audio-card').addEventListener('tone-trace', ({ detail }) => {
+      if (detail.observedPCM) window.observedPCM = Array.from(detail.observedPCM);
+    });
+  });
   await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave() });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(200);
+  await page.waitForFunction(() => window.observedPCM);
   const data = await page.evaluate(() => {
     const card = document.querySelector('.audio-card'), report = document.querySelector('#dancinglights').physics.report;
     const rows = report.toneChunks.flatMap(chunk => {
@@ -277,8 +285,11 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
       for (let i = 0; i < chunk.values.length; i += chunk.stride) out.push(Array.from(chunk.values.subarray(i, i + chunk.stride)));
       return out;
     });
-    return { pcm: Array.from(card.review.buffer.getChannelData(1)), rows: rows.slice(0, 200), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
+    return { pcm: Array.from(card.review.buffer.getChannelData(1)), observedPCM: window.observedPCM, rows: rows.slice(0, 200), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
   });
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(info.outputPath('pcm-boundary.json'), JSON.stringify(data));
+  expect(data.observedPCM).toEqual(data.pcm.slice(0, data.observedPCM.length));
   expect(Number.isSafeInteger(data.firstSample)).toBe(true);
   const expected = flashTrace(module, Float32Array.from(data.pcm), false, { firstSample: data.firstSample });
   expect(data.rows).toHaveLength(200);
