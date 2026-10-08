@@ -113,7 +113,10 @@ require no rendering code in core.
 Quiet/Loud guides project both banks through the current camera. The camera
 reserves space for their labels so all four remain visible at oblique angles. A small BPM
 readout beside Scroll lights uses the smoothed estimate and shows uncertainty
-in its help text. It does not announce every update.
+in its help text. It appears only during active audio playback, including
+digital sources with Listening off. Pause, natural end and stop hide it.
+Silence holds the last reliable tempo briefly, then eases toward 60 BPM.
+It does not announce every update.
 
 ## Verification and release boundary
 

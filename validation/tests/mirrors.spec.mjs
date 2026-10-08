@@ -290,3 +290,21 @@ test('whole-cell rejection preserves ray-portal pixels from both sides, above an
   });
   for(const result of results) expect(result.changed,JSON.stringify(result)).toBe(0);
 });
+
+test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }) => {
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.tone-repeat').check(); await page.locator('.tone-audible').uncheck();
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+  await expect(page.locator('.listening-toggle')).not.toBeChecked();
+  await expect(page.locator('.tempo-readout')).toBeVisible();
+  await page.locator('.tone-pause').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','paused');
+  await expect(page.locator('.tempo-readout')).toBeHidden();
+  await page.locator('.tone-pause').click();
+  await expect(page.locator('.tempo-readout')).toBeVisible();
+  await page.locator('.tone-repeat').uncheck();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
+  await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+});

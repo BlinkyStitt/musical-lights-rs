@@ -137,7 +137,7 @@ export class PhysicsView {
       if (now - (this.tempoReadoutAt ?? -Infinity) >= 1000) {
         this.tempoReadoutAt = now;
         const readout = this.card.querySelector('.tempo-readout');
-        if (readout) { readout.hidden = this.idle; readout.textContent = this.idle ? '' : `${Math.round(this.tempo)} BPM`; readout.title = this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'No reliable beat; easing toward 60 BPM'; }
+        if (readout) { const playing = this.card.dataset.audioState === 'playing'; readout.hidden = !playing; readout.textContent = playing ? `${Math.round(this.tempo)} BPM` : ''; readout.title = this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'No reliable beat; easing toward 60 BPM'; }
       }
       this.updateCamera(now);
       const rendered = this.current && this.sceneVisible;
@@ -183,7 +183,7 @@ export class PhysicsView {
       this.card.dataset.preview = String(this.idle);
       this.tempoReadoutAt = -Infinity;
       const readout = this.card.querySelector('.tempo-readout');
-      if (this.idle && readout) { readout.hidden = true; readout.textContent = ''; }
+      if (detail.state !== 'playing' && readout) { readout.hidden = true; readout.textContent = ''; }
       if (this.idle) { this.tempo = 120; this.tempoConfidence = 0; this.startPreview(); } else this.stopPreview();
     });
     if (this.idle) this.startPreview();
