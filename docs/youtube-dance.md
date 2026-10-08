@@ -111,9 +111,10 @@ measured separately from worker physics cost. Physical embedded mirrors
 require no rendering code in core.
 
 Quiet/Loud guides project both banks through the current camera. The camera
-reserves space for their labels so all four remain visible at oblique angles. A small BPM
-readout beside Scroll lights uses the smoothed estimate and shows uncertainty
-in its help text. It appears only during active audio playback, including
+reserves space for their labels so all four remain visible at oblique angles.
+Guides draw above the scene and let pointer input pass through to the meters.
+A small BPM readout beside Scroll lights uses the smoothed estimate and shows
+uncertainty in its help text. It appears only during active audio playback, including
 digital sources with Listening off. Pause, natural end and stop hide it.
 Silence holds the last reliable tempo briefly, then eases toward 60 BPM.
 It does not announce every update.

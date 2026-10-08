@@ -37,11 +37,16 @@ test('paired physical bars and both Quiet/Loud guides follow the rotated camera'
         const box = node.getBoundingClientRect();
         return box.x >= graph.x && box.right <= graph.right && box.y >= graph.y && box.bottom <= graph.bottom;
       });
-      return { guides, corners, labelsVisible };
+      const guideStyle = getComputedStyle(v.graph.querySelector('.meter-guide'));
+      return { guides, corners, labelsVisible,
+        guideAboveScene: Number(guideStyle.zIndex) > Number(getComputedStyle(v.layer).zIndex),
+        guidesIgnorePointer: guideStyle.pointerEvents === 'none' };
     });
     expect(Math.max(...alignment.guides)).toBeLessThan(1.5);
     expect(Math.max(...alignment.corners)).toBeLessThan(1);
     expect(alignment.labelsVisible).toBe(true);
+    expect(alignment.guideAboveScene).toBe(true);
+    expect(alignment.guidesIgnorePointer).toBe(true);
   }
 });
 
