@@ -551,7 +551,7 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
     const span=result.samples.filter(s=>s.time>=start&&s.time<=end);
     for(let i=1;i<span.length;i++) expect(direction*(span[i].yaw-span[i-1].yaw)).toBeGreaterThan(0);
   }
-  expect(result.nearTurn[1]).toBeCloseTo(30,6);
+  expect(result.nearTurn[1]).toBeCloseTo(20,6);
   expect(Math.max(...result.nearTurn)-Math.min(...result.nearTurn)).toBeLessThan(.1);
   await page.emulateMedia({reducedMotion:'reduce'});
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.reduced.matches)).toBe(true);

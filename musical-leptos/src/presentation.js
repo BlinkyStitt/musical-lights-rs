@@ -1,7 +1,7 @@
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 3, scrolling: true, youtubeLink: '' });
+  cameraMotion: true, cameraAngle: 0, mirrorCount: 3, scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds] };
   try {
@@ -69,11 +69,16 @@ export class Presentation {
     this.originalAudioType = navigator.audioSession?.type;
     this.microphoneActive = false; this.videoPlaying = false;
     this.row = card.querySelector('.button-row'); this.panel = card.querySelector('.video-panel');
-    this.panel.innerHTML = `<form class="video-form"><label>YouTube link<input class="youtube-link" type="url" placeholder="https://youtu.be/…" maxlength="2048" /></label><button type="submit">Load video</button><button type="button" class="remove-video">Remove video</button></form><div class="youtube-frame"></div><p class="youtube-status" role="status"></p>`;
+    this.panel.innerHTML = `<form class="video-form"><label>YouTube link<span class="youtube-input"><input class="youtube-link" aria-label="YouTube link" type="url" placeholder="https://youtu.be/…" maxlength="2048" /><button type="button" class="clear-youtube" aria-label="Clear YouTube link" title="Clear YouTube link">×</button></span></label><button type="submit">Load video</button><button type="button" class="remove-video">Remove video</button></form><div class="youtube-frame"></div><p class="youtube-status" role="status"></p>`;
     this.videoButton = document.createElement('button'); this.videoButton.type = 'button'; this.videoButton.className = 'video-button'; this.videoButton.textContent = 'Video';
     this.videoButton.setAttribute('aria-expanded', 'false'); this.row.insertBefore(this.videoButton, this.row.querySelector('.fullscreen-button'));
     this.listen(this.videoButton, 'click', () => { this.panel.hidden = false; this.card.classList.add('video-active', 'video-editing'); this.videoButton.setAttribute('aria-expanded', 'true'); this.panel.querySelector('input').focus(); });
     this.listen(this.panel.querySelector('form'), 'submit', event => { event.preventDefault(); this.loadVideo(this.panel.querySelector('input').value); });
+    this.listen(this.panel.querySelector('.clear-youtube'), 'click', () => {
+      const input = this.panel.querySelector('input'); input.value = ''; input.focus();
+      this.settings.youtubeLink = ''; this.save();
+      this.panel.querySelector('.youtube-status').textContent = '';
+    });
     this.listen(this.panel.querySelector('.remove-video'), 'click', () => { this.generation++; this.player?.destroy(); this.player = null; this.videoPlaying = false; this.updateAudioType(); this.panel.hidden = true; this.card.classList.remove('video-active', 'video-editing'); this.videoButton.setAttribute('aria-expanded', 'false'); this.settings.youtubeLink = ''; this.panel.querySelector('input').value = ''; this.save(); });
     this.panel.querySelector('input').value = this.settings.youtubeLink;
     this.popup = document.createElement('div'); this.popup.id = 'control-help'; this.popup.className = 'control-help'; this.popup.hidden = true; this.popup.setAttribute('role', 'tooltip'); card.append(this.popup);
@@ -103,7 +108,6 @@ export class Presentation {
     card.querySelector('.camera-rotation').value = this.settings.cameraAngle;
     this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, mirrorCount: DEFAULT_SETTINGS.mirrorCount, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle'], ['.mirror-count', 'mirrorCount']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
     this.save(false);
-    if (this.settings.youtubeLink) this.loadVideo(this.settings.youtubeLink);
     card.presentation = this;
   }
   listen(target, type, callback, options) { target.addEventListener(type, callback, options); this.removers.push(() => target.removeEventListener(type, callback, options)); }
@@ -153,6 +157,9 @@ export class Presentation {
     const status = this.panel.querySelector('.youtube-status');
     let video; try { video = parseYouTube(link); } catch (error) { status.textContent = error.message; return; }
     const generation = ++this.generation;
+    // Remember the submitted field now. A later clear must remain cleared,
+    // even if the player API finishes loading after that action.
+    this.settings.youtubeLink = link; this.save();
     this.panel.hidden = false; this.card.classList.add('video-active'); this.videoButton.setAttribute('aria-expanded', 'true'); status.textContent = 'Loading YouTube…';
     try {
       const YT = await youtubeAPI(); if (this.closed || generation !== this.generation) return;
@@ -170,7 +177,6 @@ export class Presentation {
           onStateChange: ({ data }) => { if (this.closed || generation !== this.generation) return; this.videoPlaying = data === 1; if (data === 1 && this.card.dataset.audioSource && this.card.dataset.audioSource !== 'microphone') { const source = this.card.querySelector('.input-source'); if (source) source.value = 'microphone'; this.card.dispatchEvent(new CustomEvent('review-input', { detail: { source: 'microphone', play: false } })); } this.updateAudioType(); },
           onError: ({ data }) => { if (this.closed || generation !== this.generation) return; status.textContent = ({ 100: 'This video is unavailable.', 101: 'This video does not allow embedding.', 150: 'This video does not allow embedding.', 153: 'YouTube could not identify this page. Reload and try again.' })[data] ?? 'YouTube playback failed. Try another video.'; this.videoPlaying = false; this.updateAudioType(); },
         } });
-      this.settings.youtubeLink = link; this.save();
     } catch (error) { if (!this.closed && generation === this.generation) status.textContent = error.message; }
   }
   close() { this.closed = true; this.generation++; this.observer.disconnect(); for (const remove of this.removers) remove(); this.player?.destroy(); this.hideHelp(); this.microphoneActive = this.videoPlaying = false; this.updateAudioType(); this.popup.remove(); delete this.card.presentation; }

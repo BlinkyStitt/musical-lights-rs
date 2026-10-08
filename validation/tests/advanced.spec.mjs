@@ -52,6 +52,21 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect(page.locator('.mic-status')).toBeEmpty();
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)).every(value => value === 0))).toBe(true);
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-valuenow') === '0'))).toBe(true);
+  const wave = () => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    const travel = v.current[v.layout[17] + 1] - v.layout[13];
+    return Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.layout[13]) / travel);
+  });
+  await expect.poll(async () => Math.max(...await wave())).toBeGreaterThan(.12);
+  // Wait for the taller idle preview to retract to the listening floor.
+  await expect.poll(async () => Math.max(...await wave())).toBeLessThan(.18);
+  const before = await wave();
+  expect(Math.max(...before)).toBeLessThan(.18);
+  expect(Math.min(...before)).toBeLessThan(.04);
+  await expect.poll(async () => (await wave()).some((value, i) => Math.abs(value - before[i]) > .02)).toBe(true);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(async () => Math.max(...await wave())).toBeLessThan(.001);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await listening(page).uncheck();
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => Math.max(...nodes.map(n => Number(n.getAttribute('aria-valuenow')))))).toBeGreaterThan(0);
 });

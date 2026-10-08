@@ -1,6 +1,8 @@
 # YouTube, fullscreen controls, and musical dance
 
-Paste a YouTube video link through **Video**, then choose **Load video**. Loading
+Open **Video** to use the default link or paste another video link, then choose
+**Load video**. The × button clears the field and saves the empty preference
+without stopping the current video; **Remove video** stops the player. Loading
 does not start playback or request the microphone. The embedded player keeps
 YouTube's controls and inline playback. The app supports watch, short, live,
 embed, and youtu.be links with optional start times. It does not search YouTube.
@@ -31,9 +33,15 @@ in this help. Actionable failures remain in visible recovery notices.
 The single artist/song ticker retains its continuous leftward travel and
 Reduced Motion wrapping. There is no recognition caption or exit-hint banner.
 The camera slider stays below the normal scene on both Home and Advanced. It
-shows rendered yaw, including the gentle ±4° sway and bounded attack kick.
-Dragging temporarily stops automatic motion. Reduced Motion disables sway,
-kicks, scrolling, direction draws, and extra pigment drift.
+shows rendered yaw, including a smooth 24-second horizontal sweep from −20° to
++20° at the default center angle. A manual center angle limits the sweep to the
+slider range. Dragging temporarily stops automatic motion. Reduced Motion
+disables the sweep, scrolling, direction draws, and extra pigment drift.
+
+Listening adds a small travelling wave in silence, up to one sixth of bar
+travel. Louder audio replaces this decorative floor. Audio meters still show
+measured audio, and the wave creates no attack flashes or direction draws.
+Reduced Motion disables this extra wave.
 
 ## Embedded contract
 

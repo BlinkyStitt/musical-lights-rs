@@ -68,6 +68,16 @@ pub fn idle_wave(column: usize, columns: usize, seconds: f64, reduced: bool) -> 
         * Float::sin(core::f64::consts::TAU * (column as f64 / columns as f64 - seconds / period))
 }
 
+/// Decorative microphone-listening floor, separate from measured loudness.
+/// One sixth of bar travel at most; louder audio replaces it. No attack cues.
+pub fn listening_level(level: f32, column: usize, seconds: f64, reduced: bool) -> f32 {
+    if reduced || !seconds.is_finite() {
+        return level;
+    }
+    let phase = core::f64::consts::TAU * (column as f64 / 24.0 - (seconds % 6.0) / 6.0);
+    level.max(((1.0 + Float::sin(phase)) / 12.0) as f32)
+}
+
 /// Implicit quadratic sphere drag: Cd=0.47, rho=1.225 kg/m³. Multiplier always
 /// stays in [0,1], including very fast velocities and large time steps.
 pub fn sphere_drag_factor(radius: f32, speed: f32, mass: f32, dt: f32) -> f32 {
@@ -91,6 +101,17 @@ pub fn remember_pigment(history: &mut [f32; 9], pigment: [f32; 3]) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn listening_floor_is_small_travelling_and_separate_from_louder_audio() {
+        for band in 0..24 {
+            let level = listening_level(0.0, band, 0.0, false);
+            assert!((0.0..=1.0 / 6.0).contains(&level));
+            assert_eq!(listening_level(0.7, band, 0.0, false), 0.7);
+            assert_eq!(listening_level(0.0, band, 3.0, true), 0.0);
+            assert!((level - listening_level(0.0, (band + 6) % 24, 1.5, false)).abs() < 1e-7);
+        }
+        assert_eq!(listening_level(0.5, 0, f64::NAN, false), 0.5);
+    }
     use super::*;
     #[test]
     fn paired_strokes_leave_the_reserved_room() {

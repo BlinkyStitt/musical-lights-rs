@@ -75,6 +75,14 @@
   or black bar borders. Retain white attack edges. Repeat source lighting across
   the five banks and depth copies, with one outer coating and no internal walls.
   Normal-page scenes use equal gutters and a responsive 320–560 pixel height.
+- Listening adds a core-owned travelling floor of at most one sixth of bar
+  travel. Keep measured loudness, filtered targets, accessible audio meters and
+  attack eligibility separate. Disable this floor under Reduced Motion and
+  when the microphone session stops or is interrupted. Record the combined
+  visual inputs so physics replay reproduces the wave.
+- Prefill the YouTube field with the default video. Load only on an explicit
+  Load video action. Clearing the field preserves the playing video and saves
+  the empty preference; Remove video stops the player.
 
 # Validation and delivery evidence
 

@@ -29,6 +29,27 @@ async function load(page) {
   await expect(page.locator('.youtube-status')).toBeEmpty();
   await expect(page.locator('.youtube-frame iframe')).toBeVisible();
 }
+test('default video is ready to load and the clear button preserves playback and an empty preference', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(page.locator('.youtube-link')).toHaveValue('https://www.youtube.com/watch?v=6d4NOjyd2Ik');
+  await expect(page.locator('.youtube-frame iframe')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await expect(page.locator('.youtube-frame iframe')).toHaveAttribute('src', /embed\/6d4NOjyd2Ik/);
+  await page.evaluate(() => window.videoPlayer.playVideo());
+  const clear = page.getByRole('button', { name: 'Clear YouTube link', exact: true });
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  expect(await clear.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await clear.focus(); await page.keyboard.press('Enter');
+  await expect(page.locator('.youtube-link')).toHaveValue('');
+  await expect(page.locator('.youtube-link')).toBeFocused();
+  expect(await page.evaluate(() => window.videoPlayer.destroyed ?? false)).toBe(false);
+  expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
+  expect(await page.evaluate(() => window.micRequests)).toBe(0);
+  await page.reload(); await physicsReady(page); await normalView(page);
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(page.locator('.youtube-link')).toHaveValue('');
+});
 for (const path of ['/', '/advanced/']) {
   test(`YouTube loads without microphone capture and reserves fullscreen regions on ${path}`, async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });

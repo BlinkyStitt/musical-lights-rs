@@ -34,6 +34,30 @@ test('worker ready separates restored settings from factory defaults', async () 
   } finally { w.close(); }
 });
 
+test('worker records listening-floor inputs for exact replay without adding accents', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'record', config: w.ready.config });
+    const values = new Float32Array(38); values[32] = .6;
+    for (let frame = 0; frame < 60; frame++) {
+      await w.send({ type: 'pulse', timestamp: 1000 + frame * 1000 / 60,
+        input: values.slice(), listening: true, tempo: 60, accent: 0 });
+      w.advance(1000 / 60);
+    }
+    await w.send({ type: 'pulse', timestamp: 2000, input: values.slice(), listening: false, tempo: 60, accent: 0 });
+    w.advance(500);
+    await w.send({ type: 'report' });
+    const report = w.messages.at(-1);
+    assert(report.inputs.some(event => Math.max(...event.values.slice(0, 24)) > .15));
+    assert(report.inputs.every(event => Math.max(...event.values.slice(0, 24)) <= 1 / 6 + 1e-7));
+    assert(report.inputs.every(event => event.accent === 0));
+    assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
+    assert(values.slice(0, 24).every(value => value === 0));
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v5',
+      palette: Array(72).fill(.5), layout: w.ready.layout })).every(result => result.matches));
+  } finally { w.close(); }
+});
+
 for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 31, 1]]) {
   test(`production worker preserves same-tick input/accent order around ${name}`, async () => {
     const w = await worker();

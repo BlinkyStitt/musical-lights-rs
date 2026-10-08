@@ -10,6 +10,8 @@ test('YouTube links select one video and preserve start times without accepting 
 });
 test('stored display settings restore valid preferences without restoring live permissions', () => {
   const read = saved => readSettings({ getItem(key) { assert.equal(key, SETTINGS_KEY); return JSON.stringify(saved); } });
+  assert.equal(read(null).youtubeLink, 'https://www.youtube.com/watch?v=6d4NOjyd2Ik');
+  assert.equal(read({ version: 1, youtubeLink: '' }).youtubeLink, '');
   assert.deepEqual(read({ version: 1, directionOdds: [80, 180, .1, .6, 2], cameraAngle: -20, cameraMotion: false }).directionOdds, [80, 180, .1, .6, 2]);
   assert.equal(read({ version: 1, cameraMotion: false }).cameraMotion, false);
   for (const mirrorCount of [0, 1, 8, 17]) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, mirrorCount);

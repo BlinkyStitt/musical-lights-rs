@@ -46,15 +46,23 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
       const v = document.querySelector('#dancinglights').physics;
       return Math.max(...Array.from({ length: 24 }, (_, i) => v.renderedHeight(i) - v.layout[13]));
     });
+    const renderedRatio = () => page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      const travel = v.current[v.layout[17] + 1] - v.layout[13];
+      return Math.max(...Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.layout[13]) / travel));
+    });
     await expect.poll(targets).toBe(0);
     // Check past the reported one-second shutdown, then inject actual capture
     // PCM through the MediaStream source, worklet, DSP and renderer.
     await page.waitForTimeout(1500);
     expect(await page.evaluate(() => [testContext.state, captureTrack.readyState, captureStarts])).toEqual(['running', 'live', 1]);
-    await expect.poll(rendered).toBeLessThan(.001);
+    // Silence has a small decorative floor without fabricated audio targets.
+    await expect.poll(renderedRatio).toBeGreaterThan(.12);
+    await expect.poll(renderedRatio).toBeLessThan(.18);
     await page.evaluate(() => captureBurst());
     await expect.poll(targets, { intervals: [10] }).toBeGreaterThan(.2);
     await expect.poll(rendered, { intervals: [10] }).toBeGreaterThan(.05);
+    await expect.poll(renderedRatio, { intervals: [10] }).toBeGreaterThan(.2);
     await expect.poll(targets).toBeLessThan(1e-6); // The filter decays asymptotically.
     if (action === 'Fullscreen') await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await expect(listening(page)).toBeChecked();
