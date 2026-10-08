@@ -126,11 +126,9 @@ for (const width of [375, 1440]) {
         roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i, 1)) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
-    // One additional instanced batch draws both side-wall bar banks. The
-    // original body and source-bar instance counts remain unchanged.
-    // Front, side and ball reflections use bounded parity batches; one box
-    // draws all six coatings.
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(9);
+    // One batch draws all four background banks; three draw depth copies.
+    // One coating batch covers all five boxes, with no frame-line draw.
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(8);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });

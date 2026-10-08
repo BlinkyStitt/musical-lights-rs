@@ -474,3 +474,40 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.reduced.matches)).toBe(true);
   expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;v.cameraControl.blur();v.cameraBase=12;v.updateCamera(30000);return v.rotation;})).toBe(12);
 });
+
+test('depth-copy uploads follow the active count and keep pooled geometry', async ({ page }) => {
+  await page.goto(`${origin}/advanced/`); await physicsReady(page);
+  const evidence = await page.evaluate(() => {
+    const v=document.querySelector('#dancinglights').physics,gl=v.renderer.getContext();
+    v.draw(performance.now());
+    const pools=v.mirrors.meshes.map(({mesh})=>mesh);
+    const original=gl.bufferSubData,records=[];
+    try {
+      for(const count of [0,1,3,17,3]) {
+        v.mirrors.setCount(count);
+        const arrays=new Map();
+        for(const {mesh,staged} of v.mirrors.meshes) {
+          for(const attr of [mesh.instanceMatrix,mesh.instanceColor,...staged.attributes.map(({name})=>mesh.geometry.attributes[name])])
+            arrays.set(attr.array,mesh.count*attr.itemSize*attr.array.BYTES_PER_ELEMENT);
+        }
+        const uploads=[];
+        gl.bufferSubData=function(target,offset,data,start=0,length) {
+          if(arrays.has(data)) uploads.push({expected:arrays.get(data),actual:(length ?? data.length-start)*data.BYTES_PER_ELEMENT});
+          return original.apply(this,arguments);
+        };
+        v.draw(performance.now());
+        records.push({count,uploads,pooled:v.mirrors.meshes.every(({mesh},i)=>mesh===pools[i]),
+          balls:v.balls.count,boxes:v.enclosure.count});
+      }
+    } finally {gl.bufferSubData=original;v.mirrors.setCount(v.settings.mirrorCount);}
+    return records;
+  });
+  for(const record of evidence) {
+    expect(record.pooled).toBe(true);expect(record.balls).toBe(8);expect(record.boxes).toBe(5);
+    if(record.count===0) expect(record.uploads).toHaveLength(0);
+    else {
+      expect(record.uploads.length).toBeGreaterThanOrEqual(6);
+      for(const upload of record.uploads) expect(upload.actual).toBe(upload.expected);
+    }
+  }
+});

@@ -77,6 +77,7 @@ export class MirrorRoom {
       this.walls.setMatrixAt(box, this.wallMatrix);
     }
     this.walls.instanceMatrix.needsUpdate = true;
+    if (this.count === 0) return;
     for (const staged of this.sources) {
       const { source, kind, capacity, halfWidth, matrices, colors, attributes } = staged;
       let n = 0;
@@ -100,7 +101,13 @@ export class MirrorRoom {
       for (const { name, values } of attributes) {
         const out = mesh.geometry.attributes[name];
         for (let c = 0; c < this.count; c++) out.array.set(values, c * values.length);
+        out.clearUpdateRanges(); out.addUpdateRange(0, this.count * values.length);
         out.needsUpdate = true;
+      }
+      // Pools reserve 17 images, but transfer only the active image prefix.
+      // Clear old ranges when drawing was paused or the count changed.
+      for (const attr of [mesh.instanceMatrix, mesh.instanceColor]) {
+        attr.clearUpdateRanges(); attr.addUpdateRange(0, mesh.count * attr.itemSize);
       }
       mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
     }

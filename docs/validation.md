@@ -755,3 +755,21 @@ the same 390 × 844, DPR 3, fourfold-throttled Chromium host profile. The audio
 fixture still uses the real worklet, with diagnostic recording off. This is one
 synthetic host trial of the complete changed scene; it does not isolate the
 extra boxes from the larger camera sweep or establish physical-phone speed.
+
+The renderer limits changed depth-copy buffer uploads to the active prefix of
+the 17-image pools and skips copy staging when the image count is zero. The
+measured five-box, three-image upload budget falls from 396,640 to 92,896 bytes
+per frame (76.6% less), with the same geometry, draw counts and resolution.
+Browser checks inspect actual `bufferSubData` lengths at 0, 1, 3 and 17 images
+and compare pixels against independently translated copies.
+
+The instrumented headless Chromium runs identified SwiftShader software
+rendering. Full-upload trials measured 47.2 and 51.8 FPS; active-range uploads
+measured 51.5 FPS. That variance does not establish an FPS increase. With
+Metal hardware rendering on the Apple M4 Max, the same five-box workload held
+60.0 FPS; 60 GPU timer samples averaged 0.201 ms (p95 0.217 ms), and application
+JavaScript averaged 0.644 ms per frame under fourfold CPU throttle. All use the
+30-second real-worklet synthetic audio fixture, five seconds of warmup, three
+images, the same 390 × 844/DPR 3 profile and diagnostic recording off. Hardware
+and software renderer results are separate evidence; neither proves physical
+Android or iPhone performance.

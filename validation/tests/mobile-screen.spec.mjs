@@ -100,6 +100,9 @@ test('a tapped band shows its color and frequency above the graph for three seco
   // Test color and expiry on a stationary source. Native scrolling target
   // identity is covered by touch-screen, which reads the actual pointer-down.
   await page.locator('.scroll-lights').uncheck();
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.camera-motion').uncheck();
+  await page.locator('.display-controls > summary').click();
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
   const bands = page.getByRole('meter');
