@@ -678,7 +678,7 @@ fixture with the real processor and its real completion acknowledgement.
 
 The renderer uses finite unit-height boxes, scaled to each published physical
 bar height. Their full depth matches the physical support. Matching vertical
-banks fill two adjacent background boxes; all three boxes reuse the same source
+banks fill four adjacent background boxes; all five boxes reuse the same source
 bands and only the center box contains simulated balls. Quiet/Loud guides and
 pointer meters remain attached to the center source bands.
 
@@ -700,12 +700,18 @@ The worker publishes each 120 Hz physics tick with one in-flight snapshot
 buffer. Bars render the newest physical snapshot. They do not wait for interpolation
 from the previous snapshot. Balls and horizontal motion still interpolate.
 `mirrors.spec.mjs` compares all 24 rendered bar heights with the current physical
-snapshot during a rise. Background checks verify all 24 source bands in both
+snapshot during a rise. Background checks verify all 24 source bands in all four
 neighbor boxes, their physical depth and actual lit pixels at steep angles.
 An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
-automatic camera motion while the user sets the angle.
+automatic camera motion while the user sets the angle. Automatic rotation uses a
+24-second horizontal sine cycle through ±30° around the selected center angle,
+with less travel near the slider limits. It has no attack shake or vertical wobble.
+Reduced Motion stops the sweep. The renderer draws no box-frame outlines.
+Expanded Home and Advanced show rendered FPS beside the angle slider, updated
+once per second from actual rendered frames. This readout also works during idle
+preview; it does not measure phone acceptance or audio callback rate.
 Song text scales with both viewport width and height, with a 1 rem minimum, so
 short landscape views retain room for wrapped titles and the slider.
 Wide landscape views use one control row so the video can retain its minimum
@@ -742,3 +748,28 @@ removed. Native Criterion baselines for 240 production physics ticks were
 44.0 ms portrait, 28.0 ms landscape and 51.4 ms for full attacks. Native stack
 samples concentrated in Rapier contact detection and solving; this change
 retains the solver and its collision accuracy.
+
+The follow-up five-box scene, with the new horizontal camera sweep and three
+depth images, measured 52.9 FPS over 30 seconds after five seconds of warmup in
+the same 390 × 844, DPR 3, fourfold-throttled Chromium host profile. The audio
+fixture still uses the real worklet, with diagnostic recording off. This is one
+synthetic host trial of the complete changed scene; it does not isolate the
+extra boxes from the larger camera sweep or establish physical-phone speed.
+
+The renderer limits changed depth-copy buffer uploads to the active prefix of
+the 17-image pools and skips copy staging when the image count is zero. The
+measured five-box, three-image upload budget falls from 396,640 to 92,896 bytes
+per frame (76.6% less), with the same geometry, draw counts and resolution.
+Browser checks inspect actual `bufferSubData` lengths at 0, 1, 3 and 17 images
+and compare pixels against independently translated copies.
+
+The instrumented headless Chromium runs identified SwiftShader software
+rendering. Full-upload trials measured 47.2 and 51.8 FPS; active-range uploads
+measured 51.5 FPS. That variance does not establish an FPS increase. With
+Metal hardware rendering on the Apple M4 Max, the same five-box workload held
+60.0 FPS; 60 GPU timer samples averaged 0.201 ms (p95 0.217 ms), and application
+JavaScript averaged 0.644 ms per frame under fourfold CPU throttle. All use the
+30-second real-worklet synthetic audio fixture, five seconds of warmup, three
+images, the same 390 × 844/DPR 3 profile and diagnostic recording off. Hardware
+and software renderer results are separate evidence; neither proves physical
+Android or iPhone performance.

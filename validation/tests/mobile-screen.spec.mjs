@@ -100,6 +100,9 @@ test('a tapped band shows its color and frequency above the graph for three seco
   // Test color and expiry on a stationary source. Native scrolling target
   // identity is covered by touch-screen, which reads the actual pointer-down.
   await page.locator('.scroll-lights').uncheck();
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.camera-motion').uncheck();
+  await page.locator('.display-controls > summary').click();
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
   const bands = page.getByRole('meter');
@@ -175,7 +178,8 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(page.locator('.calibration-controls')).toBeHidden();
   await expect(page.locator('.control-note')).toBeHidden();
   await expect(page.locator('.wake-status')).toBeHidden();
-  await expect(page.locator('.frame-rate')).toHaveCount(0);
+  await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
+  await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
   for (const label of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
     await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeVisible();
   }

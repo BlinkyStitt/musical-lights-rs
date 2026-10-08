@@ -307,7 +307,9 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     }
     await expect(page.locator('.control-note')).toBeHidden();
     await expect(page.locator('.wake-status')).toBeHidden();
-    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
+    await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
     await expect(page.locator('.site-header')).toBeHidden();
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });

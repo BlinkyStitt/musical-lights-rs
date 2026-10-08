@@ -60,7 +60,7 @@
   measure it; prefer instancing and avoid recursive reflection cameras, shadow
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
-- Mirror count controls drawing only. Two full-size background boxes flank the
+- Mirror count controls drawing only. Four full-size background boxes flank the
   physical center box and reuse all source bands in matching vertical banks.
   Center posts span the collider depth.
   Depth images are fading translated copies, not optical reflections. Do not add
@@ -69,7 +69,9 @@
   Hide BPM when audio stops; silence eases to
   the shared core's 60 BPM fallback without changing loudness or filtered targets.
 - Show one scrolling artist/song title in expanded mode. Keep the progress
-  ring and errors beside Identify song. Home omits FPS, including expanded mode.
+  ring and errors beside Identify song. Show rendered FPS beside the angle slider
+  in expanded mode; normal Home omits FPS. Camera motion uses a smooth horizontal
+  sweep without attack shake or vertical wobble. Do not draw box-frame outlines.
 
 # Validation and delivery evidence
 

@@ -56,7 +56,7 @@ export class PhysicsView {
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
     this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0 };
-    this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.lastAccentAt = -Infinity;
+    this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
     this.timing = { snapshots: [], resizes: [] };
@@ -147,6 +147,12 @@ export class PhysicsView {
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
       if (rendered) { this.metrics.frames++; this.metrics.renderMs += cost; }
+      if (now - this.fpsAt >= 1000) {
+        this.frameRate = `${Math.round((this.metrics.frames - this.fpsFrames) * 1000 / (now - this.fpsAt))} FPS`;
+        this.fpsAt = now; this.fpsFrames = this.metrics.frames;
+        const readout = this.card.querySelector('.frame-rate');
+        if (readout) readout.textContent = this.frameRate;
+      }
       this.report?.frame(frameTime, cost);
       this.notice.sample(this.metrics, now, 1000 / (this.layout?.[1] ?? 120));
       if (!this.lastStatus || now - this.lastStatus > 1000) {
@@ -177,7 +183,7 @@ export class PhysicsView {
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
       if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; }
       const difference = (detail.accentSequence ?? 0) - this.audioAccent;
-      if (difference > 0) { this.accentSerial += difference; this.lastAccentAt = performance.now(); }
+      if (difference > 0) this.accentSerial += difference;
       this.audioAccent = detail.accentSequence ?? 0;
     });
     this.listen(this.card, 'audio-session', ({ detail }) => {
@@ -203,7 +209,7 @@ export class PhysicsView {
       if (data.type === 'error') { this.stopPreview(); this.notice.show(`Silent preview unavailable: ${data.message}`); return; }
       if (!this.idle || this.closed || data.type !== 'frame') return;
       const difference = (data.accentSequence ?? 0) - this.idleAccent;
-      if (difference > 0) { this.accentSerial += difference; this.lastAccentAt = performance.now(); }
+      if (difference > 0) this.accentSerial += difference;
       this.idleAccent = data.accentSequence ?? 0;
       for (let i = 0; i < 24; i++) {
         this.previewLevels[i] = data.state[4 + i * 4];
@@ -300,11 +306,14 @@ export class PhysicsView {
   danceOptions() { return { odds: this.settings.directionOdds, flight: this.settings.flight / 100, seed: this.seed }; }
   updateCamera(now) {
     const moving = this.settings.cameraMotion && !this.reduced.matches && !this.cameraDrag && document.activeElement !== this.cameraControl;
-    const age = Number.isFinite(this.lastAccentAt) ? Math.max(0, now - this.lastAccentAt) : 0;
-    const kick = moving ? 1.5 * Math.exp(-age / 250) * Math.sin(age / 35) : 0;
-    const yaw = Math.max(-40, Math.min(40, this.cameraBase + (moving ? 4 * Math.sin(now / 3600) : 0) + kick));
+    const elapsed = this.cameraAt == null ? 0 : Math.max(0, now - this.cameraAt);
+    this.cameraAt = now;
+    this.cameraTime = moving ? this.cameraTime + elapsed : 0;
+    // Ease through both turns without a clamp, attack kick or vertical wobble.
+    const amplitude = Math.min(30, 40 - Math.abs(this.cameraBase));
+    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 24000) : 0);
     this.automaticCamera = true;
-    this.setCamera(yaw, moving ? Math.sin(now / 4400) * Math.tan(2 * Math.PI / 180) * CAMERA_DISTANCE : 0);
+    this.setCamera(yaw);
     this.automaticCamera = false;
     if (now - (this.sliderAt ?? -Infinity) >= 50) {
       this.sliderAt = now;
@@ -542,6 +551,10 @@ export class PhysicsView {
     if (this.request != null) cancelAnimationFrame(this.request);
     this.request = null;
     const paused = document.hidden || this.lost;
+    this.cameraAt = null;
+    this.fpsAt = performance.now(); this.fpsFrames = this.metrics.frames; this.frameRate = '— FPS';
+    const readout = this.card.querySelector('.frame-rate');
+    if (readout) readout.textContent = this.frameRate;
     this.onFrame(performance.now(), true);
     this.worker?.postMessage({ type: 'pause', paused });
     if (!paused && !this.closed) this.request = requestAnimationFrame(this.animate);

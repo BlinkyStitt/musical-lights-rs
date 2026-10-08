@@ -5,9 +5,12 @@ test.use({ hasTouch: true });
 
 test.beforeEach(async ({ page }) => {
   await page.goto('http://127.0.0.1:8101');
-  // Scrolling has separate pointer identity checks. Keep keyboard sample
+  // Scrolling and camera motion have separate checks. Keep keyboard sample
   // positions fixed while testing focus and readout ownership.
   await page.getByRole('checkbox', { name: 'Scroll lights' }).uncheck();
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.camera-motion').uncheck();
+  await page.locator('.display-controls > summary').click();
 });
 
 function sampleState(index) {
