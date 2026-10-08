@@ -122,8 +122,10 @@ jobs:
             musical-lights-physics/target
             musical-lights-worklet/target
             musical-leptos/target
-          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
+            validation/benchmarks/target
+          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', 'validation/benchmarks/**/*.rs', 'validation/benchmarks/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
+            site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-
             site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-
       - name: Cache renderer package downloads
         if: needs.plan.outputs.reuse != 'true'
@@ -151,7 +153,7 @@ jobs:
         if: needs.plan.outputs.reuse != 'true' && steps.web-tools.outputs.cache-hit != 'true'
       - name: Validate and build compiled packages once
         if: needs.plan.outputs.reuse != 'true'
-        run: python3 validation/validate.py physics worklet leptos
+        run: python3 validation/validate.py physics worklet leptos benchmarks
       - name: Run offline checks and collect full browser inventory
         if: needs.plan.outputs.reuse != 'true'
         working-directory: validation

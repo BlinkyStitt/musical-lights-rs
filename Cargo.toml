@@ -12,5 +12,6 @@ exclude = [
     "musical-lights-worklet",
     "musical-lights-physics",
     "musical-recognition-worker",
+    "validation/benchmarks",
 ]
 resolver = "2"

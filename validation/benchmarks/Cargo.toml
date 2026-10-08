@@ -1,0 +1,23 @@
+[package]
+name = "musical-lights-benchmarks"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+musical-lights-core = { path = "../../musical-lights-core", default-features = false, features = ["libm"] }
+musical-lights-physics = { path = "../../musical-lights-physics" }
+musical-lights-worklet = { path = "../../musical-lights-worklet" }
+
+[dev-dependencies]
+criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "production"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = 1
