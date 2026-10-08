@@ -117,23 +117,20 @@ for (const width of [375, 1440]) {
     expect(raised.balls.some((b, i) => b.color.some((c, j) => c !== initial.balls[i].color[j]))).toBe(true);
     const render = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      // Sample one complete draw, including its intentional interpolation delay.
+      // Sample one complete draw. Bars use the current physical snapshot.
       // Comparing a fast moving render to a different worker snapshot is invalid.
       v.draw(performance.now());
-      const a = v.bars.instanceMatrix.array;
-      const expected = Array.from({ length: 24 }, (_, i) => {
-        const current = v.current[v.layout[9] + i], previous = (v.previous ?? v.current)[v.layout[9] + i];
-        return previous + (current - previous) * v.renderAlpha;
-      });
+      const expected = Array.from({ length: 24 }, (_, i) => v.current[v.layout[9] + i]);
       return { expected, ballInstances: v.balls.count, barInstances: v.bars.count, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
-        tops: Array.from({ length: 24 }, (_, i) => a[i * 16 + 13] + v.layout[6] / 2),
-        roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedEnclosureHeight + v.layout[6] / 2 - a[(i + 72) * 16 + 13]) };
+        tops: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i)),
+        roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i, 1)) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
     // One additional instanced batch draws both side-wall bar banks. The
     // original body and source-bar instance counts remain unchanged.
-    // Six default images use two parity batches, plus the side-bank batch.
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(13);
+    // Front, side and ball reflections use bounded parity batches; one box
+    // draws all six coatings.
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(9);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
@@ -317,7 +314,8 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
   await expect(page.locator('.direction-curve')).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.36, 5);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(0.045, 5);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.enclosure.scale.z)).toBeCloseTo(.36, 5);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.diagnostics-controls > summary').click();
   const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);

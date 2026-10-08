@@ -21,7 +21,7 @@ export class PhoneReport {
     const fields = [
       ['Gravity (m/s²)', 1, 0, 30, .01], ['Density (kg/m³)', 2, 1, 20000, 1],
       ['Bounce (ratio)', 3, 0, 1, .01], ['Friction (ratio)', 4, 0, 2, .01],
-      ['Enclosure depth (m)', 5, .2, 2, .01], ['Large attack duration (ms)', 6, 40, 2000, 10],
+      ['Enclosure depth (m)', 5, .2, 2, .01], ['Bar rise duration (ms)', 6, 20, 2000, 10],
       ['Reduced Motion attack duration (ms)', 7, 320, 4000, 10],
     ];
     this.physicsHost.innerHTML = `<summary>Physics</summary>

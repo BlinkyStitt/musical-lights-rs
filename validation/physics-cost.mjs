@@ -40,7 +40,7 @@ const result = { node: process.version, platform: process.platform, cpu: cpus()[
   durationSeconds: 12, physicsHz: layout[1], runs,
   medianCpuMs: runs.map(run => run.totalMs).sort((a, b) => a - b)[1] };
 // Reproduce the full-height attack separately from the generated-audio workload.
-// Preserve real targets and the controller's 40 ms travel; record overload rather
+// Preserve real targets and the configured rise duration; record overload rather
 // than treating a capped tick as a successful performance acceptance result.
 result.fullAttacks = [];
 for (const height of [.927803, 2.596923]) {

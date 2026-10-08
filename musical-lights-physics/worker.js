@@ -85,9 +85,10 @@ function run() {
   schedule();
 }
 function publish() {
-  // Publish at 60 Hz of simulation time, independently of render callbacks.
+  // Publish each 120 Hz physics tick, independently of render callbacks.
+  // Bars use the newest position; one in-flight buffer still bounds the queue.
   // One transferred buffer bounds queued snapshots even if the main thread stalls.
-  if (!buffer || simulation.tick() < publishedTick + 2) return;
+  if (!buffer || simulation.tick() < publishedTick + 1) return;
   publishedTick = simulation.tick();
   const output = new Float32Array(buffer);
   output.set(snapshot());

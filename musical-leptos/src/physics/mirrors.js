@@ -1,6 +1,6 @@
 import * as THREE from './three.module.js';
 
-export const visiblePostProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); mvPosition.y = clamp(mvPosition.y, 0.0, enclosureHeight); world = mvPosition.xyz; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
 // A segment with both endpoints outside one face cannot intersect the room.
 // This rejects whole cells before the exact fragment ray/box portal runs.
 export const invisibleCellCull = `
@@ -13,23 +13,21 @@ export const invisibleCellCull = `
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);`;
 
 // Unfold a rectangular mirror room. A reflected point in cell n has alternating
-// parity and an n*extent translation. Keep a finite, fading set: eight deep
-// images, the six first mirrors, and adjacent corner images. No render targets,
+// parity and an n*extent translation. Keep a finite, fading set of back, side
+// and corner images. No render targets,
 // recursive cameras, physics bodies, or negative instance scales.
 export function mirrorCells(count = 6) {
   if (!Number.isInteger(count) || count < 0 || count > 17) throw new RangeError('Use 0 to 17 mirror images');
-  const cells = [];
-  for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
-    if (x || y) cells.push([x, y, 0]);
-  }
-  for (let z = -8; z < 0; z++) cells.push([0, 0, z]);
-  cells.push([0, 0, 1]);
-  // Draw nearby images first so the depth buffer rejects hidden deep copies.
-  return cells.sort((a, b) => a.reduce((n, x) => n + Math.abs(x), 0) - b.reduce((n, x) => n + Math.abs(x), 0)).slice(0, count);
+  // Include separated back-wall repeats before spending copies on corners.
+  // Full-depth posts touched their reflected neighbours and hid the depth.
+  const cells = [[0, 0, -1], [0, 0, -3], [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0]];
+  for (let z = -5; z >= -15; z -= 2) cells.push([0, 0, z]);
+  cells.push([0, 0, 1], [-1, -1, 0], [1, -1, 0], [-1, 1, 0], [1, 1, 0]);
+  return cells.slice(0, count);
 }
 
 export class MirrorRoom {
-  constructor(scene, balls, bars, width, count = 6) {
+  constructor(scene, balls, bars, sideBars, width, count = 6) {
     this.count = count;
     this.scene = scene;
     this.extent = { value: new THREE.Vector3(width, 1, 1) };
@@ -40,7 +38,7 @@ export class MirrorRoom {
     // Keep one bounded pool. Changing the image count does not release shader
     // programs and force compilation while audio is already running.
     const cells = mirrorCells(17);
-    for (const [kind, source] of [['balls', balls], ['bars', bars]]) {
+    for (const [kind, source] of [['balls', balls], ['bars', bars], ['sides', sideBars]]) {
       // Wrapped bar instances outside the real room are physics bookkeeping.
       // Upload only the two visible banks and at most one seam bar per bank.
       source.geometry.computeBoundingBox();
@@ -56,8 +54,8 @@ export class MirrorRoom {
         // Virtual images are smaller and fading. Keep physical balls detailed,
         // but use a smaller sphere grid for their reflected copies.
         const size = source.geometry.boundingBox.getSize(new THREE.Vector3());
-        // Mirror bars use 12 triangles. Their existing distance shader clips
-        // the rounded front silhouette; physical bars retain their curved mesh.
+        // Physical and mirror strips use 12 triangles. Their distance shader
+        // clips the rounded front silhouette.
         const geometry = kind === 'balls' ? new THREE.SphereGeometry(1, 12, 8) : new THREE.BoxGeometry(size.x, size.y, size.z);
         // A reflection reverses winding. Reverse indices once for odd cells;
         // all instance matrices remain the original proper rigid transforms.
@@ -88,19 +86,19 @@ export class MirrorRoom {
         // The real geometry remains lit and illuminates the physical enclosure.
         const material = new THREE.MeshBasicMaterial({ toneMapped: source.material.toneMapped });
         material.defines = { ...source.material.defines };
-        material.customProgramCacheKey = () => `mirror-room-${kind}-1`;
+        material.customProgramCacheKey = () => `mirror-room-${kind}-2`;
         material.onBeforeCompile = shader => {
           source.material.onBeforeCompile(shader);
           shader.uniforms.mirrorExtent = this.extent;
           shader.vertexShader = `attribute vec3 mirrorCell; attribute vec3 mirrorSign; attribute float mirrorGain;
-            ${kind === 'bars' ? 'uniform float halfWidth;' : ''}
+            ${kind !== 'balls' ? 'uniform float halfWidth;' : ''}
             uniform vec3 mirrorExtent; varying vec3 reflectedPoint; varying float reflectionGain;\n` + shader.vertexShader;
           shader.vertexShader = shader.vertexShader.replace('#include <defaultnormal_vertex>',
             THREE.ShaderChunk.defaultnormal_vertex.replace('transformedNormal = normalMatrix * transformedNormal;',
               'transformedNormal = normalMatrix * (mirrorSign * transformedNormal);'));
-          shader.vertexShader = shader.vertexShader.replace(kind === 'bars' ? visiblePostProjection : '#include <project_vertex>', `
+          shader.vertexShader = shader.vertexShader.replace(kind !== 'balls' ? barProjection : '#include <project_vertex>', `
             vec4 sourcePoint = instanceMatrix * vec4(transformed, 1.0);
-            ${kind === 'bars' ? 'sourcePoint.y = clamp(sourcePoint.y, 0.0, mirrorExtent.y); world = sourcePoint.xyz;' : ''}
+            ${kind !== 'balls' ? 'world = sourcePoint.xyz;' : ''}
             vec3 center = mirrorExtent * vec3(.5, .5, 0.0);
             vec3 unfolded = center + mirrorSign * (sourcePoint.xyz - center) + mirrorCell * mirrorExtent;
             reflectedPoint = (modelMatrix * vec4(unfolded, 1.0)).xyz;
@@ -123,8 +121,6 @@ export class MirrorRoom {
             float enterRoom = max(max(entry.x, entry.y), entry.z);
             float leaveRoom = min(min(exit.x, exit.y), exit.z);
             if (leaveRoom < max(enterRoom, 0.0) || leaveRoom > 1.00001) discard;`);
-          if (kind === 'bars') shader.fragmentShader = shader.fragmentShader.replace('float pixel =',
-            'if (distance < 0.0) discard; float pixel =');
           shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
             'outgoingLight *= reflectionGain;\n#include <opaque_fragment>');
         };
@@ -159,10 +155,10 @@ export class MirrorRoom {
     }
     // All six interior faces have a light silver coating; exterior faces are
     // culled. The reflected geometry supplies their moving mirror image.
-    const coating = new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.FrontSide,
+    const coating = new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.BackSide,
       transparent: true, opacity: .035, depthWrite: false });
-    this.walls = new THREE.Group();
-    for (let i = 0; i < 6; i++) this.walls.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), coating));
+    // One inward-facing box draws all six transparent mirror coatings.
+    this.walls = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), coating);
     scene.add(this.walls);
     this.frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
       new THREE.LineBasicMaterial({ color: 0x718096, transparent: true, opacity: .45 }));
@@ -174,7 +170,7 @@ export class MirrorRoom {
     this.count = count;
     for (const entry of this.meshes) {
       entry.copies = entry.cells.filter(cell => active.some(a => a.every((n, i) => n === cell[i]))).length;
-      // Each parity group retains the same nearest-first prefix as the source
+      // Each parity group retains the same selected prefix as the source
       // cell list, so no instance attributes or materials need replacement.
       entry.mesh.count = entry.copies * entry.staged.capacity;
       entry.mesh.visible = entry.copies > 0;
@@ -182,13 +178,8 @@ export class MirrorRoom {
   }
   update(width, height, depth) {
     this.extent.value.set(width, height, depth);
-    const [back, front, floor, roof, left, right] = this.walls.children;
-    back.position.set(width / 2, height / 2, -depth / 2); back.scale.set(width, height, 1);
-    front.rotation.y = Math.PI; front.position.set(width / 2, height / 2, depth / 2); front.scale.set(width, height, 1);
-    floor.rotation.x = -Math.PI / 2; floor.position.set(width / 2, 0, 0); floor.scale.set(width, depth, 1);
-    roof.rotation.x = Math.PI / 2; roof.position.set(width / 2, height, 0); roof.scale.set(width, depth, 1);
-    left.rotation.y = Math.PI / 2; left.position.set(0, height / 2, 0); left.scale.set(depth, height, 1);
-    right.rotation.y = -Math.PI / 2; right.position.set(width, height / 2, 0); right.scale.set(depth, height, 1);
+    this.walls.position.set(width / 2, height / 2, 0);
+    this.walls.scale.set(width, height, depth);
     this.frame.position.set(width / 2, height / 2, 0); this.frame.scale.set(width, height, depth);
     for (const staged of this.sources) {
       const { source, kind, capacity, halfWidth, matrices, colors, attributes } = staged;
@@ -223,7 +214,7 @@ export class MirrorRoom {
   }
   dispose() {
     for (const { mesh } of this.meshes) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
-    this.scene.remove(this.walls); this.walls.children.forEach(wall => wall.geometry.dispose()); this.walls.children[0].material.dispose();
+    this.scene.remove(this.walls); this.walls.geometry.dispose(); this.walls.material.dispose();
     this.scene.remove(this.frame); this.frame.geometry.dispose(); this.frame.material.dispose();
   }
 }

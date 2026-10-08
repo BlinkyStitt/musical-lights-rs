@@ -44,7 +44,7 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     const targets = () => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)));
     const rendered = () => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      return Math.max(...Array.from({ length: 24 }, (_, i) => v.bars.instanceMatrix.array[i * 16 + 13] + v.layout[6] / 2 - v.layout[13]));
+      return Math.max(...Array.from({ length: 24 }, (_, i) => v.renderedHeight(i) - v.layout[13]));
     });
     await expect.poll(targets).toBe(0);
     // Check past the reported one-second shutdown, then inject actual capture

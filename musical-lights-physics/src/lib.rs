@@ -1,5 +1,5 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
-use musical_lights_core::lights::bar_motion::Motion;
+use musical_lights_core::lights::bar_motion::{DEFAULT_ATTACK_SECONDS, Motion};
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
 use musical_lights_core::lights::musical_motion::{
     DirectionOdds, paired_bar_extent, remember_pigment, sphere_drag_factor,
@@ -57,7 +57,7 @@ impl Default for SimulationConfig {
             restitution: 0.72,
             friction: 0.12,
             depth: 0.24,
-            stroke_seconds: 0.040,
+            stroke_seconds: DEFAULT_ATTACK_SECONDS as f32,
             reduced_stroke_seconds: 0.320,
         }
     }
@@ -117,7 +117,7 @@ impl SimulationConfig {
             || !(0.0..=1.0).contains(&c.restitution)
             || !(0.0..=2.0).contains(&c.friction)
             || !(0.2..=2.0).contains(&c.depth)
-            || !(0.04..=2.0).contains(&c.stroke_seconds)
+            || !(0.02..=2.0).contains(&c.stroke_seconds)
             || !(0.32..=4.0).contains(&c.reduced_stroke_seconds)
         {
             return Err("Physics settings are outside the prototype limits");

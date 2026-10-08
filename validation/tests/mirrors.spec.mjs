@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { physicsReady, syntheticAudio } from '../physics-state.mjs';
+import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
@@ -25,7 +25,7 @@ test('paired physical bars and both Quiet/Loud guides follow the rotated camera'
       v.draw(performance.now());
       const graph = v.graph.getBoundingClientRect(), h = v.current[v.layout[17]], max = v.current[v.layout[17] + 1];
       const guides = [...v.graph.querySelector('.meter-guide').children].map((node, i) => {
-        const point = new THREE.Vector3(0, [h - .003, h - max, max, .003][i], 0).project(v.camera);
+        const point = new THREE.Vector3(0, [h - .003, h - max, max, .003][i], v.config[5] / 2).project(v.camera);
         const box = node.getBoundingClientRect();
         return Math.abs(box.y + box.height / 2 - graph.y - (1 - point.y) * graph.height / 2);
       });
@@ -72,18 +72,18 @@ test('six one-way faces show bounded mirror images and preserve source pixels at
         if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) changes++;
         if (plain[i] + plain[i + 1] + plain[i + 2] > 60) sourcePixels++;
       }
-      const normals = v.enclosure.children.map(wall => new THREE.Vector3(0, 0, 1).applyQuaternion(wall.quaternion).toArray());
-      const result = { changes, sourcePixels, normals, walls: v.enclosure.children.length,
+      const normals = Array.from({length:6},(_,i)=>new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal,i*4).negate().toArray());
+      const result = { changes, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
         passes, targets: v.mirrors.meshes.length, pixels: v.canvas.width * v.canvas.height,
         negativeScales: v.mirrors.meshes.some(({ mesh }) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array).determinant() < 0) };
       v.renderer.setRenderTarget(null); target.dispose(); v.cameraBase = 0; v.setCamera(0); return result;
     }, angle);
     expect(state.changes).toBeGreaterThan(150);
     expect(state.sourcePixels).toBeGreaterThan(200);
-    expect(state.walls).toBe(6); expect(state.targets).toBe(4); expect(state.negativeScales).toBe(false);
+    expect(state.walls).toBe(6); expect(state.targets).toBe(6); expect(state.negativeScales).toBe(false);
     expect(state.pixels).toBeLessThanOrEqual(200000);
-    expect(state.passes).toBeLessThanOrEqual(15);
-    expect(state.normals[4][0]).toBeCloseTo(1); expect(state.normals[5][0]).toBeCloseTo(-1);
+    expect(state.passes).toBeLessThanOrEqual(12);
+    expect(state.normals[0][0]).toBeCloseTo(-1); expect(state.normals[1][0]).toBeCloseTo(1);
     await info.attach(`mirror-${angle}.json`, { body: JSON.stringify(state), contentType: 'application/json' });
   }
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
@@ -178,7 +178,7 @@ test('side walls reuse 12 source bands each and show different bar heights at st
         const copy = render(); v.sideBars.mesh.visible = false;
         const without = render(); v.sideBars.mesh.visible = true;
         const positions = Array.from({length:24},(_,i)=>v.sideBars.mesh.instanceMatrix.array[i*16+12]);
-        const tips = Array.from({length:24},(_,i)=>v.sideBars.mesh.instanceMatrix.array[i*16+13]+v.layout[6]/2);
+        const tips = Array.from({length:24},(_,i)=>Math.abs(v.sideBars.mesh.instanceMatrix.array[i*16+5]));
         results.push({ angle, changed: copy.reduce((n,x,i)=>n+Number(Math.abs(x-without[i])>8),0),
           left:positions.filter(x=>x<v.width/2).length,right:positions.filter(x=>x>v.width/2).length,
           tipError:Math.max(...tips.map((x,i)=>Math.abs(x-v.renderedHeight(i)))),balls:v.balls.count });
@@ -214,6 +214,19 @@ test('phone opens expanded without capture and keeps video, notices, song and Ex
         for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) await expect(page.getByRole('checkbox', { name: label, exact: true }).locator('..')).toBeInViewport({ ratio: 1 });
         await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
         await expect(page.locator('.physics-status')).toBeVisible();
+        await expect(page.locator('.camera-rotation')).toBeInViewport({ ratio: 1 });
+        expect(await page.evaluate(() => {
+          const camera = document.querySelector('.camera-controls').getBoundingClientRect();
+          const controls = document.querySelector('.audio-controls').getBoundingClientRect();
+          const slider = document.querySelector('.camera-rotation'), box = slider.getBoundingClientRect();
+          return { separate: camera.bottom <= controls.top, touchSize: box.height >= 44,
+            aligned: Math.abs(box.y + box.height / 2 - camera.y - camera.height / 2) < 1,
+            touchable: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === slider };
+        })).toEqual({ separate: true, touchSize: true, aligned: true, touchable: true });
+        await page.locator('.camera-rotation').fill('30');
+        await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(30);
+        await page.locator('.camera-rotation').focus(); await page.keyboard.press('ArrowLeft');
+        await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(29);
         const scene = await page.locator('#dancinglights').boundingBox(); expect(scene.height).toBeGreaterThan(20);
       }
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
@@ -312,4 +325,70 @@ test('digital tempo is visible with Listening off and hides on pause and natural
   await page.locator('.tone-repeat').uncheck();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
   await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+});
+
+
+test('finite bar faces expose all twelve near-wall fills and separated depth images', async ({ page }, info) => {
+  await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await startFrozen(page);
+  await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; v.settings.cameraMotion = false; window.sendBars(Array(24).fill(.8)); });
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[0])).toBeCloseTo(.8, 5);
+  await page.waitForTimeout(150);
+  const results = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const target = new THREE.WebGLRenderTarget(900, 500), pixels = new Uint8Array(900 * 500 * 4), results = [];
+    v.balls.visible = false;
+    try {
+      for (const angle of [-40, 40]) {
+        v.setCamera(angle); v.draw(performance.now());
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 900, 500, pixels);
+        const fills = [];
+        for (let band = angle < 0 ? 0 : 12; band < (angle < 0 ? 12 : 24); band++) {
+          const matrix = new THREE.Matrix4().fromArray(v.sideBars.mesh.instanceMatrix.array, band * 16);
+          const point = new THREE.Vector3(0, 0, v.sideBars.geometry.boundingBox.min.z).applyMatrix4(matrix).project(v.camera);
+          const x = Math.floor((point.x + 1) * 450), y = Math.floor((point.y + 1) * 250);
+          let brightness = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const offset = ((y + dy) * 900 + x + dx) * 4;
+            brightness = Math.max(brightness, Math.max(...pixels.slice(offset, offset + 3)));
+          }
+          fills.push(brightness);
+        }
+        const source = new THREE.Vector3(v.width / 2, v.renderedHeight(12), v.bars.instanceMatrix.array[14]);
+        const depths = [0, -1, -3].map(z => { const point = source.clone(); if (z) point.z = -point.z + z * v.config[5]; return point.project(v.camera).toArray(); });
+        results.push({ angle, fills, depths, triangles: v.bars.geometry.index.count / 3,
+          physicalBalls: v.balls.count, outside: Array.from({ length: 24 }, (_, i) => {
+            const top = v.renderedHeight(i), y = v.bars.instanceMatrix.array[i * 16 + 13];
+            return Math.abs(y - top / 2);
+          }) });
+      }
+    } finally { v.balls.visible = true; v.renderer.setRenderTarget(null); target.dispose(); }
+    return results;
+  });
+  for (const result of results) {
+    expect(result.fills).toHaveLength(12);
+    for (const brightness of result.fills) expect(brightness, JSON.stringify(result)).toBeGreaterThan(70);
+    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(12);
+    expect(Math.max(...result.outside)).toBeLessThan(.000001);
+    expect(Math.abs(result.depths[0][1] - result.depths[1][1])).toBeGreaterThan(.01);
+    expect(Math.abs(result.depths[1][1] - result.depths[2][1])).toBeGreaterThan(.01);
+  }
+  await info.attach('visible-side-fills.json', { body: JSON.stringify(results), contentType: 'application/json' });
+});
+
+test('all bars show current physical travel without a previous-snapshot delay', async ({ page }, info) => {
+  await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await startFrozen(page);
+  await page.evaluate(() => window.sendBars(Array.from({ length: 24 }, (_, i) => .1 + .7 * i / 23)));
+  const errors = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics, errors = [];
+    for (let frame = 0; frame < 12; frame++) {
+      await new Promise(resolve => requestAnimationFrame(resolve)); v.draw(performance.now());
+      errors.push(Math.max(...Array.from({ length: 24 }, (_, i) => Math.abs(v.renderedHeight(i) - v.current[v.layout[9] + i]))));
+    }
+    return errors;
+  });
+  expect(Math.max(...errors)).toBeLessThan(.000001);
+  await info.attach('all-band-render-travel.json', { body: JSON.stringify(errors), contentType: 'application/json' });
 });

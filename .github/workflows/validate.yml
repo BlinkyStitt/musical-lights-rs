@@ -91,6 +91,8 @@ jobs:
     name: Build website
     needs: plan
     runs-on: ubuntu-24.04
+    outputs:
+      artifact_id: ${{ steps.compiled-bundle.outputs.artifact-id }}
     concurrency:
       group: site-build-${{ github.ref }}
       cancel-in-progress: true
@@ -162,6 +164,7 @@ jobs:
         if: needs.plan.outputs.reuse != 'true'
         run: python3 validation/ci.py pack .ci/site .ci/inventory.json
       - uses: actions/upload-artifact@v7.0.1
+        id: compiled-bundle
         with:
           name: site-build-${{ github.run_attempt }}
           path: .ci/site
@@ -229,7 +232,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: site-build-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
       - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
       - uses: actions/setup-node@v7.0.0
@@ -273,7 +276,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: site-build-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
       - name: Verify producer and byte digests
         env:

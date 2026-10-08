@@ -505,7 +505,7 @@ pub fn DancingLights(
             </div>
             </div>
             <div class="camera-controls">
-                <label class="control-row">"Camera angle (degrees)"<input class="camera-rotation" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
+                <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
             </div>
             <div class="display-note">
