@@ -316,7 +316,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => {
     const walls = document.querySelector('#dancinglights').physics.enclosure;
     return Array.from({ length: walls.count }, (_, i) => walls.instanceMatrix.array[i * 16 + 10]);
-  })).toEqual(Array(5).fill(Math.fround(.36)));
+  })).toEqual([Math.fround(.36)]);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.diagnostics-controls > summary').click();
   const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);

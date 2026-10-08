@@ -779,8 +779,9 @@ attack edges and rounded silhouettes. Background banks and depth images use
 the source material and source lighting position. One transparent outer coating
 spans all five banks; internal wall partitions and the center ceiling line are
 removed. Eight balls still use the same physical simulation. Normal-page scenes
-use equal gutters and a responsive 320–560 pixel height, with the existing
-200,000-pixel rendering limit. Tests compare actual colors across all five banks,
+use equal gutters and a responsive 320–560 pixel height. Equal top and bottom
+padding keeps the frequency tooltip above the graph. The existing 200,000-pixel
+rendering limit remains. Tests compare actual colors across all five banks,
 independent lit depth copies, colored boundaries, and normal-page centering
 before and after fullscreen at desktop and phone widths.
 

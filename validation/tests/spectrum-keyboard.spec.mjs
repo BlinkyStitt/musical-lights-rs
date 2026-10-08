@@ -255,6 +255,9 @@ test('pointer crossings preserve the readout for the keyboard-focused sample', a
   await page.mouse.move(0, 0);
   await expectSample(page, 23);
   await page.keyboard.press('Tab');
-  await page.mouse.move(other.x, other.y);
-  await expect(page.getByRole('tooltip')).toHaveText(other.label);
+  // Tab can scroll the larger graph out of view to expose the angle slider.
+  // Resolve the native hit point again after that layout change.
+  const afterTab = await meterPoint(page, page.getByRole('meter').first());
+  await page.mouse.move(afterTab.x, afterTab.y);
+  await expect(page.getByRole('tooltip')).toHaveText(afterTab.label);
 });
