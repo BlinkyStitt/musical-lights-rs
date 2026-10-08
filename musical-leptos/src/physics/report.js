@@ -190,9 +190,8 @@ export class PhoneReport {
   frame(frameTime, cost) {
     const now = performance.now();
     if (!this.lastDiagnostic || now - this.lastDiagnostic > 1000) {
-      const elapsed = now - (this.fpsAt ?? now), frames = this.view.metrics.frames - (this.fpsFrames ?? 0);
-      this.query('.diagnostic-fps').textContent = elapsed > 0 ? `${(frames * 1000 / elapsed).toFixed(0)} FPS` : '— FPS';
-      this.fpsAt = now; this.fpsFrames = this.view.metrics.frames; this.lastDiagnostic = now;
+      this.query('.diagnostic-fps').textContent = this.view.frameRate ?? '— FPS';
+      this.lastDiagnostic = now;
       const readings = this.view.motion.readings;
       this.query('.sensor-readings').textContent = `Motion permission/state: ${this.view.motion.state}; ${readings.motionEvents} acceleration events, ${readings.orientationEvents} tilt events; reading age: ${readings.at == null ? 'unavailable' : (now - readings.at).toFixed(0) + ' ms'}; gravity vector (m/s²): ${JSON.stringify(Array.from(this.view.input.slice(34, 37)))}; screen angle: ${readings.screenAngle ?? 'unavailable'} degrees; gravity-inclusive (m/s²): ${JSON.stringify(readings.gravity ?? null)}; linear acceleration (m/s²): ${JSON.stringify(readings.linear ?? null)}; tilt: ${readings.beta ?? '—'} / ${readings.gamma ?? '—'} degrees.`;
     }

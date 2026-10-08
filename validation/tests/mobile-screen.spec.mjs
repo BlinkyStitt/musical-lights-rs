@@ -175,7 +175,8 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(page.locator('.calibration-controls')).toBeHidden();
   await expect(page.locator('.control-note')).toBeHidden();
   await expect(page.locator('.wake-status')).toBeHidden();
-  await expect(page.locator('.frame-rate')).toHaveCount(0);
+  await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
+  await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
   for (const label of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
     await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeVisible();
   }

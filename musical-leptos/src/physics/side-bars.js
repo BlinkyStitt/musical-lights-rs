@@ -1,12 +1,12 @@
 import * as THREE from './three.module.js';
-import { barProjection } from './mirrors.js';
+import { barProjection, BOX_OFFSETS } from './mirrors.js';
 
-// Two full-size background boxes beside the physical center box. Copy its
+// Four full-size background boxes beside the physical center box. Copy its
 // vertical bars, including the scrolling seam, without adding any physics.
 export class SideBars {
   constructor(scene, bars, count) {
     this.scene = scene; this.bars = bars;
-    this.capacity = (count + 1) * 4;
+    this.capacity = (count + 1) * 2 * (BOX_OFFSETS.length - 1);
     bars.geometry.computeBoundingBox();
     this.geometry = bars.geometry.clone();
     this.halfWidth = this.geometry.boundingBox.max.x;
@@ -31,7 +31,9 @@ export class SideBars {
     const [count, , width] = layout;
     const source = this.bars.instanceMatrix.array, target = this.mesh.instanceMatrix.array;
     let n = 0;
-    for (const offset of [-width, width]) {
+    for (const box of BOX_OFFSETS) {
+      if (box === 0) continue;
+      const offset = box * width;
       for (let i = 0; i < this.bars.count; i++) {
         const x = source[i * 16 + 12];
         if (x < -this.halfWidth || x > width + this.halfWidth) continue;

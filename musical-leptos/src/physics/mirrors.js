@@ -1,6 +1,7 @@
 import * as THREE from './three.module.js';
 
 export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+export const BOX_OFFSETS = Object.freeze([-2, -1, 0, 1, 2]);
 
 // A finite stack of fading scene copies creates depth without reflection
 // cameras, ray/box tests in every fragment, or additional simulated balls.
@@ -56,20 +57,12 @@ export class MirrorRoom {
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * cells.length * 3), 3);
       this.meshes.push({ mesh, staged }); scene.add(mesh);
     }
-    // Transparent outside faces and faint inside coatings identify the three
-    // boxes. Only the center box participates in physics.
+    // Transparent outside faces and faint inside coatings, without box outlines.
+    // Only the center box participates in physics.
     this.walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), 3);
+      new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), BOX_OFFSETS.length);
     this.walls.frustumCulled = false; this.wallMatrix = new THREE.Matrix4();
     scene.add(this.walls);
-    const edgeGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-    const edges = edgeGeometry.attributes.position.array, positions = new Float32Array(edges.length * 3);
-    for (let box = 0; box < 3; box++) for (let i = 0; i < edges.length; i++)
-      positions[box * edges.length + i] = edges[i] + (i % 3 === 0 ? box - 1 : 0);
-    edgeGeometry.dispose();
-    this.frame = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3)),
-      new THREE.LineBasicMaterial({ color: 0x718096, transparent: true, opacity: .45 }));
-    scene.add(this.frame);
     this.setCount(count);
   }
   setCount(count) {
@@ -79,12 +72,11 @@ export class MirrorRoom {
   }
   update(width, height, depth) {
     this.depth.value = depth;
-    for (let box = 0; box < 3; box++) {
-      this.wallMatrix.makeScale(width, height, depth).setPosition((box - .5) * width, height / 2, 0);
+    for (let box = 0; box < BOX_OFFSETS.length; box++) {
+      this.wallMatrix.makeScale(width, height, depth).setPosition((BOX_OFFSETS[box] + .5) * width, height / 2, 0);
       this.walls.setMatrixAt(box, this.wallMatrix);
     }
     this.walls.instanceMatrix.needsUpdate = true;
-    this.frame.position.set(width / 2, height / 2, 0); this.frame.scale.set(width, height, depth);
     for (const staged of this.sources) {
       const { source, kind, capacity, halfWidth, matrices, colors, attributes } = staged;
       let n = 0;
@@ -116,6 +108,5 @@ export class MirrorRoom {
   dispose() {
     for (const { mesh } of this.meshes) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
     this.scene.remove(this.walls); this.walls.geometry.dispose(); this.walls.material.dispose(); this.walls.dispose();
-    this.scene.remove(this.frame); this.frame.geometry.dispose(); this.frame.material.dispose();
   }
 }

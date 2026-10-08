@@ -38,7 +38,8 @@ test('Home has silent sine motion without audio access, and switches support key
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect.poll(() => page.evaluate(() => microphoneRequests)).toBe(1);
   await expect(page.locator('.audio-error')).toContainText('Unexpected capture');
-  await expect(page.locator('.diagnostic-fps, .frame-rate')).toHaveCount(0);
+  await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+  await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   expect(errors).toEqual([]);
 });

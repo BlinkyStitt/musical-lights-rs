@@ -507,6 +507,9 @@ pub fn DancingLights(
             <div class="camera-controls">
                 <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
+                <Show when=move || fullscreen.get()>
+                    <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
+                </Show>
             </div>
             <div class="display-note">
                 <p class="display-status">
@@ -533,6 +536,7 @@ pub fn DancingLights(
                     <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="17" step="1" value="3"/></label>
                     <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. Copies use the same bars and balls."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
+                    <p>"Smooth left-to-right rotation. The angle slider sets the center. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
             <Show when=move || advanced>
