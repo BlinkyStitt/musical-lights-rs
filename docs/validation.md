@@ -702,6 +702,10 @@ at each steep angle; an instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
 automatic camera motion while the user sets the angle.
+Song text scales with both viewport width and height, with a 1 rem minimum, so
+short landscape views retain room for wrapped titles and the slider.
+Wide landscape views use one control row so the video can retain its minimum
+height. Narrow phones keep the wrapped control grid.
 
 Host frame measurements use `validation/measure-spectrum.mjs` with actual
 AudioWorklet capture, synthetic PCM, diagnostic recording disabled and a stated

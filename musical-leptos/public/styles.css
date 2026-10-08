@@ -244,7 +244,7 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .fullscreen-button { position: static; min-height: 44px; }
 .audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
 .audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
-.audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; border-radius: 0; padding: .35rem 0; background: none; font-size: clamp(1rem, 3.5vw, 1.4rem); font-weight: 600; text-shadow: 0 0 4px var(--plot), 0 0 8px var(--plot); }
+.audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; border-radius: 0; padding: .35rem 0; background: none; font-size: clamp(1rem, min(3.5vw, 5dvh), 1.4rem); font-weight: 600; text-shadow: 0 0 4px var(--plot), 0 0 8px var(--plot); }
 .audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
 .audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
 .input-source-controls .control-row { min-width: 0; gap: .5rem; }
@@ -299,6 +299,9 @@ nav { flex-wrap: wrap; }
   .audio-card[data-expanded].video-active .youtube-frame { height: 100%; aspect-ratio: auto; }
   .audio-card[data-expanded].video-active .video-panel { padding: 0 .5rem 0 0; display: flex; flex-direction: column; }
   .audio-card[data-expanded].video-active .youtube-frame { flex: 1; }
+}
+@media (min-width: 800px) and (orientation: landscape) {
+  .audio-card[data-expanded] .button-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 /* The switch has a 44px hit area; its visible pill remains compact. */
 .button-row .setting-switch { padding: 0; gap: .3rem; min-width: 0; }
