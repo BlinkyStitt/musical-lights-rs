@@ -624,10 +624,11 @@ change makes no live AudD request.
 transparent exterior faces, bounded draw calls, matched per-end bar extents,
 projected Quiet/Loud guides, saved probability curves and mobile default entry
 without capture. Short landscape combines a mock video, a long recognition
-ticker, a recovery notice and all bottom controls. Each GPU check saves frame
-cost and front/side images. These measurements describe the browser host, not
+ticker, a recovery notice, the angle slider and all bottom controls. Each GPU check
+saves frame cost and front/side images. These measurements describe the browser host, not
 a physical iPhone. The offline mirror test covers non-indexed rounded geometry,
-odd reflection winding, shader defines and disposal. Native physics covers
+odd reflection winding, separated default depth cells, shader defines and disposal.
+Native physics covers
 ceiling-bar collision, inward bounce, pigments and safe enclosure resize.
 The scissor regression compares every rendered pixel with the unrestricted
 ray portal at five camera angles. Another test checks that offscreen audio and
@@ -672,3 +673,40 @@ chunk boundaries, loop seams, pause/resume, replay and natural completion. Live
 browser checks compare observed release-worklet input with decoded PCM and retain
 exact raw loudness and filtered-target assertions. End tests use a shorter PCM
 fixture with the real processor and its real completion acknowledgement.
+
+### Visible mirror strips and all-band response
+
+The renderer uses finite unit-height strips, scaled to each published physical
+bar height on the front face. It does not clamp 20 m visual posts into the room.
+This avoids coincident caps and leaves space between mirror images. Each side wall reuses
+12 source bands in both banks; these copies and their reflections add no
+physical balls. The collider still spans the enclosure depth. Side strips stay
+inside the room, and their exterior faces remain visible through the one-way
+walls. One inward-facing box draws all six silver coatings. The default image
+selection includes two back-wall repeats before corner images. Advanced keeps
+its bounded mirror-count setting.
+
+The shared core defaults to a 40 ms rise for every band. Advanced exposes the
+rise duration in milliseconds and preserves saved overrides. The brake duration
+accounts for opposing acceleration so a short stroke cannot reverse before it
+stops. Tests sample 99 interruption phases at 20, 40 and 320 ms. Ball gravity,
+the artistic bar release, measured loudness and filtered targets retain their
+separate contracts.
+
+The worker publishes each 120 Hz physics tick with one in-flight snapshot
+buffer. Bars render the newest physical snapshot. They do not wait for interpolation
+from the previous snapshot. Balls and horizontal motion still interpolate.
+`mirrors.spec.mjs` compares all 24 rendered bar heights with the current physical
+snapshot during a rise. Its side-face check samples all 12 near-wall band fills
+at each steep angle; an instance count alone cannot establish visibility.
+The angle slider remains in expanded mode, including short landscape with video,
+recognition and recovery notices. Pointer interaction or keyboard focus pauses
+automatic camera motion while the user sets the angle.
+
+Host frame measurements use `validation/measure-spectrum.mjs` with actual
+AudioWorklet capture, synthetic PCM, diagnostic recording disabled and a stated
+viewport and CPU throttle. Packet-to-render measurements exclude PCM analysis
+and GPU presentation. Neither measurement establishes physical-phone FPS or
+human listening acceptance. The production loudness window and shared display
+filter still add their own response time; bar travel alone is not end-to-end
+audio latency.

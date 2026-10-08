@@ -14,14 +14,16 @@ test('mirror geometry accepts triangle soup, keeps shader defines and reverses o
   const balls = new THREE.InstancedMesh(new THREE.SphereGeometry(), material, 2);
   bars.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(18), 3);
   balls.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(6), 3);
-  const room = new MirrorRoom(scene, balls, bars, 1.2);
+  const sides = new THREE.InstancedMesh(geometry.clone(), material, 2);
+  sides.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(6), 3);
+  const room = new MirrorRoom(scene, balls, bars, sides, 1.2);
   room.update(1.2, .6, .24);
-  assert.equal(room.walls.children.length, 6); assert.equal(room.meshes.length, 4);
+  assert.equal(room.walls.geometry.groups.length, 6); assert.equal(room.meshes.length, 6);
   assert.equal(mirrorCells().length, 6);
   assert.equal(mirrorCells(0).length, 0); assert.equal(mirrorCells(17).length, 17);
   for (const value of [-1, 18, 1.5, NaN]) assert.throws(() => mirrorCells(value), RangeError);
-  const depths = mirrorCells().map(cell => cell.reduce((sum, n) => sum + Math.abs(n), 0));
-  assert.deepEqual(depths, depths.toSorted((a, b) => a - b));
+  assert.deepEqual(mirrorCells().slice(0, 2), [[0, 0, -1], [0, 0, -3]]);
+  assert.equal(new Set(mirrorCells(17).map(c => c.join(','))).size, 17);
   const staged = room.sources.find(s => s.kind === 'bars');
   assert.equal(staged.capacity, 4);
   assert.equal(staged.matrices[12], Math.fround(.6));
@@ -41,5 +43,5 @@ test('mirror geometry accepts triangle soup, keeps shader defines and reverses o
   assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 17);
   room.setCount(8); assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 8);
   room.dispose(); assert.equal(scene.children.length, 0);
-  geometry.dispose(); balls.geometry.dispose(); material.dispose();
+  geometry.dispose(); sides.geometry.dispose(); balls.geometry.dispose(); material.dispose();
 });

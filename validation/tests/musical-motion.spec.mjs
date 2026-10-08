@@ -65,8 +65,8 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     // Isolate one prescribed bar and sample its physical side face. The old
     // XY-only outline painted this entire face black, even under fill light.
     const count = v.bars.count, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, 0);
-    const hidden = [v.balls, v.enclosure, v.ceiling, v.mirrors.frame, ...v.mirrors.meshes.map(({ mesh }) => mesh)]; hidden.forEach(n => { n.visible = false; });
-    const object = new THREE.Object3D(); object.position.set(.6, .3 - v.layout[6] / 2, 0); object.updateMatrix();
+    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, v.ceiling, v.mirrors.frame, ...v.mirrors.meshes.map(({ mesh }) => mesh)]; hidden.forEach(n => { n.visible = false; });
+    const object = new THREE.Object3D(); object.position.set(.6, .15, 0); object.scale.set(1, .3, 1); object.updateMatrix();
     v.bars.count = 1; v.bars.setMatrixAt(0, object.matrix); v.bars.instanceMatrix.needsUpdate = true;
     const point = new THREE.Vector3(.6 + (v.layout[3] - v.layout[4]) / 2, .12, 0).project(v.camera);
     sum();
@@ -75,7 +75,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     v.bars.count = count; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
     hidden.forEach(n => { n.visible = true; });
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
-    return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.children.length,
+    return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: v.attackLights.length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });

@@ -65,8 +65,8 @@ test(`diagnostic plot separates ${end} render geometry and its clock from analys
     view.renderedAt = receivedAt - 25;
     view.current[view.layout[9] + 8] = .7 * view.height;
     view.renderedEnclosureHeight = view.height;
-    view.bars.instanceMatrix.array[8 * 16 + 13] = .2 * view.height - view.layout[6] / 2;
-    view.bars.instanceMatrix.array[(8 + 72) * 16 + 13] = .8 * view.height + view.layout[6] / 2;
+    view.bars.instanceMatrix.array[8 * 16 + 5] = .2 * view.height;
+    view.bars.instanceMatrix.array[(8 + 72) * 16 + 5] = -.2 * view.height;
     if (Math.abs(view.renderedHeight(8, end === 'top' ? 1 : 0) / view.height - .2) > 1e-5) throw Error('Wrong rendered end');
     const trace = new Float64Array(511);
     trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;

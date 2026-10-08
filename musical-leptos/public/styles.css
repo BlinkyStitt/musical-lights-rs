@@ -274,16 +274,16 @@ nav { flex-wrap: wrap; }
 .camera-controls input { flex: 1; min-width: 0; min-height: 44px; }
 .camera-angle { min-width: 5ch; font-variant-numeric: tabular-nums; }
 .control-help { position: fixed; z-index: 120; padding: .75rem; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--surface); box-shadow: 0 4px 20px #0004; font-size: .85rem; line-height: 1.5; max-height: calc(100dvh - 24px); overflow: auto; }
-.audio-card[data-expanded] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(min(2rem, 10dvh), 1fr) minmax(0, max-content) minmax(0, max-content) auto; gap: .35rem; }
+.audio-card[data-expanded] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(min(2rem, 10dvh), 1fr) minmax(0, max-content) minmax(0, max-content) auto auto; gap: .35rem; }
 .audio-card[data-expanded] > .visual-content { position: relative; inset: auto; grid-row: 1; grid-column: 1; min-height: 0; display: flex; flex-direction: column; }
 .audio-card[data-expanded].video-editing > .visual-content { overflow: auto; }
 .audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: 1; height: auto; min-height: 0; display: flex; }
 .audio-card[data-expanded] #dancinglights { flex: 1; height: auto; min-height: 0; }
-.audio-card[data-expanded] .audio-controls { position: relative; inset: auto; grid-row: 4; grid-column: 1; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
+.audio-card[data-expanded] .audio-controls { position: relative; inset: auto; grid-row: 5; grid-column: 1; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
 .audio-card[data-expanded] .recognized-song { position: relative; grid-row: 3; grid-column: 1; min-height: 0; margin: 0; max-height: none; align-items: flex-start; pointer-events: auto; }
 .audio-card[data-expanded] .recovery-notices { grid-row: 2; grid-column: 1; min-height: 0; max-height: none; }
 .audio-card[data-expanded] .button-row { display: grid; gap: .15rem .5rem; }
-.audio-card[data-expanded] :is(.camera-controls, .display-controls, .video-form) { display: none; }
+.audio-card[data-expanded] :is(.display-controls, .video-form) { display: none; }
 .audio-card[data-expanded].video-editing .video-form { display: flex; }
 .audio-card[data-expanded] .control-help { position: fixed; }
 .audio-card[data-expanded].video-active .video-panel { flex: none; min-height: 200px; }
@@ -326,3 +326,6 @@ nav { flex-wrap: wrap; }
 .scroll-controls { position: relative; min-height: 44px; }
 .scroll-controls .setting-switch { padding-bottom: .55rem; }
 .scroll-controls .tempo-readout { position: absolute; left: 1.7rem; bottom: 0; font-size: .62rem; line-height: 1; }
+
+.audio-card[data-expanded] .camera-controls { position: relative; inset: auto; grid-row: 4; grid-column: 1; width: 100%; margin: 0; gap: .5rem; font-size: .8rem; }
+.audio-card[data-expanded] .camera-controls .control-row { flex-direction: row; align-items: center; flex-wrap: nowrap; min-width: 0; gap: .5rem; }

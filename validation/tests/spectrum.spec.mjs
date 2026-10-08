@@ -22,15 +22,16 @@ for (const width of [320, 375, 1440]) {
       const graph = document.querySelector('#dancinglights').getBoundingClientRect();
       const guide = document.querySelector('.meter-guide > span:nth-child(3)').getBoundingClientRect();
       const view = document.querySelector('#dancinglights').physics;
+      const front = view.bars.instanceMatrix.array[14] + view.bars.geometry.boundingBox.max.z;
       return {
-        guideDifference: Math.abs(guide.y + guide.height / 2 - graph.y - (1 - new THREE.Vector3(0, view.current[view.layout[17] + 1], 0).project(view.camera).y) * graph.height / 2),
+        guideDifference: Math.abs(guide.y + guide.height / 2 - graph.y - (1 - new THREE.Vector3(0, view.current[view.layout[17] + 1], front).project(view.camera).y) * graph.height / 2),
         headroom: (track.top - graph.top) / graph.height,
-        expectedHeadroom: (1 - new THREE.Vector3(0, view.current[view.layout[17]+1], 0).project(view.camera).y) / 2,
+        expectedHeadroom: (1 - new THREE.Vector3(0, view.current[view.layout[17]+1], front).project(view.camera).y) / 2,
         hitRegionError: Math.max(...meters.map((node,i) => {
           const box=node.getBoundingClientRect();
           const column = (i + view.renderedPhase) % 24;
           const center = column + Math.min(1, 24 - column) / 2;
-          const point = new THREE.Vector3(center * view.layout[3], view.current[view.layout[17]] / 2, 0).project(view.camera);
+          const point = new THREE.Vector3(center * view.layout[3], view.current[view.layout[17]] / 2, front).project(view.camera);
           const projected = graph.x + (point.x + 1) / 2 * graph.width;
           return Math.abs(box.x+box.width/2-projected);
         })),

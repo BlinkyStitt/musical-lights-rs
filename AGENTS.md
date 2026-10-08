@@ -61,8 +61,9 @@
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
 - Mirror count controls drawing only. Side-wall bar copies reuse the same
-  source bands; do not add simulated balls. Keep quiet attacks responsive with
-  the configured stroke duration. Hide BPM when audio stops; silence eases to
+  source bands; do not add simulated balls. Keep all bands responsive with
+  the configured rise duration; measure packet-to-render delay as well as steps.
+  Hide BPM when audio stops; silence eases to
   the shared core's 60 BPM fallback without changing loudness or filtered targets.
 - Show one scrolling artist/song title in expanded mode. Keep the progress
   ring and errors beside Identify song. Home omits FPS, including expanded mode.
