@@ -13,6 +13,7 @@ PACKAGES = {
     "core": "musical-lights-core",
     "worklet": "musical-lights-worklet",
     "physics": "musical-lights-physics",
+    "benchmarks": "validation/benchmarks",
     "terminal": "musical-terminal",
     "leptos": "musical-leptos",
     "dioxus": "musical-dioxus",
@@ -184,6 +185,17 @@ def validate(name):
                 "--features",
                 "std,log",
             ],
+            directory,
+        )
+    elif name == "benchmarks":
+        run(
+            cargo + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
+            directory,
+        )
+        # Compile and execute each correctness-checked workload once. Statistical
+        # timings belong on an idle measured host, not a shared CI runner.
+        run(
+            cargo + ["bench", "--locked", "--bench", "production", "--", "--test"],
             directory,
         )
     elif name == "physics":

@@ -530,8 +530,8 @@ pub fn DancingLights(
                         <p class="direction-error" role="status"></p>
                     </fieldset>
                     <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
-                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="17" step="1" value="6"/></label>
-                    <p>"Fewer mirror images reduce drawing work. 0 turns reflections off. Copies use the same bars and balls."</p>
+                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="17" step="1" value="3"/></label>
+                    <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. Copies use the same bars and balls."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>

@@ -626,12 +626,12 @@ projected Quiet/Loud guides, saved probability curves and mobile default entry
 without capture. Short landscape combines a mock video, a long recognition
 ticker, a recovery notice, the angle slider and all bottom controls. Each GPU check
 saves frame cost and front/side images. These measurements describe the browser host, not
-a physical iPhone. The offline mirror test covers non-indexed rounded geometry,
-odd reflection winding, separated default depth cells, shader defines and disposal.
+a physical iPhone. The offline depth-copy test covers non-indexed source geometry,
+bounded translated cells, shader defines, pooled resources and disposal.
 Native physics covers
 ceiling-bar collision, inward bounce, pigments and safe enclosure resize.
-The scissor regression compares every rendered pixel with the unrestricted
-ray portal at five camera angles. Another test checks that offscreen audio and
+The depth-copy regression compares rendered pixels with independently translated
+geometry at five camera angles. Another test checks that offscreen audio and
 physics continue while drawing stops. The phone-clock harness rejects those
 offscreen intervals for FPS acceptance. Live PCM checks use the recorded first
 input sample clock and require exact raw loudness and filtered targets.
@@ -674,17 +674,20 @@ browser checks compare observed release-worklet input with decoded PCM and retai
 exact raw loudness and filtered-target assertions. End tests use a shorter PCM
 fixture with the real processor and its real completion acknowledgement.
 
-### Visible mirror strips and all-band response
+### Full-depth supports, background boxes and all-band response
 
-The renderer uses finite unit-height strips, scaled to each published physical
-bar height on the front face. It does not clamp 20 m visual posts into the room.
-This avoids coincident caps and leaves space between mirror images. Each side wall reuses
-12 source bands in both banks; these copies and their reflections add no
-physical balls. The collider still spans the enclosure depth. Side strips stay
-inside the room, and their exterior faces remain visible through the one-way
-walls. One inward-facing box draws all six silver coatings. The default image
-selection includes two back-wall repeats before corner images. Advanced keeps
-its bounded mirror-count setting.
+The renderer uses finite unit-height boxes, scaled to each published physical
+bar height. Their full depth matches the physical support. Matching vertical
+banks fill two adjacent background boxes; all three boxes reuse the same source
+bands and only the center box contains simulated balls. Quiet/Loud guides and
+pointer meters remain attached to the center source bands.
+
+The mirror-count setting defaults to three images and controls a finite stack
+of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
+instanced meshes draw copied bars, background bars and balls. They use no
+reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
+exterior coatings preserve the side view. No picture adds ball physics. The
+browser owns this effect; embedded hardware uses physical mirrors.
 
 The shared core defaults to a 40 ms rise for every band. Advanced exposes the
 rise duration in milliseconds and preserves saved overrides. The brake duration
@@ -697,8 +700,9 @@ The worker publishes each 120 Hz physics tick with one in-flight snapshot
 buffer. Bars render the newest physical snapshot. They do not wait for interpolation
 from the previous snapshot. Balls and horizontal motion still interpolate.
 `mirrors.spec.mjs` compares all 24 rendered bar heights with the current physical
-snapshot during a rise. Its side-face check samples all 12 near-wall band fills
-at each steep angle; an instance count alone cannot establish visibility.
+snapshot during a rise. Background checks verify all 24 source bands in both
+neighbor boxes, their physical depth and actual lit pixels at steep angles.
+An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
 automatic camera motion while the user sets the angle.
@@ -714,3 +718,27 @@ and GPU presentation. Neither measurement establishes physical-phone FPS or
 human listening acceptance. The production loudness window and shared display
 filter still add their own response time; bar travel alone is not end-to-end
 audio latency.
+
+### Production CPU benchmarks
+
+`python3 validation/validate.py benchmarks` formats, checks and executes each
+Criterion workload once. Statistical comparisons use the pinned commands and
+measurement boundaries in [the benchmark guide](../validation/benchmarks/README.md).
+The standalone package keeps host benchmarking dependencies out of the embedded
+core feature matrix. Cases call the production audio processor, snapshot parser,
+tempo estimator and Rapier simulation. Native CPU results do not establish
+browser FPS, GPU cost, microphone response or physical-phone acceptance.
+
+On 2026-10-08, the full three-box release scene measured 46.3 FPS with six
+depth copies and 56.9–59.3 FPS with three across two trials. Runs used the same
+390 × 844
+viewport, DPR 3, Chromium 154, fourfold main-thread CPU throttle, 200,000-pixel
+cap, synthetic beat PCM through the real worklet, five-second warmup and
+30-second measurement on an Apple M4 Max. Recording stayed off. The faster
+default draws fewer images; this comparison does not claim equal drawing work
+or physical-Android performance. Saved image counts remain unchanged.
+Separate side-shader and merged-pool candidates did not improve FPS and were
+removed. Native Criterion baselines for 240 production physics ticks were
+44.0 ms portrait, 28.0 ms landscape and 51.4 ms for full attacks. Native stack
+samples concentrated in Rapier contact detection and solving; this change
+retains the solver and its collision accuracy.

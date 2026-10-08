@@ -60,9 +60,12 @@
   measure it; prefer instancing and avoid recursive reflection cameras, shadow
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
-- Mirror count controls drawing only. Side-wall bar copies reuse the same
-  source bands; do not add simulated balls. Keep all bands responsive with
-  the configured rise duration; measure packet-to-render delay as well as steps.
+- Mirror count controls drawing only. Two full-size background boxes flank the
+  physical center box and reuse all source bands in matching vertical banks.
+  Center posts span the collider depth.
+  Depth images are fading translated copies, not optical reflections. Do not add
+  simulated balls for background boxes or depth images. Keep all bands responsive
+  with the configured rise duration; measure packet-to-render delay as well as steps.
   Hide BPM when audio stops; silence eases to
   the shared core's 60 BPM fallback without changing loudness or filtered targets.
 - Show one scrolling artist/song title in expanded mode. Keep the progress
@@ -72,6 +75,9 @@
 
 - Read `validation/validate.py` for pinned commands and the feature matrix.
   Verify produced WASM and browser behavior as well as native Rust tests.
+  Use the standalone Criterion package in `validation/benchmarks` for production
+  audio, tempo and physics CPU comparisons. Run statistical benchmarks on an
+  idle host, separately from browser checks; CI runs only correctness smoke cases.
   Identical PCM must retain identical raw loudness and filtered targets.
 - Keep one browser worker per runner, zero retries and the serial startup/crash
   guard. CI may distribute the unchanged suite across isolated runners; require
