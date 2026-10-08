@@ -2,6 +2,7 @@ import * as THREE from './three.module.js';
 import { RoundedBoxGeometry } from './RoundedBoxGeometry.js';
 import { PhoneReport } from './report.js';
 import { MirrorRoom, visiblePostProjection } from './mirrors.js';
+import { SideBars } from './side-bars.js';
 
 // Separate a transient notice from cumulative diagnostic counters and stopped state.
 export class PhysicsNotice {
@@ -136,7 +137,7 @@ export class PhysicsView {
       if (now - (this.tempoReadoutAt ?? -Infinity) >= 1000) {
         this.tempoReadoutAt = now;
         const readout = this.card.querySelector('.tempo-readout');
-        if (readout) { readout.textContent = `${Math.round(this.tempo)} BPM`; readout.title = this.idle ? 'Silent preview tempo' : this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'Tempo estimate uncertain; using the smoothed fallback'; }
+        if (readout) { readout.hidden = this.idle; readout.textContent = this.idle ? '' : `${Math.round(this.tempo)} BPM`; readout.title = this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'No reliable beat; easing toward 60 BPM'; }
       }
       this.updateCamera(now);
       const rendered = this.current && this.sceneVisible;
@@ -164,6 +165,9 @@ export class PhysicsView {
     this.listen(this.card, 'camera-reset', () => { this.cameraBase = 0; this.setCamera(0); });
     this.listen(this.card, 'display-settings', ({ detail }) => {
       this.settings = detail;
+      if (this.mirrors && this.mirrors.count !== detail.mirrorCount) {
+        this.mirrors.setCount(detail.mirrorCount);
+      }
       if (detail.cameraAngle !== this.cameraBase) this.cameraBase = detail.cameraAngle;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
@@ -177,6 +181,9 @@ export class PhysicsView {
       if (detail.state === 'starting') this.audioAccent = 0;
       this.idle = detail.state === 'stopped';
       this.card.dataset.preview = String(this.idle);
+      this.tempoReadoutAt = -Infinity;
+      const readout = this.card.querySelector('.tempo-readout');
+      if (this.idle && readout) { readout.hidden = true; readout.textContent = ''; }
       if (this.idle) { this.tempo = 120; this.tempoConfidence = 0; this.startPreview(); } else this.stopPreview();
     });
     if (this.idle) this.startPreview();
@@ -389,11 +396,12 @@ export class PhysicsView {
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
+    this.sideBars = new SideBars(this.scene, this.bars, count, this.palette);
     this.ceiling = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
     ]), new THREE.LineBasicMaterial({ color: getComputedStyle(this.graph).getPropertyValue('--line').trim() }));
     this.scene.add(this.ceiling);
-    this.mirrors = new MirrorRoom(this.scene, this.balls, this.bars, this.width);
+    this.mirrors = new MirrorRoom(this.scene, this.balls, this.bars, this.width, this.settings.mirrorCount);
     this.enclosure = this.mirrors.walls;
   }
   draw(now) {
@@ -443,6 +451,7 @@ export class PhysicsView {
         }
       }
     }
+    this.sideBars.update(this.layout, height, depth, phase, this.meshEdges);
     let used = 0;
     for (let i = 0; i < count && used < this.attackLights.length; i++) {
       const glow = this.meshEdges[i];
@@ -531,6 +540,7 @@ export class PhysicsView {
   }
   fail(message) { this.notice.show(`Physics stopped: ${message}`, 'Motion stopped. Reload to restart.'); this.report?.invalidate(message); this.lost = true; this.pause(); }
   disposeMeshes() {
+    this.sideBars?.dispose(); this.sideBars = null;
     this.mirrors?.dispose(); this.mirrors = null;
     for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {

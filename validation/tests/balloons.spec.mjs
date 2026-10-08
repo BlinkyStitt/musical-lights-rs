@@ -130,7 +130,10 @@ for (const width of [375, 1440]) {
         roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedEnclosureHeight + v.layout[6] / 2 - a[(i + 72) * 16 + 13]) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(14);
+    // One additional instanced batch draws both side-wall bar banks. The
+    // original body and source-bar instance counts remain unchanged.
+    // Six default images use two parity batches, plus the side-bank batch.
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(13);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });

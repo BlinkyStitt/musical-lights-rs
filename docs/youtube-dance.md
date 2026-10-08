@@ -85,8 +85,14 @@ measured concert-ball material model.
 
 The browser unfolds a bounded set of reflected images inside six inward-facing
 mirror surfaces. Exterior faces stay transparent. Perspective views show depth
-and the scene through either side. Four instanced reflection meshes share the
-bar and ball materials, contact pigments and attack highlights. Reflected bars
+and the scene through either side. Display's **Mirror images** setting saves
+an integer from 0 to 17, with six images by default. Zero disables reflected
+images without changing physics or removing the transparent box. At most four
+instanced reflection meshes reuse source colors, contact pigments and attack
+highlights. Copies use basic shading; real bars and balls retain scene lighting.
+Each side wall also displays 12 of the same source bands in matching top/bottom
+banks. These thin visual copies follow the rendered tips and source colors;
+they do not create colliders, extra balls or accessible meters. Reflected bars
 use twelve triangles and their distance shader retains the rounded front
 silhouette. Nearby images draw first to limit hidden work. A ray/box
 intersection masks each mirror portal. Odd reflections reverse triangle

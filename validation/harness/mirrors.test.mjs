@@ -17,7 +17,9 @@ test('mirror geometry accepts triangle soup, keeps shader defines and reverses o
   const room = new MirrorRoom(scene, balls, bars, 1.2);
   room.update(1.2, .6, .24);
   assert.equal(room.walls.children.length, 6); assert.equal(room.meshes.length, 4);
-  assert.equal(mirrorCells().length, 17);
+  assert.equal(mirrorCells().length, 6);
+  assert.equal(mirrorCells(0).length, 0); assert.equal(mirrorCells(17).length, 17);
+  for (const value of [-1, 18, 1.5, NaN]) assert.throws(() => mirrorCells(value), RangeError);
   const depths = mirrorCells().map(cell => cell.reduce((sum, n) => sum + Math.abs(n), 0));
   assert.deepEqual(depths, depths.toSorted((a, b) => a - b));
   const staged = room.sources.find(s => s.kind === 'bars');
@@ -30,8 +32,14 @@ test('mirror geometry accepts triangle soup, keeps shader defines and reverses o
   assert.equal(room.meshes[2].mesh.geometry.index.count, 36);
   for (const { mesh } of room.meshes) {
     assert.equal(mesh.material.defines.PIXEL_RATIO, '2.0');
+    assert.equal(mesh.material.isMeshBasicMaterial, true);
     assert(mesh.instanceMatrix.array.every(Number.isFinite));
   }
+  const meshes = room.meshes.map(({mesh}) => mesh);
+  room.setCount(0); assert(room.meshes.every(({mesh}) => mesh.count === 0 && !mesh.visible));
+  room.setCount(17); assert.deepEqual(room.meshes.map(({mesh}) => mesh), meshes);
+  assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 17);
+  room.setCount(8); assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 8);
   room.dispose(); assert.equal(scene.children.length, 0);
   geometry.dispose(); balls.geometry.dispose(); material.dispose();
 });
