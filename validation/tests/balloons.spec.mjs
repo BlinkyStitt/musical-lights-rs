@@ -127,8 +127,8 @@ for (const width of [375, 1440]) {
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
     // One batch draws all four background banks; three draw depth copies.
-    // One coating batch covers all five boxes, with no frame-line draw.
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(8);
+    // One outer coating covers all five banks, with no frame-line draw.
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(7);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });

@@ -392,6 +392,9 @@ export class PhysicsView {
       shader.vertexShader = 'uniform float enclosureHeight; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz); glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
+      // Repeated banks use the source bar's lighting position. Translation
+      // changes drawing, but must not create a different light in each bank.
+      shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;');
       shader.fragmentShader = 'uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; uniform float radius; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
@@ -401,21 +404,14 @@ export class PhysicsView {
           if (faceIsFront > .5 && distance < 0.0) discard;
           float pixel = max(0.000001, min(pixelRatio * fwidth(distance), min(halfWidth, barHeight * .5) / 3.0));
           float front = faceIsFront;
-          float outline = (1.0 - smoothstep(pixel, 2.0 * pixel, distance)) * front;
-          float inner = (1.0 - smoothstep(2.0 * pixel, 3.0 * pixel, distance)) * front;
-          diffuseColor.rgb = mix(mix(diffuseColor.rgb, vec3(1.0), inner * glow), vec3(0.0), outline);`);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(glow * inner * (1.0 - outline) * .8);');
-      // Keep the boundary dark after lighting.
-      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= 1.0 - outline;\n#include <opaque_fragment>');
+          float inner = (1.0 - smoothstep(pixel, 2.0 * pixel, distance)) * front;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(glow * inner * .8);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
     this.sideBars = new SideBars(this.scene, this.bars, count);
-    this.ceiling = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
-    ]), new THREE.LineBasicMaterial({ color: getComputedStyle(this.graph).getPropertyValue('--line').trim() }));
-    this.scene.add(this.ceiling);
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.bars, this.sideBars.mesh, this.width, this.settings.mirrorCount);
     this.enclosure = this.mirrors.walls;
   }
@@ -423,7 +419,6 @@ export class PhysicsView {
     const [count, , , pitch, , , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
-    this.ceiling.position.y = current[this.layout[17]];
     const height = current[this.layout[17]], depth = this.config[5];
     this.barRoof.value = height;
     if (!this.reduced.matches) this.patternTime.value = now / 10000;
@@ -563,7 +558,7 @@ export class PhysicsView {
   disposeMeshes() {
     this.sideBars?.dispose(); this.sideBars = null;
     this.mirrors?.dispose(); this.mirrors = null;
-    for (const mesh of [this.balls, this.bars, this.ceiling]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
+    for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
     this.closed = true; this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;

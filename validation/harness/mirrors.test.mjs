@@ -18,10 +18,11 @@ test('depth copies accept triangle soup and keep bounded pools without extra phy
   sides.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(6), 3);
   const room = new MirrorRoom(scene, balls, bars, sides, 1.2);
   room.update(1.2, .6, .24);
-  assert.equal(room.walls.geometry.groups.length, 6); assert.equal(room.walls.count, 5);
+  assert.equal(room.walls.geometry.groups.length, 6); assert.equal(room.walls.count, 1);
   assert.equal(room.meshes.length, 3);
   assert.equal(scene.children.some(node => node.isLineSegments), false);
-  assert.deepEqual([0, 1, 2, 3, 4].map(i => room.walls.instanceMatrix.array[i * 16 + 12]), [-1.8, -.6, .6, 1.8, 3.0].map(Math.fround));
+  assert.equal(room.walls.instanceMatrix.array[0], 6);
+  assert.equal(room.walls.instanceMatrix.array[12], Math.fround(.6));
   assert.equal(mirrorCells().length, 3);
   assert.equal(mirrorCells(0).length, 0); assert.equal(mirrorCells(17).length, 17);
   for (const value of [-1, 18, 1.5, NaN]) assert.throws(() => mirrorCells(value), RangeError);
@@ -36,7 +37,7 @@ test('depth copies accept triangle soup and keep bounded pools without extra phy
   assert.equal(room.meshes[1].mesh.geometry.index.count, 36);
   for (const { mesh, staged } of room.meshes) {
     assert.equal(mesh.material.defines.PIXEL_RATIO, '2.0');
-    assert.equal(mesh.material.isMeshBasicMaterial, true);
+    assert.equal(mesh.material.isMeshLambertMaterial, true);
     assert(mesh.instanceMatrix.array.every(Number.isFinite));
     assert.deepEqual(Array.from(mesh.geometry.attributes.copyDepth.array.slice(0, mesh.count)),
       Array.from({ length: 3 }, (_, c) => Array(staged.capacity).fill(-c - 1)).flat());

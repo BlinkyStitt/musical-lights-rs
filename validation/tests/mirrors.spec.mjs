@@ -5,6 +5,78 @@ import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs'
 const origin = 'http://127.0.0.1:8101';
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
 
+test('normal scenes fill a larger centered frame before and after fullscreen', async ({ page }) => {
+  await syntheticAudio(page);
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    for (const route of ['/', '/advanced/']) {
+      await page.goto(origin + route); await physicsReady(page); await normal(page);
+      for (let pass = 0; pass < 2; pass++) {
+        await expect.poll(() => page.evaluate(() => {
+          const v = document.querySelector('#dancinglights').physics;
+          const graph = v.graph.getBoundingClientRect(), panel = v.graph.parentElement.getBoundingClientRect();
+          return { centeredX: Math.abs(graph.x + graph.width / 2 - panel.x - panel.width / 2) < 1,
+            centeredY: Math.abs(graph.y + graph.height / 2 - panel.y - panel.height / 2) < 1,
+            sized: v.canvasWidth === graph.width && v.canvasHeight === graph.height,
+            large: graph.height >= (innerWidth >= 1000 ? 500 : 320),
+            bounded: v.canvas.width * v.canvas.height <= 200000,
+            noOverflow: graph.x >= 0 && graph.right <= innerWidth };
+        })).toEqual({ centeredX: true, centeredY: true, sized: true, large: true, bounded: true, noOverflow: true });
+        if (pass === 0) {
+          await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+          await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+          await normal(page);
+        }
+      }
+    }
+  }
+});
+
+test('all five bar banks share source lighting without internal wall partitions', async ({ page }) => {
+  await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
+  await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.renderedHeight(0) / v.current[v.layout[17] + 1];
+  })).toBeGreaterThan(.39);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const camera = new THREE.OrthographicCamera(-v.width * 2.5, v.width * 2.5, v.height / 2, -v.height / 2, .01, 20);
+    camera.position.set(v.width / 2, v.height / 2, 2); camera.lookAt(v.width / 2, v.height / 2, 0); camera.updateMatrixWorld();
+    const target = new THREE.WebGLRenderTarget(1440, 360), pixels = new Uint8Array(1440 * 360 * 4);
+    try {
+      v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 1440, 360, pixels);
+      const colors = [];
+      for (let band = 0; band < 24; band++) {
+        const source = v.bars.instanceMatrix.array;
+        const rgb = [-2, -1, 0, 1, 2].map(box => {
+          const point = new THREE.Vector3(source[band * 16 + 12] + box * v.width, v.renderedHeight(band) * .3, v.config[5] / 2).project(camera);
+          const offset = (Math.floor((point.y + 1) * 180) * 1440 + Math.floor((point.x + 1) * 720)) * 4;
+          return Array.from(pixels.slice(offset, offset + 3));
+        });
+        colors.push(rgb);
+      }
+      return { colors, walls: v.enclosure.count, wallWidth: v.enclosure.instanceMatrix.array[0],
+        width: v.width, wallCenter: v.enclosure.instanceMatrix.array[12],
+        outlines: v.scene.children.some(n => n.isLine), lights: v.attackLights.length,
+        copyMaterials: v.mirrors.meshes.map(({ mesh }) => mesh.material.type) };
+    } finally { v.renderer.setRenderTarget(null); target.dispose(); }
+  });
+  for (const banks of result.colors) {
+    expect(Math.max(...banks[2])).toBeGreaterThan(150);
+    for (const rgb of banks) expect(Math.max(...rgb.map((value, i) => Math.abs(value - banks[2][i])))).toBeLessThanOrEqual(3);
+  }
+  expect(result.walls).toBe(1); expect(result.wallWidth).toBeCloseTo(result.width * 5, 5);
+  expect(result.wallCenter).toBeCloseTo(result.width / 2, 5);
+  expect(result.outlines).toBe(false); expect(result.lights).toBe(4);
+  expect(result.copyMaterials).toEqual(Array(3).fill('MeshLambertMaterial'));
+});
+
 test('paired physical bars and both Quiet/Loud guides follow the rotated camera', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
@@ -50,7 +122,7 @@ test('paired physical bars and both Quiet/Loud guides follow the rotated camera'
   }
 });
 
-test('five transparent boxes show bounded depth copies and preserve source pixels at oblique views', async ({ page }, info) => {
+test('one transparent enclosure shows bounded depth copies and preserves source pixels at oblique views', async ({ page }, info) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
@@ -192,7 +264,7 @@ test('full-size background boxes repeat all source bands beside the physical cen
   });
   for (const result of results) {
     expect(result.banks).toEqual([24,24,24,24]); expect(result.balls).toBe(8);
-    expect(result.boxes).toBe(5); expect(result.depth).toBeCloseTo(result.physicalDepth,6);
+    expect(result.boxes).toBe(1); expect(result.depth).toBeCloseTo(result.physicalDepth,6);
     expect(result.width).toBe(result.sourceWidth);
     expect(result.tipError).toBeLessThan(.00001); expect(result.changed,JSON.stringify(result)).toBeGreaterThan(100);
   }
@@ -257,7 +329,7 @@ test('center supports and neighboring bars fill the same physical depth', async 
       widths:[v.bars.geometry.parameters.width,v.sideBars.geometry.parameters.width],
       heightError:Math.max(...Array.from({length:v.sideBars.mesh.count},(_,i)=>Math.abs(Math.abs(side[i*16+5])-v.renderedHeight(v.sideBars.sourceBands[i])))),
       shifts:[...new Set(v.sideBars.offsets.slice(0,v.sideBars.mesh.count))],width:v.width,
-      boxCenters:Array.from({length:5},(_,i)=>v.enclosure.instanceMatrix.array[i*16+12]),
+      outerWidth:v.enclosure.instanceMatrix.array[0],outerCenter:v.enclosure.instanceMatrix.array[12],coatings:v.enclosure.count,
       bodyCount:v.layout[21],physicalBalls:v.balls.count};
   });
   expect(result.depth).toBeCloseTo(result.physicalDepth,6); expect(result.sideDepth).toBe(result.depth);
@@ -265,7 +337,9 @@ test('center supports and neighboring bars fill the same physical depth', async 
   expect(result.heightError).toBeLessThan(.000001);
   expect(result.shifts).toHaveLength(4);
   for (const [i, offset] of [-2,-1,1,2].entries()) expect(result.shifts[i]).toBeCloseTo(offset*result.width,6);
-  for(let i=0;i<5;i++) expect(result.boxCenters[i]).toBeCloseTo((i-1.5)*result.width,6);
+  expect(result.coatings).toBe(1);
+  expect(result.outerWidth).toBeCloseTo(5*result.width,6);
+  expect(result.outerCenter).toBeCloseTo(result.width/2,6);
   expect(result.bodyCount).toBe(8); expect(result.physicalBalls).toBe(8);
 });
 
@@ -304,8 +378,17 @@ test('instanced depth copies match literal translated geometry from both camera 
           for(let layer=0;layer<v.mirrors.count;layer++) {
             const geometry=entry.mesh.geometry.clone();
             for(const {name,attr,values} of attributes) geometry.setAttribute(name,new THREE.InstancedBufferAttribute(values.slice(),attr.itemSize));
-            const material=new THREE.MeshBasicMaterial({toneMapped:source.material.toneMapped});material.defines={...source.material.defines};
-            material.onBeforeCompile=shader=>{source.material.onBeforeCompile(shader);shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight *= ${.72**(layer+1)};\n#include <opaque_fragment>`);};
+            const material=source.material.clone();
+            material.defines={...source.material.defines};
+            material.onBeforeCompile=shader=>{
+              source.material.onBeforeCompile(shader);
+              // Literal transforms move geometry. Undo only the depth shift
+              // in the lighting position, independently of copy projection.
+              const shift=(layer+1)*v.config[5];
+              shader.vertexShader=shader.vertexShader.replace('vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;',`vViewPosition = -(modelViewMatrix * vec4(world + vec3(0.0, 0.0, ${shift}), 1.0)).xyz;`);
+              shader.vertexShader=shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;',`vViewPosition = -(mvPosition.xyz + (modelViewMatrix * vec4(0.0, 0.0, ${shift}, 0.0)).xyz);`);
+              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight *= ${.72**(layer+1)};\n#include <opaque_fragment>`);
+            };
             material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
             const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;
             mesh.instanceMatrix.array.set(matrices);mesh.instanceColor=new THREE.InstancedBufferAttribute(colors.slice(),3);
@@ -503,7 +586,7 @@ test('depth-copy uploads follow the active count and keep pooled geometry', asyn
     return records;
   });
   for(const record of evidence) {
-    expect(record.pooled).toBe(true);expect(record.balls).toBe(8);expect(record.boxes).toBe(5);
+    expect(record.pooled).toBe(true);expect(record.balls).toBe(8);expect(record.boxes).toBe(1);
     if(record.count===0) expect(record.uploads).toHaveLength(0);
     else {
       expect(record.uploads.length).toBeGreaterThanOrEqual(6);
