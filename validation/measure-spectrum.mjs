@@ -2,7 +2,7 @@ import { runtimeRoot } from './runtime-assets.mjs';
 import { assertBrowserEnvironment } from './browser-environment.mjs';
 assertBrowserEnvironment();
 // Measure served release artifacts through real AudioWorklet transfer/ACK and DOM paths.
-// Usage: node measure-spectrum.mjs ROOT LABEL OUTPUT.json [PROFILE_FILTER]
+// Usage: node measure-spectrum.mjs ROOT LABEL OUTPUT.json [PROFILE_FILTER] [MIRROR_COUNT]
 import { chromium, webkit, devices } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
@@ -13,7 +13,9 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import checkBrowserStartup from './browser-startup.mjs';
 
-const [rootArgument, label, outputArgument, profileFilter] = process.argv.slice(2);
+const [rootArgument, label, outputArgument, profileFilter, mirrorCountArgument] = process.argv.slice(2);
+const mirrorCount = mirrorCountArgument === undefined ? undefined : Number(mirrorCountArgument);
+if (mirrorCount !== undefined && (!Number.isInteger(mirrorCount) || mirrorCount < 0 || mirrorCount > 17)) throw new Error('Mirror count must be 0 to 17');
 if (!rootArgument || !label || !outputArgument) throw new Error('Expected ROOT LABEL OUTPUT.json');
 const root = resolve(rootArgument), output = resolve(outputArgument);
 const dist = resolve(root, 'musical-leptos/dist');
@@ -182,6 +184,12 @@ try {
       }, { percussion });
       if (cdp) await cdp.send('Profiler.start');
       await page.goto(url);
+      if (mirrorCount !== undefined) {
+        await page.locator('.display-controls > summary').click();
+        await page.locator('.mirror-count').fill(String(mirrorCount));
+        await page.locator('.mirror-count').dispatchEvent('change');
+        await page.locator('.display-controls > summary').click();
+      }
       await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
       await page.getByRole('checkbox', { name: 'Listening', exact: true }).waitFor();
       if (expanded) await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -203,7 +211,14 @@ try {
         const { profile: cpuProfile } = await cdp.send('Profiler.stop');
         await writeFile(output.replace(/\.json$/, `-${name}.cpuprofile`), JSON.stringify(cpuProfile));
       }
-      assert(stats.messages.length > 100, 'Measure the actual worklet, not idle RAF');
+      const audioSession = await page.evaluate(() => ({
+        source: document.querySelector('.audio-card').dataset.audioSource,
+        state: document.querySelector('.audio-card').dataset.audioState,
+        notice: document.querySelector('.mic-session-status').textContent,
+        messages: window.measureStats.messages.length,
+        context: window.measuredContext?.state,
+      }));
+      assert(stats.messages.length > 100, `Measure the actual worklet, not idle RAF: ${JSON.stringify(audioSession)}`);
       assert.equal(stats.messages.length, stats.acks);
       assert(stats.decodeCosts.length === stats.messages.length);
       const intervals = stats.frames.slice(1).map((v, i) => v - stats.frames[i]);
@@ -241,6 +256,7 @@ try {
       await page.evaluate(() => window.measureInput.context.close());
       assert.deepEqual(errors, []);
       result.profiles.push({ name, browser: browser.version(), expanded, cpuRate, percussion, measuredSeconds: seconds, meters,
+        mirrorCount: await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount),
         viewport: profile.viewport, deviceScaleFactor: profile.deviceScaleFactor ?? 1,
         startupAppRafCallbackMs: summary(startup.frameCosts),
         fps: (stats.frames.length - 1) / seconds, frameIntervalMs: summary(intervals),

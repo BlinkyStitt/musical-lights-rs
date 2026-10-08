@@ -375,7 +375,7 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
     }
 }
 #[test]
-fn tiny_corrections_move_gently_and_settle_exactly_within_150_ms() {
+fn tiny_corrections_start_smoothly_and_rises_settle_within_40_ms() {
     for amplitude in [0.001, 0.01] {
         let mut sim = world(SimulationConfig::default());
         isolate(&mut sim, &[]);
@@ -386,8 +386,12 @@ fn tiny_corrections_move_gently_and_settle_exactly_within_150_ms() {
                 if tick == 0 {
                     assert!(sim.bar_velocities[0].abs() > 0.0);
                 }
-                if tick == 5 && level > 0.0 {
-                    assert_ne!(sim.motions[0].state.position, f64::from(level));
+                if tick == 0 && level > 0.0 {
+                    assert!(sim.motions[0].state.position < f64::from(level) * 0.1);
+                }
+                if tick == 4 && level > 0.0 {
+                    assert_eq!(sim.motions[0].state.position, f64::from(level));
+                    assert_eq!(sim.motions[0].state.velocity, 0.0);
                 }
             }
             assert_eq!(sim.motions[0].state.position, f64::from(level));

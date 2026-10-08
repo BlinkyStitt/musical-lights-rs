@@ -428,7 +428,7 @@ pub fn DancingLights(
                     <div class="scroll-controls">
                     <SettingSwitch label="Scroll lights" class="scroll-lights"
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
-                    <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" title="Estimated musical tempo">"120 BPM"</output>
+                    <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                     </div>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
@@ -530,6 +530,8 @@ pub fn DancingLights(
                         <p class="direction-error" role="status"></p>
                     </fieldset>
                     <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
+                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="17" step="1" value="6"/></label>
+                    <p>"Fewer mirror images reduce drawing work. 0 turns reflections off. Copies use the same bars and balls."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>

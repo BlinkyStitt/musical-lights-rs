@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { physicsReady } from '../physics-state.mjs';
+import { physicsReady, syntheticAudio } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
@@ -37,11 +37,16 @@ test('paired physical bars and both Quiet/Loud guides follow the rotated camera'
         const box = node.getBoundingClientRect();
         return box.x >= graph.x && box.right <= graph.right && box.y >= graph.y && box.bottom <= graph.bottom;
       });
-      return { guides, corners, labelsVisible };
+      const guideStyle = getComputedStyle(v.graph.querySelector('.meter-guide'));
+      return { guides, corners, labelsVisible,
+        guideAboveScene: Number(guideStyle.zIndex) > Number(getComputedStyle(v.layer).zIndex),
+        guidesIgnorePointer: guideStyle.pointerEvents === 'none' };
     });
     expect(Math.max(...alignment.guides)).toBeLessThan(1.5);
     expect(Math.max(...alignment.corners)).toBeLessThan(1);
     expect(alignment.labelsVisible).toBe(true);
+    expect(alignment.guideAboveScene).toBe(true);
+    expect(alignment.guidesIgnorePointer).toBe(true);
   }
 });
 
@@ -77,7 +82,7 @@ test('six one-way faces show bounded mirror images and preserve source pixels at
     expect(state.sourcePixels).toBeGreaterThan(200);
     expect(state.walls).toBe(6); expect(state.targets).toBe(4); expect(state.negativeScales).toBe(false);
     expect(state.pixels).toBeLessThanOrEqual(200000);
-    expect(state.passes).toBeLessThanOrEqual(14);
+    expect(state.passes).toBeLessThanOrEqual(15);
     expect(state.normals[4][0]).toBeCloseTo(1); expect(state.normals[5][0]).toBeCloseTo(-1);
     await info.attach(`mirror-${angle}.json`, { body: JSON.stringify(state), contentType: 'application/json' });
   }
@@ -114,9 +119,77 @@ test('Advanced saves bounded direction endpoints and curve without starting audi
   await expect(page.locator('.direction-curve')).toHaveValue('2');
   await page.locator('.display-reset').click();
   expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.directionOdds)).toEqual([60, 200, .05, .5, 1]);
-  await expect(page.locator('.tempo-readout')).toHaveText(/\d+ BPM/);
+  await expect(page.locator('.tempo-readout')).toBeHidden();
+  await expect(page.locator('.tempo-readout')).toHaveText('');
   await expect(page.locator('.tempo-readout')).toHaveAttribute('aria-live', 'off');
   await expect(page.locator('.listening-toggle')).not.toBeChecked();
+});
+
+test('mirror count saves, rejects fractions and resets without changing physics', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  await page.locator('.display-controls > summary').click();
+  await page.evaluate(() => { window.mirrorMeshes = document.querySelector('#dancinglights').physics.mirrors.meshes.map(({mesh})=>mesh); });
+  await page.locator('.listening-toggle').check();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+  await page.evaluate(() => { window.mirrorAudioFrames=0;document.querySelector('.audio-card').addEventListener('audio-tempo',()=>window.mirrorAudioFrames++); });
+  for (const count of [0, 1, 17]) {
+    await page.locator('.mirror-count').fill(String(count)); await page.locator('.mirror-count').dispatchEvent('change');
+    expect(await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return [v.settings.mirrorCount, v.mirrors.count, v.balls.count, v.layout[21], v.sideBars.mesh.count,
+        v.mirrors.meshes.every(({mesh},i)=>mesh===window.mirrorMeshes[i])];
+    })).toEqual([count, count, 8, 8, 48, true]);
+  }
+  await expect.poll(()=>page.evaluate(()=>window.mirrorAudioFrames)).toBeGreaterThan(5);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+  await page.locator('.mirror-count').fill('1.5'); await page.locator('.mirror-count').dispatchEvent('change');
+  expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount)).toBe(17);
+  await page.reload(); await physicsReady(page); await normal(page); await page.locator('.display-controls > summary').click();
+  await expect(page.locator('.mirror-count')).toHaveValue('17');
+  await page.locator('.display-reset').click(); await expect(page.locator('.mirror-count')).toHaveValue('6');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(6);
+});
+
+test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await physicsReady(page);
+  await expect(page.locator('.tempo-readout')).toBeHidden();
+  await page.locator('.listening-toggle').check();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(page.locator('.tempo-readout')).toBeVisible();
+  await expect(page.locator('.tempo-readout')).toHaveText('60 BPM');
+  await page.locator('.listening-toggle').uncheck();
+  await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+});
+
+test('side walls reuse 12 source bands each and show different bar heights at steep angles', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  const results = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4);
+    const render = () => { v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
+    const results = [];
+    try {
+      for (const angle of [-40, 40]) {
+        v.setCamera(angle); v.draw(performance.now());
+        const copy = render(); v.sideBars.mesh.visible = false;
+        const without = render(); v.sideBars.mesh.visible = true;
+        const positions = Array.from({length:24},(_,i)=>v.sideBars.mesh.instanceMatrix.array[i*16+12]);
+        const tips = Array.from({length:24},(_,i)=>v.sideBars.mesh.instanceMatrix.array[i*16+13]+v.layout[6]/2);
+        results.push({ angle, changed: copy.reduce((n,x,i)=>n+Number(Math.abs(x-without[i])>8),0),
+          left:positions.filter(x=>x<v.width/2).length,right:positions.filter(x=>x>v.width/2).length,
+          tipError:Math.max(...tips.map((x,i)=>Math.abs(x-v.renderedHeight(i)))),balls:v.balls.count });
+      }
+    } finally { v.renderer.setRenderTarget(null); target.dispose(); }
+    return results;
+  });
+  for (const result of results) {
+    expect(result.left).toBe(12); expect(result.right).toBe(12); expect(result.balls).toBe(8);
+    expect(result.tipError).toBeLessThan(.00001); expect(result.changed,JSON.stringify(result)).toBeGreaterThan(100);
+  }
 });
 
 test('phone opens expanded without capture and keeps video, notices, song and Exit visible in short landscape', async ({ browser }) => {
@@ -191,4 +264,52 @@ test('offscreen rendering stops while audio and physics keep running', async ({ 
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.metrics.frames)).toBeGreaterThan(before.frames);
+});
+
+test('whole-cell rejection preserves ray-portal pixels from both sides, above and below', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  const results = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const { invisibleCellCull } = await import(new URL(`${base}physics/mirrors.js`, document.baseURI));
+    const target = new THREE.WebGLRenderTarget(240,160), pixels = new Uint8Array(240*160*4), results=[];
+    const materials=v.mirrors.meshes.map(({mesh})=>mesh.material);
+    const originals=materials.map(m=>[m.onBeforeCompile,m.customProgramCacheKey]);
+    const render=()=>{v.renderer.setRenderTarget(target);v.renderer.render(v.scene,v.camera);v.renderer.readRenderTargetPixels(target,0,0,240,160,pixels);return pixels.slice();};
+    const restore=()=>materials.forEach((m,i)=>{[m.onBeforeCompile,m.customProgramCacheKey]=originals[i];m.needsUpdate=true;});
+    try {
+      for(const [angle,vertical] of [[-40,0],[0,0],[40,0],[20,.8],[-20,-.8]]) {
+        v.setCamera(angle,vertical);v.draw(performance.now());
+        const actual=render();
+        materials.forEach((m,i)=>{
+          m.onBeforeCompile=shader=>{originals[i][0](shader);shader.vertexShader=shader.vertexShader.replace(invisibleCellCull,'');};
+          m.customProgramCacheKey=()=>originals[i][1]()+'-reference-without-cell-rejection';m.needsUpdate=true;
+        });
+        const expected=render();restore();
+        results.push({angle,vertical,changed:actual.reduce((n,x,i)=>n+Number(x!==expected[i]),0)});
+      }
+    } finally {restore();v.renderer.setRenderTarget(null);target.dispose();}
+    return results;
+  });
+  for(const result of results) expect(result.changed,JSON.stringify(result)).toBe(0);
+});
+
+test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }) => {
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.tone-repeat').check(); await page.locator('.tone-audible').uncheck();
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+  await expect(page.locator('.listening-toggle')).not.toBeChecked();
+  await expect(page.locator('.tempo-readout')).toBeVisible();
+  await page.locator('.tone-pause').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','paused');
+  await expect(page.locator('.tempo-readout')).toBeHidden();
+  await page.locator('.tone-pause').click();
+  await expect(page.locator('.tempo-readout')).toBeVisible();
+  await page.locator('.tone-repeat').uncheck();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
+  await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
 });

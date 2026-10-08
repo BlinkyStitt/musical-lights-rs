@@ -48,9 +48,10 @@ does not receive an artificial kick away from a wall.
 
 Bars use position-based kinematic bodies in normalized bar coordinates.
 Rises use piecewise quintic Hermite splines: 70% acceleration and 30% braking,
-with position, velocity and acceleration preserved on retargeting. Upward
-corrections of 1% or less take 140 ms; smoothstep interpolation reduces this to
-40 ms at 12.5% or more. Reduced Motion attacks take at least 320 ms.
+with position, velocity and acceleration preserved on retargeting. Every rise
+uses the configured attack duration, including quiet corrections. The default
+is 40 ms; small rises no longer add a 140 ms delay. Reduced Motion attacks take
+at least 320 ms. Acoustic filtering and microphone/output timing remain separate.
 
 Releases accelerate downward at 2 bar heights/s², capped at 1.2 bar heights/s.
 A full-height fall from rest takes about 1.13 s regardless of screen size. The

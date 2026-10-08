@@ -57,7 +57,10 @@ It retains eight seconds (400 f32 values), evaluates after four seconds every
 half-second, searches 60–200 BPM using normalized mean-centered onset
 correlation, rejects weak/nonperiodic evidence, and favors continuity at ambiguous
 octaves. Accepted tempo enters a three-second time-based EMA; lost confidence
-holds for two seconds before smoothly returning to 120 BPM. It estimates tempo,
+holds for two seconds before smoothly returning to 60 BPM. Startup and silence
+use 60 BPM; the octave-search prior stays at 120 BPM to avoid interpreting
+180 BPM clicks as 60 BPM. The page hides the counter when audio stops and marks
+uncertain active estimates in its help text. It estimates tempo,
 not beat timestamps, and makes no promise of correct metrical interpretation for
 all music. A startup interpretation can differ from a listener's half/double tempo.
 

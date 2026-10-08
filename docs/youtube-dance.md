@@ -85,8 +85,14 @@ measured concert-ball material model.
 
 The browser unfolds a bounded set of reflected images inside six inward-facing
 mirror surfaces. Exterior faces stay transparent. Perspective views show depth
-and the scene through either side. Four instanced reflection meshes share the
-bar and ball materials, contact pigments and attack highlights. Reflected bars
+and the scene through either side. Display's **Mirror images** setting saves
+an integer from 0 to 17, with six images by default. Zero disables reflected
+images without changing physics or removing the transparent box. At most four
+instanced reflection meshes reuse source colors, contact pigments and attack
+highlights. Copies use basic shading; real bars and balls retain scene lighting.
+Each side wall also displays 12 of the same source bands in matching top/bottom
+banks. These thin visual copies follow the rendered tips and source colors;
+they do not create colliders, extra balls or accessible meters. Reflected bars
 use twelve triangles and their distance shader retains the rounded front
 silhouette. Nearby images draw first to limit hidden work. A ray/box
 intersection masks each mirror portal. Odd reflections reverse triangle
@@ -105,9 +111,13 @@ measured separately from worker physics cost. Physical embedded mirrors
 require no rendering code in core.
 
 Quiet/Loud guides project both banks through the current camera. The camera
-reserves space for their labels so all four remain visible at oblique angles. A small BPM
-readout beside Scroll lights uses the smoothed estimate and shows uncertainty
-in its help text. It does not announce every update.
+reserves space for their labels so all four remain visible at oblique angles.
+Guides draw above the scene and let pointer input pass through to the meters.
+A small BPM readout beside Scroll lights uses the smoothed estimate and shows
+uncertainty in its help text. It appears only during active audio playback, including
+digital sources with Listening off. Pause, natural end and stop hide it.
+Silence holds the last reliable tempo briefly, then eases toward 60 BPM.
+It does not announce every update.
 
 ## Verification and release boundary
 

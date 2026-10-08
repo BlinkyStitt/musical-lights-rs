@@ -1,12 +1,23 @@
 import * as THREE from './three.module.js';
 
 export const visiblePostProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); mvPosition.y = clamp(mvPosition.y, 0.0, enclosureHeight); world = mvPosition.xyz; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+// A segment with both endpoints outside one face cannot intersect the room.
+// This rejects whole cells before the exact fragment ray/box portal runs.
+export const invisibleCellCull = `
+  if ((mirrorCell.x < 0.0 && cameraPosition.x <= 0.0)
+   || (mirrorCell.x > 0.0 && cameraPosition.x >= mirrorExtent.x)
+   || (mirrorCell.y < 0.0 && cameraPosition.y <= 0.0)
+   || (mirrorCell.y > 0.0 && cameraPosition.y >= mirrorExtent.y)
+   || (mirrorCell.z < 0.0 && cameraPosition.z <= -mirrorExtent.z * .5)
+   || (mirrorCell.z > 0.0 && cameraPosition.z >= mirrorExtent.z * .5))
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);`;
 
 // Unfold a rectangular mirror room. A reflected point in cell n has alternating
 // parity and an n*extent translation. Keep a finite, fading set: eight deep
 // images, the six first mirrors, and adjacent corner images. No render targets,
 // recursive cameras, physics bodies, or negative instance scales.
-export function mirrorCells() {
+export function mirrorCells(count = 6) {
+  if (!Number.isInteger(count) || count < 0 || count > 17) throw new RangeError('Use 0 to 17 mirror images');
   const cells = [];
   for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
     if (x || y) cells.push([x, y, 0]);
@@ -14,18 +25,21 @@ export function mirrorCells() {
   for (let z = -8; z < 0; z++) cells.push([0, 0, z]);
   cells.push([0, 0, 1]);
   // Draw nearby images first so the depth buffer rejects hidden deep copies.
-  return cells.sort((a, b) => a.reduce((n, x) => n + Math.abs(x), 0) - b.reduce((n, x) => n + Math.abs(x), 0));
+  return cells.sort((a, b) => a.reduce((n, x) => n + Math.abs(x), 0) - b.reduce((n, x) => n + Math.abs(x), 0)).slice(0, count);
 }
 
 export class MirrorRoom {
-  constructor(scene, balls, bars, width) {
+  constructor(scene, balls, bars, width, count = 6) {
+    this.count = count;
     this.scene = scene;
     this.extent = { value: new THREE.Vector3(width, 1, 1) };
     this.meshes = [];
     this.sources = [];
     this.corner = new THREE.Vector3(); this.viewport = new THREE.Vector4();
     this.savedScissor = new THREE.Vector4();
-    const cells = mirrorCells();
+    // Keep one bounded pool. Changing the image count does not release shader
+    // programs and force compilation while audio is already running.
+    const cells = mirrorCells(17);
     for (const [kind, source] of [['balls', balls], ['bars', bars]]) {
       // Wrapped bar instances outside the real room are physics bookkeeping.
       // Upload only the two visible banks and at most one seam bar per bank.
@@ -69,7 +83,10 @@ export class MirrorRoom {
         geometry.setAttribute('mirrorCell', new THREE.InstancedBufferAttribute(cellData, 3));
         geometry.setAttribute('mirrorSign', new THREE.InstancedBufferAttribute(signData, 3));
         geometry.setAttribute('mirrorGain', new THREE.InstancedBufferAttribute(gainData, 1));
-        const material = source.material.clone();
+        // Reflections reuse the source color, attack outline and pigments.
+        // Avoid evaluating four local lights again for every virtual image.
+        // The real geometry remains lit and illuminates the physical enclosure.
+        const material = new THREE.MeshBasicMaterial({ toneMapped: source.material.toneMapped });
         material.defines = { ...source.material.defines };
         material.customProgramCacheKey = () => `mirror-room-${kind}-1`;
         material.onBeforeCompile = shader => {
@@ -90,6 +107,7 @@ export class MirrorRoom {
             reflectionGain = mirrorGain;
             vec4 mvPosition = viewMatrix * vec4(reflectedPoint, 1.0);
             gl_Position = projectionMatrix * mvPosition;
+            ${invisibleCellCull}
             ${kind === 'bars' ? 'if (instanceMatrix[3].x < -halfWidth || instanceMatrix[3].x > mirrorExtent.x + halfWidth) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);' : ''}`);
           shader.fragmentShader = `uniform vec3 mirrorExtent; varying vec3 reflectedPoint; varying float reflectionGain;\n` + shader.fragmentShader;
           // Only rays that traverse the real room and leave an interior mirror
@@ -136,7 +154,7 @@ export class MirrorRoom {
           renderer.setScissorTest(true);
         };
         mesh.onAfterRender = renderer => { renderer.setScissor(this.savedScissor); renderer.setScissorTest(this.savedScissorTest); };
-        this.meshes.push({ mesh, staged, copies: group.length }); scene.add(mesh);
+        this.meshes.push({ mesh, staged, cells: group, copies: group.length }); scene.add(mesh);
       }
     }
     // All six interior faces have a light silver coating; exterior faces are
@@ -149,6 +167,18 @@ export class MirrorRoom {
     this.frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
       new THREE.LineBasicMaterial({ color: 0x718096, transparent: true, opacity: .45 }));
     scene.add(this.frame);
+    this.setCount(count);
+  }
+  setCount(count) {
+    const active = mirrorCells(count);
+    this.count = count;
+    for (const entry of this.meshes) {
+      entry.copies = entry.cells.filter(cell => active.some(a => a.every((n, i) => n === cell[i]))).length;
+      // Each parity group retains the same nearest-first prefix as the source
+      // cell list, so no instance attributes or materials need replacement.
+      entry.mesh.count = entry.copies * entry.staged.capacity;
+      entry.mesh.visible = entry.copies > 0;
+    }
   }
   update(width, height, depth) {
     this.extent.value.set(width, height, depth);
