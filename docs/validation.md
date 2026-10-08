@@ -773,3 +773,22 @@ JavaScript averaged 0.644 ms per frame under fourfold CPU throttle. All use the
 images, the same 390 × 844/DPR 3 profile and diagnostic recording off. Hardware
 and software renderer results are separate evidence; neither proves physical
 Android or iPhone performance.
+
+The continuous-color follow-up removes black bar borders while retaining white
+attack edges and rounded silhouettes. Background banks and depth images use
+the source material and source lighting position. One transparent outer coating
+spans all five banks; internal wall partitions and the center ceiling line are
+removed. Eight balls still use the same physical simulation. Normal-page scenes
+use equal gutters and a responsive 320–560 pixel height. Equal top and bottom
+padding keeps the frequency tooltip above the graph. The existing 200,000-pixel
+rendering limit remains. Tests compare actual colors across all five banks,
+independent lit depth copies, colored boundaries, and normal-page centering
+before and after fullscreen at desktop and phone widths.
+
+The changed scene held 60.0 FPS in a 30-second Metal run on the Apple M4 Max,
+after five seconds of warmup, with real-worklet synthetic input, diagnostic
+recording off, 390 × 844/DPR 3, fourfold main-thread CPU throttle and three
+depth images. GPU timers averaged 0.226 ms (p95 0.249 ms); application animation
+callbacks averaged 0.461 ms per frame. Uploads remained 92,640 bytes per frame.
+The larger normal frame changes the scene geometry, so this complete-scene
+measurement does not isolate lighting cost or establish physical-phone FPS.

@@ -36,7 +36,7 @@ export class MirrorRoom {
       }
       geometry.setAttribute('copyDepth', new THREE.InstancedBufferAttribute(offsets, 1));
       geometry.setAttribute('copyGain', new THREE.InstancedBufferAttribute(gains, 1));
-      const material = new THREE.MeshBasicMaterial({ toneMapped: source.material.toneMapped });
+      const material = source.material.clone();
       material.defines = { ...source.material.defines };
       material.customProgramCacheKey = () => `depth-copy-${kind}`;
       material.onBeforeCompile = shader => {
@@ -49,6 +49,9 @@ export class MirrorRoom {
           vec4 mvPosition = modelViewMatrix * vec4(sourcePoint.xyz + vec3(0.0, 0.0, copyDepth * mirrorDepth), 1.0);
           imageGain = copyGain;
           gl_Position = projectionMatrix * mvPosition;`);
+        // Preserve the source lighting while translating the drawing. Bars
+        // already shade at their bank-local world position; balls use theirs.
+        if (kind === 'balls') shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * sourcePoint).xyz;');
         shader.fragmentShader = 'varying float imageGain;\n' + shader.fragmentShader;
         shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= imageGain;\n#include <opaque_fragment>');
       };
@@ -57,10 +60,11 @@ export class MirrorRoom {
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * cells.length * 3), 3);
       this.meshes.push({ mesh, staged }); scene.add(mesh);
     }
+    // One continuous outer coating has no partitions between repeated banks.
     // Transparent outside faces and faint inside coatings, without box outlines.
     // Only the center box participates in physics.
     this.walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), BOX_OFFSETS.length);
+      new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), 1);
     this.walls.frustumCulled = false; this.wallMatrix = new THREE.Matrix4();
     scene.add(this.walls);
     this.setCount(count);
@@ -72,10 +76,8 @@ export class MirrorRoom {
   }
   update(width, height, depth) {
     this.depth.value = depth;
-    for (let box = 0; box < BOX_OFFSETS.length; box++) {
-      this.wallMatrix.makeScale(width, height, depth).setPosition((BOX_OFFSETS[box] + .5) * width, height / 2, 0);
-      this.walls.setMatrixAt(box, this.wallMatrix);
-    }
+    this.wallMatrix.makeScale(BOX_OFFSETS.length * width, height, depth).setPosition(width / 2, height / 2, 0);
+    this.walls.setMatrixAt(0, this.wallMatrix);
     this.walls.instanceMatrix.needsUpdate = true;
     if (this.count === 0) return;
     for (const staged of this.sources) {

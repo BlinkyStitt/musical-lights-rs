@@ -37,7 +37,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
 }
 
 for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-preference', 'reduce']) {
-  test(`canvas glow retains rainbow centers and a one-pixel inner edge in ${colorScheme}, ${reducedMotion}`, async ({ page }, info) => {
+  test(`canvas keeps colored boundaries and a white attack edge in ${colorScheme}, ${reducedMotion}`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme, reducedMotion });
     await syntheticAudio(page); await page.goto('http://127.0.0.1:8101'); await startFrozen(page);
@@ -73,18 +73,13 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       const edge = pixels.side + (i + .02) * pixels.plotWidth / 24;
       const left = Math.floor(edge + .5);
       const middle = rgb(center);
-      // Multisample edge coverage differs between engines. Inspect the outline
-      // and inner flash together; outside samples can contain antialiasing.
+      // Sample inside the front face; outside pixels include the bar gap.
       const border = Array.from({ length: Math.ceil(3 * pixels.ratio) }, (_, offset) => rgb(left + offset))
         .sort((a, b) => Math.min(...b) - Math.min(...a))[0];
-      const boundary = [rgb(left - 1), rgb(left), rgb(left + 1)]
-        .sort((a, b) => Math.max(...a) - Math.max(...b))[0];
       // Lit fills retain at least 75% encoded value and 40% relative saturation.
       // The previous unlit material fixed peak value at 100% for every face.
       expect(Math.max(...middle)).toBeGreaterThanOrEqual(255 * .75);
       expect((Math.max(...middle) - Math.min(...middle)) / Math.max(...middle)).toBeGreaterThanOrEqual(.4);
-      // The dark outer boundary is visible even on a white page.
-      expect(Math.max(...boundary), JSON.stringify({ i, left, middle, boundary })).toBeLessThan(Math.max(...middle));
       // White is confined to the inside edge; the next pixels return to the fill.
       expect(Math.min(...border)).toBeGreaterThan(Math.min(...middle));
       expect(Math.min(...rgb(left + Math.ceil(3 * pixels.ratio)))).toBeLessThan(245);
@@ -94,6 +89,22 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBeCloseTo(reducedMotion === 'reduce' ? .25 : .5, 6);
     await page.evaluate(() => { window.audioNow += .090001; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
+    const colored = await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      v.draw(performance.now());
+      const gl = v.renderer.getContext(), width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+      v.pointerPoint.set(v.width / 2, v.renderedHeight(0) / 2, v.config[5] / 2).project(v.camera);
+      const values = new Uint8Array(width * 4);
+      gl.readPixels(0, Math.floor((v.pointerPoint.y + 1) * height / 2), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, values);
+      return Array.from(values);
+    });
+    for (let i = 0; i < 24; i++) {
+      const center = Math.floor(pixels.side + (i + .5) * pixels.plotWidth / 24);
+      const inside = Math.ceil(pixels.side + (i + .02) * pixels.plotWidth / 24 + pixels.ratio);
+      const fill = colored.slice(center * 4, center * 4 + 3), boundary = colored.slice(inside * 4, inside * 4 + 3);
+      expect(Math.max(...boundary), JSON.stringify({ i, fill, boundary })).toBeGreaterThanOrEqual(Math.max(...fill) * .85);
+      expect(Math.max(...boundary) - Math.min(...boundary)).toBeGreaterThan(60);
+    }
     await page.evaluate(() => { window.audioNow += 10; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);
     expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.bars.instanceColor.array))).toEqual(pixels.colors);

@@ -71,7 +71,10 @@
 - Show one scrolling artist/song title in expanded mode. Keep the progress
   ring and errors beside Identify song. Show rendered FPS beside the angle slider
   in expanded mode; normal Home omits FPS. Camera motion uses a smooth horizontal
-  sweep without attack shake or vertical wobble. Do not draw box-frame outlines.
+  sweep without attack shake or vertical wobble. Do not draw box-frame outlines
+  or black bar borders. Retain white attack edges. Repeat source lighting across
+  the five banks and depth copies, with one outer coating and no internal walls.
+  Normal-page scenes use equal gutters and a responsive 320–560 pixel height.
 
 # Validation and delivery evidence
 

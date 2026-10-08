@@ -53,8 +53,8 @@ p { line-height: 1.65; }
 .audio-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 1rem; box-shadow: 0 12px 38px var(--shadow); }
 h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .mic-status { font-size: .74rem; color: var(--muted); background: var(--paper); border: 1px solid var(--line); border-radius: 50px; padding: .4rem .8rem; margin: 0; text-align: center; }
-.spectrum-panel { container-type: inline-size; position: relative; padding: 2.2rem 1.5rem 1rem 3.3rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
-#dancinglights { --balloon-headroom: 40%; --plot-side-inset: 0%; --plot-baseline: 3px; padding-inline: var(--plot-side-inset); position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); height: clamp(210px, 28vw, 320px); }
+.spectrum-panel { container-type: inline-size; position: relative; padding: 2rem 1rem; background: var(--plot); border: 1px solid var(--line); border-radius: 13px; }
+#dancinglights { --balloon-headroom: 40%; --plot-side-inset: 0%; --plot-baseline: 3px; padding-inline: var(--plot-side-inset); position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); height: clamp(320px, 48vw, 560px); }
 #dancinglights::before { content: ""; position: absolute; inset: var(--balloon-headroom) var(--plot-side-inset) var(--plot-baseline); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%); pointer-events: none; }
 .balloon-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; contain: layout paint; pointer-events: none; }
 .balloon-layer canvas { display: block; width: 100%; height: 100%; }
@@ -74,7 +74,7 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .meter-guide { position: absolute; z-index: 2; pointer-events: none; top: var(--balloon-headroom); bottom: var(--plot-baseline); left: calc(var(--plot-side-inset) - 2.6rem); display: flex; flex-direction: column; justify-content: space-between; font-size: .6rem; letter-spacing: .05em; color: var(--muted); }
 .meter-guide > :first-child { transform: translateY(-50%); }
 .meter-guide > :last-child { transform: translateY(50%); }
-.spectrum-labels { display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; padding-top: 1rem; }
+.spectrum-labels { position: absolute; bottom: .4rem; left: 1rem; right: 1rem; display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; }
 .audio-controls { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-bottom: 1rem; }
 .scroll-control { display: inline-flex; align-items: center; gap: .25rem; font-size: .85rem; }
 .button-row { display: flex; flex-wrap: wrap; gap: .65rem; }
@@ -135,7 +135,7 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
   button { font-size: .75rem; padding: .65rem .6rem; }
   .display-note { flex-direction: column; gap: .15rem; }
   .display-note .mic-status { align-self: flex-start; }
-  .spectrum-panel { padding-right: .65rem; padding-left: 3rem; }
+  .spectrum-panel { padding-inline: .65rem; }
   .meter-guide { left: calc(var(--plot-side-inset) - 2.55rem); }
   .how-it-works { grid-template-columns: 1fr; gap: 1rem; }
   footer { flex-direction: column; gap: .5rem; }

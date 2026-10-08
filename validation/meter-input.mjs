@@ -17,10 +17,10 @@ function hitPoints(meters) {
   });
 }
 export async function meterPoint(page, meter) {
-  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.locator('.spectrum-panel').scrollIntoViewIfNeeded();
   return (await meter.evaluateAll(hitPoints))[0];
 }
 export async function meterPoints(page) {
-  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.locator('.spectrum-panel').scrollIntoViewIfNeeded();
   return page.getByRole('meter').evaluateAll(hitPoints);
 }
