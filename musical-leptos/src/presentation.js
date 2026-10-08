@@ -1,7 +1,7 @@
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, scrolling: true, youtubeLink: '' });
+  cameraMotion: true, cameraAngle: 0, mirrorCount: 3, scrolling: true, youtubeLink: '' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds] };
   try {

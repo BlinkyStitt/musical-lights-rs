@@ -372,10 +372,9 @@ export class PhysicsView {
         diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
-    // Draw the visible height, not a 20 m collider clipped at both banks.
-    // A narrow strip leaves distinct spaces between the repeated mirror images.
-    const stripDepth = Math.min(this.config[5] / 8, pitch - gap);
-    const geometry = new THREE.BoxGeometry(pitch - gap, 1, stripDepth);
+    // The visible post spans the same depth as its physical support surface.
+    // Scale only its height; keep finite geometry inside both banks.
+    const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     this.barRoof = { value: this.height };
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
@@ -403,7 +402,7 @@ export class PhysicsView {
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
-    this.sideBars = new SideBars(this.scene, this.bars, count, this.palette);
+    this.sideBars = new SideBars(this.scene, this.bars, count);
     this.ceiling = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, this.config[5] / 2), new THREE.Vector3(this.width, 0, this.config[5] / 2),
     ]), new THREE.LineBasicMaterial({ color: getComputedStyle(this.graph).getPropertyValue('--line').trim() }));
@@ -458,7 +457,7 @@ export class PhysicsView {
         }
       }
     }
-    this.sideBars.update(this.layout, height, depth, phase, this.meshEdges);
+    this.sideBars.update(this.layout);
     let used = 0;
     for (let i = 0; i < count && used < this.attackLights.length; i++) {
       const glow = this.meshEdges[i];
