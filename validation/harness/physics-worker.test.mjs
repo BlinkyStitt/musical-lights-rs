@@ -62,3 +62,20 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
     } finally { w.close(); }
   });
 }
+
+
+test('each physics tick can publish fresh travel with one outstanding snapshot', async () => {
+  const w = await worker();
+  try {
+    const bytes = w.ready.layout[12] * 4;
+    await w.send({ type: 'snapshot', buffer: new ArrayBuffer(bytes) });
+    const first = w.messages.at(-1);
+    assert.equal(first.type, 'snapshot');
+    w.advance(1000 / 120 + .001);
+    assert.equal(w.messages.at(-1), first, 'An unreturned buffer bounds the queue');
+    await w.send({ type: 'snapshot', buffer: first.buffer });
+    const next = w.messages.at(-1);
+    assert.equal(next.type, 'snapshot');
+    assert.equal(next.tick, first.tick + 1);
+  } finally { w.close(); }
+});

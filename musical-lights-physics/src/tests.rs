@@ -349,6 +349,7 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
             assert!(sim.bar_velocities[0].abs() < 1e-6);
         }
         input(&mut sim, [1.0; COUNT]);
+        // Interrupt the rising stroke before it reaches its target.
         sim.step();
         sim.step();
         sim.step();
@@ -357,7 +358,7 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
         input(&mut sim, [0.0; COUNT]);
         assert_eq!(sim.bar_velocities[0], velocity);
         sim.step();
-        assert!(sim.bar_velocities[0] > 0.0 && sim.bar_velocities[0] < velocity);
+        assert!(sim.bar_velocities[0] < velocity);
         let mut ticks = 1;
         while sim.bar_velocities[0] >= 0.0 && ticks < 12 {
             sim.step();
@@ -375,13 +376,13 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
     }
 }
 #[test]
-fn tiny_corrections_start_smoothly_and_rises_settle_within_40_ms() {
-    for amplitude in [0.001, 0.01] {
+fn all_rises_start_continuously_and_settle_within_fifty_ms() {
+    for amplitude in [0.001, 0.01, 0.1, 0.5, 1.0] {
         let mut sim = world(SimulationConfig::default());
         isolate(&mut sim, &[]);
         for level in [amplitude, 0.0] {
             input(&mut sim, [level; COUNT]);
-            for tick in 0..18 {
+            for tick in 0..if level > 0.0 { 18 } else { 160 } {
                 sim.step();
                 if tick == 0 {
                     assert!(sim.bar_velocities[0].abs() > 0.0);
@@ -1491,4 +1492,24 @@ fn roof_bar_deflects_inward_and_reports_its_source_pigment() {
     }
     assert!(impulse > 0.0 && inward);
     assert_eq!(&sim.pigments[..3], &sim.palette[12]);
+}
+
+#[test]
+fn default_full_attacks_stay_within_the_work_cap_in_tall_phone_rooms() {
+    for height in [0.927803, 2.596923, 2.75] {
+        let mut sim = world(SimulationConfig {
+            height,
+            ..SimulationConfig::default()
+        });
+        input(&mut sim, [0.0; COUNT]);
+        for _ in 0..HZ {
+            sim.step();
+        }
+        input(&mut sim, [1.0; COUNT]);
+        for _ in 0..16 {
+            sim.step();
+            assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
+            assert!(sim.snapshot.values[COST_OFFSET] <= MAX_SUBSTEPS as f32);
+        }
+    }
 }

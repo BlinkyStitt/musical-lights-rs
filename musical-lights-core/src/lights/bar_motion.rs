@@ -1,6 +1,9 @@
 //! Smooth attacks and gravity-limited releases in normalized bar coordinates.
 use num::Float;
 
+/// Default rise time for every band. Device adapters can expose an override.
+pub const DEFAULT_ATTACK_SECONDS: f64 = 0.040;
+
 const FALL_GRAVITY: f64 = 2.0; // bar heights / second²
 const FALL_SPEED: f64 = 1.2; // terminal bar heights / second
 #[derive(Clone, Copy, Debug, Default)]
@@ -8,6 +11,17 @@ pub struct State {
     pub position: f64,
     pub velocity: f64,
     pub acceleration: f64,
+}
+
+// A cubic Hermite brake has v(u) = (1-u)^2 * (v0*(1+2u)+a0*t*u).
+// Limit t when acceleration opposes velocity so braking cannot reverse and
+// then accelerate back toward zero. This also scales safely for short rises.
+fn brake_time(state: State, maximum: f64) -> f64 {
+    if state.velocity * state.acceleration < 0.0 {
+        maximum.min(3.0 * state.velocity.abs() / state.acceleration.abs())
+    } else {
+        maximum
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -74,7 +88,7 @@ impl Motion {
             // Lower targets change only the floor. Preserve downward momentum;
             // an upward attack first brakes before gravity takes over.
             self.brake_duration = if start.velocity > 0.0 {
-                if reduced { 0.080 } else { 0.020 }
+                brake_time(start, if reduced { 0.080 } else { 0.020 })
             } else {
                 0.0
             };
@@ -96,14 +110,14 @@ impl Motion {
         let duration = if reduced {
             slow.max(0.320)
         } else {
-            // Quiet attacks must not pay a 140 ms delay. The configured stroke
-            // time applies to every rise; retain C2 joins and gravity releases.
+            // The configured time applies to every rise. Retain C2 joins
+            // and gravity releases without a loudness-dependent delay.
             fast
         };
         let brake = if start.velocity * delta < 0.0
             || start.velocity.abs() * duration * 0.5 > delta.abs()
         {
-            if reduced { 0.080 } else { 0.020 }
+            brake_time(start, if reduced { 0.080 } else { 0.020 })
         } else {
             0.0
         };
@@ -195,6 +209,40 @@ impl Motion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn short_strokes_brake_monotonically_from_every_rising_phase() {
+        for duration in [0.020, DEFAULT_ATTACK_SECONDS, 0.320] {
+            for phase in 1..100 {
+                let mut motion = Motion::default();
+                motion.retarget(1.0, duration, false, 0.320);
+                motion.advance(duration * f64::from(phase) / 100.0);
+                let before = motion.state;
+                motion.retarget(0.0, duration, false, 0.320);
+                assert_eq!(motion.sample(0.0).position, before.position);
+                assert!((motion.sample(0.0).velocity - before.velocity).abs() < 1e-9);
+                for sample in 0..100 {
+                    assert!(
+                        motion
+                            .sample(motion.brake_duration * f64::from(sample) / 100.0)
+                            .velocity
+                            >= -1e-9
+                    );
+                }
+                assert!(motion.sample(motion.brake_duration + 0.01).velocity < 0.0);
+            }
+        }
+    }
+    #[test]
+    fn every_default_rise_reaches_its_target_within_the_configured_time() {
+        for height in [0.005, 0.03, 0.08, 0.5, 1.0] {
+            let mut motion = Motion::default();
+            motion.retarget(height, DEFAULT_ATTACK_SECONDS, false, 0.320);
+            assert!(motion.sample(DEFAULT_ATTACK_SECONDS * 0.625).position > height * 0.5);
+            assert!(motion.sample(DEFAULT_ATTACK_SECONDS * 0.875).position > height * 0.9);
+            motion.advance(DEFAULT_ATTACK_SECONDS);
+            assert_eq!(motion.state.position, height);
+        }
+    }
     #[test]
     fn quiet_and_full_attacks_use_the_same_configured_stroke() {
         for height in [0.005, 0.03, 0.08, 0.5, 1.0] {
