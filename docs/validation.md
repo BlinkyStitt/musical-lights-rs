@@ -730,7 +730,8 @@ tempo estimator and Rapier simulation. Native CPU results do not establish
 browser FPS, GPU cost, microphone response or physical-phone acceptance.
 
 On 2026-10-08, the full three-box release scene measured 46.3 FPS with six
-depth copies and 59.3 FPS with three. Both runs used the same 390 × 844
+depth copies and 56.9–59.3 FPS with three across two trials. Runs used the same
+390 × 844
 viewport, DPR 3, Chromium 154, fourfold main-thread CPU throttle, 200,000-pixel
 cap, synthetic beat PCM through the real worklet, five-second warmup and
 30-second measurement on an Apple M4 Max. Recording stayed off. The faster
