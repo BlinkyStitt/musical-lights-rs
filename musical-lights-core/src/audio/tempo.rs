@@ -5,7 +5,7 @@ use micromath::F32Ext;
 
 pub const ENVELOPE_HZ: usize = 50;
 pub const HISTORY: usize = ENVELOPE_HZ * 8;
-pub const FALLBACK_BPM: f32 = 120.0;
+pub const FALLBACK_BPM: f32 = 60.0;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TempoEstimate {
@@ -32,7 +32,9 @@ impl Default for TempoEstimator {
             bins: 0,
             elapsed: 0.0,
             aggregate: 0.0,
-            accepted: FALLBACK_BPM,
+            // The octave prior is not the silent movement rate. Starting the
+            // correlation search at 60 biases 180 BPM clicks to their third.
+            accepted: 120.0,
             established: false,
             smoothed: FALLBACK_BPM,
             confidence: 0.0,
@@ -65,7 +67,7 @@ impl TempoEstimator {
         } else {
             self.lost_seconds += 0.020;
         }
-        let target = if self.lost_seconds > 2.0 {
+        let target = if !self.established || self.lost_seconds > 2.0 {
             FALLBACK_BPM
         } else {
             self.accepted
@@ -187,6 +189,11 @@ mod tests {
     #[test]
     fn silence_noise_and_loss_return_to_fallback() {
         let mut t = TempoEstimator::default();
+        for _ in 0..3000 {
+            t.push(&[0.0; 24]);
+            assert_eq!(t.estimate().bpm, 60.0);
+            assert_eq!(t.estimate().confidence, 0.0);
+        }
         feed(&mut t, 150.0, 24);
         let previous = t.estimate().bpm;
         for _ in 0..500 {
@@ -197,7 +204,7 @@ mod tests {
             t.push(&[0.0; 24]);
         }
         assert_eq!(t.estimate().confidence, 0.0);
-        assert!((t.estimate().bpm - 120.0).abs() < 0.1);
+        assert!((t.estimate().bpm - FALLBACK_BPM).abs() < 0.1);
         let mut seed = 42_u32;
         for _ in 0..12000 {
             seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);

@@ -93,11 +93,12 @@ impl Motion {
             self.elapsed = 0.0;
             return;
         }
-        let blend = ((delta.abs() - 0.01) / (0.125 - 0.01)).clamp(0.0, 1.0);
         let duration = if reduced {
             slow.max(0.320)
         } else {
-            0.140 + (fast - 0.140) * blend * blend * (3.0 - 2.0 * blend)
+            // Quiet attacks must not pay a 140 ms delay. The configured stroke
+            // time applies to every rise; retain C2 joins and gravity releases.
+            fast
         };
         let brake = if start.velocity * delta < 0.0
             || start.velocity.abs() * duration * 0.5 > delta.abs()
@@ -194,6 +195,18 @@ impl Motion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn quiet_and_full_attacks_use_the_same_configured_stroke() {
+        for height in [0.005, 0.03, 0.08, 0.5, 1.0] {
+            let mut motion = Motion::default();
+            motion.retarget(height, 0.040, false, 0.320);
+            assert!(motion.sample(0.025).position > height * 0.5);
+            assert!(motion.sample(0.035).position > height * 0.9);
+            motion.advance(0.040);
+            assert_eq!(motion.state.position, height);
+            assert_eq!(motion.state.velocity, 0.0);
+        }
+    }
     #[test]
     fn spline_joins_are_continuous_and_retarget_preserves_all_derivatives() {
         let mut motion = Motion::default();
