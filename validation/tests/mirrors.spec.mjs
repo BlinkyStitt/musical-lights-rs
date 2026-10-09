@@ -528,18 +528,18 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
     cancelAnimationFrame(v.request); v.request = null;
     document.activeElement?.blur(); v.cameraBase = 0; v.cameraAt = null; v.cameraTime = 0;
     const samples = [];
-    for (let now = 0; now <= 24000; now += 250) {
+    for (let now = 0; now <= 48000; now += 250) {
       v.updateCamera(now);
       const before = v.rotation;
       v.card.dispatchEvent(new CustomEvent('audio-tempo', { detail: { bpm: 160, confidence: 1, accentSequence: now + 1 } }));
       v.updateCamera(now);
       samples.push({time:now,yaw:v.rotation,y:v.camera.position.y,attackDelta:v.rotation-before});
     }
-    const nearTurn = samples.filter(s=>Math.abs(s.time-6000)<=250).map(s=>s.yaw);
+    const nearTurn = samples.filter(s=>Math.abs(s.time-12000)<=250).map(s=>s.yaw);
     v.cameraBase = 35; v.cameraAt = null; v.cameraTime = 0;
     const bounded=[];
-    for(let now=0;now<=24000;now+=1000){v.updateCamera(now);bounded.push(v.rotation);}
-    v.cameraControl.focus(); v.updateCamera(25000);
+    for(let now=0;now<=48000;now+=1000){v.updateCamera(now);bounded.push(v.rotation);}
+    v.cameraControl.focus(); v.updateCamera(49000);
     return {samples,nearTurn,bounded,manual:v.rotation,centerY:v.visibleHeight/2,
       outlines:v.scene.children.some(node=>node.isLineSegments)};
   });
@@ -547,7 +547,7 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
   expect(result.manual).toBe(35);
   expect(Math.min(...result.bounded)).toBeCloseTo(30,6); expect(Math.max(...result.bounded)).toBeCloseTo(40,6);
   for(const sample of result.samples){expect(sample.y).toBeCloseTo(result.centerY,8);expect(sample.attackDelta).toBe(0);}
-  for(const [start,end,direction] of [[0,6000,1],[6000,18000,-1],[18000,24000,1]]) {
+  for(const [start,end,direction] of [[0,12000,1],[12000,36000,-1],[36000,48000,1]]) {
     const span=result.samples.filter(s=>s.time>=start&&s.time<=end);
     for(let i=1;i<span.length;i++) expect(direction*(span[i].yaw-span[i-1].yaw)).toBeGreaterThan(0);
   }
@@ -555,7 +555,7 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
   expect(Math.max(...result.nearTurn)-Math.min(...result.nearTurn)).toBeLessThan(.1);
   await page.emulateMedia({reducedMotion:'reduce'});
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.reduced.matches)).toBe(true);
-  expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;v.cameraControl.blur();v.cameraBase=12;v.updateCamera(30000);return v.rotation;})).toBe(12);
+  expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;v.cameraControl.blur();v.cameraBase=12;v.updateCamera(50000);return v.rotation;})).toBe(12);
 });
 
 test('depth-copy uploads follow the active count and keep pooled geometry', async ({ page }) => {

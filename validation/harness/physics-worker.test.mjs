@@ -20,7 +20,8 @@ async function worker(config = Array.from(PhysicsSimulation.defaults())) {
     danceOptions: { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1 }, paused: false });
   const ready = messages.at(-1);
   return { ready, send, messages,
-    advance: ms => { now += ms; runInNewContext('while (debt + (absoluteNow() - lastTime) >= stepMs) run()', context); },
+    elapse: ms => { now += ms; },
+    advance: ms => { now += ms; runInNewContext('while (!paused && debt + (absoluteNow() - lastTime) >= stepMs) run()', context); },
     close: () => runInNewContext('simulation.free()', context) };
 }
 
@@ -31,6 +32,27 @@ test('worker ready separates restored settings from factory defaults', async () 
     assert.equal(w.ready.config[2], 16); assert(Math.abs(w.ready.config[6] - .08) < 1e-8);
     assert.equal(w.ready.defaults[2], 8); assert(Math.abs(w.ready.defaults[6] - .04) < 1e-8);
     assert.deepEqual(w.ready.defaults, Array.from(PhysicsSimulation.defaults()));
+  } finally { w.close(); }
+});
+
+test('pause flushes elapsed work and its queued snapshot, then excludes paused time on resume', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'snapshot', buffer: new ArrayBuffer(w.ready.layout[12] * 4) });
+    const first = w.messages.at(-1);
+    w.elapse(1000 / 120 + .001);
+    await w.send({ type: 'pause', paused: true });
+    assert.equal(w.messages.at(-1), first, 'The previous snapshot still owns the only transferable buffer');
+    await w.send({ type: 'snapshot', buffer: first.buffer });
+    const stopped = w.messages.at(-1);
+    assert.equal(stopped.tick, first.tick + 1, 'The final elapsed tick arrives after the pause request');
+    w.advance(1000);
+    await w.send({ type: 'pause', paused: true });
+    await w.send({ type: 'snapshot', buffer: stopped.buffer });
+    assert.equal(w.messages.at(-1), stopped, 'Paused time must not produce another snapshot');
+    await w.send({ type: 'pause', paused: false });
+    w.advance(1000 / 120 + .001);
+    assert.equal(w.messages.at(-1).tick, stopped.tick + 1, 'Resume must not replay the paused second');
   } finally { w.close(); }
 });
 

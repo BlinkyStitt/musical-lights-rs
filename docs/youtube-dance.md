@@ -26,6 +26,11 @@ height with the scene on short landscape screens. Mobile opens in this expanded
 layout without microphone capture or a native fullscreen request. Exit returns
 to the normal page; the next viewport resize does not reopen it. Listening and Identify song occupy the first
 two grid cells. Native switches keep 44-pixel touch targets and keyboard focus.
+In expanded mode, the video entry floats above the scene. Opening the mobile
+keyboard keeps the scene height and bar enclosure unchanged; the keyboard can
+cover the lower scene. The entry follows the visible viewport and scrolls if
+space is short. Load video and Remove video dismiss the keyboard. Rotation and
+Exit restore the normal layout. No video space is reserved before a video loads.
 Tap, hover, or focus a label to read help without changing its switch; Escape
 closes the box. Microphone state and routine recognition availability appear
 in this help. Actionable failures remain in visible recovery notices.
@@ -33,7 +38,7 @@ in this help. Actionable failures remain in visible recovery notices.
 The single artist/song ticker retains its continuous leftward travel and
 Reduced Motion wrapping. There is no recognition caption or exit-hint banner.
 The camera slider stays below the normal scene on both Home and Advanced. It
-shows rendered yaw, including a smooth 24-second horizontal sweep from −20° to
+shows rendered yaw, including a smooth 48-second horizontal sweep from −20° to
 +20° at the default center angle. A manual center angle limits the sweep to the
 slider range. Dragging temporarily stops automatic motion. Reduced Motion
 disables the sweep, scrolling, direction draws, and extra pigment drift.
@@ -75,7 +80,7 @@ physics defaults stay distinct from saved settings across reloads.
 
 The worklet adds cue ordinals to existing tempo metadata. Raw loudness,
 filtered-target transport, acoustic traces, and the 38-value physics input
-layout remain unchanged. Physics protocol 9 and phone report v5 record the
+layout remain unchanged. Physics protocol 10 and phone report v5 record the
 random seed, dance settings, starting ordinal and tempo, and ordered input events
 with their tempo and accent for exact replay with the matching WASM engine.
 Buffers allocate only when recording starts. No alternate timed-reversal engine remains.

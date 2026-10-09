@@ -69,21 +69,32 @@ export class Presentation {
     this.originalAudioType = navigator.audioSession?.type;
     this.microphoneActive = false; this.videoPlaying = false;
     this.row = card.querySelector('.button-row'); this.panel = card.querySelector('.video-panel');
-    this.panel.innerHTML = `<form class="video-form"><label>YouTube link<span class="youtube-input"><input class="youtube-link" aria-label="YouTube link" type="url" placeholder="https://youtu.be/…" maxlength="2048" /><button type="button" class="clear-youtube" aria-label="Clear YouTube link" title="Clear YouTube link">×</button></span></label><button type="submit">Load video</button><button type="button" class="remove-video">Remove video</button></form><div class="youtube-frame"></div><p class="youtube-status" role="status"></p>`;
+    this.panel.innerHTML = `<div class="video-entry"><form class="video-form"><label>YouTube link<span class="youtube-input"><input class="youtube-link" aria-label="YouTube link" type="url" placeholder="https://youtu.be/…" maxlength="2048" /><button type="button" class="clear-youtube" aria-label="Clear YouTube link" title="Clear YouTube link">×</button></span></label><button type="submit">Load video</button><button type="button" class="remove-video">Remove video</button></form><p class="youtube-status" role="status"></p></div><div class="youtube-frame"></div>`;
     this.videoButton = document.createElement('button'); this.videoButton.type = 'button'; this.videoButton.className = 'video-button'; this.videoButton.textContent = 'Video';
     this.videoButton.setAttribute('aria-expanded', 'false'); this.row.insertBefore(this.videoButton, this.row.querySelector('.fullscreen-button'));
-    this.listen(this.videoButton, 'click', () => { this.panel.hidden = false; this.card.classList.add('video-active', 'video-editing'); this.videoButton.setAttribute('aria-expanded', 'true'); this.panel.querySelector('input').focus(); });
+    this.listen(this.videoButton, 'click', () => {
+      this.card.classList.add('video-editing'); this.updateVideoEditor();
+      this.panel.hidden = false; this.videoButton.setAttribute('aria-expanded', 'true');
+      this.panel.querySelector('input').focus();
+    });
     this.listen(this.panel.querySelector('form'), 'submit', event => { event.preventDefault(); this.loadVideo(this.panel.querySelector('input').value); });
     this.listen(this.panel.querySelector('.clear-youtube'), 'click', () => {
       const input = this.panel.querySelector('input'); input.value = ''; input.focus();
       this.settings.youtubeLink = ''; this.save();
       this.panel.querySelector('.youtube-status').textContent = '';
     });
-    this.listen(this.panel.querySelector('.remove-video'), 'click', () => { this.generation++; this.player?.destroy(); this.player = null; this.videoPlaying = false; this.updateAudioType(); this.panel.hidden = true; this.card.classList.remove('video-active', 'video-editing'); this.videoButton.setAttribute('aria-expanded', 'false'); this.settings.youtubeLink = ''; this.panel.querySelector('input').value = ''; this.save(); });
+    this.listen(this.panel.querySelector('.remove-video'), 'click', () => { this.endVideoEdit(); this.generation++; this.player?.destroy(); this.player = null; this.videoPlaying = false; this.updateAudioType(); this.panel.hidden = true; this.card.classList.remove('video-active'); this.videoButton.setAttribute('aria-expanded', 'false'); this.settings.youtubeLink = ''; this.panel.querySelector('input').value = ''; this.save(); });
     this.panel.querySelector('input').value = this.settings.youtubeLink;
     this.popup = document.createElement('div'); this.popup.id = 'control-help'; this.popup.className = 'control-help'; this.popup.hidden = true; this.popup.setAttribute('role', 'tooltip'); card.append(this.popup);
     this.enhanceControls();
     this.observer = new MutationObserver(() => this.enhanceControls()); this.observer.observe(this.row, { childList: true, subtree: true });
+    this.screenObserver = new MutationObserver(() => this.updateVideoEditor());
+    this.screenObserver.observe(card, { attributes: true, attributeFilter: ['data-expanded'] });
+    this.listen(window, 'resize', () => this.updateVideoEditor());
+    if (window.visualViewport) {
+      this.listen(window.visualViewport, 'resize', () => this.updateVideoEditor());
+      this.listen(window.visualViewport, 'scroll', () => this.updateVideoEditor());
+    }
     this.listen(document, 'pointerdown', event => { if (!this.popup.contains(event.target) && !this.anchor?.contains(event.target)) this.hideHelp(); });
     this.listen(document, 'keydown', event => { if (event.key === 'Escape' && !this.popup.hidden) { event.preventDefault(); event.stopImmediatePropagation(); this.hideHelp(); } }, true);
     this.listen(window, 'scroll', () => this.positionHelp(), { passive: true });
@@ -153,9 +164,34 @@ export class Presentation {
     this.popup.style.top = Math.max(12, Math.min(innerHeight - height - 12, rect.top > height + 20 ? rect.top - height - 8 : rect.bottom + 8)) + 'px';
   }
   hideHelp() { this.popup.hidden = true; this.anchor?.removeAttribute('aria-describedby'); this.anchor?.setAttribute('aria-expanded', 'false'); this.anchor = null; }
+  updateVideoEditor() {
+    const expanded = this.card.hasAttribute('data-expanded');
+    if (!expanded || !this.card.classList.contains('video-editing')) {
+      if (!expanded && this.editViewport && this.panel.contains(document.activeElement)) document.activeElement.blur();
+      this.editViewport = null;
+      for (const name of ['--expanded-height', '--video-editor-top', '--video-editor-height']) this.card.style.removeProperty(name);
+      return;
+    }
+    // Keyboard height changes must not resize the scene or its colliders.
+    // A width change represents a new layout (including device rotation).
+    if (!this.editViewport || this.editViewport.width !== innerWidth) {
+      this.card.style.removeProperty('--expanded-height');
+      this.editViewport = { width: innerWidth, height: this.card.getBoundingClientRect().height };
+      this.card.style.setProperty('--expanded-height', this.editViewport.height + 'px');
+    }
+    const viewport = window.visualViewport;
+    this.card.style.setProperty('--video-editor-top', (viewport?.offsetTop ?? 0) + 'px');
+    this.card.style.setProperty('--video-editor-height', (viewport?.height ?? innerHeight) + 'px');
+  }
+  endVideoEdit() {
+    this.card.classList.remove('video-editing');
+    if (this.panel.contains(document.activeElement)) document.activeElement.blur();
+    this.updateVideoEditor();
+  }
   async loadVideo(link) {
     const status = this.panel.querySelector('.youtube-status');
     let video; try { video = parseYouTube(link); } catch (error) { status.textContent = error.message; return; }
+    this.endVideoEdit();
     const generation = ++this.generation;
     // Remember the submitted field now. A later clear must remain cleared,
     // even if the player API finishes loading after that action.
@@ -170,7 +206,6 @@ export class Presentation {
       const embed = new URL('https://www.youtube-nocookie.com/embed/' + video.id);
       for (const [key, value] of Object.entries({ enablejsapi: 1, origin: location.origin, playsinline: 1, controls: 1, autoplay: 0, start: video.start })) embed.searchParams.set(key, value);
       host.src = embed.href; this.panel.querySelector('.youtube-frame').replaceChildren(host);
-      this.card.classList.remove('video-editing');
       this.player = new YT.Player(host, { host: 'https://www.youtube-nocookie.com', videoId: video.id,
         playerVars: { origin: location.origin, playsinline: 1, controls: 1, autoplay: 0, start: video.start }, events: {
           onReady: ({ target }) => { if (this.closed || generation !== this.generation) { target.destroy(); return; } status.textContent = ''; this.panel.querySelector('iframe')?.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); },
@@ -179,5 +214,5 @@ export class Presentation {
         } });
     } catch (error) { if (!this.closed && generation === this.generation) status.textContent = error.message; }
   }
-  close() { this.closed = true; this.generation++; this.observer.disconnect(); for (const remove of this.removers) remove(); this.player?.destroy(); this.hideHelp(); this.microphoneActive = this.videoPlaying = false; this.updateAudioType(); this.popup.remove(); delete this.card.presentation; }
+  close() { this.closed = true; this.generation++; this.endVideoEdit(); this.observer.disconnect(); this.screenObserver.disconnect(); for (const remove of this.removers) remove(); this.player?.destroy(); this.hideHelp(); this.microphoneActive = this.videoPlaying = false; this.updateAudioType(); this.popup.remove(); delete this.card.presentation; }
 }

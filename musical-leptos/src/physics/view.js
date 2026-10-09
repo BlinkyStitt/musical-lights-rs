@@ -313,7 +313,7 @@ export class PhysicsView {
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Ease through both turns without a clamp, attack kick or vertical wobble.
     const amplitude = Math.min(20, 40 - Math.abs(this.cameraBase));
-    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 24000) : 0);
+    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 48000) : 0);
     this.automaticCamera = true;
     this.setCamera(yaw);
     this.automaticCamera = false;

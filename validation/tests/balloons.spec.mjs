@@ -289,6 +289,10 @@ test('context loss pauses physics and restoration resumes without losing the Exi
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; window.loss = v.renderer.getContext().getExtension('WEBGL_lose_context'); window.loss.loseContext(); });
   await expect(page.locator('.physics-status')).toContainText('Graphics paused');
+  // The notice is local. The worker flushes elapsed work when it handles
+  // pause, and its final queued snapshot can arrive after the notice.
+  // Measure the stopped interval after that bounded message-delivery window.
+  await page.waitForTimeout(150);
   const tick = (await physicsState(page)).tick;
   await page.waitForTimeout(150);
   expect((await physicsState(page)).tick).toBe(tick);
