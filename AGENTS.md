@@ -89,8 +89,8 @@
   Hide BPM when audio stops; silence eases to
   the shared core's 60 BPM fallback without changing loudness or filtered targets.
 - Show one scrolling artist/song title in expanded mode. Keep the progress
-  ring and errors beside Identify song. Show rendered FPS beside the angle slider
-  in expanded mode; normal Home omits FPS. Camera motion uses a smooth horizontal
+  ring and errors beside Identify song. Show small rendered FPS beside the angle
+  slider in normal Home and expanded mode. Camera motion uses a smooth horizontal
   sweep without attack shake or vertical wobble. Do not draw box-frame outlines
   or black bar borders. Retain white attack edges. Repeat source lighting across
   the five banks and depth copies, with one outer coating and no internal walls.

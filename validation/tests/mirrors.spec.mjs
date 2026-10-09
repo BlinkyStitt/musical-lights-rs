@@ -559,12 +559,20 @@ test('all bars show current physical travel without a previous-snapshot delay', 
   await info.attach('all-band-render-travel.json', { body: JSON.stringify(errors), contentType: 'application/json' });
 });
 
-test('expanded mode shows actual rendered FPS without adding a footer row', async ({ page }) => {
+test('Home and expanded mode share a small rendered FPS readout', async ({ page }) => {
   await page.addInitScript(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Capture disabled for presentation check'); }; });
   await page.goto(origin); await physicsReady(page);
-  if (!await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).isVisible())
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   const fps = page.locator('.frame-rate');
+  if (await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).isVisible())
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await fps.scrollIntoViewIfNeeded();
+  await expect(fps).toHaveCount(1);
+  await expect(fps).toBeInViewport({ ratio: 1 });
+  await expect(fps).toHaveText(/^\d+ FPS$/);
+  await expect(fps).toHaveAttribute('aria-live', 'off');
+  expect(await fps.evaluate(node => parseFloat(getComputedStyle(node).fontSize) < parseFloat(getComputedStyle(node.parentElement).fontSize))).toBe(true);
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(fps).toHaveCount(1);
   await expect(fps).toHaveText(/^\d+ FPS$/);
   expect(Number((await fps.textContent()).split(' ')[0])).toBeGreaterThan(0);
   for (const viewport of [{width:390,height:664},{width:568,height:320}]) {
@@ -578,7 +586,8 @@ test('expanded mode shows actual rendered FPS without adding a footer row', asyn
     expect(await fps.evaluate(node => node.parentElement.className)).toBe('camera-controls');
   }
   await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
-  await expect(fps).toHaveCount(0);
+  await expect(fps).toHaveCount(1);
+  await expect(fps).toBeVisible();
   await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
 });
 

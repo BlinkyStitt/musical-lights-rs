@@ -82,7 +82,7 @@ button:disabled { cursor: default; color: var(--muted); background: var(--disabl
 button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
 .display-note { color: var(--muted); font-size: .7rem; margin: .75rem 0 0; display: flex; justify-content: space-between; gap: 1rem; }
 .control-note, .display-status { margin: 0; }
-.frame-rate { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7ch; text-align: right; }
+.frame-rate { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7ch; text-align: right; }
 .display-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
 .wake-status { white-space: nowrap; }
 .screen-error, .audio-stopped { color: var(--ink); font-size: .82rem; margin: 0; }

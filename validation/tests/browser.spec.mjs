@@ -261,7 +261,7 @@ for (const colorScheme of ['light', 'dark']) {
           return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
         };
         const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.mic-status', '.eyebrow', '.frequency-tooltip', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
+        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.mic-status', '.frame-rate', '.eyebrow', '.frequency-tooltip', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
           const node = document.querySelector(selector);
           let parent = node;
           while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;

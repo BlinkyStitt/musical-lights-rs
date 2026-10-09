@@ -507,9 +507,7 @@ pub fn DancingLights(
             <div class="camera-controls">
                 <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
-                <Show when=move || fullscreen.get()>
-                    <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
-                </Show>
+                <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
             </div>
             <div class="display-note">
                 <p class="display-status">
