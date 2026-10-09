@@ -11,6 +11,10 @@ test.beforeEach(async ({ page }) => {
   await page.locator('.display-controls > summary').click();
   await page.locator('.camera-motion').uncheck();
   await page.locator('.display-controls > summary').click();
+  // Focusing the scene scrolls it into view. Keep the setup click's mouse
+  // outside it so a real hover cannot replace the keyboard readout on blur.
+  // Mouse and touch ownership are exercised explicitly below.
+  await page.mouse.move(0, 0);
 });
 
 function sampleState(index) {

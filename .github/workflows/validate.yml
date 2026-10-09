@@ -220,15 +220,19 @@ jobs:
         include:
           - name: chromium-1
             projects: --project chromium --project chromium-permissions
-            shard: 1/2
+            # Group by measured file cost. Count-based sharding left one
+            # Chromium runner at 16.7 minutes and the other at 8.1 minutes.
+            files: 'tests/(balloons|capture-startup|edges|mirrors|spectrum-keyboard|touch-screen|youtube)\.spec\.mjs$'
             browsers: chromium
           - name: chromium-2
             projects: --project chromium --project chromium-permissions
-            shard: 2/2
+            # New files enter this group; the coverage barrier still requires
+            # every collected test exactly once across all three runners.
+            files: 'tests/(?!(balloons|capture-startup|edges|mirrors|spectrum-keyboard|touch-screen|youtube)\.spec\.mjs$).*\.spec\.mjs$'
             browsers: chromium
           - name: webkit
             projects: --project webkit-spectrum --project iphone-webkit
-            shard: 1/1
+            files: 'tests/.*\.spec\.mjs$'
             browsers: webkit
     steps:
       - uses: actions/checkout@v7.0.1
@@ -242,19 +246,23 @@ jobs:
           node-version: '26.8.2'
           cache: npm
           cache-dependency-path: validation/package-lock.json
-      - name: Install exact browser and run isolated shard
+      - name: Install exact browser
         working-directory: validation
         env:
-          PROJECTS: ${{ matrix.projects }}
-          SHARD: ${{ matrix.shard }}
           BROWSERS: ${{ matrix.browsers }}
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
-          DEBUG: pw:browser
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps "$BROWSERS"
+      - name: Run isolated browser group
+        working-directory: validation
+        env:
+          PROJECTS: ${{ matrix.projects }}
+          TEST_FILES: ${{ matrix.files }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
+          DEBUG: pw:browser
+        run: |
           read -r -a projects <<< "$PROJECTS"
-          npx playwright test "${projects[@]}" --shard="$SHARD" --reporter=list,./browser-process-reporter.mjs,json
+          npx playwright test "$TEST_FILES" "${projects[@]}" --reporter=list,./browser-process-reporter.mjs,json
       - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:

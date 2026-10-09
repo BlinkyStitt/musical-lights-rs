@@ -17,8 +17,8 @@ for (const theme of ['light', 'dark']) {
       const bar = document.querySelector('.audio-controls').getBoundingClientRect();
       const source = document.querySelector('.input-source-controls').getBoundingClientRect();
       const graph = document.querySelector('.spectrum-panel').getBoundingClientRect();
-      return { barAboveSource: bar.bottom <= source.top, sourceAboveGraph: source.bottom <= graph.top, fits: document.documentElement.scrollWidth <= innerWidth };
-    })).toEqual({ barAboveSource: true, sourceAboveGraph: true, fits: true });
+      return { barAboveSource: bar.bottom <= source.top, graphAboveBar: graph.bottom <= bar.top, fits: document.documentElement.scrollWidth <= innerWidth };
+    })).toEqual({ barAboveSource: true, graphAboveBar: true, fits: true });
     await page.locator('.input-source').selectOption('generated');
     await expect(page.locator('.review-start')).toBeVisible();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();

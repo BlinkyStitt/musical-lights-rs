@@ -44,6 +44,7 @@ test('calibration is optional, measures a known reference, and binds to reported
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   expect(await page.evaluate(()=>window.requestedConstraints.audio)).toEqual({autoGainControl:false, echoCancellation:false, noiseSuppression:false});
 
   await page.getByRole('button', {name:'Measure reference'}).click();
@@ -60,6 +61,7 @@ test('calibration is optional, measures a known reference, and binds to reported
   // runtime and opens capture. Wait for this session before changing settings.
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.calibration-status')).toHaveText('Calibrated for this input');
   // Changing capture settings invalidates the running session, even with no new user action.
   await page.evaluate(()=>{window.captureSettings.sampleRate=44100;});
@@ -70,6 +72,7 @@ test('calibration is optional, measures a known reference, and binds to reported
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.calibration-status')).toContainText('Uncalibrated');
   expect(errors).toEqual([]);
 });
@@ -82,6 +85,7 @@ for(const fault of ['mute','processorerror']) {
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     await page.evaluate(fault=>{(fault==='mute'?window.inputTrack:window.analysisNode).dispatchEvent(new Event(fault));},fault);
     await expect(page.getByRole('alert')).not.toBeEmpty();
     await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeEnabled();
@@ -103,6 +107,7 @@ test('Reduced Motion survives pending permission and updates the audio producer'
   await page.evaluate(()=>window.allowMicrophone());
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   expect(await page.evaluate(()=>window.initialMotion)).toBe(true);
   await expect.poll(()=>page.evaluate(()=>window.producerMotion)).toBe(1);
   await page.emulateMedia({reducedMotion:'no-preference'});

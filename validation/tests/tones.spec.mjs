@@ -32,32 +32,34 @@ test('non-repeating exercise cannot start phone acceptance', async ({ page }) =>
   expect(await page.evaluate(() => Boolean(document.querySelector('#dancinglights').physics.report.active))).toBe(false);
   await expect(page.locator('.phone-progress')).toContainText('repeating 24-tone exercise');
 });
-for (const stage of ['warmup', 'measurement']) {
-  for (const action of ['pause', 'repeat-off', 'stop', 'end', 'interruption']) {
-    test(`${action} invalidates ${stage} and resume cannot repair acceptance`, async ({ page }) => {
-      await acceptancePage(page);
-      await page.locator('.phone-start').click();
-      await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.startMs != null)).toBe(true);
-      if (stage === 'measurement') await page.evaluate(() => { document.querySelector('#dancinglights').physics.report.startMs -= 16000; });
-      await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
-      if (action === 'pause') await page.locator('.tone-pause').click();
-      if (action === 'repeat-off') await page.locator('.tone-repeat').uncheck();
-      if (action === 'stop') await page.locator('.review-stop').click();
-      if (action === 'interruption') await page.evaluate(() => window.exerciseContext.suspend());
-      if (action === 'end') {
-        // Stop repeating the short fixture in the actual PCM processor.
-        // Its real end acknowledgement invalidates the acceptance workload.
-        await page.evaluate(() => {
-          window.exerciseSource.port.postMessage({ type: 'repeat', repeat: false, sequence: 0 });
-        });
-      }
-      await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid.length), { timeout: 10000 }).toBeGreaterThan(0);
-      if (action === 'pause') await page.locator('.tone-pause').click();
-      if (action === 'repeat-off') await page.locator('.tone-repeat').check();
-      if (action === 'interruption') await expect(page.locator('.listening-toggle')).not.toBeChecked();
-      expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid.length)).toBeGreaterThan(0);
-    });
-  }
+for (const [stage, action, reason] of [
+  ['warmup', 'pause', 'pause'], ['warmup', 'repeat-off', 'repeat changed'],
+  ['warmup', 'stop', 'cleanup'], ['warmup', 'end', 'natural end'],
+  ['warmup', 'interruption', 'suspended'], ['measurement', 'pause', 'pause'],
+]) {
+  test(`${action} invalidates ${stage} and retains its rejection after the transition`, async ({ page }) => {
+    await acceptancePage(page);
+    await page.locator('.phone-start').click();
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.startMs != null)).toBe(true);
+    if (stage === 'measurement') await page.evaluate(() => { document.querySelector('#dancinglights').physics.report.startMs -= 16000; });
+    await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+    if (action === 'pause') await page.locator('.tone-pause').click();
+    if (action === 'repeat-off') await page.locator('.tone-repeat').uncheck();
+    if (action === 'stop') await page.locator('.review-stop').click();
+    if (action === 'interruption') await page.evaluate(() => window.exerciseContext.suspend());
+    if (action === 'end') {
+      // Stop repeating the short fixture in the actual PCM processor.
+      // Its real end acknowledgement invalidates the acceptance workload.
+      await page.evaluate(() => {
+        window.exerciseSource.port.postMessage({ type: 'repeat', repeat: false, sequence: 0 });
+      });
+    }
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid), { timeout: 10000 }).toContain(`Audio workload changed: ${reason}`);
+    if (action === 'pause') await page.locator('.tone-pause').click();
+    if (action === 'repeat-off') await page.locator('.tone-repeat').check();
+    if (action === 'interruption') await expect(page.locator('.listening-toggle')).not.toBeChecked();
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.invalid)).toContain(`Audio workload changed: ${reason}`);
+  });
 }
 test.beforeEach(async ({ page }, info) => {
   await page.addInitScript(shortEnd => {

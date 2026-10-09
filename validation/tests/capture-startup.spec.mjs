@@ -10,7 +10,8 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
       window.AudioContext = class extends Context {
         constructor(...args) { super(...args); window.testContext = this; }
       };
-      window.captureStarts = 0;
+      window.captureStarts = 0; window.captureStates = [];
+      document.addEventListener('audio-session', ({ detail }) => window.captureStates.push(detail), true);
       MediaDevices.prototype.getUserMedia = async () => {
         window.captureStarts++;
         const context = window.testContext, destination = context.createMediaStreamDestination();
@@ -31,13 +32,18 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
     const entry = action === 'Fullscreen' ? page.getByRole('button', { name: 'Fullscreen', exact: true }) : listening(page);
     if (info.project.use.hasTouch) await entry.tap(); else await entry.click();
-    await expect.poll(() => page.evaluate(() => ({
-      checked: document.querySelector('.listening-toggle').checked,
-      disabled: document.querySelector('.listening-toggle').disabled,
-      context: window.testContext.state, count: window.captureStarts,
-      state: document.querySelector('.audio-card').dataset.audioState,
-      error: document.querySelector('.audio-error').textContent,
-    }))).toEqual({ checked: true, disabled: false, context: 'running', count: 1, state: 'playing', error: '' });
+    try {
+      await expect.poll(() => page.evaluate(() => ({
+        checked: document.querySelector('.listening-toggle').checked,
+        disabled: document.querySelector('.listening-toggle').disabled,
+        context: window.testContext.state, count: window.captureStarts,
+        state: document.querySelector('.audio-card').dataset.audioState,
+        error: document.querySelector('.audio-error').textContent,
+      }))).toEqual({ checked: true, disabled: false, context: 'running', count: 1, state: 'playing', error: '' });
+    } catch (error) {
+      await info.attach('capture-session-events', { body: JSON.stringify(await page.evaluate(() => captureStates)), contentType: 'application/json' });
+      throw error;
+    }
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.mic-status')).toBeEmpty();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'false');

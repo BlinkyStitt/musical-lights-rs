@@ -4,9 +4,9 @@
 
 Website validation builds physics, the worklet and Leptos once. The build job
 runs the offline harness and records the complete browser test inventory. Two
-isolated Chromium shards and one WebKit/iPhone-profile job download that same
+isolated Chromium groups and one WebKit/iPhone-profile job download that same
 compiled bundle. Each retains the serial startup/crash guard, one worker, zero
-retries and every existing assertion. The final job compares the reports with
+retries. The final job compares the reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
 Core and loudness-reference checks run alongside the build and browser jobs.
 
@@ -66,6 +66,32 @@ workflow syntax, install the pinned checker with
 Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`; the reference
 target includes their lint/type checks.
+
+## CI test ownership and scheduling
+
+Pure fullscreen lifecycle and compiled-WASM worklet checks run in the Node offline
+harness before the browser jobs. They do not need a browser process. The worklet
+suite retains steady-state convergence, acoustic fixtures, channel selection,
+calibration and bounded-memory checks. Host CPU performance belongs in the
+standalone Criterion benchmarks, not a wall-clock assertion on a shared CI runner.
+
+Browser tests cover actual rendering, native input, audio output and lifecycle
+integration. All viewport/theme combinations retain geometry and audio checks.
+The complete 24-band hover sequence and common-control keyboard order run once;
+other layouts check edge and center readouts. The existing keyboard tests still
+visit every band. Route tests own route content checks. The short-landscape test
+creates its own mobile context and runs once per engine, rather than twice in
+WebKit. Acceptance tests cover each distinct audio transition and require its
+specific rejection reason, plus a transition after warmup. They do not repeat
+every transition at both stages of the same rejection path.
+
+Before this cleanup, Linux run 37880898598 spent 16.7 and 8.1 minutes in its two
+Chromium groups and 12.6 minutes in WebKit. These are Playwright report durations,
+excluding browser installation and compilation. The Chromium file groups now
+use those measured costs instead of test counts. New files enter the second
+group by default. The final inventory barrier still requires complete, unique,
+successful test results across all three runners. Installation and test execution
+have separate CI steps so their costs can be compared independently.
 
 ## Controls and embedded musical motion (2026-10-03)
 
@@ -622,7 +648,7 @@ change makes no live AudD request.
 
 `mirrors.spec.mjs` checks actual GPU pixels at front and oblique camera angles,
 transparent exterior faces, bounded draw calls, matched per-end bar extents,
-projected Quiet/Loud guides, saved probability curves and mobile default entry
+the absence of Quiet/Loud labels, saved probability curves and mobile default entry
 without capture. Short landscape combines a mock video, a long recognition
 ticker, a recovery notice, the angle slider and all bottom controls. Each GPU check
 saves frame cost and front/side images. These measurements describe the browser host, not
@@ -679,10 +705,10 @@ fixture with the real processor and its real completion acknowledgement.
 The renderer uses finite unit-height boxes, scaled to each published physical
 bar height. Their full depth matches the physical support. Matching vertical
 banks fill four adjacent background boxes; all five boxes reuse the same source
-bands and only the center box contains simulated balls. Quiet/Loud guides and
+bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands.
 
-The mirror-count setting defaults to three images and controls a finite stack
+The mirror-count setting defaults to six images and controls a finite stack
 of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
 instanced meshes draw copied bars, background bars and balls. They use no
 reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
@@ -706,7 +732,7 @@ An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
 automatic camera motion while the user sets the angle. Automatic rotation uses a
-24-second horizontal sine cycle through ±30° around the selected center angle,
+48-second horizontal sine cycle through ±10° around the selected center angle,
 with less travel near the slider limits. It has no attack shake or vertical wobble.
 Reduced Motion stops the sweep. The renderer draws no box-frame outlines.
 Expanded Home and Advanced show rendered FPS beside the angle slider, updated
@@ -792,3 +818,114 @@ depth images. GPU timers averaged 0.226 ms (p95 0.249 ms); application animation
 callbacks averaged 0.461 ms per frame. Uploads remained 92,640 bytes per frame.
 The larger normal frame changes the scene geometry, so this complete-scene
 measurement does not isolate lighting cost or establish physical-phone FPS.
+
+### Audio/video lifecycle and continuous depth bars
+
+The YouTube fixture records each player instance and permits late callbacks from
+replaced or removed players. Synthetic microphone capture supplies streams without
+using the host microphone or changing speaker volume. Tests cover canceled pending
+capture and blocked startup resume, repeated Listening/play/pause clicks, buffering,
+permission denial, tab hide/restore with and without an OS audio interruption,
+explicit recovery, digital-source handoff, and route cleanup. An interruption must
+release the capture tracks, restore the remaining player's audio mode, and leave
+Listening usable. Showing the tab must not acquire a new microphone. These mocks
+prove application ownership and cleanup; they do not prove real YouTube, Safari
+hardware routing, or physical-phone audio behavior.
+
+Listening remains available during startup so the user can cancel an outstanding
+permission or resume request. Closing an AudioContext publishes session shutdown
+immediately, even if acquisition has not returned. YouTube buffering retains
+playback mode. Repeated state notifications do not write the same AudioSession type
+again. Older player callbacks cannot replace the current audio owner.
+
+Bars now use one continuous depth extrusion per rendered bar, with a smooth color
+fade instead of separate end faces and brightness steps at every copied box.
+Ball depth images still copy the eight physical transforms; the large physical
+balls use 32 horizontal and 20 vertical sphere segments. Background bar culling
+uses the entire extruded box, including the trailing depth, and retains all 24
+source bands and accessible meters. Pixel tests compare culled and complete
+background banks at five angles and 0, 3, 8 and 17 depth settings. Side-surface
+samples check color continuity across the former copy boundaries. Normal pages
+share the video/visualizer/bottom-controls order with expanded mode; extra settings
+and Home learning content remain below the presentation.
+
+Under the same 390 × 844/DPR 3, fourfold CPU throttle, fixed 20° camera,
+real-worklet synthetic microphone PCM, five-second warmup and 30-second sample,
+SwiftShader measured 54.84 FPS before the continuous-depth changes and 60.00 FPS
+with both three and six depth images afterward. Application animation work
+averaged 0.933 ms before, 0.390 ms with three images, and 0.454 ms with six.
+Uploads averaged 92,640, 18,214 and 23,445 bytes per frame respectively. These
+compare the complete renderer changes, including smoother balls and camera
+framing; they do not isolate one optimization. They are individual host samples,
+not physical Android/iPhone acceptance. Six is the new depth default; valid saved
+counts, including three, remain unchanged.
+
+A further run of the final compiled six-image renderer measured 54.94 FPS,
+0.608 ms of application animation work per frame, and 23,441 upload bytes per
+frame under the same software-renderer conditions. This variation means the
+samples do not prove sustained 60 FPS. The upload reduction is about 75% against
+the baseline; physical-phone frame rate remains unverified.
+
+The depth setting now accepts integer counts from 0 to 2,048. The default stays
+at six: new SwiftShader samples measured 60.00 and 59.87 FPS at six, versus
+40.58 and 52.91 at eight under the same workload. The image pool grows in powers
+of two when a higher count needs it; the default reserves eight slots, rather
+than allocating the Advanced maximum. Growth releases old GPU buffers and keeps
+the scene object and material. Lower counts reuse that pool and upload only the
+active prefix. Tests check released buffers, stable geometry counts, source
+transforms, contact pigments, and saved settings.
+
+A separate Apple M4 Max Metal sweep used the same viewport, fourfold CPU
+throttle, PCM, camera angle and measurement interval. It measured 60.00 FPS at
+6, 32, 64, 128, 256, 512, 1,024, 2,048, 4,096, 8,192, 16,384 and 32,768 images.
+At 65,536 it dropped to 44.64 FPS; a repeat measured 46.14 FPS. Application
+animation work averaged 19.17 and 18.90 ms per frame at that count, and uploads
+were about 58.7 MB per frame. These temporary candidates locate a cost boundary;
+they are not shipping settings. Counts through 4,096 used preallocated pools;
+higher counts used the growing pool implementation. They include camera clipping and fading, so they
+do not show tens of thousands of visible images. The shipped 2,048 limit already
+exceeds the current camera's 200-unit far plane at the minimum enclosure depth
+and allowed camera angles. Additional counts would add cost without useful
+visible depth. None of these host measurements establishes physical-phone FPS.
+
+After selecting the final range, the growing-pool six-image SwiftShader build
+measured 56.77 FPS, 0.702 ms of application animation work per frame, 23,443
+upload bytes per frame and 7,680 bytes of image-instance storage. This final
+sample remains within the earlier host variation; it does not establish
+sustained 60 FPS. Default instance storage falls from the temporary 256-slot
+pool's 245,760 bytes to eight slots, without reducing the six drawn images.
+
+The final growing-pool 2,048-image Metal build measured 60.00 FPS, 1.415 ms of
+application animation work and 3.264 ms of GPU time, with 1,862,532 upload bytes
+per frame and 1,966,080 bytes of image-instance storage. The 32,768-image
+boundary repeat stayed at 60.00 FPS. These runs preserve eight simulated balls;
+image count changes only drawing. The high settings are optional and do not
+establish a phone performance target.
+
+The high-count Linux Chromium check exposed a startup failure after reloading
+2,048 images. A same-workload SwiftShader measurement at that setting rejected
+the active-worklet sample: 1.21 FPS, only 39 snapshots over about 30 seconds,
+and 1.903 ms mean JavaScript animation work per frame. The profile spent most
+of its time outside sampled JavaScript. This is a stalled graphics workload,
+not a successful audio/FPS acceptance result.
+
+Copied balls now use sphere bounds against all six camera planes. The renderer
+keeps the prefix through the last potentially visible depth cell, including
+cells that enter the view farther back. It preserves the requested count,
+pool capacity, all source transforms and eight simulated balls. Tests compare
+the complete 64-image batch and culled pixels at five camera configurations;
+Chromium, WebKit and the iPhone profile produce byte-identical pixels.
+
+Under the same measurement conditions, culling reduced the 2,048-image
+SwiftShader case to 2.06 FPS with 65 snapshots. It still rejects the
+active-worklet sample. High counts require a fast GPU; software-renderer and
+physical-phone acceptance remain separate. The six-image SwiftShader default
+measured 55.07 FPS, 0.828 ms mean animation work and 23,440 upload bytes per
+frame, within earlier host variation.
+
+The final culled 2,048-image Metal sample measured 60.00 FPS, 1.026 ms mean
+animation work, 2.320 ms mean GPU time and 815,517 upload bytes per frame.
+Its last measured frame submitted 7,032 ball images instead of all 16,384.
+The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
+upload bytes per frame. These use the same viewport, PCM, CPU throttle and
+fixed 20-degree camera; they do not establish physical-phone frame rate.

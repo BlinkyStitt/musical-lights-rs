@@ -217,6 +217,8 @@ for (const clip of ['trumpet', 'music', 'local']) {
     await page.locator('.review-replay').press('Enter');
     await page.locator('.review-device').fill('Mac test output'); await page.locator('.review-notes').fill('Automated playback check; human accents, swells and decay judgments pending.');
     await page.locator('.review-note').click();
+    await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.sessions[0].timing.length)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.samples.length)).toBeGreaterThan(0);
     const download = page.waitForEvent('download'); await page.locator('.review-export').click();
     const report = JSON.parse(await readFile(await (await download).path(), 'utf8'));
     expect(report.clip.pcmSha256).toBe(identity.pcmSha256); expect(report.playbackDevice).toBe('Mac test output');
@@ -253,9 +255,13 @@ test('invalid file and unavailable channel fail without capture; replacement and
 test('file picker shares the source row; selecting and replacing files starts audio with Listening off', async ({ page }) => {
   await syntheticAudio(page); await advanced(page);
   await expect(page.locator('.input-source-controls .review-file')).toBeVisible();
-  const row = await page.locator('.input-source-controls').boundingBox();
-  const file = await page.locator('.review-file').boundingBox();
-  expect(file.y).toBeGreaterThanOrEqual(row.y); expect(file.y + file.height).toBeLessThanOrEqual(row.y + row.height);
+  // Read both rectangles in one layout. Separate browser calls can straddle
+  // a startup resize and compare positions from different page layouts.
+  const { row, file } = await page.locator('.input-source-controls').evaluate(node => {
+    const row = node.getBoundingClientRect(), file = node.querySelector('.review-file').getBoundingClientRect();
+    return { row: { top: row.top, bottom: row.bottom }, file: { top: file.top, bottom: file.bottom } };
+  });
+  expect(file.top).toBeGreaterThanOrEqual(row.top); expect(file.bottom).toBeLessThanOrEqual(row.bottom);
   await start(page); await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.mic-status')).toBeEmpty();
   await page.evaluate(() => { window.previousContext = testContext; });
