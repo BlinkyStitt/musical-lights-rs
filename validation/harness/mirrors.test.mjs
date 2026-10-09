@@ -15,7 +15,9 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
     balls.setColorAt(i, new THREE.Color(.4, .2 + i * .1, .1));
   }
   const room = new MirrorRoom(scene, balls, 3);
-  room.update(1.2, .6, .24);
+  const camera = new THREE.PerspectiveCamera(150, 1, .01, 10000);
+  camera.position.set(0, 0, 4); camera.updateMatrixWorld();
+  room.update(1.2, .6, .24, camera);
   assert.equal(room.poolCount, 4);
   assert.equal(room.meshes[0].mesh.instanceMatrix.array.length, 2 * 4 * 16);
   assert.equal(room.walls.geometry.groups.length, 6); assert.equal(room.walls.count, 1);
@@ -50,7 +52,7 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
   assert.equal(geometryReleases, 1); assert.equal(bufferReleases, 1);
   assert.deepEqual(room.meshes.map(({mesh}) => mesh), meshes);
   assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 17);
-  room.setCount(MAX_DEPTH_IMAGES); room.update(1.2, .6, .24);
+  room.setCount(MAX_DEPTH_IMAGES); room.update(1.2, .6, .24, camera);
   assert.equal(room.meshes[0].mesh.count, balls.count * MAX_DEPTH_IMAGES);
   assert.equal(room.meshes[0].mesh.instanceMatrix.array.length, balls.count * MAX_DEPTH_IMAGES * 16);
   assert(room.meshes[0].mesh.instanceMatrix.array.every(Number.isFinite));
@@ -60,4 +62,27 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
   assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 8);
   room.dispose(); assert.equal(scene.children.length, 0);
   geometry.dispose(); material.dispose();
+});
+
+test('depth culling keeps images that enter the view later and removes the invisible tail', () => {
+  const scene = new THREE.Scene(), geometry = new THREE.SphereGeometry(), material = new THREE.MeshLambertMaterial();
+  const balls = new THREE.InstancedMesh(geometry, material, 1);
+  balls.setMatrixAt(0, new THREE.Matrix4().makeScale(.1, .1, .1).setPosition(3, 0, 0));
+  balls.setColorAt(0, new THREE.Color(1, 0, 0));
+  const camera = new THREE.PerspectiveCamera(30, 1, .01, 12);
+  camera.position.set(0, 0, 4); camera.updateMatrixWorld();
+  const room = new MirrorRoom(scene, balls, 17);
+  room.update(1.2, .6, .24, camera);
+  assert.equal(room.meshes[0].mesh.count, 0);
+  assert.equal(room.meshes[0].mesh.visible, false);
+  room.setCount(MAX_DEPTH_IMAGES); room.update(1.2, .6, .24, camera);
+  const visible = room.meshes[0].mesh.count;
+  assert(visible > 17 && visible < 64);
+  assert.equal(room.count, MAX_DEPTH_IMAGES);
+  const source = geometry.boundingSphere.clone().applyMatrix4(new THREE.Matrix4().fromArray(balls.instanceMatrix.array));
+  for (let n = visible + 1; n <= MAX_DEPTH_IMAGES; n++)
+    assert.equal(room.frustum.intersectsSphere(source.clone().translate(new THREE.Vector3(0, 0, -n * .24))), false);
+  for (const attr of [room.meshes[0].mesh.instanceMatrix, room.meshes[0].mesh.instanceColor])
+    assert.deepEqual(attr.updateRanges, [{ start: 0, count: visible * attr.itemSize }]);
+  room.dispose(); geometry.dispose(); material.dispose();
 });

@@ -476,7 +476,7 @@ export class PhysicsView {
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.renderedEnclosureHeight = height;
-    this.mirrors.update(this.width, height, depth);
+    this.mirrors.update(this.width, height, depth, this.camera);
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);

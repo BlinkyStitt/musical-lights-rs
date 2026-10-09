@@ -875,3 +875,31 @@ per frame and 1,966,080 bytes of image-instance storage. The 32,768-image
 boundary repeat stayed at 60.00 FPS. These runs preserve eight simulated balls;
 image count changes only drawing. The high settings are optional and do not
 establish a phone performance target.
+
+The high-count Linux Chromium check exposed a startup failure after reloading
+2,048 images. A same-workload SwiftShader measurement at that setting rejected
+the active-worklet sample: 1.21 FPS, only 39 snapshots over about 30 seconds,
+and 1.903 ms mean JavaScript animation work per frame. The profile spent most
+of its time outside sampled JavaScript. This is a stalled graphics workload,
+not a successful audio/FPS acceptance result.
+
+Copied balls now use sphere bounds against all six camera planes. The renderer
+keeps the prefix through the last potentially visible depth cell, including
+cells that enter the view farther back. It preserves the requested count,
+pool capacity, all source transforms and eight simulated balls. Tests compare
+the complete 64-image batch and culled pixels at five camera configurations;
+Chromium, WebKit and the iPhone profile produce byte-identical pixels.
+
+Under the same measurement conditions, culling reduced the 2,048-image
+SwiftShader case to 2.06 FPS with 65 snapshots. It still rejects the
+active-worklet sample. High counts require a fast GPU; software-renderer and
+physical-phone acceptance remain separate. The six-image SwiftShader default
+measured 55.07 FPS, 0.828 ms mean animation work and 23,440 upload bytes per
+frame, within earlier host variation.
+
+The final culled 2,048-image Metal sample measured 60.00 FPS, 1.026 ms mean
+animation work, 2.320 ms mean GPU time and 815,517 upload bytes per frame.
+Its last measured frame submitted 7,032 ball images instead of all 16,384.
+The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
+upload bytes per frame. These use the same viewport, PCM, CPU throttle and
+fixed 20-degree camera; they do not establish physical-phone frame rate.

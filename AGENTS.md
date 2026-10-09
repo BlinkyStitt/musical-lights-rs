@@ -79,6 +79,10 @@
   Bars extend as continuous geometry with a smooth depth fade; do not restore
   per-copy end faces or brightness steps. Cull background bars against their
   full extruded bounds and verify visible pixels before claiming savings.
+  Cull ball depth images with all six camera planes. Keep cells that enter the
+  view farther back and retain the requested setting and pool capacity. Verify
+  complete-batch pixel equivalence and measure the submitted prefix. High-count
+  GPU results do not establish software-renderer or phone FPS acceptance.
   Do not add
   simulated balls for background boxes or depth images. Keep all bands responsive
   with the configured rise duration; measure packet-to-render delay as well as steps.

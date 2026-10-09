@@ -469,6 +469,56 @@ test('instanced depth copies match literal translated geometry from both camera 
   for(const result of results){expect(result.meanError,JSON.stringify(result)).toBeLessThan(1);expect(result.changed,JSON.stringify(result)).toBeLessThan(240*160*.005);}
 });
 
+test('camera depth culling preserves pixels from the complete copied-ball batch', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4), results = [];
+    const render = () => {
+      v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice();
+    };
+    try {
+      v.mirrors.setCount(64);
+      for (const [angle, vertical] of [[-40, 0], [0, 0], [40, 0], [20, .8], [-20, -.8]]) {
+        v.setCamera(angle, vertical); v.camera.far = 12; v.camera.updateProjectionMatrix();
+        v.draw(performance.now());
+        const culled = v.mirrors.meshes[0].mesh.count, actual = render();
+        // Submit every requested image with the same shader and camera. Only
+        // the production frustum rejection differs from this full batch.
+        for (const { mesh, staged } of v.mirrors.meshes) {
+          mesh.count = 64 * staged.capacity; mesh.visible = true;
+          for (let layer = 0; layer < 64; layer++) {
+            mesh.instanceMatrix.array.set(staged.matrices, layer * staged.matrices.length);
+            mesh.instanceColor.array.set(staged.colors, layer * staged.colors.length);
+            for (const { name, values } of staged.attributes)
+              mesh.geometry.attributes[name].array.set(values, layer * values.length);
+          }
+          for (const attr of [mesh.instanceMatrix, mesh.instanceColor, ...staged.attributes.map(({ name }) => mesh.geometry.attributes[name])]) {
+            attr.clearUpdateRanges(); attr.addUpdateRange(0, mesh.count * attr.itemSize); attr.needsUpdate = true;
+          }
+        }
+        const full = v.mirrors.meshes[0].mesh.count, expected = render();
+        let changed = 0;
+        for (let i = 0; i < actual.length; i++) if (actual[i] !== expected[i]) changed++;
+        results.push({ angle, vertical, culled, full, changed });
+      }
+    } finally {
+      v.renderer.setRenderTarget(null); target.dispose();
+      v.mirrors.setCount(v.settings.mirrorCount); v.camera.far = 200; v.camera.updateProjectionMatrix();
+    }
+    return results;
+  });
+  for (const result of evidence) {
+    expect(result.culled, JSON.stringify(result)).toBeLessThan(result.full);
+    expect(result.changed, JSON.stringify(result)).toBe(0);
+  }
+  await info.attach('depth-culling-pixels.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+});
+
 test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }) => {
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
   await page.locator('.input-source').selectOption('generated');

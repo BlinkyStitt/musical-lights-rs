@@ -35,9 +35,12 @@ export class MirrorRoom {
     this.poolCount = Math.min(MAX_DEPTH_IMAGES, 2 ** Math.ceil(Math.log2(Math.max(1, count))));
     this.scene = scene;
     this.depth = { value: 1 };
+    this.frustum = new THREE.Frustum(); this.clipMatrix = new THREE.Matrix4();
+    this.sourceMatrix = new THREE.Matrix4(); this.sourceSphere = new THREE.Sphere();
     this.meshes = []; this.sources = [];
     for (const [kind, source] of [['balls', balls]]) {
       source.geometry.computeBoundingBox();
+      source.geometry.computeBoundingSphere();
       const capacity = source.count;
       const staged = { source, capacity, kind,
         matrices: new Float32Array(capacity * 16), colors: new Float32Array(capacity * 3), attributes: [] };
@@ -93,12 +96,37 @@ export class MirrorRoom {
     this.count = count;
     for (const { mesh, staged } of this.meshes) { mesh.count = count * staged.capacity; mesh.visible = count > 0; }
   }
-  update(width, height, depth) {
+  visibleCount(staged, depth) {
+    const { source } = staged;
+    const padding = 1e-5 * (1 + this.count * depth);
+    let visible = 0;
+    for (let i = 0; i < source.count; i++) {
+      this.sourceMatrix.fromArray(source.instanceMatrix.array, i * 16);
+      this.sourceSphere.copy(source.geometry.boundingSphere).applyMatrix4(this.sourceMatrix);
+      let first = 1, last = this.count;
+      for (const plane of this.frustum.planes) {
+        // Include float shader rounding at the far end of a long depth bank.
+        const distance = plane.distanceToPoint(this.sourceSphere.center) + this.sourceSphere.radius + padding;
+        const step = depth * plane.normal.z;
+        // Cell n translates the sphere by -n * depth along world Z. Keep a
+        // conservative prefix through the last cell that intersects all six
+        // planes. This also retains cells that enter the view farther back.
+        if (step > 0) last = Math.min(last, Math.floor(distance / step));
+        else if (step < 0) first = Math.max(first, Math.ceil(distance / step));
+        else if (distance < 0) { last = 0; break; }
+      }
+      if (last >= first) visible = Math.max(visible, last);
+    }
+    return visible;
+  }
+  update(width, height, depth, camera) {
     this.depth.value = depth;
     this.wallMatrix.makeScale(BOX_OFFSETS.length * width, height, depth * (this.count + 1)).setPosition(width / 2, height / 2, -depth * this.count / 2);
     this.walls.setMatrixAt(0, this.wallMatrix);
     this.walls.instanceMatrix.needsUpdate = true;
     if (this.count === 0) return;
+    this.clipMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.clipMatrix);
     for (const staged of this.sources) {
       const { source, capacity, matrices, colors, attributes } = staged;
       let n = 0;
@@ -113,14 +141,17 @@ export class MirrorRoom {
     }
     for (const { mesh, staged } of this.meshes) {
       const { capacity, matrices, colors, attributes } = staged;
-      for (let c = 0; c < this.count; c++) {
+      const count = this.visibleCount(staged, depth);
+      mesh.count = count * capacity; mesh.visible = count > 0;
+      if (count === 0) continue;
+      for (let c = 0; c < count; c++) {
         mesh.instanceMatrix.array.set(matrices, c * capacity * 16);
         mesh.instanceColor.array.set(colors, c * capacity * 3);
       }
       for (const { name, values } of attributes) {
         const out = mesh.geometry.attributes[name];
-        for (let c = 0; c < this.count; c++) out.array.set(values, c * values.length);
-        out.clearUpdateRanges(); out.addUpdateRange(0, this.count * values.length);
+        for (let c = 0; c < count; c++) out.array.set(values, c * values.length);
+        out.clearUpdateRanges(); out.addUpdateRange(0, count * values.length);
         out.needsUpdate = true;
       }
       // Grow pools only on settings changes; transfer the active image prefix.
