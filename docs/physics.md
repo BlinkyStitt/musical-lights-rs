@@ -15,7 +15,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Setting | Default |
 | --- | --- |
 | Width / depth | 1.2 m / 0.24 m |
-| Bar pitch / gap / top corner radius | 50 mm / 2 mm / 12 mm |
+| Bar pitch / gap / top corner radius | 50 mm / 0 mm / 0 mm |
 | Sphere diameter | 8 size ratios × 48 mm |
 | Density | 8 kg/m³ |
 | Gravity | 9.81 m/s² |
@@ -90,7 +90,7 @@ the solver and re-enabled before they can contact a ball. Rendering clips
 copies to the enclosure. The 24 accessible meters keep
 source identity while their pointer regions and keyboard focus follow the bars.
 
-The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rounded bar extends 20 m beyond its active floor or ceiling base. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rectangular bar extends 20 m beyond its active floor or ceiling base. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
@@ -258,9 +258,13 @@ measured/default gravity; ceiling bars can leave balls resting on the floor.
 One animation loop interpolates snapshots and updates the accessible audio
 meters. ResizeObserver caches layout measurements. The renderer caps pixel
 ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
-bloom. Rounded bar caps use two chords per quarter-circle. Bar shaders retain
-rainbow fills, full-height glow, and a one-CSS-pixel
-white inner edge. Only distinct bar impacts blend sphere colors.
+bloom. Bars meet edge to edge with flat tips in both the colliders and the
+rendered geometry. This removes the rounded seam trough that let the smallest
+sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
+Physics protocol 11 rejects replays from the previous rounded-bar engine.
+Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
+white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
+intensity. Only distinct bar impacts blend sphere colors.
 
 Hidden pages and lost WebGL contexts pause both clocks. Return resets the
 frame clock. Route cleanup closes audio, terminates the worker, removes sensor
@@ -343,8 +347,8 @@ Phone acceptance requires an actively playing, repeating 24-tone exercise with d
 The browser keeps the established red-to-purple HSLuv hue anchors, uses full
 saturation, and scales each linear RGB fill until its brightest channel reaches
 one. This uses the full display gamut instead of holding every hue at the same
-muted lightness. A permanent one-pixel dark outline separates bright fills
-from the light background; the one-pixel white attack flash sits just inside it.
+muted lightness. Adjacent fills meet without a gap or dark outline. A narrow
+white attack flash sits inside each bar boundary.
 Bar height remains the loudness measure. Source labels, numeric
 meters, keyboard focus and pointer readouts remain available independently of
 color. LED palettes and acoustic analysis are unchanged.
@@ -356,7 +360,7 @@ object coordinates. Its appearance rotates with the physical quaternion;
 Reduced Motion stops additional pattern drift. Existing average-color snapshot
 diagnostics stay intact, and resting contacts do not keep adding pigments.
 
-Bars use diffuse Lambert lighting with a dark boundary and white emissive attack
+Bars use diffuse Lambert lighting with contiguous colored boundaries and white emissive attack
 highlights. Four reusable point lights illuminate nearby surfaces during attacks,
 with hemisphere/directional fill and lit enclosure surfaces. Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;

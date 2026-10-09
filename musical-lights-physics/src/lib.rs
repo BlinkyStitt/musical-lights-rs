@@ -13,8 +13,8 @@ pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
 pub const WIDTH: f32 = 1.2;
 pub const PITCH: f32 = WIDTH / COUNT as f32;
-pub const GAP: f32 = 0.002;
-pub const CORNER: f32 = 0.012;
+// Keep the existing beach-ball sizes independent of the now full-width bars.
+pub const BALL_SIZE_UNIT: f32 = PITCH - 0.002;
 pub const POST_HEIGHT: f32 = 20.0;
 pub const MAX_SUBSTEPS: usize = 128;
 pub const MIN_HEIGHT: f32 = 0.40;
@@ -64,14 +64,14 @@ impl Default for SimulationConfig {
 }
 impl SimulationConfig {
     pub fn hop_height(self, reduced: bool) -> f32 {
-        let diameter = SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP);
+        let diameter = SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * BALL_SIZE_UNIT;
         flight_height(self.height - diameter - CLEARANCE, 0.3, reduced)
     }
     pub fn bar_max(self) -> f32 {
         // Keep the same geometry in Reduced Motion: only the release energy changes.
         paired_bar_extent(
             self.height,
-            SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP)
+            SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * BALL_SIZE_UNIT
                 + self.hop_height(false)
                 + CLEARANCE,
         )
@@ -273,16 +273,12 @@ impl Simulation {
                     },
                     0.0,
                 )),
-                // Rapier adds the rounding radius outside the cuboid's half extents.
-                ColliderBuilder::round_cuboid(
-                    (PITCH - GAP) / 2.0 - CORNER,
-                    POST_HEIGHT / 2.0 - CORNER,
-                    config.depth / 2.0 - CORNER,
-                    CORNER,
-                )
-                .user_data((COUNT + 1 + (i / (COUNT * 3)) * COUNT + i % COUNT) as u128)
-                .friction(config.friction)
-                .restitution(config.restitution),
+                // Full-pitch, flat tips meet without a slot or rounded trough.
+                // Use the same rectangular profile in the renderer.
+                ColliderBuilder::cuboid(PITCH / 2.0, POST_HEIGHT / 2.0, config.depth / 2.0)
+                    .user_data((COUNT + 1 + (i / (COUNT * 3)) * COUNT + i % COUNT) as u128)
+                    .friction(config.friction)
+                    .restitution(config.restitution),
             )
         });
         let mut order: [usize; BALL_COUNT] = std::array::from_fn(|i| i);
@@ -290,9 +286,9 @@ impl Simulation {
         let mut spawn = [Vector::ZERO; BALL_COUNT];
         let mut bottom = BASELINE + 0.002;
         for (row_index, row) in order.chunks(6).enumerate() {
-            let diameter = SIZE_RATIOS[row[0]] * (PITCH - GAP);
+            let diameter = SIZE_RATIOS[row[0]] * BALL_SIZE_UNIT;
             for (column, &i) in row.iter().enumerate() {
-                let radius = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
+                let radius = SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0;
                 let side = if (column + row_index).is_multiple_of(2) {
                     1.0
                 } else {
@@ -316,7 +312,7 @@ impl Simulation {
             bottom += diameter + 0.002;
         }
         let balls = std::array::from_fn(|i| {
-            let radius = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
+            let radius = SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0;
             world.insert(
                 RigidBodyBuilder::dynamic()
                     .translation(spawn[i])
@@ -430,7 +426,7 @@ impl Simulation {
         Ok(())
     }
     fn hop_height(&self, reduced: bool) -> f32 {
-        let diameter = SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * (PITCH - GAP);
+        let diameter = SIZE_RATIOS.iter().copied().fold(0.0_f32, f32::max) * BALL_SIZE_UNIT;
         flight_height(
             self.config.height - diameter - CLEARANCE,
             self.flight_fraction,
@@ -530,7 +526,7 @@ impl Simulation {
                     .enumerate()
                     .any(|(i, &(ball, _))| {
                         let body = &self.world.bodies[ball];
-                        let radius = f64::from(SIZE_RATIOS[i] * (PITCH - GAP) / 2.0);
+                        let radius = f64::from(SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0);
                         body.is_enabled()
                             && f64::from((body.translation().x - post.translation().x).abs())
                                 <= reach_x + radius + ball_reach
@@ -545,7 +541,7 @@ impl Simulation {
             })
             .fold(resize_speed, f64::max);
         let min_radius =
-            SIZE_RATIOS.iter().copied().fold(f32::INFINITY, f32::min) * (PITCH - GAP) / 2.0;
+            SIZE_RATIOS.iter().copied().fold(f32::INFINITY, f32::min) * BALL_SIZE_UNIT / 2.0;
         // Bound each kind of contact: two opposing balls, or a ball and a post.
         // Adding all three speeds double-counts the ball for post contacts and
         // makes unrelated ball-ball contacts pay for the fastest nearby post.
@@ -623,7 +619,7 @@ impl Simulation {
                 }
                 // Sphere Cd=.47, air density=1.225 kg/m³. Implicit quadratic
                 // drag update stays dissipative even for a fast sensor impulse.
-                let radius = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
+                let radius = SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0;
                 let velocity = body.linvel();
                 body.set_linvel(
                     velocity * sphere_drag_factor(radius, velocity.length(), body.mass(), dt),
@@ -644,9 +640,9 @@ impl Simulation {
                         let post = &self.world.bodies[*post];
                         post.is_enabled()
                             && (post.translation().x - b.translation().x).abs()
-                                <= PITCH / 2.0 + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                                <= PITCH / 2.0 + SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
                             && b.translation().y
-                                + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                                + SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
                                 + b.linvel().y.max(0.0) * dt
                                 >= post.translation().y - POST_HEIGHT / 2.0 - CLEARANCE
                     })
@@ -773,7 +769,7 @@ impl Simulation {
                 .filter(|(_, (h, _))| self.world.bodies[*h].is_enabled())
                 .map(|(i, (h, _))| {
                     self.world.bodies[*h].translation().y
-                        + SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+                        + SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
                         + CLEARANCE
                 })
                 .fold(0.0_f32, f32::max)
@@ -807,7 +803,7 @@ impl Simulation {
             let out = &mut values[3 + i * BODY_STRIDE..3 + (i + 1) * BODY_STRIDE];
             out[..3].copy_from_slice(&body.translation().to_array());
             out[3..7].copy_from_slice(&body.rotation().to_array());
-            out[7] = SIZE_RATIOS[i] * (PITCH - GAP) / 2.0;
+            out[7] = SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0;
             out[8] = body.mass();
             out[9..12].copy_from_slice(&body.linvel().to_array());
             out[12..15].copy_from_slice(&body.angvel().to_array());
@@ -852,8 +848,8 @@ impl PhysicsSimulation {
             HZ as f32,
             WIDTH,
             PITCH,
-            GAP,
-            CORNER,
+            0.0, // bar gap: adjacent posts meet edge to edge
+            0.0, // rectangular tips: no rounded trough at the seam
             POST_HEIGHT,
             0.0, // Historical headroom fraction; v2 publishes actual geometry below.
             BODY_STRIDE as f32,
@@ -866,7 +862,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            10.0, // faster releases; adapter records the decorative listening floor
+            11.0, // contiguous rectangular bar colliders; replay requires this engine
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,

@@ -341,7 +341,7 @@ test('center supports and neighboring bars fill the same physical depth', async 
       heightError:Math.max(...Array.from({length:v.sideBars.mesh.count},(_,i)=>Math.abs(Math.abs(side[i*16+5])-v.renderedHeight(v.sideBars.sourceBands[i])))),
       shifts:[...new Set(v.sideBars.offsets.slice(0,v.sideBars.mesh.count))],width:v.width,
       outerWidth:v.enclosure.instanceMatrix.array[0],outerCenter:v.enclosure.instanceMatrix.array[12],coatings:v.enclosure.count,
-      bodyCount:v.layout[21],physicalBalls:v.balls.count};
+      bodyCount:v.layout[21],physicalBalls:v.balls.count,sideCount:v.sideBars.mesh.count};
   });
   expect(result.depth).toBeCloseTo(result.physicalDepth,6); expect(result.sideDepth).toBe(result.depth);
   expect(result.centers.every(z=>z===0)).toBe(true); expect(result.widths[0]).toBe(result.widths[1]);
@@ -352,6 +352,7 @@ test('center supports and neighboring bars fill the same physical depth', async 
   expect(result.outerWidth).toBeCloseTo(5*result.width,6);
   expect(result.outerCenter).toBeCloseTo(result.width/2,6);
   expect(result.bodyCount).toBe(8); expect(result.physicalBalls).toBe(8);
+  expect(result.sideCount).toBe(24 * 2 * 4); // zero-area columns at the box edges do not draw
 });
 
 test('offscreen rendering stops while audio and physics keep running', async ({ page }) => {

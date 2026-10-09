@@ -3,7 +3,7 @@ import { physicsReady, physicsState } from '../physics-state.mjs';
 
 const edges = [0,100,200,300,400,510,630,770,920,1080,1270,1480,1720,2000,2320,2700,3150,3700,4400,5300,6400,7700,9500,12000,15500];
 for (const width of [320, 375, 1440]) {
-  test(`spectrum has 24 rounded bars with exact frequency labels at ${width}px`, async ({ page }) => {
+  test(`spectrum has 24 contiguous bars with exact frequency labels at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('http://127.0.0.1:8101');
     await expect(page.locator('.bark-group[role=group]')).toHaveCount(24);
@@ -35,6 +35,7 @@ for (const width of [320, 375, 1440]) {
         })),
         colors: groups.map(node => getComputedStyle(node).getPropertyValue('--band-color').trim()),
         counts: groups.map(node => node.querySelectorAll('[role=meter]').length),
+        barWidth: view.bars.geometry.boundingBox.max.x - view.bars.geometry.boundingBox.min.x,
         layout: document.querySelector('#dancinglights').physics.layout,
         canvas: document.querySelector('canvas').getBoundingClientRect().toJSON(),
         graph: graph.toJSON(),
@@ -44,8 +45,9 @@ for (const width of [320, 375, 1440]) {
     expect(geometry.hitRegionError).toBeLessThan(1);
     expect(geometry.counts).toEqual(Array(24).fill(1));
     expect(new Set(geometry.colors).size).toBe(24);
-    expect(geometry.layout[4]).toBeCloseTo(.002, 6);
-    expect(geometry.layout[5]).toBeCloseTo(.012, 6);
+    expect(geometry.layout[4]).toBe(0);
+    expect(geometry.layout[5]).toBe(0);
+    expect(geometry.barWidth).toBeCloseTo(geometry.layout[3], 6);
     expect(geometry.canvas.width).toBe(geometry.graph.width);
     expect(geometry.canvas.height).toBe(geometry.graph.height);
     await page.getByRole('meter').nth(13).focus();

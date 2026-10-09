@@ -5,10 +5,12 @@ import init, { PhysicsSimulation } from '../../musical-lights-physics/pkg/physic
 import { replayReport } from '../replay-physics.mjs';
 const wasm = await init({ module_or_path: await readFile(new URL('../../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
 
-test('the built WASM accepts protocol 10 scrolling and stops at its published phase', () => {
+test('the built WASM accepts protocol 11 scrolling and stops at its published phase', () => {
   const layout = PhysicsSimulation.layout();
-  assert.equal(layout[18], 10, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
+  assert.equal(layout[18], 11, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
   assert.equal(layout[0], 24);
+  assert.equal(layout[4], 0, 'Adjacent bar colliders have no gap');
+  assert.equal(layout[5], 0, 'Flat tips have no seam trough');
   assert.equal(layout[21], 8);
   assert.equal(layout[9], 3 + 8 * layout[8]);
   assert.equal(layout[11] - layout[10], 8 * 24);
