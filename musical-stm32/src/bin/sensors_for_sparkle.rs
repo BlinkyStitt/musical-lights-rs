@@ -122,7 +122,7 @@ async fn read_from_sparkle_task(
 
 /// read from a channel and send to the sparkle via UART
 #[embassy_executor::task]
-async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart: UartToSparkle<'static, 256>) {
+async fn send_to_sparkle_task(channel: MyMessageReceiver, mut uart: UartToSparkle<'static>) {
     loop {
         let message = channel.receive().await;
         info!("sending message to sparkle: {:?}", message);
@@ -285,7 +285,7 @@ async fn main(spawner: Spawner) {
     let (uart_sparkle_tx, uart_sparkle_rx) = uart_sparkle.split();
 
     // TODO: What should the buffer sizes be?!
-    let uart_sparkle_tx = UartToSparkle::<256>::new(uart_sparkle_tx);
+    let uart_sparkle_tx = UartToSparkle::new(uart_sparkle_tx);
     let uart_sparkle_rx = UartFromSparkle::new(uart_sparkle_rx);
 
     let mut uart_gps_config = Config::default();

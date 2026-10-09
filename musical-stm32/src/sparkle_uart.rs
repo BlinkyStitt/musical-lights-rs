@@ -4,134 +4,67 @@ use embassy_stm32::{
     usart::{UartRx, UartTx},
 };
 use embedded_io_async::Write;
-use heapless::Vec;
 use musical_lights_core::{
     errors::{MyError, MyResult},
-    logging::{error, warn},
-    message::{
-        Message, deserialize_with_crc, max_size_with_crc, max_size_with_crc_and_cobs,
-        serialize_with_crc_and_cobs,
-    },
-};
-use postcard::accumulator::{CobsAccumulator, FeedResult};
-
-pub const CRC_BUF_BYTES: usize = max_size_with_crc::<Message>();
-pub const RAW_BUF_BYTES: usize = max_size_with_crc_and_cobs::<Message>();
-pub const COBS_ACCUMULATOR_BUF_BYTES: usize = RAW_BUF_BYTES * 2;
-
-const _SAFETY_CHECKS: () = {
-    assert!(CRC_BUF_BYTES < RAW_BUF_BYTES);
-    assert!(COBS_ACCUMULATOR_BUF_BYTES >= RAW_BUF_BYTES * 2);
+    logging::warn,
+    message::{Message, MessageDecoder, MessageEncoder},
 };
 
-// TODO: make this work for async or sync? generics are hard
-pub struct UartToSparkle<'a, const N: usize> {
+pub struct UartToSparkle<'a> {
     uart: UartTx<'a, Async>,
-
-    /// TODO: i think these buffers should be different lengths
-    /// TODO: should these buffers just be a part of the write function?
-    crc_buffer: [u8; CRC_BUF_BYTES],
-    /// TODO: what size does this need? it should be RAW_BUF_BYTES minus something
-    output_buffer: [u8; RAW_BUF_BYTES],
+    encoder: MessageEncoder,
 }
 
-impl<'a, const N: usize> UartToSparkle<'a, N> {
+impl<'a> UartToSparkle<'a> {
     pub fn new(uart: UartTx<'a, Async>) -> Self {
         Self {
             uart,
-            crc_buffer: [0u8; CRC_BUF_BYTES],
-            output_buffer: [0u8; RAW_BUF_BYTES],
+            encoder: MessageEncoder::new(),
         }
     }
 
-    /// Write a Message with CRC and COBS.
-    /// TODO: Return an error instead of unwrapping.
+    /// Write one complete Message frame with CRC, COBS and its delimiter.
     pub async fn write(&mut self, message: &Message) -> MyResult<()> {
-        let encoded_len =
-            serialize_with_crc_and_cobs(message, &mut self.crc_buffer, &mut self.output_buffer)?;
-
         self.uart
-            .write_all(&self.output_buffer[..encoded_len])
+            .write_all(self.encoder.encode(message)?)
             .await
-            .map_err(|_| MyError::UartSend)?;
-
-        Ok(())
+            .map_err(|_| MyError::UartSend)
     }
 }
 
 pub struct UartFromSparkle<'a> {
     uart: UartRx<'a, Async>,
-    raw_buf: [u8; RAW_BUF_BYTES],
-    cobs_acc: CobsAccumulator<COBS_ACCUMULATOR_BUF_BYTES>,
+    raw_buf: [u8; MessageEncoder::MAX_FRAME_SIZE],
+    decoder: MessageDecoder,
 }
 
 impl<'a> UartFromSparkle<'a> {
     pub const fn new(uart: UartRx<'a, Async>) -> Self {
-        let raw_buf = [0u8; RAW_BUF_BYTES];
-        let cobs_acc = CobsAccumulator::<COBS_ACCUMULATOR_BUF_BYTES>::new();
-
-        // TODO: do we want a ring buffer? theres not a ton of data here, so it should be fine
-        // let uart = uart.into_ring_buffered(dma_buf);
-
         Self {
             uart,
-            raw_buf,
-            cobs_acc,
+            raw_buf: [0; MessageEncoder::MAX_FRAME_SIZE],
+            decoder: MessageDecoder::new(),
         }
     }
 
-    /// read messages from the uart until the uart shuts down
-    /// TODO: how can we tell this loop to stop?
+    /// Read until UART shutdown, retaining partial frames across reads.
     pub async fn read_loop<F, Fut>(&mut self, output: F) -> MyResult<()>
     where
         F: Fn(Message) -> Fut,
         Fut: Future<Output = ()>,
     {
-        // TODO: how should we make this work, and what should the asserts be?
-        // const _: () = assert!(RAW_BUF_BYTES > COB_BUF_BYTES, "RAW_BUF_BYTES must be greater than COB_BUF_BYTES");
-        // const _: () = assert!(RAW_BUF_BYTES > 0, "RAW_BUF_BYTES must be greater than 0");
-        // const RAW_BUF_BYTES: usize = max_size_with_crc_and_cobs::<T>();
-        // const _: () = assert!(RAW_BUF_BYTES * 3 == COB_BUF_BYTES);
-
-        // TODO: what size do these buffers need to be?
-
-        // TODO: buffered read until we get a zero byte. thats the end delimeter for the cobs encoded messages
-        // TODO: is read_until_idle correct?
-        while let Ok(ct) = self.uart.read_until_idle(&mut self.raw_buf).await {
-            if ct == 0 {
-                // Finished reading input
+        while let Ok(count) = self.uart.read_until_idle(&mut self.raw_buf).await {
+            if count == 0 {
                 break;
             }
-
-            let mut window = &self.raw_buf[..ct];
-
-            'cobs: while !window.is_empty() {
-                // TODO: RAW_BUF_BYTES is probably the wrong size for feed. calculte it from the generic types somehow
-                window = match self.cobs_acc.feed::<Vec<u8, RAW_BUF_BYTES>>(window) {
-                    FeedResult::Consumed => break 'cobs,
-                    FeedResult::OverFull(new_wind) => {
-                        error!("cobs buffer overfull, dropping data");
-                        new_wind
+            for &byte in &self.raw_buf[..count] {
+                if let Some(result) = self.decoder.feed(byte) {
+                    match result {
+                        Ok(message) => output(message).await,
+                        // MyError has no defmt::Format implementation.
+                        Err(_) => warn!("invalid UART message frame, dropping data"),
                     }
-                    FeedResult::DeserError(new_wind) => {
-                        error!("cobs buffer deserialization error, dropping data");
-                        new_wind
-                    }
-                    FeedResult::Success { data, remaining } => {
-                        match deserialize_with_crc(&data) {
-                            Ok(msg) => {
-                                output(msg).await;
-                            }
-                            Err(err) => {
-                                // TODO: MyError doesn't implement defmt::Format
-                                warn!("failed to deserialize message");
-                                warn!("{:?}", err);
-                            }
-                        }
-
-                        remaining
-                    }
-                };
+                }
             }
         }
         Ok(())

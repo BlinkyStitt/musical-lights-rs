@@ -113,12 +113,12 @@ test(`diagnostic plot separates ${end} render geometry and its clock from analys
 test('saved Physics settings restore on reload while factory reset retains factory values', async ({ page }) => {
   await advanced(page); await page.locator('.physics-controls > summary').click();
   await page.locator('[data-config="2"]').fill('16');
-  await page.locator('[data-config="6"]').fill('80');
+  await page.locator('[data-config="6"]').fill('20');
   await page.getByRole('button', { name: 'Apply settings and reset', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.config[2])).toBe(16);
   await page.reload(); await physicsReady(page); await page.locator('.physics-controls > summary').click();
   await expect(page.locator('[data-config="2"]')).toHaveValue('16');
-  await expect(page.locator('[data-config="6"]')).toHaveValue('80');
+  await expect(page.locator('[data-config="6"]')).toHaveValue('20');
   const height = await page.evaluate(() => document.querySelector('#dancinglights').physics.height);
   await page.getByRole('button', { name: 'Restore defaults and reset', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.config[2])).toBe(8);

@@ -1,22 +1,13 @@
-//! todo: theres lots of options for serialization. postcard looks easy to use. benchmark things if it even matters for our use case
-/// TODO: support Read and embedded-io::Read and Async variants
-// use postcard::accumulator::CobsAccumulator;
-// use postcard::accumulator::FeedResult;
-// use postcard::de_flavors::{Crc16 as DeCrc16, De as DeCobs};
-// use postcard::ser_flavors::crc::to_slice_u8;
-// use postcard::ser_flavors::{Cobs, Slice};
-// use postcard::serialize_with_flavor;
-// use heapless::Vec;
-use postcard::de_flavors;
+//! Bounded, allocation-free UART frames: Postcard Message, CRC-16/IBM-SDLC
+//! (little endian), COBS, then a zero delimiter. No vector length prefix.
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
 use crate::compass::Coordinate;
 use crate::compass::Magnetometer;
-use crate::errors::MyResult;
+use crate::errors::{MyError, MyResult};
 use crate::gps::GpsTime;
 use crate::orientation::Orientation;
-// use crate::logging::{error, warn};
 
 pub const MESSAGE_BAUD_RATE: u32 = 115_200;
 
@@ -39,139 +30,278 @@ pub enum Message {
     SelfCoordinate(Coordinate),
 }
 
-pub type CrcWidth = u16;
+const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_IBM_SDLC);
+const RAW_SIZE: usize = Message::POSTCARD_MAX_SIZE + size_of::<u16>();
+const ENCODED_SIZE: usize = cobs::max_encoding_length(RAW_SIZE);
 
-/// TODO: i have no idea which algo to pick. theres so many
-/// TODO: take this as an argument?
-pub const CRC: crc::Crc<CrcWidth> = crc::Crc::<CrcWidth>::new(&crc::CRC_16_IBM_SDLC);
-
-/// TODO: what size do these buffers need to be? make sure to leave room for the sentinel byte
-/// TODO: is writing to a buffer like this good? should we have a std version that returns a Vec?
-/// TODO: <https://github.com/jamesmunns/postcard/issues/117#issuecomment-2888769291>
-/// The returned length includes the final zero delimiter.
-pub fn serialize_with_crc_and_cobs<T>(
-    value: &T,
-    crc_buf: &mut [u8],
-    output: &mut [u8],
-) -> MyResult<usize>
-where
-    T: Serialize,
-{
-    let digest = CRC.digest();
-
-    let intermediate = postcard::ser_flavors::crc::to_slice_u16(value, crc_buf, digest)?;
-
-    // TODO: use max_encoding_length(source_len) to make sure the buffers are the right size? encode panics if they aren't
-    let size = cobs::try_encode(intermediate, output)?;
-
-    // try_encode doesn't include the sentinel byte, so we need to add it manually
-    // TODO: is this right?
-    *output.get_mut(size).ok_or(cobs::DestBufTooSmallError)? = 0;
-
-    Ok(size + 1)
+/// Owns the scratch and output buffers for one complete UART frame.
+/// Reuse this encoder; the returned frame remains valid until the next encode.
+#[derive(Default)]
+pub struct MessageEncoder {
+    scratch: [u8; RAW_SIZE],
+    output: [u8; ENCODED_SIZE + 1],
 }
 
-/// this drops any extra data, so be careful how you use this!
-pub fn deserialize_with_crc<T>(data: &[u8]) -> postcard::Result<T>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    let digest = CRC.digest();
+impl MessageEncoder {
+    /// Maximum complete wire frame length, including its zero delimiter.
+    pub const MAX_FRAME_SIZE: usize = ENCODED_SIZE + 1;
 
-    de_flavors::crc::from_bytes_u16(data, digest)
+    pub const fn new() -> Self {
+        Self {
+            scratch: [0; RAW_SIZE],
+            output: [0; ENCODED_SIZE + 1],
+        }
+    }
+
+    /// Serialize exactly one message with CRC, COBS and a final zero delimiter.
+    pub fn encode(&mut self, message: &Message) -> MyResult<&[u8]> {
+        let raw =
+            postcard::ser_flavors::crc::to_slice_u16(message, &mut self.scratch, CRC.digest())?;
+        let size = cobs::try_encode(raw, &mut self.output[..ENCODED_SIZE])?;
+        self.output[size] = 0;
+        Ok(&self.output[..size + 1])
+    }
 }
 
-/// a hopefully durable deserialze.
-/// this reverses `serialize_with_crc_and_cobs`.
-/// you probbaly want something more like the `example_deserialize_loop`
-pub fn deserialize_with_cobs_and_crc<T>(data: &mut [u8]) -> MyResult<T>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    let size = cobs::decode_in_place(data)?;
-
-    let message = deserialize_with_crc(&data[..size])?;
-
-    Ok(message)
+/// Owns receive state across arbitrary UART reads. Emits at most one result per
+/// delimiter. Empty delimiters are ignored. Oversized frames discard all bytes
+/// through their delimiter; malformed frames cannot contaminate the next frame.
+#[derive(Default)]
+pub struct MessageDecoder {
+    buffer: [u8; ENCODED_SIZE],
+    length: usize,
+    discarding: bool,
 }
 
-// TODO: make this generic.
-pub const fn max_size_with_crc<T: MaxSize>() -> usize {
-    T::POSTCARD_MAX_SIZE + size_of::<CrcWidth>()
-}
+impl MessageDecoder {
+    pub const fn new() -> Self {
+        Self {
+            buffer: [0; ENCODED_SIZE],
+            length: 0,
+            discarding: false,
+        }
+    }
 
-pub const fn max_size_with_crc_and_cobs<T: MaxSize>() -> usize {
-    cobs::max_encoding_length(max_size_with_crc::<T>()) + 1
+    pub fn feed(&mut self, byte: u8) -> Option<MyResult<Message>> {
+        if byte == 0 {
+            let length = self.length;
+            self.length = 0;
+            if self.discarding {
+                self.discarding = false;
+                return Some(Err(MyError::MessageTooLong));
+            }
+            if length == 0 {
+                return None;
+            }
+            return Some(self.decode_frame(length));
+        }
+        if !self.discarding {
+            if let Some(slot) = self.buffer.get_mut(self.length) {
+                *slot = byte;
+                self.length += 1;
+            } else {
+                self.discarding = true;
+            }
+        }
+        None
+    }
+
+    fn decode_frame(&mut self, length: usize) -> MyResult<Message> {
+        let size = cobs::decode_in_place(&mut self.buffer[..length])?;
+        let payload_size = size
+            .checked_sub(size_of::<u16>())
+            .ok_or(postcard::Error::DeserializeUnexpectedEnd)?;
+        let (payload, checksum) = self.buffer[..size].split_at(payload_size);
+        let expected = u16::from_le_bytes([checksum[0], checksum[1]]);
+        if CRC.checksum(payload) != expected {
+            return Err(postcard::Error::DeserializeBadCrc.into());
+        }
+        let (message, remaining) = postcard::take_from_bytes(payload)?;
+        if !remaining.is_empty() {
+            return Err(postcard::Error::DeserializeBadEncoding.into());
+        }
+        Ok(message)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::vec::Vec;
 
-    #[test]
-    fn test_durable_messages() {
-        /// the maximum size of the postcard serialized bytes with a CRC attached.
-        const MESSAGE_MAX_SIZE_WITH_CRC: usize = max_size_with_crc::<Message>();
-        /// the maximum size of the postcard serialized bytes with a CRC attached and cobs encoded.
-        /// Includes the final zero delimiter.
-        const MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS: usize = max_size_with_crc_and_cobs::<Message>();
+    // Fixed wire fixtures: Postcard discriminant, little-endian CRC-16/X-25,
+    // one COBS block and delimiter. These contain no serialized vector prefix.
+    const PING: &[u8] = &[4, 4, 0x5c, 0xb6, 0];
+    const PONG: &[u8] = &[4, 5, 0xd5, 0xa7, 0];
 
-        // encode the message into output
-        // TODO: do we need a buffer? can we use the output as buf?
-        let mut buf = [0u8; MESSAGE_MAX_SIZE_WITH_CRC];
-        let mut output = [0u8; MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS];
-
-        let message = Message::Orientation(Orientation::TopUp);
-
-        println!("message: {message:?}");
-
-        println!("MESSAGE_MAX_SIZE: {}", Message::POSTCARD_MAX_SIZE);
-        println!("MESSAGE_MAX_SIZE_WITH_CRC: {MESSAGE_MAX_SIZE_WITH_CRC}");
-        println!("MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS: {MESSAGE_MAX_SIZE_WITH_CRC_AND_COBS}");
-
-        let size = serialize_with_crc_and_cobs(&message, &mut buf, &mut output).unwrap();
-
-        assert!(size > 0);
-
-        let sized_output = &mut output[..size];
-
-        println!("encoded: {sized_output:?}");
-
-        let deserialized_message: Message = deserialize_with_cobs_and_crc(sized_output).unwrap();
-
-        assert_eq!(deserialized_message, message);
+    fn feed(decoder: &mut MessageDecoder, bytes: &[u8]) -> Vec<MyResult<Message>> {
+        bytes.iter().filter_map(|&b| decoder.feed(b)).collect()
     }
+
+    fn messages() -> [Message; 7] {
+        [
+            Message::GpsTime(u32::MAX),
+            Message::Orientation(Orientation::TopUp),
+            Message::Magnetometer(Magnetometer {
+                x_gauss: 0.0,
+                y_gauss: -1.25,
+                z_gauss: f32::MAX,
+            }),
+            Message::PeerCoordinate(
+                PeerId(255),
+                Coordinate {
+                    lat: f32::MAX,
+                    lon: f32::MIN,
+                },
+            ),
+            Message::Ping,
+            Message::Pong,
+            Message::SelfCoordinate(Coordinate {
+                lat: 37.0001,
+                lon: -122.0,
+            }),
+        ]
+    }
+
     #[test]
-    fn worst_case_message_fits_and_corruption_is_rejected() {
-        let message = Message::PeerCoordinate(
-            PeerId(255),
-            Coordinate {
-                lat: f32::MAX,
-                lon: f32::MIN,
-            },
-        );
-        let mut scratch = [0; max_size_with_crc::<Message>()];
-        let mut frame = [0; max_size_with_crc_and_cobs::<Message>()];
-        let size = serialize_with_crc_and_cobs(&message, &mut scratch, &mut frame).unwrap();
-        assert_eq!(frame[size - 1], 0);
-        assert!(frame[..size - 1].iter().all(|&b| b != 0));
-        let mut good = frame;
+    fn encoder_matches_fixed_wire_fixtures() {
+        let mut encoder = MessageEncoder::new();
+        assert_eq!(encoder.encode(&Message::Ping).unwrap(), PING);
+        assert_eq!(encoder.encode(&Message::Pong).unwrap(), PONG);
+    }
+
+    #[test]
+    fn decoder_accepts_fixed_wire_fixtures_without_an_encoder() {
+        let mut decoder = MessageDecoder::new();
         assert_eq!(
-            deserialize_with_cobs_and_crc::<Message>(&mut good[..size]).unwrap(),
-            message
+            feed(&mut decoder, PING).pop().unwrap().unwrap(),
+            Message::Ping
         );
-        frame[2] ^= 0x40;
-        assert!(deserialize_with_cobs_and_crc::<Message>(&mut frame[..size]).is_err());
+        assert_eq!(
+            feed(&mut decoder, PONG).pop().unwrap().unwrap(),
+            Message::Pong
+        );
+        assert!(feed(&mut decoder, &[0, 0]).is_empty());
     }
 
     #[test]
-    fn missing_sentinel_space_returns_error() {
-        let mut scratch = [0; 8];
-        let mut frame = [0; 8];
-        let size = serialize_with_crc_and_cobs(&Message::Ping, &mut scratch, &mut frame).unwrap();
+    fn all_variants_round_trip_at_every_frame_split() {
+        let mut encoder = MessageEncoder::new();
+        for message in messages() {
+            let frame = encoder.encode(&message).unwrap();
+            assert!(frame.len() <= MessageEncoder::MAX_FRAME_SIZE);
+            assert_eq!(frame.last(), Some(&0));
+            assert!(frame[..frame.len() - 1].iter().all(|&b| b != 0));
+            for split in 0..=frame.len() {
+                let mut decoder = MessageDecoder::new();
+                let mut received = feed(&mut decoder, &frame[..split]);
+                received.extend(feed(&mut decoder, &frame[split..]));
+                assert_eq!(received.len(), 1);
+                assert_eq!(received.pop().unwrap().unwrap(), message);
+                assert!(decoder.feed(0).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn concatenated_frames_are_ordered_without_duplicates_for_every_read_size() {
+        let mut encoder = MessageEncoder::new();
+        let wire: Vec<u8> = messages()
+            .iter()
+            .flat_map(|message| encoder.encode(message).unwrap().to_vec())
+            .collect();
+        for read_size in 1..=wire.len() {
+            let mut decoder = MessageDecoder::new();
+            let received: Vec<Message> = wire
+                .chunks(read_size)
+                .flat_map(|chunk| feed(&mut decoder, chunk))
+                .map(Result::unwrap)
+                .collect();
+            assert_eq!(received.as_slice(), &messages());
+        }
+    }
+
+    #[test]
+    fn missing_delimiter_does_not_deliver_a_partial_or_combined_frame() {
+        let mut decoder = MessageDecoder::new();
+        assert!(feed(&mut decoder, &PING[..PING.len() - 1]).is_empty());
+        assert!(feed(&mut decoder, PONG).pop().unwrap().is_err());
+        assert_eq!(
+            feed(&mut decoder, PING).pop().unwrap().unwrap(),
+            Message::Ping
+        );
+        // A delayed delimiter completes exactly one pending frame.
+        assert!(feed(&mut decoder, &PONG[..PONG.len() - 1]).is_empty());
+        assert_eq!(decoder.feed(0).unwrap().unwrap(), Message::Pong);
+        assert!(decoder.feed(0).is_none());
+    }
+
+    #[test]
+    fn malformed_cobs_bad_crc_and_truncation_recover_at_the_next_delimiter() {
+        for bad in [&[5, 1, 0][..], &[4, 5, 0x5c, 0xb6, 0], &[1, 0], &[2, 4, 0]] {
+            let mut decoder = MessageDecoder::new();
+            let results = feed(&mut decoder, bad);
+            assert_eq!(results.len(), 1);
+            assert!(results[0].is_err());
+            assert_eq!(
+                feed(&mut decoder, PONG).pop().unwrap().unwrap(),
+                Message::Pong
+            );
+        }
+        let mut decoder = MessageDecoder::new();
         assert!(matches!(
-            serialize_with_crc_and_cobs(&Message::Ping, &mut scratch, &mut frame[..size - 1]),
-            Err(crate::errors::MyError::CobsDestBufTooSmall(_))
+            feed(&mut decoder, &[4, 5, 0x5c, 0xb6, 0]).pop().unwrap(),
+            Err(MyError::Postcard(postcard::Error::DeserializeBadCrc))
         ));
+    }
+
+    #[test]
+    fn valid_crc_cannot_hide_invalid_serialization_or_trailing_payload() {
+        for payload in [&[255][..], &[4, 99]] {
+            let mut raw = payload.to_vec();
+            raw.extend(CRC.checksum(payload).to_le_bytes());
+            let mut wire = [0; MessageEncoder::MAX_FRAME_SIZE];
+            let size = cobs::try_encode(&raw, &mut wire).unwrap();
+            wire[size] = 0;
+            let mut decoder = MessageDecoder::new();
+            assert!(
+                feed(&mut decoder, &wire[..size + 1])
+                    .pop()
+                    .unwrap()
+                    .is_err()
+            );
+            assert_eq!(
+                feed(&mut decoder, PING).pop().unwrap().unwrap(),
+                Message::Ping
+            );
+        }
+    }
+
+    #[test]
+    fn overflow_discards_through_delimiter_including_any_apparent_frame_suffix() {
+        let mut decoder = MessageDecoder::new();
+        for _ in 0..ENCODED_SIZE {
+            assert!(decoder.feed(1).is_none());
+        }
+        // Exactly the capacity reaches raw decoding, rather than overflow.
+        assert!(!matches!(
+            decoder.feed(0).unwrap(),
+            Err(MyError::MessageTooLong)
+        ));
+        for _ in 0..ENCODED_SIZE + 1 {
+            assert!(decoder.feed(1).is_none());
+        }
+        for &byte in &PING[..PING.len() - 1] {
+            assert!(decoder.feed(byte).is_none());
+        }
+        assert!(matches!(
+            decoder.feed(0).unwrap(),
+            Err(MyError::MessageTooLong)
+        ));
+        assert_eq!(
+            feed(&mut decoder, PONG).pop().unwrap().unwrap(),
+            Message::Pong
+        );
+        assert!(decoder.feed(0).is_none());
     }
 }
