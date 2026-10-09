@@ -85,6 +85,8 @@ export async function startFrozen(page) {
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await page.evaluate(async () => {
     // Controlled clock fixture suppresses the real interruption event.
+    // These controller fixtures isolate note-driven motion from the decorative floor.
+    document.querySelector('#dancinglights').physics.listening = false;
     window.freezeClock = true;
     await window.testContext.suspend();
     await new Promise(resolve => setTimeout(resolve, 50));

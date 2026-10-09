@@ -29,6 +29,109 @@ async function load(page) {
   await expect(page.locator('.youtube-status')).toBeEmpty();
   await expect(page.locator('.youtube-frame iframe')).toBeVisible();
 }
+for (const resizeLayout of [false, true]) {
+  test(`expanded video entry overlays the scene during ${resizeLayout ? 'layout' : 'visual'} keyboard resizing`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // An on-screen keyboard is not available in headless browsers. Model the
+    // two viewport resize contracts, including Safari's visual viewport pan.
+    await page.addInitScript(() => {
+      const viewport = Object.assign(new EventTarget(), { width: innerWidth, height: innerHeight, offsetTop: 0, offsetLeft: 0, scale: 1 });
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+      window.keyboardViewport = (height, offsetTop = 0) => {
+        viewport.width = innerWidth; viewport.height = height; viewport.offsetTop = offsetTop;
+        viewport.dispatchEvent(new Event('resize')); viewport.dispatchEvent(new Event('scroll'));
+      };
+    });
+    await setup(page); await load(page);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+    await page.evaluate(() => {
+      const card = document.querySelector('.audio-card');
+      const song = card.querySelector('.recognized-song'); song.hidden = false;
+      song.querySelector('.song-title').textContent = 'A long artist name — A long recognized song title '.repeat(3);
+      const status = card.querySelector('.recognition-status'); delete status.dataset.routine;
+      status.textContent = 'No song recognized. Try again during a clearer part of the song.';
+      card.querySelector('.audio-error').textContent = 'Microphone capture was interrupted.';
+    });
+    const geometry = () => page.evaluate(() => {
+      const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { width: r.width, height: r.height, top: r.top, bottom: r.bottom }; };
+      const view = document.querySelector('#dancinglights').physics;
+      return { scene: rect('.balloon-layer'), video: rect('.youtube-frame'), enclosure: view.input[32] };
+    });
+    // Wait for the expanded layout and its physical enclosure resize.
+    await expect.poll(() => page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return v.canvasHeight === document.querySelector('.balloon-layer').getBoundingClientRect().height;
+    })).toBe(true);
+    const before = await geometry();
+    await page.getByRole('button', { name: 'Video', exact: true }).click();
+    await expect(page.locator('.youtube-link')).toBeFocused();
+    expect(await geometry()).toEqual(before);
+    await page.evaluate(() => window.keyboardViewport(320, 40));
+    if (resizeLayout) await page.setViewportSize({ width: 390, height: 360 });
+    await expect.poll(geometry).toEqual(before);
+    const editor = page.locator('.video-form');
+    const box = await editor.boundingBox();
+    expect(box.y).toBeGreaterThanOrEqual(40); expect(box.y + box.height).toBeLessThanOrEqual(360);
+    expect(before.scene.bottom).toBeGreaterThan(360); // The keyboard covers it; no squash.
+    for (const name of ['Clear YouTube link', 'Load video', 'Remove video']) {
+      const rect = await page.getByRole('button', { name, exact: true }).boundingBox();
+      expect(rect.height).toBeGreaterThanOrEqual(44); expect(rect.y + rect.height).toBeLessThanOrEqual(360);
+    }
+    await page.screenshot({ path: info.outputPath('floating-youtube-keyboard.png') });
+    await page.getByRole('button', { name: 'Load video', exact: true }).click();
+    await expect(editor).toBeHidden(); await expect(page.locator('.youtube-link')).not.toBeFocused();
+    expect(await page.locator('.audio-card').evaluate(n => n.style.getPropertyValue('--expanded-height'))).toBe('');
+    await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => window.keyboardViewport(844));
+    await page.getByRole('button', { name: 'Video', exact: true }).click();
+    await page.setViewportSize({ width: 844, height: 390 }); await page.evaluate(() => window.keyboardViewport(390));
+    await expect.poll(() => page.locator('.audio-card').evaluate(n => n.getBoundingClientRect().height)).toBe(390);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+    await expect(page.locator('.youtube-link')).not.toBeFocused();
+    expect(await page.locator('.audio-card').evaluate(n => n.style.getPropertyValue('--expanded-height'))).toBe('');
+    await page.getByRole('link', { name: 'About', exact: true }).click();
+    expect(await page.evaluate(() => window.videoPlayer.destroyed)).toBe(true);
+  });
+}
+test('expanded entry without a loaded video does not reserve or resize the scene', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await setup(page);
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+  const sceneHeight = await page.locator('.balloon-layer').evaluate(n => n.getBoundingClientRect().height);
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  expect(await page.locator('.balloon-layer').evaluate(n => n.getBoundingClientRect().height)).toBe(sceneHeight);
+  await page.getByRole('button', { name: 'Clear YouTube link', exact: true }).click();
+  await page.locator('.youtube-link').fill('https://example.com/video');
+  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await expect(page.locator('.youtube-status')).toContainText('Use a link to one YouTube video');
+  await expect(page.locator('.video-form')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove video', exact: true }).click();
+  await expect(page.locator('.video-panel')).toBeHidden();
+  await expect(page.locator('.youtube-link')).not.toBeFocused();
+  expect(await page.locator('.audio-card').evaluate(n => n.style.getPropertyValue('--expanded-height'))).toBe('');
+});
+test('default video is ready to load and the clear button preserves playback and an empty preference', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(page.locator('.youtube-link')).toHaveValue('https://www.youtube.com/watch?v=6d4NOjyd2Ik');
+  await expect(page.locator('.youtube-frame iframe')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await expect(page.locator('.youtube-frame iframe')).toHaveAttribute('src', /embed\/6d4NOjyd2Ik/);
+  await page.evaluate(() => window.videoPlayer.playVideo());
+  const clear = page.getByRole('button', { name: 'Clear YouTube link', exact: true });
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  expect(await clear.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await clear.focus(); await page.keyboard.press('Enter');
+  await expect(page.locator('.youtube-link')).toHaveValue('');
+  await expect(page.locator('.youtube-link')).toBeFocused();
+  expect(await page.evaluate(() => window.videoPlayer.destroyed ?? false)).toBe(false);
+  expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
+  expect(await page.evaluate(() => window.micRequests)).toBe(0);
+  await page.reload(); await physicsReady(page); await normalView(page);
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(page.locator('.youtube-link')).toHaveValue('');
+});
 for (const path of ['/', '/advanced/']) {
   test(`YouTube loads without microphone capture and reserves fullscreen regions on ${path}`, async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });

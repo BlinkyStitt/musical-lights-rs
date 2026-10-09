@@ -135,6 +135,10 @@ self.onmessage = async ({ data }) => {
       case 'pulse': {
         const tick = Math.max(simulation.tick(), Math.ceil((data.timestamp - origin) / stepMs));
         if (pending.length >= 256) throw new Error('Physics input queue is full');
+        // Record the final visual inputs, including the core's listening floor.
+        // Raw audio and filtered snapshots remain owned by the audio processor.
+        if (data.listening) for (let i = 0; i < 24; i++)
+          data.input[i] = PhysicsSimulation.listening_level(data.input[i], i, data.timestamp / 1000, data.input[31] === 1);
         pending.push({ tick, timestamp: data.timestamp, values: data.input, tempo: data.tempo, accent: data.accent });
         break;
       }

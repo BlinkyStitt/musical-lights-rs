@@ -843,6 +843,9 @@ impl PhysicsSimulation {
     pub fn defaults() -> Vec<f32> {
         SimulationConfig::default().values().to_vec()
     }
+    pub fn listening_level(level: f32, band: usize, seconds: f64, reduced: bool) -> f32 {
+        musical_lights_core::lights::musical_motion::listening_level(level, band, seconds, reduced)
+    }
     pub fn layout() -> Vec<f32> {
         vec![
             COUNT as f32,
@@ -863,7 +866,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            9.0, // paired inward bars, tempo-scaled peak direction policy
+            10.0, // faster releases; adapter records the decorative listening floor
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,

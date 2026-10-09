@@ -21,7 +21,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Gravity | 9.81 m/s² |
 | Ball, bar, floor and ceiling restitution / friction | 0.72 / 0.12 |
 | Vertical wall restitution / friction | 0.55 minimum / 0 |
-| Full-height attack / release | 40 ms attack; approximately 1.13 s gravity release; slower Reduced Motion |
+| Full-height attack / release | 40 ms attack; approximately 0.31 s gravity release; slower Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved upper space | Largest sphere diameter + hop allowance + 4 mm |
 | Minimum enclosure height | 0.40 m |
@@ -53,14 +53,20 @@ uses the configured attack duration, including quiet corrections. The default
 is 40 ms; small rises no longer add a 140 ms delay. Reduced Motion attacks take
 at least 320 ms. Acoustic filtering and microphone/output timing remain separate.
 
-Releases accelerate downward at 2 bar heights/s², capped at 1.2 bar heights/s.
-A full-height fall from rest takes about 1.13 s regardless of screen size. The
+Releases accelerate downward at 32 bar heights/s², capped at 4 bar heights/s.
+A full-height fall from rest takes about 0.31 s regardless of screen size. The
 latest audio target is a hard floor: lower packets keep downward momentum,
 raised floors stop the fall exactly, and identical packets never restart it.
-An upward-moving bar brakes before falling. Reduced Motion uses one quarter
-of the release acceleration and half the terminal speed. Reaching the floor
+An upward-moving bar brakes before falling. Reduced Motion retains a slower 0.5 bar heights/s² acceleration and
+0.6 bar heights/s terminal speed. Reaching the floor
 ends velocity and acceleration immediately, like the hat's falling envelope.
 The shared loudness measurements, gain, filtering and 180 ms flash are unchanged.
+While the microphone is playing, a separate travelling visual floor spans all
+24 bands. Its maximum is one sixth of available bar travel. Louder audio replaces
+the floor; it does not add attack flashes or direction draws. Reduced Motion
+disables it. The physics worker records the combined targets for exact replay,
+while the audio meters and trace retain the measured values. Protocol 10 marks
+the faster release policy; older recordings need their matching engine.
 
 Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess outward release velocity is dissipated. The default flight budget is 30% of available enclosure space after maximum ball clearance; Reduced Motion halves it and caps it at 2.5 cm. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle bar end sits 3 mm inside its active floor or ceiling base.
 

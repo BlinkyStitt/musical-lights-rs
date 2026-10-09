@@ -52,6 +52,7 @@ export class PhysicsView {
     this.inflight = false;
     this.sequence = 0;
     this.input = new Float32Array(38);
+    this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
@@ -134,7 +135,7 @@ export class PhysicsView {
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
-          sequence: ++this.sequence, input: this.input, tempo: this.tempo, accent: this.accentSerial });
+          sequence: ++this.sequence, input: this.input, tempo: this.tempo, accent: this.accentSerial, listening: this.listening });
       }
       if (now - (this.tempoReadoutAt ?? -Infinity) >= 1000) {
         this.tempoReadoutAt = now;
@@ -187,6 +188,7 @@ export class PhysicsView {
       this.audioAccent = detail.accentSequence ?? 0;
     });
     this.listen(this.card, 'audio-session', ({ detail }) => {
+      this.listening = detail.source === 'microphone' && detail.state === 'playing';
       if (detail.state === 'starting') this.audioAccent = 0;
       this.idle = detail.state === 'stopped';
       this.card.dataset.preview = String(this.idle);
@@ -310,8 +312,8 @@ export class PhysicsView {
     this.cameraAt = now;
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Ease through both turns without a clamp, attack kick or vertical wobble.
-    const amplitude = Math.min(30, 40 - Math.abs(this.cameraBase));
-    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 24000) : 0);
+    const amplitude = Math.min(20, 40 - Math.abs(this.cameraBase));
+    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 48000) : 0);
     this.automaticCamera = true;
     this.setCamera(yaw);
     this.automaticCamera = false;
@@ -325,7 +327,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 9 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 10 || data.layout[21] !== 8 || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;

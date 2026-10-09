@@ -49,6 +49,9 @@
 - Mobile opens in the expanded video/visualizer/bottom-controls layout without
   starting audio or requesting native fullscreen. Keep Exit usable in short
   landscape screens, with safe areas, recognition and recovery notices.
+  Float the video entry over the scene. Keep scene and collider size stable
+  while the on-screen keyboard opens; fit the entry to the visible viewport.
+  Restore layout sizing and dismiss the keyboard on Load, Remove and Exit.
 - Matching bars grow inward from both ends and reserve space for the balls.
   Quiet/Loud guides must follow the actual rendered tips and bases. Keep a
   single accessible meter per source band despite copies and reflections.
@@ -75,6 +78,15 @@
   or black bar borders. Retain white attack edges. Repeat source lighting across
   the five banks and depth copies, with one outer coating and no internal walls.
   Normal-page scenes use equal gutters and a responsive 320–560 pixel height.
+  The default sweep spans −20° to +20° over a 48-second cycle.
+- Listening adds a core-owned travelling floor of at most one sixth of bar
+  travel. Keep measured loudness, filtered targets, accessible audio meters and
+  attack eligibility separate. Disable this floor under Reduced Motion and
+  when the microphone session stops or is interrupted. Record the combined
+  visual inputs so physics replay reproduces the wave.
+- Prefill the YouTube field with the default video. Load only on an explicit
+  Load video action. Clearing the field preserves the playing video and saves
+  the empty preference; Remove video stops the player.
 
 # Validation and delivery evidence
 

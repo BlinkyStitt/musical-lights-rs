@@ -20,7 +20,8 @@ async function worker(config = Array.from(PhysicsSimulation.defaults())) {
     danceOptions: { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1 }, paused: false });
   const ready = messages.at(-1);
   return { ready, send, messages,
-    advance: ms => { now += ms; runInNewContext('while (debt + (absoluteNow() - lastTime) >= stepMs) run()', context); },
+    elapse: ms => { now += ms; },
+    advance: ms => { now += ms; runInNewContext('while (!paused && debt + (absoluteNow() - lastTime) >= stepMs) run()', context); },
     close: () => runInNewContext('simulation.free()', context) };
 }
 
@@ -31,6 +32,51 @@ test('worker ready separates restored settings from factory defaults', async () 
     assert.equal(w.ready.config[2], 16); assert(Math.abs(w.ready.config[6] - .08) < 1e-8);
     assert.equal(w.ready.defaults[2], 8); assert(Math.abs(w.ready.defaults[6] - .04) < 1e-8);
     assert.deepEqual(w.ready.defaults, Array.from(PhysicsSimulation.defaults()));
+  } finally { w.close(); }
+});
+
+test('pause flushes elapsed work and its queued snapshot, then excludes paused time on resume', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'snapshot', buffer: new ArrayBuffer(w.ready.layout[12] * 4) });
+    const first = w.messages.at(-1);
+    w.elapse(1000 / 120 + .001);
+    await w.send({ type: 'pause', paused: true });
+    assert.equal(w.messages.at(-1), first, 'The previous snapshot still owns the only transferable buffer');
+    await w.send({ type: 'snapshot', buffer: first.buffer });
+    const stopped = w.messages.at(-1);
+    assert.equal(stopped.tick, first.tick + 1, 'The final elapsed tick arrives after the pause request');
+    w.advance(1000);
+    await w.send({ type: 'pause', paused: true });
+    await w.send({ type: 'snapshot', buffer: stopped.buffer });
+    assert.equal(w.messages.at(-1), stopped, 'Paused time must not produce another snapshot');
+    await w.send({ type: 'pause', paused: false });
+    w.advance(1000 / 120 + .001);
+    assert.equal(w.messages.at(-1).tick, stopped.tick + 1, 'Resume must not replay the paused second');
+  } finally { w.close(); }
+});
+
+test('worker records listening-floor inputs for exact replay without adding accents', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'record', config: w.ready.config });
+    const values = new Float32Array(38); values[32] = .6;
+    for (let frame = 0; frame < 60; frame++) {
+      await w.send({ type: 'pulse', timestamp: 1000 + frame * 1000 / 60,
+        input: values.slice(), listening: true, tempo: 60, accent: 0 });
+      w.advance(1000 / 60);
+    }
+    await w.send({ type: 'pulse', timestamp: 2000, input: values.slice(), listening: false, tempo: 60, accent: 0 });
+    w.advance(500);
+    await w.send({ type: 'report' });
+    const report = w.messages.at(-1);
+    assert(report.inputs.some(event => Math.max(...event.values.slice(0, 24)) > .15));
+    assert(report.inputs.every(event => Math.max(...event.values.slice(0, 24)) <= 1 / 6 + 1e-7));
+    assert(report.inputs.every(event => event.accent === 0));
+    assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
+    assert(values.slice(0, 24).every(value => value === 0));
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v5',
+      palette: Array(72).fill(.5), layout: w.ready.layout })).every(result => result.matches));
   } finally { w.close(); }
 });
 

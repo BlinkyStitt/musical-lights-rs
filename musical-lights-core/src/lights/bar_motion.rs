@@ -4,8 +4,8 @@ use num::Float;
 /// Default rise time for every band. Device adapters can expose an override.
 pub const DEFAULT_ATTACK_SECONDS: f64 = 0.040;
 
-const FALL_GRAVITY: f64 = 2.0; // bar heights / second²
-const FALL_SPEED: f64 = 1.2; // terminal bar heights / second
+const FALL_GRAVITY: f64 = 32.0; // bar heights / second²
+const FALL_SPEED: f64 = 4.0; // terminal bar heights / second
 #[derive(Clone, Copy, Debug, Default)]
 pub struct State {
     pub position: f64,
@@ -158,9 +158,11 @@ impl Motion {
                 return self.segments[0].sample(time);
             }
             time -= self.brake_duration;
-            let scale = if self.reduced { 0.25 } else { 1.0 };
-            let gravity = FALL_GRAVITY * scale;
-            let terminal = FALL_SPEED * Float::sqrt(scale);
+            let (gravity, terminal) = if self.reduced {
+                (0.5, 0.6)
+            } else {
+                (FALL_GRAVITY, FALL_SPEED)
+            };
             let speed = (-self.fall_start.velocity).clamp(0.0, terminal);
             let accelerating = time.min((terminal - speed) / gravity);
             let distance = speed * accelerating
@@ -208,6 +210,20 @@ impl Motion {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn short_notes_fall_promptly_without_stretching_small_drops() {
+        for height in [0.1, 0.5, 1.0] {
+            let mut motion = Motion::default();
+            motion.retarget(height, DEFAULT_ATTACK_SECONDS, false, 0.320);
+            motion.advance(DEFAULT_ATTACK_SECONDS);
+            motion.retarget(0.0, DEFAULT_ATTACK_SECONDS, false, 0.320);
+            motion.advance(0.05);
+            assert!(motion.state.position <= height - 0.0399);
+            motion.advance(if height <= 0.1 { 0.03 } else { 0.263 });
+            assert_eq!(motion.state.position, 0.0);
+            assert_eq!(motion.state.velocity, 0.0);
+        }
+    }
     use super::*;
     #[test]
     fn short_strokes_brake_monotonically_from_every_rising_phase() {
@@ -228,7 +244,8 @@ mod tests {
                             >= -1e-9
                     );
                 }
-                assert!(motion.sample(motion.brake_duration + 0.01).velocity < 0.0);
+                let falling = motion.sample(motion.brake_duration + 0.01);
+                assert!(falling.velocity < 0.0 || falling.position == 0.0);
             }
         }
     }
@@ -289,7 +306,7 @@ mod tests {
         assert_eq!(motion.state.velocity, 0.0);
     }
     #[test]
-    fn noise_travel_and_speed_are_lower_than_the_previous_controller() {
+    fn noise_travel_stays_lower_with_a_bounded_faster_release() {
         let mut motion = Motion {
             state: State {
                 position: 0.4,
@@ -327,7 +344,8 @@ mod tests {
         }
         eprintln!("noise travel: {old_travel} -> {travel}; peak speed: {old_peak} -> {peak}");
         assert!(travel < old_travel);
-        assert!(peak < old_peak);
+        // Faster release raises peak speed, but keeps small-noise travel bounded.
+        assert!(peak < 1.0);
         // Slow sustained swells still arrive at the true final level.
         for tick in 0..240 {
             motion.retarget(0.4 + 0.2 * tick as f64 / 239.0, 0.040, false, 0.320);
@@ -343,22 +361,22 @@ mod tests {
         motion.advance(0.05);
         motion.retarget(0.2, 0.040, false, 0.320);
         motion.advance(0.1);
-        assert!((motion.state.position - 0.99).abs() < 1e-12);
-        assert!((motion.state.velocity + 0.2).abs() < 1e-12);
+        assert!((motion.state.position - 0.84).abs() < 1e-12);
+        assert!((motion.state.velocity + 3.2).abs() < 1e-12);
         // A lower floor does not restart the fall or change its acceleration.
         motion.retarget(0.0, 0.040, false, 0.320);
-        motion.advance(0.1);
-        assert!((motion.state.position - 0.96).abs() < 1e-12);
-        assert!((motion.state.velocity + 0.4).abs() < 1e-12);
+        motion.advance(0.01);
+        assert!((motion.state.position - 0.8064).abs() < 1e-12);
+        assert!((motion.state.velocity + 3.52).abs() < 1e-12);
         // Raising the floor while still below the bar stops precisely there.
-        motion.retarget(0.9, 0.040, false, 0.320);
+        motion.retarget(0.8, 0.040, false, 0.320);
         for _ in 0..120 {
-            motion.retarget(0.9, 0.040, false, 0.320);
+            motion.retarget(0.8, 0.040, false, 0.320);
             motion.advance(1.0 / 120.0);
-            assert!(motion.state.position >= 0.9);
-            assert!(motion.state.velocity >= -1.2);
+            assert!(motion.state.position >= 0.8);
+            assert!(motion.state.velocity >= -4.0);
         }
-        assert_eq!(motion.state.position, 0.9);
+        assert_eq!(motion.state.position, 0.8);
         assert_eq!(motion.state.velocity, 0.0);
         motion.retarget(1.0, 0.040, false, 0.320);
         motion.advance(0.15);
@@ -377,7 +395,7 @@ mod tests {
             motion.state.position
         };
         for fps in [30, 60, 120] {
-            assert!((run(fps, false) - 0.75).abs() < 1e-12);
+            assert!((run(fps, false)).abs() < 1e-12);
             assert!((run(fps, true) - 0.9375).abs() < 1e-12);
         }
     }
