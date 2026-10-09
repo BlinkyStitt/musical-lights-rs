@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { meterPoint, meterPoints } from '../meter-input.mjs';
 import { physicsReady } from '../physics-state.mjs';
+import { DEFAULT_SETTINGS, SETTINGS_KEY } from '../../musical-leptos/src/presentation.js';
 const leptos = 'http://127.0.0.1:8101';
 
 async function trackContexts(page) {
@@ -188,21 +189,22 @@ async function prepareSpectrum(page, width, colorScheme) {
     const cpu = await page.context().newCDPSession(page);
     await cpu.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   }
+  // Load stationary geometry through the normal saved-preferences path.
+  // The controls and their persistence have dedicated interaction tests.
+  await page.addInitScript(({ key, version }) => {
+    localStorage.setItem(key, JSON.stringify({ version, scrolling: false, cameraMotion: false }));
+  }, { key: SETTINGS_KEY, version: DEFAULT_SETTINGS.version });
   await page.emulateMedia({ colorScheme });
   await page.goto(leptos); await physicsReady(page);
   // Use the default physical depth for geometry fixtures.
   await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
-  // Geometry and contrast fixtures use stationary source columns. The idle
-  // sine now scrolls them too; freeze scrolling for stationary hover targets.
-  await page.locator('.scroll-lights').uncheck();
-  await page.locator('.display-controls > summary').click();
-  await page.locator('.camera-motion').uncheck();
-  await page.locator('.display-controls > summary').click();
   await page.evaluate(() => window.scrollTo(0, 0));
-  // The switch eases to a stop; wait for the displayed phase to settle.
   await page.waitForFunction(() => {
+    const card = document.querySelector('.audio-card');
     const view = document.querySelector('#dancinglights').physics;
-    return view?.current && view.previous
+    return !card.querySelector('.scroll-lights').checked
+      && !card.querySelector('.camera-motion').checked
+      && view?.current && view.previous
       && view.current[view.layout[20]] === view.previous[view.layout[20]]
       && Math.abs(view.renderedPhase - view.current[view.layout[20]]) < 1e-6;
   });
