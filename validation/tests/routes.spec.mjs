@@ -127,7 +127,9 @@ for (const path of ['/advanced', '/advanced/']) {
     await expect(page.locator('.calibration-controls, .physics-controls, .diagnostics-controls')).toHaveCount(0);
     await expect(page.locator('.display-controls')).not.toHaveAttribute('open');
     await expect(page.locator('.song-history')).not.toHaveAttribute('open');
-    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.frame-rate')).toHaveCount(1);
+    await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
     await page.goBack(); await expect(page.locator('.input-source')).toBeVisible();
     await page.goForward(); await expect(page.locator('.learning-topics')).toBeVisible();
   });

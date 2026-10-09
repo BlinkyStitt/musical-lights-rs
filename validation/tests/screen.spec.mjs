@@ -110,7 +110,9 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await page.mouse.move(viewport.width / 2, 200, { steps: 5 });
     await page.mouse.up();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
-    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.frame-rate')).toHaveCount(1);
+    await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
