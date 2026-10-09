@@ -4,9 +4,9 @@
 
 Website validation builds physics, the worklet and Leptos once. The build job
 runs the offline harness and records the complete browser test inventory. Two
-isolated Chromium shards and one WebKit/iPhone-profile job download that same
+isolated Chromium groups and one WebKit/iPhone-profile job download that same
 compiled bundle. Each retains the serial startup/crash guard, one worker, zero
-retries and every existing assertion. The final job compares the reports with
+retries. The final job compares the reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
 Core and loudness-reference checks run alongside the build and browser jobs.
 
@@ -66,6 +66,32 @@ workflow syntax, install the pinned checker with
 Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`; the reference
 target includes their lint/type checks.
+
+## CI test ownership and scheduling
+
+Pure fullscreen lifecycle and compiled-WASM worklet checks run in the Node offline
+harness before the browser jobs. They do not need a browser process. The worklet
+suite retains steady-state convergence, acoustic fixtures, channel selection,
+calibration and bounded-memory checks. Host CPU performance belongs in the
+standalone Criterion benchmarks, not a wall-clock assertion on a shared CI runner.
+
+Browser tests cover actual rendering, native input, audio output and lifecycle
+integration. All viewport/theme combinations retain geometry and audio checks.
+The complete 24-band hover sequence and common-control keyboard order run once;
+other layouts check edge and center readouts. The existing keyboard tests still
+visit every band. Route tests own route content checks. The short-landscape test
+creates its own mobile context and runs once per engine, rather than twice in
+WebKit. Acceptance tests cover each distinct audio transition and require its
+specific rejection reason, plus a transition after warmup. They do not repeat
+every transition at both stages of the same rejection path.
+
+Before this cleanup, Linux run 37880898598 spent 16.7 and 8.1 minutes in its two
+Chromium groups and 12.6 minutes in WebKit. These are Playwright report durations,
+excluding browser installation and compilation. The Chromium file groups now
+use those measured costs instead of test counts. New files enter the second
+group by default. The final inventory barrier still requires complete, unique,
+successful test results across all three runners. Installation and test execution
+have separate CI steps so their costs can be compared independently.
 
 ## Controls and embedded musical motion (2026-10-03)
 

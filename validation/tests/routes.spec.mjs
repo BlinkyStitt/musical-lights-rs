@@ -12,6 +12,7 @@ for (const path of ['/about', '/about/']) {
     await expect(page).toHaveURL(`${origin}/about/${suffix}`);
     await expect(page.getByRole('heading', { name: 'About Musical Lights', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'About', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: 'Old Arduino Code', exact: true })).toBeVisible();
     expect(await page.locator('.about-page').evaluate(node => getComputedStyle(node).maxWidth)).toBe('720px');
 
     const refreshed = await page.reload();
@@ -21,6 +22,7 @@ for (const path of ['/about', '/about/']) {
 
     await page.getByRole('link', { name: 'Home', exact: true }).click();
     await expect(page).toHaveURL(`${origin}/`);
+    await expect(page.getByRole('heading', { name: 'Musical Lights', exact: true })).toBeVisible();
     await expect(page.getByRole('meter')).toHaveCount(24);
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'About Musical Lights', exact: true })).toBeVisible();

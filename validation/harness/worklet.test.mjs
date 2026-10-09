@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test } from 'node:test';
+import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -179,18 +180,6 @@ test('reference calibration uses exactly three seconds across callback partition
     expect(state).toEqual(reference);
     expect(state[0]).toBe(4.0); // End-exclusive causal partial-loudness window.
   }
-});
-
-test('worklet keeps warmed audio processing below its host real-time budget', () => {
-  const p = processor();
-  const samples = tone(192000, 80, .4);
-  for (let i = 0; i < samples.length; i += 128) p.push(samples.subarray(i, i + 128));
-  const start = performance.now();
-  for (let i = 0; i < samples.length; i += 128) p.push(samples.subarray(i, i + 128));
-  const elapsed = performance.now() - start;
-  console.log(`WASM processor: 4 s audio / ${elapsed.toFixed(2)} ms host CPU; ${(elapsed / 40).toFixed(3)}% of real time; ${p.value.wasm.memory.buffer.byteLength} memory bytes`);
-  expect(p.value.failed).toBe(false);
-  expect(elapsed).toBeLessThan(4000);
 });
 
 test('diagnostic frames preserve all 240 measurements and bound a stalled receiver', () => {
