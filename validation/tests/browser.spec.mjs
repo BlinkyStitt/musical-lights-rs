@@ -142,6 +142,7 @@ for (const rate of [44100, 48000]) {
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
     await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     await page.getByRole('link', { name: 'About', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed', 'closed']);

@@ -11,7 +11,7 @@ export function readSettings(storage) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
     if (validDirectionOdds(saved.directionOdds)) defaults.directionOdds = [...saved.directionOdds];
-    if (Number.isInteger(saved.mirrorCount) && saved.mirrorCount >= 0 && saved.mirrorCount <= 17) defaults.mirrorCount = saved.mirrorCount;
+    if (Number.isInteger(saved.mirrorCount) && saved.mirrorCount >= 0 && saved.mirrorCount <= 2048) defaults.mirrorCount = saved.mirrorCount;
     for (const key of ['cameraMotion', 'scrolling']) if (typeof saved[key] === 'boolean') defaults[key] = saved[key];
     if (typeof saved.youtubeLink === 'string' && saved.youtubeLink.length <= 2048) defaults.youtubeLink = saved.youtubeLink;
     if (Array.isArray(saved.physics) && saved.physics.length === 8 && saved.physics.every((v, i) => Number.isFinite(v) && v >= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.04, 2], [.32, 4]][i][0] && v <= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.04, 2], [.32, 4]][i][1])) defaults.physics = saved.physics;

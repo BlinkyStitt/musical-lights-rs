@@ -78,6 +78,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await page.evaluate(async () => {
     window.freezeTransport = true;
     await window.transportContext.suspend();

@@ -70,7 +70,9 @@
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
 - Mirror count controls drawing only; six depth images are the default, and
-  saved choices remain unchanged. Four full-size background boxes flank the
+  saved choices remain unchanged. Advanced allows 0–2048 images; validate the
+  upper bound and saved settings without changing physical ball counts. Four
+  full-size background boxes flank the
   physical center box and reuse all source bands in matching vertical banks.
   Center posts span the collider depth.
   Ball depth images are fading translated copies, not optical reflections.

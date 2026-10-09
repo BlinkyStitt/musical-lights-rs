@@ -119,6 +119,7 @@ test('a deployment leaves existing listening untouched and checks the next sessi
     const stop = page.getByRole('checkbox', { name: 'Listening', exact: true });
     await expect(stop).toBeChecked();
     await expect(stop).toBeEnabled();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     const session = await page.locator('.audio-card').getAttribute('data-audio-session');
     fixture.deploy();
     await page.waitForTimeout(300);

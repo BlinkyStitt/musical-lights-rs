@@ -256,7 +256,7 @@ test('mirror count saves, rejects fractions and resets without changing physics'
   await page.locator('.listening-toggle').check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
   await page.evaluate(() => { window.mirrorAudioFrames=0;document.querySelector('.audio-card').addEventListener('audio-tempo',()=>window.mirrorAudioFrames++); });
-  for (const count of [0, 1, 17]) {
+  for (const count of [0, 1, 17, 64, 2048]) {
     await page.locator('.mirror-count').fill(String(count)); await page.locator('.mirror-count').dispatchEvent('change');
     expect(await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
@@ -266,10 +266,13 @@ test('mirror count saves, rejects fractions and resets without changing physics'
   }
   await expect.poll(()=>page.evaluate(()=>window.mirrorAudioFrames)).toBeGreaterThan(5);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
-  await page.locator('.mirror-count').fill('1.5'); await page.locator('.mirror-count').dispatchEvent('change');
-  expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount)).toBe(17);
+  for (const invalid of ['1.5', '2049', '-1']) {
+    await page.locator('.mirror-count').fill(invalid); await page.locator('.mirror-count').dispatchEvent('change');
+    expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount)).toBe(2048);
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(2048);
+  }
   await page.reload(); await physicsReady(page); await normal(page); await page.locator('.display-controls > summary').click();
-  await expect(page.locator('.mirror-count')).toHaveValue('17');
+  await expect(page.locator('.mirror-count')).toHaveValue('2048');
   await page.locator('.display-reset').click(); await expect(page.locator('.mirror-count')).toHaveValue('6');
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(6);
 });
@@ -620,10 +623,15 @@ test('depth-copy uploads follow the active count and keep pooled geometry', asyn
     const v=document.querySelector('#dancinglights').physics,gl=v.renderer.getContext();
     v.draw(performance.now());
     const pools=v.mirrors.meshes.map(({mesh})=>mesh);
-    const original=gl.bufferSubData,records=[];
+    const original=gl.bufferSubData, originalDelete=gl.deleteBuffer, records=[];
+    let releases = 0; gl.deleteBuffer = function() { releases++; return originalDelete.apply(this, arguments); };
     try {
       for(const count of [0,1,3,17,3]) {
+        gl.bufferSubData = original;
+        const oldPool = v.mirrors.poolCount, oldGeometry = v.mirrors.meshes[0].mesh.geometry, oldReleases = releases;
         v.mirrors.setCount(count);
+        // Allocate a newly grown pool once; steady frames upload only active data.
+        v.draw(performance.now());
         const arrays=new Map();
         for(const {mesh,staged} of v.mirrors.meshes) {
           for(const attr of [mesh.instanceMatrix,mesh.instanceColor,...staged.attributes.map(({name})=>mesh.geometry.attributes[name])])
@@ -635,13 +643,18 @@ test('depth-copy uploads follow the active count and keep pooled geometry', asyn
           return original.apply(this,arguments);
         };
         v.draw(performance.now());
-        records.push({count,uploads,pooled:v.mirrors.meshes.every(({mesh},i)=>mesh===pools[i]),
+        records.push({count,uploads,grew: v.mirrors.poolCount > oldPool, releases: releases - oldReleases,
+          geometryRetained: v.mirrors.meshes[0].mesh.geometry === oldGeometry,
+          geometries: v.renderer.info.memory.geometries, pooled:v.mirrors.meshes.every(({mesh},i)=>mesh===pools[i]),
           balls:v.balls.count,boxes:v.enclosure.count});
       }
-    } finally {gl.bufferSubData=original;v.mirrors.setCount(v.settings.mirrorCount);}
+    } finally {gl.bufferSubData=original;gl.deleteBuffer=originalDelete;v.mirrors.setCount(v.settings.mirrorCount);}
     return records;
   });
   for(const record of evidence) {
+    expect(record.geometryRetained).toBe(!record.grew);
+    if (record.grew) expect(record.releases).toBeGreaterThanOrEqual(2);
+    expect(record.geometries).toBe(evidence[0].geometries);
     expect(record.pooled).toBe(true);expect(record.balls).toBe(8);expect(record.boxes).toBe(1);
     if(record.count===0) expect(record.uploads).toHaveLength(0);
     else {

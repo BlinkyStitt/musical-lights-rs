@@ -217,6 +217,8 @@ for (const clip of ['trumpet', 'music', 'local']) {
     await page.locator('.review-replay').press('Enter');
     await page.locator('.review-device').fill('Mac test output'); await page.locator('.review-notes').fill('Automated playback check; human accents, swells and decay judgments pending.');
     await page.locator('.review-note').click();
+    await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.sessions[0].timing.length)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.samples.length)).toBeGreaterThan(0);
     const download = page.waitForEvent('download'); await page.locator('.review-export').click();
     const report = JSON.parse(await readFile(await (await download).path(), 'utf8'));
     expect(report.clip.pcmSha256).toBe(identity.pcmSha256); expect(report.playbackDevice).toBe('Mac test output');

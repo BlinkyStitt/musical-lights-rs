@@ -839,3 +839,39 @@ A further run of the final compiled six-image renderer measured 54.94 FPS,
 frame under the same software-renderer conditions. This variation means the
 samples do not prove sustained 60 FPS. The upload reduction is about 75% against
 the baseline; physical-phone frame rate remains unverified.
+
+The depth setting now accepts integer counts from 0 to 2,048. The default stays
+at six: new SwiftShader samples measured 60.00 and 59.87 FPS at six, versus
+40.58 and 52.91 at eight under the same workload. The image pool grows in powers
+of two when a higher count needs it; the default reserves eight slots, rather
+than allocating the Advanced maximum. Growth releases old GPU buffers and keeps
+the scene object and material. Lower counts reuse that pool and upload only the
+active prefix. Tests check released buffers, stable geometry counts, source
+transforms, contact pigments, and saved settings.
+
+A separate Apple M4 Max Metal sweep used the same viewport, fourfold CPU
+throttle, PCM, camera angle and measurement interval. It measured 60.00 FPS at
+6, 32, 64, 128, 256, 512, 1,024, 2,048, 4,096, 8,192, 16,384 and 32,768 images.
+At 65,536 it dropped to 44.64 FPS; a repeat measured 46.14 FPS. Application
+animation work averaged 19.17 and 18.90 ms per frame at that count, and uploads
+were about 58.7 MB per frame. These temporary candidates locate a cost boundary;
+they are not shipping settings. Counts through 4,096 used preallocated pools;
+higher counts used the growing pool implementation. They include camera clipping and fading, so they
+do not show tens of thousands of visible images. The shipped 2,048 limit already
+exceeds the current camera's 200-unit far plane at the minimum enclosure depth
+and allowed camera angles. Additional counts would add cost without useful
+visible depth. None of these host measurements establishes physical-phone FPS.
+
+After selecting the final range, the growing-pool six-image SwiftShader build
+measured 56.77 FPS, 0.702 ms of application animation work per frame, 23,443
+upload bytes per frame and 7,680 bytes of image-instance storage. This final
+sample remains within the earlier host variation; it does not establish
+sustained 60 FPS. Default instance storage falls from the temporary 256-slot
+pool's 245,760 bytes to eight slots, without reducing the six drawn images.
+
+The final growing-pool 2,048-image Metal build measured 60.00 FPS, 1.415 ms of
+application animation work and 3.264 ms of GPU time, with 1,962,531 upload bytes
+per frame and 1,966,080 bytes of image-instance storage. The 32,768-image
+boundary repeat stayed at 60.00 FPS. These runs preserve eight simulated balls;
+image count changes only drawing. The high settings are optional and do not
+establish a phone performance target.

@@ -126,9 +126,9 @@ for (const width of [375, 1440]) {
         roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i, 1)) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
-    // One batch draws all four background banks; three draw depth copies.
+    // One batch draws visible background banks and one draws ball depth images.
     // One outer coating covers all five banks, with no frame-line draw.
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(7);
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(5);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
@@ -195,6 +195,12 @@ test('pointer and device inputs apply recorded forces and reduced motion reduces
     const { balls } = await physicsState(page);
     return balls.filter(b => b.velocity[0] > .05).length / balls.length;
   }).toBeGreaterThan(1 / 3);
+  await page.locator('canvas').scrollIntoViewIfNeeded();
+  // Pointer coordinates use the scene bounds cached by the scroll listener.
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, box = v.layer.getBoundingClientRect();
+    return v.motion.bounds.top === box.top && v.motion.bounds.left === box.left;
+  })).toBe(true);
   const box = await page.locator('canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
@@ -275,6 +281,7 @@ for (const end of ['stop', 'route', 'microphone denial', 'audio failure']) {
       await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
       await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
       if (end === 'stop') await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
       if (end === 'route') await page.getByRole('link', { name: 'About', exact: true }).click();
       if (end === 'audio failure') { await page.evaluate(() => window.testNode.dispatchEvent(new Event('processorerror'))); await expect(page.getByRole('alert')).toContainText('Audio processor failed'); }
@@ -320,7 +327,7 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => {
     const walls = document.querySelector('#dancinglights').physics.enclosure;
     return Array.from({ length: walls.count }, (_, i) => walls.instanceMatrix.array[i * 16 + 10]);
-  })).toEqual([Math.fround(.36)]);
+  })).toEqual([Math.fround(.36 * 7)]);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.diagnostics-controls > summary').click();
   const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);

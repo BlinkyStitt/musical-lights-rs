@@ -1,21 +1,41 @@
 import * as THREE from './three.module.js';
 
 export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+// This exceeds the camera’s visible depth even at the minimum enclosure depth
+// and maximum yaw. Higher settings add storage and uploads without visible depth.
+export const MAX_DEPTH_IMAGES = 2048;
 export const BOX_OFFSETS = Object.freeze([-2, -1, 0, 1, 2]);
 
 // Ball images reuse the physical transforms. Bars use continuous extrusions
 // instead of repeated boxes, so their depth surfaces have no internal seams.
 export function mirrorCells(count) {
-  if (!Number.isInteger(count) || count < 0 || count > 17) throw new RangeError('Use 0 to 17 mirror images');
+  if (!Number.isInteger(count) || count < 0 || count > MAX_DEPTH_IMAGES) throw new RangeError(`Use 0 to ${MAX_DEPTH_IMAGES} mirror images`);
   return Array.from({ length: count }, (_, i) => [0, 0, -i - 1]);
+}
+
+function imageGeometry(staged, count) {
+  const { capacity, attributes } = staged;
+  const cells = mirrorCells(count);
+  const geometry = new THREE.SphereGeometry(1, 12, 8);
+  for (const { name, attr } of attributes) geometry.setAttribute(name,
+    new THREE.InstancedBufferAttribute(new Float32Array(capacity * attr.itemSize * count), attr.itemSize));
+  const offsets = new Float32Array(count * capacity), gains = new Float32Array(offsets.length);
+  for (let c = 0; c < count; c++) {
+    offsets.fill(cells[c][2], c * capacity, (c + 1) * capacity);
+    gains.fill(.72 ** (c + 1), c * capacity, (c + 1) * capacity);
+  }
+  geometry.setAttribute('copyDepth', new THREE.InstancedBufferAttribute(offsets, 1));
+  geometry.setAttribute('copyGain', new THREE.InstancedBufferAttribute(gains, 1));
+  return geometry;
 }
 
 export class MirrorRoom {
   constructor(scene, balls, count) {
+    mirrorCells(count);
+    this.poolCount = Math.min(MAX_DEPTH_IMAGES, 2 ** Math.ceil(Math.log2(Math.max(1, count))));
     this.scene = scene;
     this.depth = { value: 1 };
     this.meshes = []; this.sources = [];
-    const cells = mirrorCells(17);
     for (const [kind, source] of [['balls', balls]]) {
       source.geometry.computeBoundingBox();
       const capacity = source.count;
@@ -24,16 +44,7 @@ export class MirrorRoom {
       for (const [name, attr] of Object.entries(source.geometry.attributes)) if (attr.isInstancedBufferAttribute)
         staged.attributes.push({ name, attr, values: new Float32Array(capacity * attr.itemSize) });
       this.sources.push(staged);
-      const geometry = new THREE.SphereGeometry(1, 12, 8);
-      for (const { name, attr } of staged.attributes) geometry.setAttribute(name,
-        new THREE.InstancedBufferAttribute(new Float32Array(capacity * attr.itemSize * cells.length), attr.itemSize));
-      const offsets = new Float32Array(cells.length * capacity), gains = new Float32Array(offsets.length);
-      for (let c = 0; c < cells.length; c++) {
-        offsets.fill(cells[c][2], c * capacity, (c + 1) * capacity);
-        gains.fill(.72 ** (c + 1), c * capacity, (c + 1) * capacity);
-      }
-      geometry.setAttribute('copyDepth', new THREE.InstancedBufferAttribute(offsets, 1));
-      geometry.setAttribute('copyGain', new THREE.InstancedBufferAttribute(gains, 1));
+      const geometry = imageGeometry(staged, this.poolCount);
       const material = source.material.clone();
       material.defines = { ...source.material.defines };
       material.customProgramCacheKey = () => `depth-copy-${kind}`;
@@ -51,9 +62,9 @@ export class MirrorRoom {
         shader.fragmentShader = 'varying float imageGain;\n' + shader.fragmentShader;
         shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= imageGain;\n#include <opaque_fragment>');
       };
-      const mesh = new THREE.InstancedMesh(geometry, material, capacity * cells.length);
+      const mesh = new THREE.InstancedMesh(geometry, material, capacity * this.poolCount);
       mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * cells.length * 3), 3);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * this.poolCount * 3), 3);
       this.meshes.push({ mesh, staged }); scene.add(mesh);
     }
     // One continuous outer coating has no partitions between repeated banks.
@@ -67,6 +78,18 @@ export class MirrorRoom {
   }
   setCount(count) {
     mirrorCells(count); // Validate before mutating the active pool.
+    if (count > this.poolCount) {
+      const poolCount = Math.min(MAX_DEPTH_IMAGES, 2 ** Math.ceil(Math.log2(count)));
+      for (const { mesh, staged } of this.meshes) {
+        // Release old GPU buffers before replacing them. Keep the scene object
+        // and material, and reuse the expanded pool on later count reductions.
+        mesh.dispose(); mesh.geometry.dispose();
+        mesh.geometry = imageGeometry(staged, poolCount);
+        mesh.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(staged.capacity * poolCount * 16), 16).setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(staged.capacity * poolCount * 3), 3);
+      }
+      this.poolCount = poolCount;
+    }
     this.count = count;
     for (const { mesh, staged } of this.meshes) { mesh.count = count * staged.capacity; mesh.visible = count > 0; }
   }
@@ -100,7 +123,7 @@ export class MirrorRoom {
         out.clearUpdateRanges(); out.addUpdateRange(0, this.count * values.length);
         out.needsUpdate = true;
       }
-      // Pools reserve 17 images, but transfer only the active image prefix.
+      // Grow pools only on settings changes; transfer the active image prefix.
       // Clear old ranges when drawing was paused or the count changed.
       for (const attr of [mesh.instanceMatrix, mesh.instanceColor]) {
         attr.clearUpdateRanges(); attr.addUpdateRange(0, mesh.count * attr.itemSize);

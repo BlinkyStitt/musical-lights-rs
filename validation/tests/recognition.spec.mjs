@@ -326,14 +326,14 @@ test('a missing recorder disables recognition without disabling listening or his
   await expect(page.locator('.listening-toggle')).toBeEnabled();
 });
 
-test('the song toggle is prominent above the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
+test('the song toggle sits beside Listening below the lights on a narrow phone and usable in fullscreen', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 720 });
   // Keep the real capture window while checking layout and switching identification off.
   // Slow CI can outlast the shortened recording used by successful matches.
   const uploads = await setup(page, { captureMs: 10_000 });
   const identify = page.locator('.audio-controls').getByRole('checkbox', { name: 'Identify song', exact: true });
   await expect(identify).toBeInViewport();
-  expect(await identify.evaluate(button => button.getBoundingClientRect().bottom <= document.querySelector('.spectrum-panel').getBoundingClientRect().top)).toBe(true);
+  expect(await identify.evaluate(button => button.getBoundingClientRect().top >= document.querySelector('.spectrum-panel').getBoundingClientRect().bottom)).toBe(true);
   await expect(identify).toHaveCSS('font-weight', '700');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -362,10 +362,12 @@ test('the song toggle is prominent above the lights on a narrow phone and usable
 
 test.describe('song controls with touch input', () => {
   test.use({ hasTouch: true });
-  test('a top-area song-toggle tap identifies without closing fullscreen', async ({ page }) => {
+  test('a song-toggle tap with action help open identifies without closing fullscreen', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 });
     const uploads = await setup(page);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
+    await page.getByRole('button', { name: 'Video', exact: true }).focus();
+    await expect(page.locator('.control-help')).toBeVisible();
     await page.getByRole('checkbox', { name: 'Identify song', exact: true }).tap();
     await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
   await expect(page.locator('.recognition-status')).toBeEmpty();

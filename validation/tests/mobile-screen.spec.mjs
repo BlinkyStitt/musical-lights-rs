@@ -170,6 +170,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.mic-status')).toBeEmpty();
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
+  await expand.scrollIntoViewIfNeeded();
   const initialScroll = await page.evaluate(() => scrollY);
   await expand.tap();
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });

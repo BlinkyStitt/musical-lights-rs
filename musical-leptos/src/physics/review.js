@@ -25,7 +25,7 @@ export class ListeningReview {
       <p>Local files stay in browser memory. PCM levels are preserved; output volume is not calibrated SPL. Selecting music starts playback; Listening controls only the microphone.</p>
       <p>“Jazz Trumpet Loops Pack in F 90 bpm” by <a href="https://freesound.org/s/77711/">Mihai Sorohan</a> and “Vibe Ace” by <a href="https://freemusicarchive.org/music/Kevin_MacLeod/Jazz_Sampler/Vibe_Ace">Kevin MacLeod</a>, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. Audit excerpts: mono 48 kHz, fixed peak 0.2; trumpet first 5.333 s, Vibe Ace 8–14 s.</p>
       <label class="control-row">Local audio file<input class="review-file" type="file" accept="audio/*"></label>
-      <p class="review-status" role="status">Choose a source above the lights.</p>
+      <p class="review-status" role="status">Choose a source below the lights.</p>
       <button class="review-replay" type="button" disabled>Replay</button>
       <label class="control-row">Playback device<input class="review-device" placeholder="e.g. built-in speakers, headphones"></label>
       <label class="control-row">Listening notes<textarea class="review-notes" rows="4" placeholder="Describe accents, swells and decay; include playback times."></textarea></label>
