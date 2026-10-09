@@ -115,7 +115,9 @@ for (const rate of [44100, 48000]) {
     await expect.poll(() => page.evaluate(() => window.inputStream.getTracks().map(t => t.readyState))).toEqual(['ended']);
     await expect.poll(() => page.evaluate(() => window.audioContexts.map(c => c.state))).toEqual(['closed']);
     await expectOnlySphereAnimation(page);
-    await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+    await expect(page.locator('.frame-rate')).toHaveCount(1);
+    await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
     await page.evaluate(() => window.inputContext.close());
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
