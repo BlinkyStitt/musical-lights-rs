@@ -13,6 +13,8 @@ pub enum MyError {
     CobsDecode(#[from] cobs::DecodeError),
     #[error("postcard error: {0:?}")]
     Postcard(#[from] postcard::Error),
+    #[error("UART message exceeds maximum frame size")]
+    MessageTooLong,
     /// TODO: i don't like this. it doesn't have the actual error in it because theres too many different hardware options
     #[error("spi device error")]
     SpiDeviceError,

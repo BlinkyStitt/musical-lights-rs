@@ -27,3 +27,14 @@ test('direction endpoints and curve reject inverted, non-finite and out-of-music
   for (const v of [[60, 200, .05, .5, 1], [80, 180, 0, 1, .25]]) assert(validDirectionOdds(v));
   for (const v of [[59, 200, .05, .5, 1], [60, 201, .05, .5, 1], [60, 60, .05, .5, 1], [60, 200, .6, .5, 1], [60, 200, .05, .5, 0], [60, 200, .05, .5, NaN]]) assert(!validDirectionOdds(v));
 });
+
+test('saved Physics settings retain the complete configuration at 20 and 30 ms rises', () => {
+  const read = physics => readSettings({ getItem() { return JSON.stringify({ version: 1, physics }); } });
+  for (const rise of [.02, .03, 2]) {
+    const physics = [.8, 12, 16, .6, .4, .5, rise, .7];
+    assert.deepEqual(read(physics).physics, physics);
+  }
+  for (const rise of [.019, 2.001, null, '0.02']) {
+    assert.equal(read([.8, 12, 16, .6, .4, .5, rise, .7]).physics, undefined);
+  }
+});

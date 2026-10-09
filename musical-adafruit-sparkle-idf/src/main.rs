@@ -178,9 +178,9 @@ fn main() -> eyre::Result<()> {
     // TODO: pick proper sizes for these buffers. 256 should work, but its not correct
     // TODO: box the usart sensor things? its got some big buffers inside of it
     // TODO: const new functions for these so we can statically allocate them?
-    let mut uart_from_sensors: Box<UartFromSensors<'_, 256, 256>> =
+    let mut uart_from_sensors: Box<UartFromSensors<'_>> =
         Box::new(UartFromSensors::new(uart_to_sensors_rx));
-    let mut uart_to_sensors: Box<UartToSensors<'_, 256>> =
+    let mut uart_to_sensors: Box<UartToSensors<'_>> =
         Box::new(UartToSensors::new(uart_to_sensors_tx));
     */
 
@@ -375,11 +375,11 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
 }
 
 /// TODO: should state be in a RwLock? should it be a watch channel instead that we send things to and some other task does work on it?
-fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize>(
+fn read_from_sensors_task(
     message_to_sensors: flume::Sender<Message>,
     pong_received: &'static AtomicBool,
     state: &'static Mutex<State>,
-    uart_from_sensors: &mut UartFromSensors<'static, RAW_BUF_BYTES, COB_BUF_BYTES>,
+    uart_from_sensors: &mut UartFromSensors<'static>,
 ) -> eyre::Result<()> {
     let process_message = |msg| {
         info!("received msg: {msg:?}");
@@ -440,10 +440,10 @@ fn read_from_sensors_task<const RAW_BUF_BYTES: usize, const COB_BUF_BYTES: usize
     Ok(())
 }
 
-fn send_to_sensors_task<const N: usize>(
+fn send_to_sensors_task(
     message_to_sensors: flume::Receiver<Message>,
     pong_received: &'static AtomicBool,
-    uart_to_sensors: &mut UartToSensors<'static, N>,
+    uart_to_sensors: &mut UartToSensors<'static>,
 ) -> eyre::Result<()> {
     // send a ping on an interval until we get a pong. then continue
     while !pong_received.load(Ordering::SeqCst) {

@@ -1,40 +1,26 @@
-// declination calculator for magnetic bearing
-// TODO: why does the linter think this is unused when math functions on f32 are used. something about std being enabled in the linter?
-#[allow(unused_imports)]
-use micromath::F32Ext;
+use num::Float;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
-// /// Degrees to Radians
-// const DEG2RAD: f32 = 0.017453292;
-// const RAD2DEG: f32 = 1.0 / DEG2RAD;
-
-/// in meters
+/// Mean Earth radius in meters, retained for the spherical course model.
 pub const EARTH_RADIUS: f32 = 6371000.0;
-
-/// we don't have std, so we don't have PI
-/// TODO: use std if we do have it?
-#[allow(clippy::approx_constant)]
-const PI: f32 = 3.141_592_7;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Course {
-    /// in meters
+    /// Great-circle distance in meters.
     pub distance: f32,
-    /// Positive angles measured counter-clockwise
-    /// from positive x axis
-    /// -pi/4 radians (45 deg clockwise)
+    /// Initial bearing in degrees clockwise from north, in [0, 360).
+    /// Magnetic declination is added to the true bearing.
     pub magnetic_bearing: f32,
 }
 
-// TODO: should these be in the Gps Module instead?
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, Default, Deserialize, Serialize, Debug, PartialEq, MaxSize)]
 pub struct Coordinate {
-    /// latitude
+    /// Latitude in degrees, positive north.
     pub lat: f32,
-    /// longitude
+    /// Longitude in degrees, positive east.
     pub lon: f32,
 }
 
@@ -47,172 +33,220 @@ pub struct Magnetometer {
 }
 
 impl Course {
-    fn magnetic_bearing(from: Coordinate, to: Coordinate, magnetic_declination: f32) -> f32 {
-        /*
-        φ is latitude, λ is longitude, R is earth’s radius (mean radius = 6,371km);
-        note that angles need to be in radians to pass to trig functions!
-
-        Formula: 	θ = atan2( sin Δλ ⋅ cos φ2 , cos φ1 ⋅ sin φ2 − sin φ1 ⋅ cos φ2 ⋅ cos Δλ )
-            where 	φ1,λ1 is the start point, φ2,λ2 the end point (Δλ is the difference in longitude)
-
-        JavaScript: (all angles in radians)
-
-        const y = Math.sin(λ2-λ1) * Math.cos(φ2);
-        const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
-        const θ = Math.atan2(y, x);
-        const bearing = (θ*180/Math.PI + 360) % 360; // in degrees
-        */
-        let y = (to.lon - from.lon).sin() * to.lat.cos();
-        let x = from.lat.cos() * to.lat.sin() - from.lat.sin() * to.lat.cos() * (to.lon - from.lon);
-        let θ = y.atan2(x);
-
-        // bearing in degrees
-        // atan2 returns values in the range -π ... +π (that is, -180° ... +180°)
-        (θ * 180.0 / PI + magnetic_declination + 360.0) % 360.0
-    }
-
-    /*
-    pub fn haversine(from: Coordinate, to: Coordinate, magnetic_declination: f32) -> Self {
-        /*
-        φ is latitude, λ is longitude, R is earth’s radius (mean radius = 6,371km);
-        note that angles need to be in radians to pass to trig functions!
-
-        Haversine
-        formula: 	a = sin²(Δφ/2) + cos φ1 ⋅ cos φ2 ⋅ sin²(Δλ/2)
-                    c = 2 ⋅ atan2( √a, √(1−a) )
-                    d = R ⋅ c
-
-        In javascript:
-
-            const R = 6371e3; // metres
-            const φ1 = lat1 * Math.PI/180; // φ, λ in radians
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
-
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-            const d = R * c; // in metres
-        */
-
-        let magnetic_bearing = Self::magnetic_bearing(from, to, magnetic_declination);
-
-        let distance = todo!();
-
-        Self {
-            distance,
-            magnetic_bearing,
-        }
-    }
-    */
-
-    #[allow(non_snake_case)]
+    /// Calculate a spherical course from degree coordinates and declination.
+    ///
+    /// The established entry point uses f64 haversine arithmetic to retain
+    /// short-distance precision. Results and serialized fields remain f32.
+    /// Declination is in degrees and is additive; positive values turn clockwise.
+    /// Identical points have no direction and return the wrapped declination.
     pub fn spherical_law_of_cosines(
         from: Coordinate,
         to: Coordinate,
         magnetic_declination: f32,
     ) -> Self {
-        /*
-           φ is latitude, λ is longitude, R is earth’s radius (mean radius = 6,371km);
-           note that angles need to be in radians to pass to trig functions!
+        let lat1 = (from.lat as f64).to_radians();
+        let lat2 = (to.lat as f64).to_radians();
+        let delta_lat = ((to.lat as f64) - (from.lat as f64)).to_radians();
+        let delta_lon = ((to.lon as f64) - (from.lon as f64)).to_radians();
+        let sin_lat = Float::sin(delta_lat / 2.0);
+        let sin_lon = Float::sin(delta_lon / 2.0);
+        let a = (sin_lat * sin_lat + Float::cos(lat1) * Float::cos(lat2) * sin_lon * sin_lon)
+            .clamp(0.0, 1.0);
+        let distance =
+            2.0 * Float::atan2(Float::sqrt(a), Float::sqrt(1.0 - a)) * EARTH_RADIUS as f64;
 
-           Law of cosines: 	d = acos( sin φ1 ⋅ sin φ2 + cos φ1 ⋅ cos φ2 ⋅ cos Δλ ) ⋅ R
-           JavaScript:
-
-           const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180, Δλ = (lon2-lon1) * Math.PI/180, R = 6371e3;
-           const d = Math.acos( Math.sin(φ1)*Math.sin(φ2) + Math.cos(φ1)*Math.cos(φ2) * Math.cos(Δλ) ) * R;
-        */
-        let φ1 = from.lat * PI / 180.0;
-        let φ2 = to.lat * PI / 180.0;
-        let Δλ = (to.lon - from.lon) * PI / 180.0;
-
-        let distance = (φ1.sin() * φ2.sin() + φ1.cos() * φ2.cos() * Δλ.cos()).acos() * EARTH_RADIUS;
-
-        let magnetic_bearing = Self::magnetic_bearing(from, to, magnetic_declination);
-
-        Course {
-            distance,
-            magnetic_bearing,
-        }
-    }
-
-    /*
-    pub fn polar_coordinate_flat_earth(
-        from: Coordinate,
-        to: Coordinate,
-        magnetic_declination: f32,
-    ) -> Self {
-        /*
-            the polar coordinate flat-earth formula can be used:
-            using the co-latitudes θ1 = π/2−φ1 and θ2 = π/2−φ2,
-            then d = R ⋅ sqrt(θ1² + θ2² − 2 ⋅ θ1 ⋅ θ2 ⋅ cos Δλ). I’ve not compared accuracy.
-        */
-        todo!();
-    }
-    */
-
-    /*
-    /// If performance is an issue and accuracy less important, for small distances Pythagoras’ theorem
-    /// can be used on an equi­rectangular projec­tion:
-    /// TODO: something is wrong with this
-    pub fn equirectangular(from: Coordinate, to: Coordinate, magnetic_declination: f32) -> Self {
-        /*
-            φ is latitude, λ is longitude, R is earth’s radius (mean radius = 6,371km);
-            note that angles need to be in radians to pass to trig functions!
-
-            Formula 	x = Δλ ⋅ cos φm
-                        y = Δφ
-                        d = R ⋅ √x² + y²
-
-            JavaScript:
-
-                const x = (λ2-λ1) * Math.cos((φ1+φ2)/2);
-                const y = (φ2-φ1);
-                const d = Math.sqrt(x*x + y*y) * R;
-        */
-        let x = (to.lon - from.lon) * ((from.lat + to.lat) / 2.0).cos();
-        let y = to.lat - from.lat;
-        let distance = (x * x + y * y).sqrt() * EARTH_RADIUS;
-
-        // dbg!(x);
-        // dbg!(y);
-        // dbg!(distance);
-
-        let magnetic_bearing = Self::magnetic_bearing(from, to, magnetic_declination);
-
-        // dbg!(magnetic_bearing);
-
+        let y = Float::sin(delta_lon) * Float::cos(lat2);
+        let x = Float::cos(lat1) * Float::sin(lat2)
+            - Float::sin(lat1) * Float::cos(lat2) * Float::cos(delta_lon);
+        let angle = Float::atan2(y, x).to_degrees() + magnetic_declination as f64;
+        let bearing = num::traits::Euclid::rem_euclid(&angle, &360.0) as f32;
         Self {
-            distance,
-            magnetic_bearing,
+            distance: distance as f32,
+            // Rounding to f32 can turn a value just below 360 into 360.
+            magnetic_bearing: bearing % 360.0,
         }
     }
-    */
 }
-
-// /// TODO: i don't actually like this. deprecate this
-// impl From<(Coordinate, Coordinate, f32)> for Course {
-//     fn from((from, to, magnetic_declination): (Coordinate, Coordinate, f32)) -> Self {
-//         Self::spherical_law_of_cosines(from, to, magnetic_declination)
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn coordinate(lat: f32, lon: f32) -> Coordinate {
+        Coordinate { lat, lon }
+    }
+    fn course(from: Coordinate, to: Coordinate) -> Course {
+        Course::spherical_law_of_cosines(from, to, 0.0)
+    }
+    fn near(actual: f32, expected: f64, tolerance: f64) {
+        assert!(
+            (actual as f64 - expected).abs() <= tolerance,
+            "{actual} != {expected}"
+        );
+    }
+
     #[test]
-    fn test_spherical_law_of_cosines() {
-        let c1 = Coordinate { lat: 0.0, lon: 0.0 };
-        let c2 = Coordinate { lat: 1.0, lon: 0.0 };
+    fn cardinal_diagonal_and_non_equatorial_bearings() {
+        let origin = coordinate(0.0, 0.0);
+        for (lat, lon, expected) in [
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 90.0),
+            (-1.0, 0.0, 180.0),
+            (0.0, -1.0, 270.0),
+            (1.0, 1.0, 45.0),
+            (-1.0, 1.0, 135.0),
+            (-1.0, -1.0, 225.0),
+            (1.0, -1.0, 315.0),
+        ] {
+            near(
+                course(origin, coordinate(lat, lon)).magnetic_bearing,
+                expected,
+                0.01,
+            );
+        }
+        near(
+            course(coordinate(45.0, 0.0), coordinate(45.0, 90.0)).magnetic_bearing,
+            54.7356103,
+            0.0001,
+        );
+        near(
+            course(coordinate(-45.0, 0.0), coordinate(-45.0, 90.0)).magnetic_bearing,
+            125.2643897,
+            0.0001,
+        );
+    }
 
-        let course = Course::spherical_law_of_cosines(c1, c2, 0.0);
+    #[test]
+    fn additive_declination_wraps_in_both_directions() {
+        for (declination, expected) in [
+            (0.0, 90.0),
+            (15.0, 105.0),
+            (-100.0, 350.0),
+            (720.0, 90.0),
+            (-810.0, 0.0),
+        ] {
+            near(
+                Course::spherical_law_of_cosines(
+                    coordinate(0.0, 0.0),
+                    coordinate(0.0, 1.0),
+                    declination,
+                )
+                .magnetic_bearing,
+                expected,
+                0.0001,
+            );
+        }
+    }
 
-        let expected_distance = 111189.45;
-        assert_eq!(course.magnetic_bearing, 0.0);
-        assert_eq!(course.distance, expected_distance);
+    #[test]
+    fn analytic_distances_and_nearby_coordinate_precision() {
+        let radius = EARTH_RADIUS as f64;
+        for (from, to, expected, tolerance) in [
+            (coordinate(37.0, -122.0), coordinate(37.0, -122.0), 0.0, 0.0),
+            (
+                coordinate(0.0, 0.0),
+                coordinate(1.0, 0.0),
+                radius.to_radians(),
+                0.01,
+            ),
+            (
+                coordinate(0.0, 0.0),
+                coordinate(0.0, 90.0),
+                radius * core::f64::consts::FRAC_PI_2,
+                1.0,
+            ),
+            (
+                coordinate(0.0, 0.0),
+                coordinate(0.0, 180.0),
+                radius * core::f64::consts::PI,
+                2.0,
+            ),
+            (
+                coordinate(0.0, 179.0),
+                coordinate(0.0, -179.0),
+                (2.0 * radius).to_radians(),
+                0.02,
+            ),
+            (
+                coordinate(90.0, 0.0),
+                coordinate(-90.0, 0.0),
+                radius * core::f64::consts::PI,
+                2.0,
+            ),
+            (
+                coordinate(90.0, 0.0),
+                coordinate(90.0, 120.0),
+                0.0,
+                0.000001,
+            ),
+            (
+                coordinate(37.0, -122.0),
+                coordinate(37.0001, -122.0),
+                11.029,
+                0.001,
+            ),
+        ] {
+            near(course(from, to).distance, expected, tolerance);
+            near(course(to, from).distance, expected, tolerance);
+        }
+        assert_eq!(
+            course(coordinate(37.0, -122.0), coordinate(37.0, -122.0)).magnetic_bearing,
+            0.0
+        );
+        near(
+            course(coordinate(0.0, 179.0), coordinate(0.0, -179.0)).magnetic_bearing,
+            90.0,
+            0.0001,
+        );
+        near(
+            course(coordinate(89.0, 10.0), coordinate(90.0, 10.0)).magnetic_bearing,
+            0.0,
+            0.0001,
+        );
+    }
+
+    // Independent central angle from the cross and dot products of unit vectors.
+    fn reference_distance(from: Coordinate, to: Coordinate) -> f64 {
+        let vector = |c: Coordinate| {
+            let (lat, lon) = ((c.lat as f64).to_radians(), (c.lon as f64).to_radians());
+            [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()]
+        };
+        let (a, b) = (vector(from), vector(to));
+        let cross = [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ];
+        let sine = cross.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let cosine = a.iter().zip(b).map(|(x, y)| x * y).sum::<f64>();
+        sine.atan2(cosine) * EARTH_RADIUS as f64
+    }
+
+    #[test]
+    fn distances_match_independent_unit_vector_reference() {
+        let points = [
+            coordinate(0.0, 0.0),
+            coordinate(37.0, -122.0),
+            coordinate(37.0001, -122.0),
+            coordinate(-33.86, 151.21),
+            coordinate(89.999, 179.999),
+            coordinate(-89.999, -179.999),
+            coordinate(90.0, 0.0),
+            coordinate(-90.0, 120.0),
+            coordinate(0.0, 179.999),
+            coordinate(0.0, -179.999),
+            coordinate(0.0, 180.0),
+        ];
+        for from in points {
+            for to in points {
+                let expected = reference_distance(from, to);
+                // Allow final f32 rounding (about 1 meter at an Earth diameter).
+                near(
+                    course(from, to).distance,
+                    expected,
+                    0.0001 + expected * 1e-7,
+                );
+            }
+        }
     }
 }
