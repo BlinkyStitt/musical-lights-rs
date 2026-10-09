@@ -73,7 +73,7 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       const edge = pixels.side + (i + .02) * pixels.plotWidth / 24;
       const left = Math.floor(edge + .5);
       const middle = rgb(center);
-      // Sample inside the front face; outside pixels include the bar gap.
+      // Sample inside the front face, where the white flash overlays the fill.
       const border = Array.from({ length: Math.ceil(3 * pixels.ratio) }, (_, offset) => rgb(left + offset))
         .sort((a, b) => Math.min(...b) - Math.min(...a))[0];
       // Lit fills retain at least 75% encoded value and 40% relative saturation.
@@ -104,6 +104,16 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       const fill = colored.slice(center * 4, center * 4 + 3), boundary = colored.slice(inside * 4, inside * 4 + 3);
       expect(Math.max(...boundary), JSON.stringify({ i, fill, boundary })).toBeGreaterThanOrEqual(Math.max(...fill) * .85);
       expect(Math.max(...boundary) - Math.min(...boundary)).toBeGreaterThan(60);
+    }
+    // Every seam must retain a colored fill after the flash ends. White
+    // background slots and dark cracks both fail these actual-pixel checks.
+    for (let i = 1; i < 24; i++) {
+      const seam = Math.floor(pixels.side + i * pixels.plotWidth / 24);
+      for (const x of [seam - 1, seam, seam + 1]) {
+        const color = colored.slice(x * 4, x * 4 + 3);
+        expect(Math.max(...color), `seam ${i} at ${x}`).toBeGreaterThan(180);
+        expect(Math.max(...color) - Math.min(...color), `seam ${i} at ${x}`).toBeGreaterThan(60);
+      }
     }
     await page.evaluate(() => { window.audioNow += 10; });
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(0);

@@ -506,17 +506,18 @@ test('leftward scrolling interpolates through the seam without sweeping the patt
 for (const scenario of [
   // A 16 m/s² device acceleration exceeds gravity for upward lift. At 1x SI
   // scale a 2 m/s² lift cannot overcome gravity; do not rely on a hidden gain.
-  { name: 'portrait sideways', angle: 0, acceleration: { x: -16, y: 0, z: 0 }, axis: 0, travel: .08 },
-  { name: 'portrait lift', angle: 0, acceleration: { x: 0, y: -16, z: 0 }, axis: 1, travel: .08 },
-  { name: 'landscape lift', angle: 90, acceleration: { x: -16, y: 0, z: 0 }, axis: 1, travel: .08 },
-  { name: 'depth', angle: 0, acceleration: { x: 0, y: 0, z: -16 }, axis: 2, travel: .035 },
+  { name: 'portrait sideways', angle: 0, acceleration: { x: -16, y: 0, z: 0 }, axis: 0, direction: 1, travel: .08 },
+  { name: 'portrait lift', angle: 0, acceleration: { x: 0, y: -16, z: 0 }, axis: 1, direction: 1, travel: .08 },
+  { name: 'landscape lift', angle: 90, acceleration: { x: -16, y: 0, z: 0 }, axis: 1, direction: 1, travel: .08 },
+  { name: 'depth toward the front', angle: 0, acceleration: { x: 0, y: 0, z: -16 }, axis: 2, direction: 1, travel: .035 },
+  { name: 'depth toward the back', angle: 0, acceleration: { x: 0, y: 0, z: 16 }, axis: 2, direction: -1, travel: .035 },
 ]) {
   test(`handheld box shake produces visible ${scenario.name} travel from rest`, async ({ page }, info) => {
     await syntheticAudio(page); await page.goto(url); await startFrozen(page);
     await page.evaluate(angle => Object.defineProperty(screen.orientation, 'angle', { configurable: true, value: angle }), scenario.angle);
     await page.waitForTimeout(2000);
     const before = await physicsState(page);
-    const result = await page.evaluate(async ({ acceleration, axis }) => {
+    const result = await page.evaluate(async ({ acceleration, axis, direction }) => {
       const view = document.querySelector('#dancinglights').physics;
       const first = Array.from({ length: view.layout[21] }, (_, i) => view.current[3 + i * view.layout[8] + axis]);
       const travel = first.map(() => 0);
@@ -524,13 +525,24 @@ for (const scenario of [
       while (performance.now() < end) {
         window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration }));
         await new Promise(resolve => requestAnimationFrame(resolve));
-        for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], view.current[3 + i * view.layout[8] + axis] - first[i]);
+        for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], direction * (view.current[3 + i * view.layout[8] + axis] - first[i]));
       }
-      return { travel, input: Array.from(view.input.slice(24, 27)) };
+      return { first, travel, input: Array.from(view.input.slice(24, 27)) };
     }, scenario);
     await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
-    expect(result.travel.filter(distance => distance > scenario.travel).length).toBeGreaterThanOrEqual(before.balls.length / 2);
-    expect(result.input[scenario.axis]).toBeCloseTo(16, 5);
+    const lower = scenario.axis === 2 ? -before.config[5] / 2 : 0;
+    const upper = [1.2, before.ceiling, before.config[5] / 2][scenario.axis];
+    let eligible = 0;
+    for (const [i, ball] of before.balls.entries()) {
+      // A ball already at the wall cannot travel through it. Require every
+      // ball with enough space to move the full distance at the measured force.
+      const room = scenario.direction > 0 ? upper - ball.radius - result.first[i] : result.first[i] - lower - ball.radius;
+      if (room <= scenario.travel) continue;
+      eligible++;
+      expect(result.travel[i], `ball ${i}, available travel ${room}`).toBeGreaterThan(scenario.travel);
+    }
+    expect(eligible).toBeGreaterThan(0);
+    expect(result.input[scenario.axis]).toBeCloseTo(scenario.direction * 16, 5);
     // Lost events do not leave a continuous force; gravity/collisions continue.
     await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
     const after = await physicsState(page);

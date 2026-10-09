@@ -41,7 +41,9 @@ export class SideBars {
       const offset = box * width;
       for (let i = 0; i < this.bars.count; i++) {
         const x = source[i * 16 + 12];
-        if (x < -this.halfWidth || x > width + this.halfWidth) continue;
+        // Touching an edge contributes no surface inside this box. Compare
+        // the submitted float32 bounds so a rounded JS sum cannot add a sliver.
+        if (Math.fround(x + this.halfWidth) <= 0 || Math.fround(x - this.halfWidth) >= width) continue;
         if (camera) {
           const y = source[i * 16 + 13], halfHeight = Math.abs(source[i * 16 + 5]) / 2;
           this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight, -depth * (copies + .5));

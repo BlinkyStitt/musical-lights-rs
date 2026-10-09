@@ -21,7 +21,106 @@ fn velocity(sim: &Simulation, i: usize) -> Vector {
     sim.world.bodies[sim.balls[i].0].linvel()
 }
 fn radius(i: usize) -> f32 {
-    SIZE_RATIOS[i] * (PITCH - GAP) / 2.0
+    SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
+}
+
+#[test]
+fn smallest_ball_rests_on_bar_seams_without_sinking_between_tips() {
+    for ceiling in [false, true] {
+        let mut sim = world(SimulationConfig::default());
+        isolate(&mut sim, &[0]);
+        input(&mut sim, [0.65; COUNT]);
+        for _ in 0..HZ {
+            sim.step();
+        }
+        let tip = if ceiling {
+            sim.ceiling_height - sim.bar_positions[0] as f32
+        } else {
+            sim.bar_positions[0] as f32
+        };
+        let inward = if ceiling { -1.0 } else { 1.0 };
+        place(
+            &mut sim,
+            0,
+            Vector::new(PITCH * 12.0, tip + inward * (radius(0) + 0.08), 0.0),
+            Vector::ZERO,
+        );
+        sim.apply(SimulationInput {
+            tick: sim.tick,
+            gravity: Some([0.0, -inward * sim.config.gravity, 0.0]),
+            ..sim.input
+        })
+        .unwrap();
+        for _ in 0..HZ * 4 {
+            sim.step();
+        }
+        let clearance = (position(&sim, 0).y - tip) * inward - radius(0);
+        assert!(
+            clearance >= -0.001,
+            "ceiling={ceiling}: smallest ball sank {clearance} m into the bar seam"
+        );
+        assert!(velocity(&sim, 0).length() < 0.01);
+    }
+}
+
+#[test]
+fn smallest_ball_clears_seams_after_spikes_and_motion_restarts() {
+    for height in [0.6, 2.596923] {
+        let mut sim = world(SimulationConfig {
+            height,
+            ..SimulationConfig::default()
+        });
+        isolate(&mut sim, &[0]);
+        place(
+            &mut sim,
+            0,
+            Vector::new(PITCH * 12.0, BASELINE + radius(0) + 0.01, 0.0),
+            Vector::ZERO,
+        );
+        for tick in 0..HZ * 6 {
+            let motion_on = !(tick / (HZ / 3)).is_multiple_of(3);
+            let sign = if (tick / (HZ / 3)).is_multiple_of(2) {
+                1.0
+            } else {
+                -1.0
+            };
+            let mut levels = [0.15; COUNT];
+            levels[11 + (tick / 5 % 2) as usize] = 1.0;
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels,
+                height,
+                acceleration: if motion_on {
+                    [sign * 12.0, 0.0, sign * 8.0]
+                } else {
+                    [0.0; 3]
+                },
+                gravity: motion_on.then_some([0.0, sign * sim.config.gravity, 0.0]),
+                scrolling: motion_on,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            sim.step();
+            let p = position(&sim, 0);
+            assert!(p.x >= radius(0) - 0.002 && p.x <= WIDTH - radius(0) + 0.002);
+            assert!(p.y >= radius(0) - 0.002 && p.y <= height - radius(0) + 0.002);
+        }
+        // Stopping motion clears sensor forces and restores downward gravity.
+        input(&mut sim, [0.65; COUNT]);
+        for _ in 0..HZ {
+            sim.step();
+        }
+        // A beach ball may still bounce. Require clearance above the complete
+        // surface throughout recovery, rather than an unrelated sleep deadline.
+        for _ in 0..HZ * 3 {
+            sim.step();
+            let clearance = position(&sim, 0).y - radius(0) - sim.bar_positions[0] as f32;
+            assert!(
+                clearance >= -0.001,
+                "height={height}: seam clearance {clearance}"
+            );
+        }
+    }
 }
 fn input(sim: &mut Simulation, levels: [f32; COUNT]) {
     sim.apply(SimulationInput {
@@ -803,7 +902,7 @@ fn invalid_inputs_and_configuration_leave_state_unchanged() {
 }
 
 #[test]
-fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
+fn exposed_bar_corner_deflects_a_ball_and_reports_the_bar_impulse() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
     let top = 0.1;
@@ -818,7 +917,11 @@ fn rounded_top_deflects_a_ball_and_reports_the_bar_impulse() {
     place(
         &mut sim,
         0,
-        Vector::new(0.648, top + radius(0) + 0.08, 0.0),
+        Vector::new(
+            0.625 + PITCH / 2.0 + radius(0) / 2.0,
+            top + radius(0) + 0.08,
+            0.0,
+        ),
         Vector::new(0.0, -1.0, 0.0),
     );
     let mut impulse = 0.0;
