@@ -1,7 +1,7 @@
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 3, scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
+  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds] };
   try {
@@ -125,7 +125,9 @@ export class Presentation {
   save(persist = true) { if (persist) { try { this.storage?.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Session settings remain usable. */ } } this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
   updateAudioType() {
     if (!navigator.audioSession) return;
-    try { navigator.audioSession.type = this.microphoneActive ? 'play-and-record' : this.videoPlaying ? 'playback' : this.originalAudioType ?? 'auto'; } catch { /* Physical mobile acceptance is still required. */ }
+    const type = this.microphoneActive ? 'play-and-record' : this.videoPlaying ? 'playback' : this.originalAudioType ?? 'auto';
+    // Repeated notifications do not require rerouting the device audio session.
+    try { if (navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch { /* Physical mobile acceptance is still required. */ }
   }
   enhanceControls() {
     for (const [className, text] of Object.entries(explanations)) {
@@ -209,7 +211,7 @@ export class Presentation {
       this.player = new YT.Player(host, { host: 'https://www.youtube-nocookie.com', videoId: video.id,
         playerVars: { origin: location.origin, playsinline: 1, controls: 1, autoplay: 0, start: video.start }, events: {
           onReady: ({ target }) => { if (this.closed || generation !== this.generation) { target.destroy(); return; } status.textContent = ''; this.panel.querySelector('iframe')?.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); },
-          onStateChange: ({ data }) => { if (this.closed || generation !== this.generation) return; this.videoPlaying = data === 1; if (data === 1 && this.card.dataset.audioSource && this.card.dataset.audioSource !== 'microphone') { const source = this.card.querySelector('.input-source'); if (source) source.value = 'microphone'; this.card.dispatchEvent(new CustomEvent('review-input', { detail: { source: 'microphone', play: false } })); } this.updateAudioType(); },
+          onStateChange: ({ data }) => { if (this.closed || generation !== this.generation) return; this.videoPlaying = data === 1 || data === 3; if (data === 1 && this.card.dataset.audioSource && this.card.dataset.audioSource !== 'microphone') { const source = this.card.querySelector('.input-source'); if (source) source.value = 'microphone'; this.card.dispatchEvent(new CustomEvent('review-input', { detail: { source: 'microphone', play: false } })); } this.updateAudioType(); },
           onError: ({ data }) => { if (this.closed || generation !== this.generation) return; status.textContent = ({ 100: 'This video is unavailable.', 101: 'This video does not allow embedding.', 150: 'This video does not allow embedding.', 153: 'YouTube could not identify this page. Reload and try again.' })[data] ?? 'YouTube playback failed. Try another video.'; this.videoPlaying = false; this.updateAudioType(); },
         } });
     } catch (error) { if (!this.closed && generation === this.generation) status.textContent = error.message; }

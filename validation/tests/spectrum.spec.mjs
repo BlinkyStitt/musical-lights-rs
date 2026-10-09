@@ -20,11 +20,9 @@ for (const width of [320, 375, 1440]) {
       const meters = [...document.querySelectorAll('.meter')];
       const track = document.querySelector('.meter-track').getBoundingClientRect();
       const graph = document.querySelector('#dancinglights').getBoundingClientRect();
-      const guide = document.querySelector('.meter-guide > span:nth-child(3)').getBoundingClientRect();
       const view = document.querySelector('#dancinglights').physics;
       const front = view.bars.instanceMatrix.array[14] + view.bars.geometry.boundingBox.max.z;
       return {
-        guideDifference: Math.abs(guide.y + guide.height / 2 - graph.y - (1 - new THREE.Vector3(0, view.current[view.layout[17] + 1], front).project(view.camera).y) * graph.height / 2),
         headroom: (track.top - graph.top) / graph.height,
         expectedHeadroom: (1 - new THREE.Vector3(0, view.current[view.layout[17]+1], front).project(view.camera).y) / 2,
         hitRegionError: Math.max(...meters.map((node,i) => {
@@ -42,7 +40,6 @@ for (const width of [320, 375, 1440]) {
         graph: graph.toJSON(),
       };
     });
-    expect(geometry.guideDifference).toBeLessThan(1);
     expect(geometry.headroom).toBeCloseTo(geometry.expectedHeadroom, 3);
     expect(geometry.hitRegionError).toBeLessThan(1);
     expect(geometry.counts).toEqual(Array(24).fill(1));
@@ -57,7 +54,7 @@ for (const width of [320, 375, 1440]) {
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     await page.keyboard.press('Escape');
-    await expect(page.locator('.meter-guide')).toBeVisible();
+    await expect(page.locator('.meter-guide')).toHaveCount(0);
   });
 }
 

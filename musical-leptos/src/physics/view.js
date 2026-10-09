@@ -281,10 +281,8 @@ export class PhysicsView {
     this.camera.updateMatrixWorld();
     const depth = this.config?.[5] ?? .24;
     let tangent = 0;
-    // Reserve space for the projected Quiet/Loud labels around the room.
-    // Fit the geometry inside those CSS gutters; keep labels on their true
-    // projected coordinates instead of clamping them away from the bar bases.
-    const horizontal = Math.max(.5, 1 - 84 / this.canvasWidth);
+    // Keep a small gutter around the physical room for focus outlines.
+    const horizontal = Math.max(.5, 1 - 24 / this.canvasWidth);
     const vertical = Math.max(.5, 1 - 24 / this.canvasHeight);
     // Fit all eight room corners, including the near faces and camera pitch.
     // A 2D field of view crops those faces under perspective projection.
@@ -312,7 +310,7 @@ export class PhysicsView {
     this.cameraAt = now;
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Ease through both turns without a clamp, attack kick or vertical wobble.
-    const amplitude = Math.min(20, 40 - Math.abs(this.cameraBase));
+    const amplitude = Math.min(10, 40 - Math.abs(this.cameraBase));
     const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 48000) : 0);
     this.automaticCamera = true;
     this.setCamera(yaw);
@@ -368,7 +366,7 @@ export class PhysicsView {
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, gap, radius] = this.layout;
-    const ballGeometry = new THREE.SphereGeometry(1, 20, 14);
+    const ballGeometry = new THREE.SphereGeometry(1, 32, 20);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
     const ballMaterial = new THREE.MeshLambertMaterial();
     this.patternTime = { value: 0 };
@@ -388,16 +386,17 @@ export class PhysicsView {
     const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     this.barRoof = { value: this.height };
+    this.barDepth = { value: 1 + this.settings.mirrorCount };
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
-      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, halfWidth: { value: (pitch - gap) / 2 }, radius: { value: radius } });
-      shader.vertexShader = 'uniform float enclosureHeight; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 }, radius: { value: radius } });
+      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz); glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
       shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;');
-      shader.fragmentShader = 'uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; uniform float radius; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'varying float depthDistance; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; uniform float radius; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
           float capRadius = min(radius, barHeight * .5);
@@ -408,13 +407,14 @@ export class PhysicsView {
           float front = faceIsFront;
           float inner = (1.0 - smoothstep(pixel, 2.0 * pixel, distance)) * front;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= pow(.72, max(0.0, depthDistance));\n#include <opaque_fragment>');
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(glow * inner * .8);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
     this.sideBars = new SideBars(this.scene, this.bars, count);
-    this.mirrors = new MirrorRoom(this.scene, this.balls, this.bars, this.sideBars.mesh, this.width, this.settings.mirrorCount);
+    this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount);
     this.enclosure = this.mirrors.walls;
   }
   draw(now) {
@@ -422,7 +422,7 @@ export class PhysicsView {
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
     const height = current[this.layout[17]], depth = this.config[5];
-    this.barRoof.value = height;
+    this.barRoof.value = height; this.barDepth.value = 1 + this.mirrors.count;
     if (!this.reduced.matches) this.patternTime.value = now / 10000;
     for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
       const attr = this.balls.geometry.attributes[name];
@@ -463,7 +463,7 @@ export class PhysicsView {
         }
       }
     }
-    this.sideBars.update(this.layout);
+    this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
     let used = 0;
     for (let i = 0; i < count && used < this.attackLights.length; i++) {
       const glow = this.meshEdges[i];
@@ -495,13 +495,10 @@ export class PhysicsView {
     this.camera.updateMatrixWorld();
     const height = this.current?.[this.layout?.[17]] ?? this.height;
     const maximum = this.current?.[this.layout?.[17] + 1] ?? this.height / 4;
-    const guide = this.graph.querySelector('.meter-guide');
-    for (const [i, y] of [height - .003, height - maximum, maximum, .003].entries()) {
+    for (const [property, y] of [['--balloon-headroom', maximum], ['--plot-baseline', .003]]) {
       this.pointerPoint.set(0, y, frontDepth).project(this.camera);
       const top = (1 - this.pointerPoint.y) * 50;
-      if (guide?.children[i]) guide.children[i].style.top = `${top}%`;
-      if (i === 2) this.graph.style.setProperty('--balloon-headroom', `${top}%`);
-      if (i === 3) this.graph.style.setProperty('--plot-baseline', `${100 - top}%`);
+      this.graph.style.setProperty(property, `${property === '--plot-baseline' ? 100 - top : top}%`);
     }
     this.pointerPoint.set(0, height / 2, frontDepth).project(this.camera);
     const inset = (this.pointerPoint.x + 1) * 50;

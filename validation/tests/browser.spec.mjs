@@ -12,7 +12,7 @@ test('Leptos renders routes and 24 meters without the temporary counter', async 
   await expect(page.getByRole('button', { name: /Click me|counter/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Pause display|Resume display/i })).toHaveCount(0);
   await expect(page.getByText('Every band has room')).toHaveCount(0);
-  await expect(page.locator('.meter-guide')).toHaveText('QUIETLOUDLOUDQUIET');
+  await expect(page.locator('.meter-guide')).toHaveCount(0);
   await expect(page.locator('.frame-rate, .diagnostic-fps')).toHaveCount(0);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Old Arduino Code' })).toBeVisible();
@@ -286,7 +286,7 @@ for (const colorScheme of ['light', 'dark']) {
           return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
         };
         const contrast = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.mic-status', '.eyebrow', '.frequency-tooltip', '.meter-guide', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
+        const text = ['.setting-switch', '.fullscreen-button', '.wake-status', '.mic-status', '.eyebrow', '.frequency-tooltip', '.spectrum-labels', 'h1', '.intro p', '.how-it-works p', 'nav a', 'footer a'].map(selector => {
           const node = document.querySelector(selector);
           let parent = node;
           while (getComputedStyle(parent).backgroundColor === 'rgba(0, 0, 0, 0)') parent = parent.parentElement;

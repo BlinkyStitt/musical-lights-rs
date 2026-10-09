@@ -1,32 +1,30 @@
 import * as THREE from './three.module.js';
 
-export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
 export const BOX_OFFSETS = Object.freeze([-2, -1, 0, 1, 2]);
 
-// A finite stack of fading scene copies creates depth without reflection
-// cameras, ray/box tests in every fragment, or additional simulated balls.
-export function mirrorCells(count = 3) {
+// Ball images reuse the physical transforms. Bars use continuous extrusions
+// instead of repeated boxes, so their depth surfaces have no internal seams.
+export function mirrorCells(count) {
   if (!Number.isInteger(count) || count < 0 || count > 17) throw new RangeError('Use 0 to 17 mirror images');
   return Array.from({ length: count }, (_, i) => [0, 0, -i - 1]);
 }
 
 export class MirrorRoom {
-  constructor(scene, balls, bars, sideBars, width, count = 3) {
+  constructor(scene, balls, count) {
     this.scene = scene;
     this.depth = { value: 1 };
     this.meshes = []; this.sources = [];
     const cells = mirrorCells(17);
-    for (const [kind, source] of [['balls', balls], ['bars', bars], ['sides', sideBars]]) {
+    for (const [kind, source] of [['balls', balls]]) {
       source.geometry.computeBoundingBox();
-      const halfWidth = (source.geometry.boundingBox.max.x - source.geometry.boundingBox.min.x) / 2;
-      const capacity = kind === 'bars' ? (source.count / 6 + 1) * 2 : source.count;
-      const staged = { source, capacity, kind, halfWidth,
+      const capacity = source.count;
+      const staged = { source, capacity, kind,
         matrices: new Float32Array(capacity * 16), colors: new Float32Array(capacity * 3), attributes: [] };
       for (const [name, attr] of Object.entries(source.geometry.attributes)) if (attr.isInstancedBufferAttribute)
         staged.attributes.push({ name, attr, values: new Float32Array(capacity * attr.itemSize) });
       this.sources.push(staged);
-      const size = source.geometry.boundingBox.getSize(new THREE.Vector3());
-      const geometry = kind === 'balls' ? new THREE.SphereGeometry(1, 12, 8) : new THREE.BoxGeometry(size.x, size.y, size.z);
+      const geometry = new THREE.SphereGeometry(1, 12, 8);
       for (const { name, attr } of staged.attributes) geometry.setAttribute(name,
         new THREE.InstancedBufferAttribute(new Float32Array(capacity * attr.itemSize * cells.length), attr.itemSize));
       const offsets = new Float32Array(cells.length * capacity), gains = new Float32Array(offsets.length);
@@ -43,15 +41,13 @@ export class MirrorRoom {
         source.material.onBeforeCompile(shader);
         shader.uniforms.mirrorDepth = this.depth;
         shader.vertexShader = 'attribute float copyDepth; attribute float copyGain; uniform float mirrorDepth; varying float imageGain;\n' + shader.vertexShader;
-        shader.vertexShader = shader.vertexShader.replace(kind === 'balls' ? '#include <project_vertex>' : barProjection, `
+        shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `
           vec4 sourcePoint = instanceMatrix * vec4(transformed, 1.0);
-          ${kind === 'balls' ? '' : 'world = sourcePoint.xyz;'}
           vec4 mvPosition = modelViewMatrix * vec4(sourcePoint.xyz + vec3(0.0, 0.0, copyDepth * mirrorDepth), 1.0);
           imageGain = copyGain;
           gl_Position = projectionMatrix * mvPosition;`);
-        // Preserve the source lighting while translating the drawing. Bars
-        // already shade at their bank-local world position; balls use theirs.
-        if (kind === 'balls') shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * sourcePoint).xyz;');
+        // Keep the source ball lighting while translating its depth image.
+        shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * sourcePoint).xyz;');
         shader.fragmentShader = 'varying float imageGain;\n' + shader.fragmentShader;
         shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= imageGain;\n#include <opaque_fragment>');
       };
@@ -76,16 +72,14 @@ export class MirrorRoom {
   }
   update(width, height, depth) {
     this.depth.value = depth;
-    this.wallMatrix.makeScale(BOX_OFFSETS.length * width, height, depth).setPosition(width / 2, height / 2, 0);
+    this.wallMatrix.makeScale(BOX_OFFSETS.length * width, height, depth * (this.count + 1)).setPosition(width / 2, height / 2, -depth * this.count / 2);
     this.walls.setMatrixAt(0, this.wallMatrix);
     this.walls.instanceMatrix.needsUpdate = true;
     if (this.count === 0) return;
     for (const staged of this.sources) {
-      const { source, kind, capacity, halfWidth, matrices, colors, attributes } = staged;
+      const { source, capacity, matrices, colors, attributes } = staged;
       let n = 0;
       for (let i = 0; i < source.count; i++) {
-        const x = source.instanceMatrix.array[i * 16 + 12];
-        if (kind === 'bars' && (x < -halfWidth || x > width + halfWidth)) continue;
         if (n >= capacity) throw Error('Depth-copy source exceeds visible geometry capacity');
         matrices.set(source.instanceMatrix.array.subarray(i * 16, i * 16 + 16), n * 16);
         colors.set(source.instanceColor.array.subarray(i * 3, i * 3 + 3), n * 3);

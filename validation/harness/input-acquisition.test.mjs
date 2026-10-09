@@ -65,3 +65,15 @@ for (const cancellation of ['context closed', 'route detached']) {
     assert.equal(old.getTracks()[0].readyState, 'ended');
   });
 }
+
+test('closing a pending microphone publishes stopped before acquisition resolves', async t => {
+  const f = fixture(t), ctx = f.context(), stream = f.stream(), states = [];
+  f.card.addEventListener('audio-session', ({ detail }) => states.push(detail.state));
+  const request = await f.pending(ctx);
+  ctx.state = 'closed'; ctx.dispatchEvent(new Event('statechange'));
+  assert.equal(f.card.dataset.audioState, 'stopped');
+  assert.deepEqual(states, ['starting', 'stopped']);
+  f.requests[0](stream); await request.result;
+  assert.deepEqual(states, ['starting', 'stopped']);
+  assert.equal(stream.getTracks()[0].readyState, 'ended');
+});

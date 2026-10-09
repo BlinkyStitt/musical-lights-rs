@@ -35,7 +35,11 @@
   attribution, private local-file processing, diagnostics and exports.
   `/phone` receives ordinary not-found handling.
 - Listening controls the microphone. Digital playback and phone motion have
-  independent lifetimes. Startup, replacement, visibility changes and route
+  independent lifetimes. Listening remains stoppable during microphone startup;
+  closing its context releases audio ownership before a pending acquisition
+  returns. Buffering retains YouTube playback routing. Avoid repeated writes
+  of an unchanged AudioSession type. Visibility alone must not start input.
+  Startup, replacement, visibility changes and route
   cleanup must cancel work before publishing resources from an old session.
   Song identification stays opt-in and microphone-only, with the shared
   cooldown and development upload restriction. Routine tests use mocks;
@@ -47,14 +51,16 @@
   native switches and 44-pixel touch targets. Use hover/focus help and a mobile
   tap popup. Keep less common settings collapsed below the scene.
 - Mobile opens in the expanded video/visualizer/bottom-controls layout without
-  starting audio or requesting native fullscreen. Keep Exit usable in short
+  starting audio or requesting native fullscreen. Normal pages use the same
+  video/scene/bottom-controls order, with extra settings and learning below.
+  Keep Exit usable in short
   landscape screens, with safe areas, recognition and recovery notices.
   Float the video entry over the scene. Keep scene and collider size stable
   while the on-screen keyboard opens; fit the entry to the visible viewport.
   Restore layout sizing and dismiss the keyboard on Load, Remove and Exit.
 - Matching bars grow inward from both ends and reserve space for the balls.
-  Quiet/Loud guides must follow the actual rendered tips and bases. Keep a
-  single accessible meter per source band despite copies and reflections.
+  Omit Quiet/Loud labels. Keep a single accessible meter per source band
+  despite background banks and depth drawing.
 - Draw a direction probability only after a new attack exceeds the recent
   loudness peak. Defaults rise from 5% at 60 BPM to 50% at 200 BPM. Advanced
   settings expose the endpoint tempos, probabilities and curve. Preserve
@@ -63,10 +69,15 @@
   measure it; prefer instancing and avoid recursive reflection cameras, shadow
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
-- Mirror count controls drawing only. Four full-size background boxes flank the
+- Mirror count controls drawing only; six depth images are the default, and
+  saved choices remain unchanged. Four full-size background boxes flank the
   physical center box and reuse all source bands in matching vertical banks.
   Center posts span the collider depth.
-  Depth images are fading translated copies, not optical reflections. Do not add
+  Ball depth images are fading translated copies, not optical reflections.
+  Bars extend as continuous geometry with a smooth depth fade; do not restore
+  per-copy end faces or brightness steps. Cull background bars against their
+  full extruded bounds and verify visible pixels before claiming savings.
+  Do not add
   simulated balls for background boxes or depth images. Keep all bands responsive
   with the configured rise duration; measure packet-to-render delay as well as steps.
   Hide BPM when audio stops; silence eases to
@@ -78,7 +89,7 @@
   or black bar borders. Retain white attack edges. Repeat source lighting across
   the five banks and depth copies, with one outer coating and no internal walls.
   Normal-page scenes use equal gutters and a responsive 320–560 pixel height.
-  The default sweep spans −20° to +20° over a 48-second cycle.
+  The default sweep spans −10° to +10° over a 48-second cycle.
 - Listening adds a core-owned travelling floor of at most one sixth of bar
   travel. Keep measured loudness, filtered targets, accessible audio meters and
   attack eligibility separate. Disable this floor under Reduced Motion and

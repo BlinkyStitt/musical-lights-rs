@@ -412,7 +412,8 @@ pub fn DancingLights(
             <div class="audio-controls">
                 <div class="button-row">
                     <SettingSwitch label="Listening" class="listening-toggle"
-                        checked=listening.into() disabled=Signal::derive(move || starting.get() || input_source.get() != "microphone")
+                        checked=Signal::derive(move || listening.get() || starting.get() && input_source.get() == "microphone")
+                        disabled=Signal::derive(move || input_source.get() != "microphone")
                         on_change=Callback::new(move |enabled| {
                             if enabled { start(); } else {
                                 stop();
@@ -498,7 +499,6 @@ pub fn DancingLights(
                             </div>
                         }
                     }).collect_view()}
-                    <span class="meter-guide" aria-hidden="true"><span>"QUIET"</span><span>"LOUD"</span><span>"LOUD"</span><span>"QUIET"</span></span>
                     <span class="balloon-layer" aria-hidden="true" node_ref=canvas_layer></span>
                 </div>
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
@@ -533,7 +533,7 @@ pub fn DancingLights(
                         <p class="direction-error" role="status"></p>
                     </fieldset>
                     <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
-                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="17" step="1" value="3"/></label>
+                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="17" step="1" value="6"/></label>
                     <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. Copies use the same bars and balls."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <p>"Smooth left-to-right rotation. The angle slider sets the center. Reduced Motion stops the automatic rotation."</p>

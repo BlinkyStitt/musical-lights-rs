@@ -33,6 +33,9 @@ function beginSession(context, card, source) {
     session.publish('starting', 'start');
     let stateBeforeInterruption = 'starting';
     const stateChanged = () => {
+        // A canceled acquisition may never return. Closing its context ends
+        // ownership now, before a late getUserMedia result can arrive.
+        if (context.state === 'closed') { session.close(); return; }
         if (context.state !== 'running') {
             if (session.state !== 'interrupted') stateBeforeInterruption = session.state;
             session.publish('interrupted', context.state);

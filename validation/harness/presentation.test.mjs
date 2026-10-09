@@ -14,8 +14,8 @@ test('stored display settings restore valid preferences without restoring live p
   assert.equal(read({ version: 1, youtubeLink: '' }).youtubeLink, '');
   assert.deepEqual(read({ version: 1, directionOdds: [80, 180, .1, .6, 2], cameraAngle: -20, cameraMotion: false }).directionOdds, [80, 180, .1, .6, 2]);
   assert.equal(read({ version: 1, cameraMotion: false }).cameraMotion, false);
-  for (const mirrorCount of [0, 1, 8, 17]) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, mirrorCount);
-  for (const mirrorCount of [-1, 18, 1.5, '8']) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, 3);
+  for (const mirrorCount of [0, 1, 3, 8, 17]) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, mirrorCount);
+  for (const mirrorCount of [-1, 18, 1.5, '8']) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, 6);
   assert.deepEqual(read({ version: 1, directionOdds: [200, 60, .5, .05, 1], flight: 99, cameraAngle: '20' }).directionOdds, [60, 200, .05, .5, 1]);
   assert.equal(read({ version: 1, physics: [0.6, -1, 8, .72, .12, .24, .04, .32] }).physics, undefined);
   assert.deepEqual(read({ version: 2, directionOdds: [80, 180, .1, .6, 2] }).directionOdds, [60, 200, .05, .5, 1]);

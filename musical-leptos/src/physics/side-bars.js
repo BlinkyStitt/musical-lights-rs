@@ -6,6 +6,7 @@ import { barProjection, BOX_OFFSETS } from './mirrors.js';
 export class SideBars {
   constructor(scene, bars, count) {
     this.scene = scene; this.bars = bars;
+    this.frustum = new THREE.Frustum(); this.projection = new THREE.Matrix4(); this.bounds = new THREE.Box3();
     this.capacity = (count + 1) * 2 * (BOX_OFFSETS.length - 1);
     bars.geometry.computeBoundingBox();
     this.geometry = bars.geometry.clone();
@@ -27,8 +28,12 @@ export class SideBars {
     this.mesh.frustumCulled = false; this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
   }
-  update(layout) {
+  update(layout, camera, copies, depth) {
     const [count, , width] = layout;
+    if (camera) {
+      camera.updateMatrixWorld();
+      this.frustum.setFromProjectionMatrix(this.projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    }
     const source = this.bars.instanceMatrix.array, target = this.mesh.instanceMatrix.array;
     let n = 0;
     for (const box of BOX_OFFSETS) {
@@ -37,6 +42,12 @@ export class SideBars {
       for (let i = 0; i < this.bars.count; i++) {
         const x = source[i * 16 + 12];
         if (x < -this.halfWidth || x > width + this.halfWidth) continue;
+        if (camera) {
+          const y = source[i * 16 + 13], halfHeight = Math.abs(source[i * 16 + 5]) / 2;
+          this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight, -depth * (copies + .5));
+          this.bounds.max.set(x + offset + this.halfWidth, y + halfHeight, depth / 2);
+          if (!this.frustum.intersectsBox(this.bounds)) continue;
+        }
         if (n >= this.capacity) throw Error('Background bars exceed the bounded seam capacity');
         target.set(source.subarray(i * 16, i * 16 + 16), n * 16);
         target[n * 16 + 12] += offset;
@@ -47,9 +58,9 @@ export class SideBars {
       }
     }
     this.mesh.count = n;
-    this.geometry.attributes.edge.needsUpdate = true;
-    this.geometry.attributes.backgroundOffset.needsUpdate = true;
-    this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true;
+    for (const attr of [this.geometry.attributes.edge, this.geometry.attributes.backgroundOffset, this.mesh.instanceMatrix, this.mesh.instanceColor]) {
+      attr.clearUpdateRanges(); attr.addUpdateRange(0, n * attr.itemSize); attr.needsUpdate = true;
+    }
   }
   dispose() { this.scene.remove(this.mesh); this.geometry.dispose(); this.material.dispose(); this.mesh.dispose(); }
 }

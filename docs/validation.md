@@ -622,7 +622,7 @@ change makes no live AudD request.
 
 `mirrors.spec.mjs` checks actual GPU pixels at front and oblique camera angles,
 transparent exterior faces, bounded draw calls, matched per-end bar extents,
-projected Quiet/Loud guides, saved probability curves and mobile default entry
+the absence of Quiet/Loud labels, saved probability curves and mobile default entry
 without capture. Short landscape combines a mock video, a long recognition
 ticker, a recovery notice, the angle slider and all bottom controls. Each GPU check
 saves frame cost and front/side images. These measurements describe the browser host, not
@@ -679,10 +679,10 @@ fixture with the real processor and its real completion acknowledgement.
 The renderer uses finite unit-height boxes, scaled to each published physical
 bar height. Their full depth matches the physical support. Matching vertical
 banks fill four adjacent background boxes; all five boxes reuse the same source
-bands and only the center box contains simulated balls. Quiet/Loud guides and
+bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands.
 
-The mirror-count setting defaults to three images and controls a finite stack
+The mirror-count setting defaults to six images and controls a finite stack
 of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
 instanced meshes draw copied bars, background bars and balls. They use no
 reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
@@ -706,7 +706,7 @@ An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
 automatic camera motion while the user sets the angle. Automatic rotation uses a
-24-second horizontal sine cycle through ±30° around the selected center angle,
+48-second horizontal sine cycle through ±10° around the selected center angle,
 with less travel near the slider limits. It has no attack shake or vertical wobble.
 Reduced Motion stops the sweep. The renderer draws no box-frame outlines.
 Expanded Home and Advanced show rendered FPS beside the angle slider, updated
@@ -792,3 +792,50 @@ depth images. GPU timers averaged 0.226 ms (p95 0.249 ms); application animation
 callbacks averaged 0.461 ms per frame. Uploads remained 92,640 bytes per frame.
 The larger normal frame changes the scene geometry, so this complete-scene
 measurement does not isolate lighting cost or establish physical-phone FPS.
+
+### Audio/video lifecycle and continuous depth bars
+
+The YouTube fixture records each player instance and permits late callbacks from
+replaced or removed players. Synthetic microphone capture supplies streams without
+using the host microphone or changing speaker volume. Tests cover canceled pending
+capture and blocked startup resume, repeated Listening/play/pause clicks, buffering,
+permission denial, tab hide/restore with and without an OS audio interruption,
+explicit recovery, digital-source handoff, and route cleanup. An interruption must
+release the capture tracks, restore the remaining player's audio mode, and leave
+Listening usable. Showing the tab must not acquire a new microphone. These mocks
+prove application ownership and cleanup; they do not prove real YouTube, Safari
+hardware routing, or physical-phone audio behavior.
+
+Listening remains available during startup so the user can cancel an outstanding
+permission or resume request. Closing an AudioContext publishes session shutdown
+immediately, even if acquisition has not returned. YouTube buffering retains
+playback mode. Repeated state notifications do not write the same AudioSession type
+again. Older player callbacks cannot replace the current audio owner.
+
+Bars now use one continuous depth extrusion per rendered bar, with a smooth color
+fade instead of separate end faces and brightness steps at every copied box.
+Ball depth images still copy the eight physical transforms; the large physical
+balls use 32 horizontal and 20 vertical sphere segments. Background bar culling
+uses the entire extruded box, including the trailing depth, and retains all 24
+source bands and accessible meters. Pixel tests compare culled and complete
+background banks at five angles and 0, 3, 8 and 17 depth settings. Side-surface
+samples check color continuity across the former copy boundaries. Normal pages
+share the video/visualizer/bottom-controls order with expanded mode; extra settings
+and Home learning content remain below the presentation.
+
+Under the same 390 × 844/DPR 3, fourfold CPU throttle, fixed 20° camera,
+real-worklet synthetic microphone PCM, five-second warmup and 30-second sample,
+SwiftShader measured 54.84 FPS before the continuous-depth changes and 60.00 FPS
+with both three and six depth images afterward. Application animation work
+averaged 0.933 ms before, 0.390 ms with three images, and 0.454 ms with six.
+Uploads averaged 92,640, 18,214 and 23,445 bytes per frame respectively. These
+compare the complete renderer changes, including smoother balls and camera
+framing; they do not isolate one optimization. They are individual host samples,
+not physical Android/iPhone acceptance. Six is the new depth default; valid saved
+counts, including three, remain unchanged.
+
+A further run of the final compiled six-image renderer measured 54.94 FPS,
+0.608 ms of application animation work per frame, and 23,441 upload bytes per
+frame under the same software-renderer conditions. This variation means the
+samples do not prove sustained 60 FPS. The upload reduction is about 75% against
+the baseline; physical-phone frame rate remains unverified.
