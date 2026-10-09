@@ -870,7 +870,7 @@ sustained 60 FPS. Default instance storage falls from the temporary 256-slot
 pool's 245,760 bytes to eight slots, without reducing the six drawn images.
 
 The final growing-pool 2,048-image Metal build measured 60.00 FPS, 1.415 ms of
-application animation work and 3.264 ms of GPU time, with 1,962,531 upload bytes
+application animation work and 3.264 ms of GPU time, with 1,862,532 upload bytes
 per frame and 1,966,080 bytes of image-instance storage. The 32,768-image
 boundary repeat stayed at 60.00 FPS. These runs preserve eight simulated balls;
 image count changes only drawing. The high settings are optional and do not
