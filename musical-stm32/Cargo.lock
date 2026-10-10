@@ -914,7 +914,6 @@ name = "musical-lights-core"
 version = "1.0.0"
 dependencies = [
  "ahrs",
- "circular-buffer",
  "cobs 0.5.1",
  "crc",
  "defmt 1.1.1",
@@ -927,7 +926,6 @@ dependencies = [
  "micromath",
  "nalgebra",
  "num",
- "num-complex",
  "palette",
  "postcard",
  "serde",

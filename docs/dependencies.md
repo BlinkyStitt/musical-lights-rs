@@ -8,7 +8,7 @@ The user requested current releases and pre-releases. These major upgrades requi
 | --- | --- | --- |
 | ahrs | `0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9` | core, stm32 |
 | anyhow | `=1.0.104` | terminal |
-| circular-buffer | `=2.0.1` | core, stm32 |
+| circular-buffer | `=2.0.1` | stm32 |
 | cobs | `=0.5.1` | core |
 | console_error_panic_hook | `=0.1.7` | leptos, wasm |
 | console_log | `=1.1.0` | leptos, wasm |
@@ -16,17 +16,17 @@ The user requested current releases and pre-releases. These major upgrades requi
 | cortex-m-rt | `=0.7.6` | feather, stm32 |
 | cpal | `=0.18.2` | terminal |
 | crc | `=3.4.0` | core |
-| critical-section | `=1.2.0` | terminal, esp-embassy |
+| critical-section | `=1.2.0` | esp-embassy |
 | dagc | `=0.1.1` | esp-idf |
 | defmt | `=1.1.1` | core, stm32, esp-embassy |
 | defmt-rtt | `=1.3.0` | stm32 |
 | dioxus | `=0.8.0-alpha.1` | dioxus |
 | embassy-embedded-hal | `=0.6.0` | stm32 |
-| embassy-executor | `=0.10.0` | terminal, feather, stm32, esp-embassy |
+| embassy-executor | `=0.10.0` | feather, stm32, esp-embassy |
 | embassy-futures | `=0.1.2` | stm32, esp-embassy |
 | embassy-stm32 | `=0.6.0` | stm32 |
-| embassy-sync | `=0.8.0` | terminal, feather, stm32, esp-embassy |
-| embassy-time | `=0.5.1` | core, terminal, stm32, esp-embassy |
+| embassy-sync | `=0.8.0` | feather, stm32, esp-embassy |
+| embassy-time | `=0.5.1` | core, stm32, esp-embassy |
 | embedded-alloc | `=0.7.0` | stm32 |
 | embedded-graphics | `=0.8.2` | terminal, esp-idf |
 | embedded-graphics-simulator | `=0.8.0` | terminal |
@@ -48,7 +48,7 @@ The user requested current releases and pre-releases. These major upgrades requi
 | heapless | `=0.9.3` | core, feather, stm32, esp-embassy, esp-idf |
 | i24 | `=2.3.5` | core |
 | infrared | `=0.14.2` | esp-idf |
-| itertools | `=0.15.0` | core, stm32, esp-idf |
+| itertools | `=0.15.0` | core, stm32 |
 | js-sys | `=0.3.105` | leptos, dioxus, wasm |
 | leptos | `=0.9.0-beta` | leptos |
 | leptos_router | `=0.9.0-beta1` | leptos |
@@ -59,7 +59,6 @@ The user requested current releases and pre-releases. These major upgrades requi
 | musical-lights-core | `../musical-lights-core` | terminal, leptos, worklet, dioxus, feather, stm32, esp-embassy, esp-idf |
 | nalgebra | `=0.35.0` | core, stm32 |
 | num | `=0.4.3` | core, leptos |
-| num-complex | `=0.4.6` | core |
 | once_cell | `=1.21.4` | esp-idf |
 | palette | `=0.7.7` | core, stm32 |
 | panic-halt | `=1.0.0` | feather |
@@ -71,9 +70,8 @@ The user requested current releases and pre-releases. These major upgrades requi
 | resampler | `=0.5.1` | terminal non-48-kHz input |
 | rapier3d | `=0.34.0` | physics (Apache-2.0) |
 | smart-leds | `=0.4.0` | core, stm32, esp-embassy, esp-idf |
-| smart-leds-matrix | `=0.2.0` | terminal |
 | smart-leds-trait | `=0.3.2` | stm32, esp-idf |
-| static_cell | `=2.1.1` | terminal, stm32, esp-embassy, esp-idf |
+| static_cell | `=2.1.1` | stm32, esp-embassy, esp-idf |
 | sx1262 | `=0.3.0` | esp-embassy |
 | terrors | `=0.3.3` | leptos |
 | test-log | `=0.2.21` | core (dev) |

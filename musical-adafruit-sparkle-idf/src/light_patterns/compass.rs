@@ -3,7 +3,7 @@ use smart_leds::{
     RGB8,
 };
 
-use crate::{light_patterns::loading, State};
+use crate::{compass::State, light_patterns::loading};
 
 /// TODO: actually show the compass
 pub fn compass(base_hsv: Hsv, light_data: &mut [RGB8], state: &State) {
