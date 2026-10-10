@@ -1,38 +1,11 @@
-//! Audio processing
-//!
-//! Samples -> Buffer -> Window -> FFT -> Amplitudes -> WeightedAmplitudes -> AggregatedAmplitudes -> Decibels -> MicLoudness
-//!                                                                           (Bark, Shazam, etc.)
-//!
-//! TODO: bucket by note
-mod amplitudes;
-mod bark_scale;
+//! Continuous calibrated loudness, shared display activity, and PCM utilities.
 pub mod browser;
-mod buffered_fft;
-mod decibels;
-mod down_resistance_builder;
-mod exponential_scale;
-mod fft;
 mod i2s;
+pub mod jacket;
 pub mod loudness;
 pub mod partial;
-mod peak_scaled;
 mod samples;
-mod shazam;
-pub mod visual;
-mod weighting;
-
-pub use amplitudes::{AggregatedBins, AggregatedBinsBuilder, Amplitudes, WeightedAmplitudes};
-pub use bark_scale::{BarkScaleAmplitudes, BarkScaleBuilder};
-pub use buffered_fft::{BufferedFFT, FftOutputs, bin_to_frequency, frequency_to_bin};
-pub use decibels::Decibels;
-pub use down_resistance_builder::DownResistanceBuilder;
-pub use exponential_scale::{ExponentialScaleAmplitudes, ExponentialScaleBuilder};
-pub use i2s::{parse_i2s_16_bit_mono_to_f32_array, parse_i2s_24_bit_mono_to_f32_array};
-pub use peak_scaled::PeakScaledBuilder;
-pub use samples::{Samples, WindowedSamples};
-pub use shazam::{SHAZAM_SCALE_OUT, ShazamScaleBuilder};
-pub use weighting::{AWeighting, FlatWeighting, Weighting};
-
-// TODO: test comparing bark scale and exponential scale
-
 pub mod tempo;
+pub mod visual;
+pub use i2s::{parse_i2s_16_bit_mono_to_f32_array, parse_i2s_24_bit_mono_to_f32_array};
+pub use samples::Samples;

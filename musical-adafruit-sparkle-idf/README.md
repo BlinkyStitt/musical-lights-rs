@@ -2,6 +2,14 @@
 
 Rust's standard library on a tiny little $25 computer. Amazing.
 
+The default `net` binary runs the 400-pixel net and its onboard microphone at
+48 kHz. It starts only the audio and LED resources. Sensor-board readiness does
+not control startup. `light-check` remains a separate bench application.
+
+The library exposes `compass` state and UART tasks, `sensor_uart`, and the
+existing light patterns. A compass application can use these modules with its
+own entry point and resource setup.
+
 # Development
 
 Use ESP-IDF `v6.1`, toolchain `esp-1.98.1.0`, and `espup 0.17.1`.

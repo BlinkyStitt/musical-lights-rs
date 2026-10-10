@@ -3,7 +3,7 @@ use smart_leds::{
     RGB8,
 };
 
-use crate::State;
+use crate::compass::State;
 
 /// TODO: actually show the compass
 /// TODO: this should be a struct that keeps track of where it is in this pattern.

@@ -1,11 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
-test('render the share image with the actual shared rainbow palette', async ({ page }) => {
+test('render the share image with the actual shared rainbow palette', async ({ page }, testInfo) => {
   await page.goto('http://127.0.0.1:8101');
   await expect(page.getByRole('meter')).toHaveCount(24);
-  const colors = await page.locator('.bark-group > .meter:first-child .meter-fill').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+  const colors = await page.locator('.bark-group').evaluateAll(nodes => nodes.map(node => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext('2d');
+    context.fillStyle = getComputedStyle(node).getPropertyValue('--band-color');
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return `rgb(${r}, ${g}, ${b})`;
+  }));
   expect(colors).toHaveLength(24);
+  await writeFile(testInfo.outputPath('palette.json'), JSON.stringify(colors, null, 2));
   await page.setViewportSize({ width: 1200, height: 630 });
   await page.setContent(await readFile(new URL('./card.html', import.meta.url), 'utf8'));
   await page.evaluate(async colors => {
@@ -21,5 +31,5 @@ test('render the share image with the actual shared rainbow palette', async ({ p
     });
     await document.fonts.ready;
   }, colors);
-  await page.screenshot({ path: '../musical-leptos/public/social-preview.png' });
+  await page.screenshot({ path: fileURLToPath(new URL('../../musical-leptos/public/social-preview.png', import.meta.url)) });
 });

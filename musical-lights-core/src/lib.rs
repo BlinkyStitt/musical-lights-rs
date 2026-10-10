@@ -21,8 +21,8 @@ pub mod message;
 pub mod orientation;
 pub mod radio;
 pub mod sd;
+pub mod sensor_mount;
 pub mod speaker;
-pub mod windows;
 
 /// Map t in range [a, b] to range [c, d]
 /// TODO: remap for u8 and u16

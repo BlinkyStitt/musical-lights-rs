@@ -258,12 +258,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "circular-buffer"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "662f6b21c6e889ee4e3f449e197c40f03603472fcd40c709093d386e3dca07cf"
-
-[[package]]
 name = "clang-sys"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1258,7 +1252,6 @@ dependencies = [
  "flume",
  "heapless 0.9.3",
  "infrared",
- "itertools 0.15.0",
  "log",
  "musical-lights-core",
  "once_cell",
@@ -1274,7 +1267,6 @@ name = "musical-lights-core"
 version = "1.0.0"
 dependencies = [
  "ahrs",
- "circular-buffer",
  "cobs 0.5.1",
  "crc",
  "defmt",
@@ -1287,7 +1279,6 @@ dependencies = [
  "micromath",
  "nalgebra 0.35.0",
  "num",
- "num-complex",
  "palette",
  "postcard",
  "serde",

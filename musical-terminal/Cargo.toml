@@ -10,14 +10,6 @@ resolver = "2"
 [dependencies]
 anyhow = "=1.0.104"
 cpal = "=0.18.2"
-critical-section = { version = "=1.2.0", features = ["std"] }
-embassy-executor = { version = "=0.10.0", features = [
-    "platform-std",
-    "executor-thread",
-    "log",
-] }
-embassy-sync = { version = "=0.8.0", features = ["log", "std"] }
-embassy-time = { version = "=0.5.1", features = ["log", "std"] }
 embedded-graphics = { version = "=0.8.2", features = [
     "nalgebra_support",
     "defmt",
@@ -33,5 +25,3 @@ musical-lights-core = { path = "../musical-lights-core", features = [
     "std",
     "log",
 ] }
-smart-leds-matrix = "=0.2.0"
-static_cell = { version = "=2.1.1", features = ["nightly"] }

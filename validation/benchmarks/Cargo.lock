@@ -172,12 +172,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "circular-buffer"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "662f6b21c6e889ee4e3f449e197c40f03603472fcd40c709093d386e3dca07cf"
-
-[[package]]
 name = "clap"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -576,7 +570,6 @@ name = "musical-lights-core"
 version = "1.0.0"
 dependencies = [
  "ahrs",
- "circular-buffer",
  "cobs 0.5.1",
  "crc",
  "enterpolation",
@@ -587,7 +580,6 @@ dependencies = [
  "micromath",
  "nalgebra",
  "num",
- "num-complex",
  "palette",
  "postcard",
  "serde",
