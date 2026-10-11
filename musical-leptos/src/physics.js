@@ -202,7 +202,7 @@ export class PhysicsInput {
 
 // Async module ownership also covers route changes during download or WASM compilation.
 export class Scene {
-  constructor(layer, palette, onFrame) {
+  constructor(layer, palette, onFrame, waveLight) {
     palette = new Float32Array(palette);
     this.closed = false;
     const card = layer.closest('.audio-card');
@@ -309,7 +309,7 @@ export class Scene {
     };
     import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/view.js', document.baseURI)).then(({ PhysicsView }) => {
       if (this.closed) return;
-      this.view = new PhysicsView(layer, palette, onFrame, this.input);
+      this.view = new PhysicsView(layer, palette, onFrame, this.input, waveLight);
     }).catch(error => {
       if (!this.closed) layer.closest('.audio-card').querySelector('.physics-status').textContent = `Cannot start 3D physics: ${error}`;
     });

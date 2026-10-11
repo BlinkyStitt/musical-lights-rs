@@ -733,13 +733,19 @@ color as the base. Surface haze fades into the bank before the camera clipping
 plane.
 The fog adds one draw call, with no reflection camera or extra render target.
 
-
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
 physical simulation stay unchanged. Background culling includes the full vertical
 and depth extrusion. The browser suite checks visible pixels above and below the
 room, opaque fog in empty air, light scattering, and complete-batch culling.
 
+With the microphone off, the rising side of the wave receives sustained light.
+Equal-height frames retain that light, so tall held bars remain bright. The light
+uses a 180 ms release when the bar starts to fall. All paired bars, background
+banks and fog use that light. The shared core owns the calculation. Microphone
+input keeps its acoustic attack envelope. Raw
+loudness, filtered targets, accessible audio meters and direction eligibility
+stay separate.
 
 The shared core defaults to a 40 ms rise for every band. Advanced exposes the
 rise duration in milliseconds and preserves saved overrides. The brake duration

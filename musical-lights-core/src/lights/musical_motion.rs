@@ -68,6 +68,48 @@ pub fn idle_wave(column: usize, columns: usize, seconds: f64, reduced: bool) -> 
         * Float::sin(core::f64::consts::TAU * (column as f64 / columns as f64 - seconds / period))
 }
 
+/// Sustained light on the rising side of a visual wave. Equal-height display
+/// frames retain the direction; a smooth release follows the falling side.
+#[derive(Clone, Copy, Default)]
+pub struct WaveLight {
+    previous: Option<(f32, f64)>,
+    rising: bool,
+    intensity: f32,
+}
+impl WaveLight {
+    pub fn sample(&mut self, height: f32, maximum: f32, seconds: f64, enabled: bool) -> f32 {
+        if !enabled
+            || !height.is_finite()
+            || !maximum.is_finite()
+            || maximum <= 0.0
+            || !seconds.is_finite()
+        {
+            *self = Self::default();
+            return 0.0;
+        }
+        let height = height.clamp(0.0, maximum);
+        let dt = if let Some((previous, at)) = self.previous {
+            if seconds < at {
+                *self = Self::default();
+                self.previous = Some((height, seconds));
+                return 0.0;
+            }
+            if height > previous {
+                self.rising = true;
+            } else if height < previous {
+                self.rising = false;
+            }
+            (seconds - at).min(0.1)
+        } else {
+            0.0
+        };
+        self.previous = Some((height, seconds));
+        let target = if self.rising { height / maximum } else { 0.0 };
+        self.intensity += (target - self.intensity) * (-Float::exp_m1(-dt / 0.18)) as f32;
+        self.intensity
+    }
+}
+
 /// Decorative microphone-listening floor, separate from measured loudness.
 /// One sixth of bar travel at most; louder audio replaces it. No attack cues.
 pub fn listening_level(level: f32, column: usize, seconds: f64, reduced: bool) -> f32 {
@@ -101,6 +143,36 @@ pub fn remember_pigment(history: &mut [f32; 9], pigment: [f32; 3]) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wave_light_holds_rising_bars_and_releases_falling_bars_at_all_frame_rates() {
+        for fps in [30, 60, 120] {
+            let mut light = WaveLight::default();
+            assert_eq!(light.sample(0.1, 0.2, 0.0, true), 0.0);
+            for frame in 1..=fps {
+                let at = f64::from(frame) / f64::from(fps);
+                light.sample(0.1 + at as f32 * 0.1, 0.2, at, true);
+            }
+            let rising = light.intensity;
+            assert!(rising > 0.85);
+            for frame in 1..=fps {
+                let at = 1.0 + f64::from(frame) / f64::from(fps);
+                let held = light.sample(0.2, 0.2, at, true);
+                assert!(held >= rising);
+                assert_eq!(light.sample(0.2, 0.2, at, true), held);
+            }
+            assert!(light.intensity > 0.99);
+            let mut previous = light.intensity;
+            for frame in 1..=fps {
+                let dt = f64::from(frame) / f64::from(fps);
+                let falling = light.sample(0.2 - dt as f32 * 0.1, 0.2, 2.0 + dt, true);
+                assert!(falling < previous && previous - falling < 0.18);
+                previous = falling;
+            }
+            assert!(light.intensity < 0.004);
+            assert_eq!(light.sample(0.2, 0.2, 4.0, false), 0.0);
+            assert_eq!(light.sample(f32::NAN, 0.2, 5.0, true), 0.0);
+        }
+    }
     #[test]
     fn listening_floor_is_small_travelling_and_separate_from_louder_audio() {
         for band in 0..24 {

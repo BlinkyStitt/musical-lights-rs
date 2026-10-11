@@ -42,11 +42,12 @@ export class PhysicsNotice {
 }
 
 export class PhysicsView {
-  constructor(layer, palette, onFrame, motion) {
+  constructor(layer, palette, onFrame, motion, waveLight) {
     this.layer = layer;
     this.graph = layer.parentElement;
     this.card = this.graph.closest('.audio-card');
     this.onFrame = onFrame;
+    this.waveLight = waveLight;
     this.palette = palette;
     this.closed = false;
     this.lost = false;
@@ -469,6 +470,9 @@ export class PhysicsView {
     }
     for (let i = 0; i < count; i++) {
       const top = current[barOffset + i];
+      const wave = this.waveLight(i, top, current[this.layout[17] + 1], now / 1000, !this.listening);
+      const edge = this.listening ? this.edges[i] : wave * (this.reduced.matches ? .5 : 1);
+      for (let copy = 0; copy < 6; copy++) this.meshEdges[i + copy * count] = edge;
       const column = (i + phase) % count;
       this.object.scale.set(1, top, 1);
       for (let end = 0; end < 2; end++) {
@@ -560,7 +564,6 @@ export class PhysicsView {
       }
     }
     this.input.set(levels, 0); this.edges.set(edges);
-    for (let copy = 0; copy < 6; copy++) this.meshEdges.set(edges, copy * 24);
     this.input[33] = scrolling ? 1 : 0;
   }
   clearMotion() { this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38); }
