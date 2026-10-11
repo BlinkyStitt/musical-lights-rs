@@ -19,18 +19,16 @@ function imageGeometry(staged, count) {
   const geometry = new THREE.SphereGeometry(1, 12, 8);
   for (const { name, attr } of attributes) geometry.setAttribute(name,
     new THREE.InstancedBufferAttribute(new Float32Array(capacity * attr.itemSize * count), attr.itemSize));
-  const offsets = new Float32Array(count * capacity), gains = new Float32Array(offsets.length);
+  const offsets = new Float32Array(count * capacity);
   for (let c = 0; c < count; c++) {
     offsets.fill(cells[c][2], c * capacity, (c + 1) * capacity);
-    gains.fill(.72 ** (c + 1), c * capacity, (c + 1) * capacity);
   }
   geometry.setAttribute('copyDepth', new THREE.InstancedBufferAttribute(offsets, 1));
-  geometry.setAttribute('copyGain', new THREE.InstancedBufferAttribute(gains, 1));
   return geometry;
 }
 
 export class MirrorRoom {
-  constructor(scene, balls, count) {
+  constructor(scene, balls, count, lighting) {
     mirrorCells(count);
     this.poolCount = Math.min(MAX_DEPTH_IMAGES, 2 ** Math.ceil(Math.log2(Math.max(1, count))));
     this.scene = scene;
@@ -54,16 +52,16 @@ export class MirrorRoom {
       material.onBeforeCompile = shader => {
         source.material.onBeforeCompile(shader);
         shader.uniforms.mirrorDepth = this.depth;
-        shader.vertexShader = 'attribute float copyDepth; attribute float copyGain; uniform float mirrorDepth; varying float imageGain;\n' + shader.vertexShader;
+        shader.vertexShader = 'attribute float copyDepth; uniform float mirrorDepth; varying float copyDepthForLight;\n' + shader.vertexShader;
         shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `
           vec4 sourcePoint = instanceMatrix * vec4(transformed, 1.0);
           vec4 mvPosition = modelViewMatrix * vec4(sourcePoint.xyz + vec3(0.0, 0.0, copyDepth * mirrorDepth), 1.0);
-          imageGain = copyGain;
+          copyDepthForLight = copyDepth;
           gl_Position = projectionMatrix * mvPosition;`);
         // Keep the source ball lighting while translating its depth image.
         shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * sourcePoint).xyz;');
-        shader.fragmentShader = 'varying float imageGain;\n' + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= imageGain;\n#include <opaque_fragment>');
+        shader.fragmentShader = 'varying float copyDepthForLight;\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fade = pow(reflectionFade, max(0.0, -copyDepthForLight)); outgoingLight = outgoingLight * fade + (totalEmissiveRadiance + nearbyLight) * (1.0 - fade);\n#include <opaque_fragment>');
       };
       const mesh = new THREE.InstancedMesh(geometry, material, capacity * this.poolCount);
       mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -73,8 +71,9 @@ export class MirrorRoom {
     // One continuous outer coating has no partitions between repeated banks.
     // Transparent outside faces and faint inside coatings, without box outlines.
     // Only the center box participates in physics.
-    this.walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshBasicMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), 1);
+    this.walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1, 120, 16, 1),
+      new THREE.MeshLambertMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), 1);
+    this.walls.material.onBeforeCompile = shader => lighting.apply(shader);
     this.walls.frustumCulled = false; this.wallMatrix = new THREE.Matrix4();
     scene.add(this.walls);
     this.setCount(count);

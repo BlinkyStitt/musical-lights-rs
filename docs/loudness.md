@@ -60,6 +60,8 @@ Advanced controls expose gain, smoothing, attack history and gates, flash timing
 
 Auto depth measures observed frame cadence, tests bounded increasing counts, then freezes the largest passing count. It requires at least 95% of the measured cadence, a 95th-percentile interval below 1.25 refresh periods, and fewer than 1% missed frames. It does not infer GPU speed from CPU or memory hints. Saved counts remain manual; Auto and Retest are explicit controls. Hiding the scene, hiding the page, or losing its graphics context stops a measurement at its best completed count. Retest starts a new measurement when the scene is visible.
 
+A bounded field uses 24 paired light strips and eight physical ball sources. Bars emit their palette colors; balls emit their pigment colors. White attacks illuminate nearby surfaces through the full tunnel depth. The shader samples the field at mesh vertices and interpolates across faces. The single outer coating has fixed subdivisions. All five banks and translated depth images reuse these sources. There are no additional physical balls, per-copy light objects, shadow maps, recursive reflection cameras, or bloom passes. Controls expose glow, spill strength/range, depth fade, resolution, camera sweep, and scrolling speed.
+
 ## Scientific sources and implementation roles
 
 - [ISO 532-1:2017, Zwicker method](https://www.iso.org/standard/63077.html) defines the authoritative time-varying loudness calculation. The application uses its existing implementation rather than mixing loudness models.

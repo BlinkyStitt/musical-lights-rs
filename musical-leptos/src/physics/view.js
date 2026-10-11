@@ -1,4 +1,5 @@
 import { AutoDepth } from './depth-auto.js';
+import { SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
 import { MirrorRoom, barProjection } from './mirrors.js';
@@ -100,7 +101,7 @@ export class PhysicsView {
       this.lost = false; this.notice.clear(); this.pause();
     });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
-    this.attackLights = Array.from({ length: 4 }, () => { const light = new THREE.PointLight(0xffffff, 0, .45, 2); this.scene.add(light); return light; });
+    this.lighting = new SceneLighting(palette, this.settings);
     const light = new THREE.DirectionalLight(0xffffff, 1.8); light.position.set(-1, 3, 4); this.scene.add(light);
     const fill = new THREE.DirectionalLight(0xffffff, .9); fill.position.set(2, 1, 1); this.scene.add(fill);
     this.pointerPoint = new THREE.Vector3(); this.pointerRay = new THREE.Raycaster(); this.pointerCoordinates = new THREE.Vector2(); this.pointerPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -179,6 +180,7 @@ export class PhysicsView {
     this.listen(this.card, 'camera-reset', () => { this.cameraBase = 0; this.setCamera(0); });
     this.listen(this.card, 'display-settings', ({ detail }) => {
       this.settings = detail;
+      this.lighting.configure(detail); this.resizePending = true;
       if (detail.depthMode !== 'auto') this.depthProfile?.cancel();
       if (this.mirrors && this.mirrors.count !== detail.mirrorCount) {
         this.mirrors.setCount(detail.mirrorCount);
@@ -259,8 +261,10 @@ export class PhysicsView {
     this.height = Math.max(this.layout?.[19] ?? .4, this.width * box.height / box.width);
     if (this.input[32] !== this.height && this.timing.resizes.length < 5000) this.timing.resizes.push({ at: performance.now(), from: this.input[32], to: this.height });
     this.input[32] = this.height;
-    if (box.width !== this.canvasWidth || box.height !== this.canvasHeight) {
-      const ratio = Math.min(devicePixelRatio, 2, Math.sqrt(200000 / (box.width * box.height)));
+    const resolution = this.settings.resolution ?? 1;
+    if (box.width !== this.canvasWidth || box.height !== this.canvasHeight || resolution !== this.renderResolution) {
+      const ratio = Math.min(devicePixelRatio, 2, Math.sqrt(200000 * resolution ** 2 / (box.width * box.height)));
+      this.renderResolution = resolution;
       this.pixelRatio.value = ratio;
       this.renderer.setPixelRatio(ratio);
       this.renderer.setSize(box.width, box.height, false);
@@ -316,8 +320,8 @@ export class PhysicsView {
     this.cameraAt = now;
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Ease through both turns without a clamp, attack kick or vertical wobble.
-    const amplitude = Math.min(10, 40 - Math.abs(this.cameraBase));
-    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / 48000) : 0);
+    const amplitude = Math.min(this.settings.sweepAngle ?? 10, 40 - Math.abs(this.cameraBase));
+    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / ((this.settings.sweepSeconds ?? 48) * 1000)) : 0);
     this.automaticCamera = true;
     this.setCamera(yaw);
     this.automaticCamera = false;
@@ -377,6 +381,7 @@ export class PhysicsView {
     const ballMaterial = new THREE.MeshLambertMaterial();
     this.patternTime = { value: 0 };
     ballMaterial.onBeforeCompile = shader => {
+      this.lighting.apply(shader);
       shader.uniforms.patternTime = this.patternTime;
       shader.vertexShader = 'attribute vec3 pigmentA; attribute vec3 pigmentB; attribute vec3 pigmentC; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nobjectPoint = position; paintA = pigmentA; paintB = pigmentB; paintC = pigmentC;');
@@ -385,6 +390,7 @@ export class PhysicsView {
         float wave = sin(7.0 * objectPoint.y + 3.0 * sin(3.0 * objectPoint.x + patternTime) + 4.0 * objectPoint.z);
         vec3 pigment = mix(mix(paintA, paintB, smoothstep(-0.85, 0.15, wave)), paintC, smoothstep(0.15, 0.9, wave));
         diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
     // The visible post spans the same depth as its physical support surface.
@@ -395,6 +401,7 @@ export class PhysicsView {
     this.barDepth = { value: 1 + this.settings.mirrorCount };
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
+      this.lighting.apply(shader);
       Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
       shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz); glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
@@ -410,14 +417,14 @@ export class PhysicsView {
           float front = faceIsFront;
           float inner = (1.0 - smoothstep(1.25 * pixel, 2.5 * pixel, distance)) * front;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= pow(.72, max(0.0, depthDistance));\n#include <opaque_fragment>');
-      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(glow * inner * .8);');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fade = pow(reflectionFade, max(0.0, depthDistance)); outgoingLight = outgoingLight * fade + (totalEmissiveRadiance + nearbyLight) * (1.0 - fade);\n#include <opaque_fragment>');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + vec3(glow * inner * .8);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
     this.sideBars = new SideBars(this.scene, this.bars, count);
-    this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount);
+    this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
     this.enclosure = this.mirrors.walls;
     if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(); }
   }
@@ -468,15 +475,7 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
-    let used = 0;
-    for (let i = 0; i < count && used < this.attackLights.length; i++) {
-      const glow = this.meshEdges[i];
-      if (glow < .05) continue;
-      const light = this.attackLights[used++];
-      light.position.set(((i + phase) % count + .5) * pitch, used % 2 ? current[barOffset + i] + .025 : height - current[barOffset + i] - .025, depth / 2 + .025);
-      light.intensity = .035 * glow;
-    }
-    while (used < this.attackLights.length) this.attackLights[used++].intensity = 0;
+    this.lighting.update(this, current, barOffset, phase, pitch, height, depth);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.renderedEnclosureHeight = height;

@@ -120,7 +120,7 @@ export class PhoneReport {
         rowLayout: 'ISO sample index, total sones, 240 specific values, 24 one-Bark integrals, gain, 24 log-loudness novelty values, 24 log-loudness values, 102-value shared presentation, 24 acoustic event timestamps, 24 suppression counts',
         displayMapping: 'ISO one-Bark integrals; one shared gain and headroom scale. Shared-coefficient 1 Euro presentation. Onsets use canonical log-loudness changes, independent of gain. Settings are engineering controls, not model coefficients.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead, independent of callback size. Transport, physics and render timestamps are separate.',
-        audioSettings: view.settings.audio,
+        audioSettings: view.settings.audio, renderSettings: { ...view.settings },
         tone: this.toneMetadata };
       const parts = [JSON.stringify(header).slice(0, -1), ',"chunks":['];
       this.toneChunks.forEach((chunk, i) => parts.push((i ? ',' : '') + JSON.stringify({ ...chunk, values: Array.from(chunk.values) })));

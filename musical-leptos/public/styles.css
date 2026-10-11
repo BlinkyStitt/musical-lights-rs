@@ -367,7 +367,7 @@ nav { flex-wrap: wrap; }
   .audio-card[data-expanded] .scene-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .depth-controls button, .audio-tuning select { min-height: 44px; }
-.audio-tuning { display: grid; gap: .5rem; }
+.audio-tuning, .render-tuning { display: grid; gap: .5rem; }
 .audio-card[data-expanded] > .settings-section { display: none; }
 .audio-card[data-expanded] .loudness-readouts { position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
 .audio-card[data-expanded] .loudness-readouts small { display: none; }

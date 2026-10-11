@@ -550,6 +550,7 @@ pub fn DancingLights(
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
             <details class="settings-section"><summary>"Audio response & readouts"</summary><div class="audio-tuning"></div></details>
+            <details class="settings-section"><summary>"Lighting & rendering"</summary><div class="render-tuning"></div></details>
             <Show when=move || advanced>
             <details class="calibration-controls settings-section">
                 <summary>"Input & calibration"</summary>

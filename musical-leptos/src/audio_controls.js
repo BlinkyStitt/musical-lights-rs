@@ -6,6 +6,18 @@ export function validAudio(values) {
     && values.every((v, i) => Number.isFinite(v) && v >= AUDIO_CONTROLS[i][2] && v <= AUDIO_CONTROLS[i][3])
     && values[18] < values[19] && values[8] <= values[7];
 }
+export const RENDER_CONTROLS = Object.freeze([
+  ['resolution', 'Scene resolution scale', 1, .25, 1.5, .05],
+  ['depthFade', 'Depth brightness retention', .72, .1, .99, .01],
+  ['barGlow', 'Bar color emission', .08, 0, 1, .01],
+  ['ballGlow', 'Ball color emission', .12, 0, 1, .01],
+  ['colorSpill', 'Colored light strength', .18, 0, 2, .01],
+  ['attackLight', 'White attack light strength', .8, 0, 3, .05],
+  ['lightRange', 'Local light range', .22, .05, 1, .01],
+  ['sweepAngle', 'Camera sweep (degrees)', 10, 0, 40, 1],
+  ['sweepSeconds', 'Camera sweep period (s)', 48, 4, 180, 1],
+  ['scrollSpeed', 'Scroll columns per beat', 2, .25, 8, .25],
+]);
 export function mountAudioControls(presentation) {
   const { card, settings } = presentation;
   const host = card.querySelector('.audio-tuning');
@@ -39,7 +51,12 @@ export function mountAudioControls(presentation) {
   const note = document.createElement('p'); note.textContent = 'Block and latency requests depend on browser support. They do not specify total microphone-to-screen delay. RMS uses exponential integration. Background is a readout only.'; host.append(note, status);
   const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset audio controls'; host.append(reset);
   presentation.listen(reset, 'click', () => { settings.audio = [...DEFAULT_AUDIO]; settings.quantum = 'default'; settings.latency = 'interactive'; inputs.forEach((input, i) => { input.value = settings.audio[i]; }); quantum.value = 'default'; latency.value = 'interactive'; presentation.save(); });
-
+  const renderHost = card.querySelector('.render-tuning');
+  for (const [key, label, , min, max, step] of RENDER_CONTROLS) {
+    const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
+    const input = document.createElement('input'); Object.assign(input, { type: 'number', min, max, step, value: settings[key] }); input.dataset.renderSetting = key; row.append(input); renderHost.append(row);
+    presentation.listen(input, 'change', () => { if (input.value === '' || !input.validity.valid) return; settings[key] = Number(input.value); presentation.save(); });
+  }
 }
 
 export function createAudioContext() {

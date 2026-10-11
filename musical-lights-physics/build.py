@@ -63,6 +63,7 @@ def main() -> None:
     shutil.copyfile(root / "worker.js", output / "worker.js")
     for name in (
         "view.js",
+        "lighting.js",
         "depth-auto.js",
         "mirrors.js",
         "side-bars.js",

@@ -137,7 +137,7 @@ test('all five bar banks share source lighting without internal wall partitions'
       }
       return { colors, walls: v.enclosure.count, wallWidth: v.enclosure.instanceMatrix.array[0],
         width: v.width, wallCenter: v.enclosure.instanceMatrix.array[12],
-        outlines: v.scene.children.some(n => n.isLine), lights: v.attackLights.length,
+        outlines: v.scene.children.some(n => n.isLine), lights: v.scene.children.filter(n => n.isPointLight).length,
         copyMaterials: v.mirrors.meshes.map(({ mesh }) => mesh.material.type) };
     } finally { v.renderer.setRenderTarget(null); target.dispose(); }
   });
@@ -147,7 +147,7 @@ test('all five bar banks share source lighting without internal wall partitions'
   }
   expect(result.walls).toBe(1); expect(result.wallWidth).toBeCloseTo(result.width * 5, 5);
   expect(result.wallCenter).toBeCloseTo(result.width / 2, 5);
-  expect(result.outlines).toBe(false); expect(result.lights).toBe(4);
+  expect(result.outlines).toBe(false); expect(result.lights).toBe(0);
   expect(result.copyMaterials).toEqual(['MeshLambertMaterial']);
 });
 
@@ -203,7 +203,7 @@ test('one transparent enclosure shows bounded depth copies and preserves source 
         if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) changes++;
         if (plain[i] + plain[i + 1] + plain[i + 2] > 60) sourcePixels++;
       }
-      const normals = Array.from({length:6},(_,i)=>new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal,i*4).negate().toArray());
+      const normals = v.enclosure.geometry.groups.map(group => new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal, v.enclosure.geometry.index.getX(group.start)).negate().toArray());
       const result = { changes, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
         passes, targets: v.mirrors.meshes.length, pixels: v.canvas.width * v.canvas.height,
         negativeScales: v.mirrors.meshes.some(({ mesh }) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array).determinant() < 0) };
@@ -410,7 +410,10 @@ test('instanced depth copies match literal translated geometry from both camera 
               const shift=(layer+1)*v.config[5];
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;',`vViewPosition = -(modelViewMatrix * vec4(world + vec3(0.0, 0.0, ${shift}), 1.0)).xyz;`);
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;',`vViewPosition = -(mvPosition.xyz + (modelViewMatrix * vec4(0.0, 0.0, ${shift}, 0.0)).xyz);`);
-              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight *= ${.72**(layer+1)};\n#include <opaque_fragment>`);
+              shader.vertexShader=shader.vertexShader.replace('nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));', `nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz + vec3(0.0, 0.0, ${shift}), normalize(transformedNormal));`);
+              // The display contract retains emitted/spilled light through depth.
+              const fade = v.settings.depthFade ** (layer + 1);
+              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight = outgoingLight * ${fade} + (totalEmissiveRadiance + nearbyLight) * ${1 - fade};\n#include <opaque_fragment>`);
             };
             material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
             const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;
