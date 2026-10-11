@@ -8,7 +8,9 @@ test('Auto measures startup, freezes its choice, and manual depth cancels a rete
   const count = await page.locator('.depth-slider').inputValue();
   expect(Number(count)).toBeGreaterThanOrEqual(0); expect(Number(count)).toBeLessThanOrEqual(2048);
   await expect(page.locator('.depth-status')).toHaveAttribute('title', /Hz target/);
-  await page.getByRole('button', { name: 'Retest', exact: true }).click();
+  const measuredAt = await page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.start);
+  await page.getByRole('button', { name: 'Auto', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.start)).toBeGreaterThan(measuredAt);
   await page.locator('.depth-slider').fill('128');
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
@@ -21,10 +23,11 @@ test('Auto measures startup, freezes its choice, and manual depth cancels a rete
 
 test('Auto stops when its scene leaves the viewport and waits for an explicit retest', async ({ page }) => {
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
-  await page.getByRole('button', { name: 'Retest', exact: true }).click();
+  await page.getByRole('button', { name: 'Auto', exact: true }).click();
   await page.locator('footer').scrollIntoViewIfNeeded();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done)).toBe(true);
   await expect(page.locator('.depth-status')).toHaveText('Auto paused');
+  await expect(page.locator('.depth-status')).toHaveAttribute('title', 'Select Auto to measure again.');
   const selected = await page.locator('.depth-slider').inputValue();
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   expect(await page.locator('.depth-slider').inputValue()).toBe(selected);

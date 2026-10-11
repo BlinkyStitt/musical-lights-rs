@@ -54,6 +54,8 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     // A worker receipt may precede the next animation frame. Render this
     // snapshot before comparing its contact history with mesh attributes.
     v.draw(performance.now());
+    // Measure physical surface lighting separately from the opaque atmosphere.
+    v.fogBank.visible = false;
     const target = new THREE.WebGLRenderTarget(240, 160);
     const pixels = new Uint8Array(240 * 160 * 4);
     const lights = v.scene.children.filter(n => n.isLight), intensities = lights.map(n => n.intensity);
@@ -80,6 +82,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     v.bars.count = count; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
     hidden.forEach(n => { n.visible = true; });
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
+    v.fogBank.visible = true;
     return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };

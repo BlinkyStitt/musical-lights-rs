@@ -46,8 +46,8 @@ export class SideBars {
         if (Math.fround(x + this.halfWidth) <= 0 || Math.fround(x - this.halfWidth) >= width) continue;
         if (camera) {
           const y = source[i * 16 + 13], halfHeight = Math.abs(source[i * 16 + 5]) / 2;
-          this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight, -depth * (copies + .5));
-          this.bounds.max.set(x + offset + this.halfWidth, y + halfHeight, depth / 2);
+          this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight - (source[i * 16 + 5] > 0 ? layout[6] : 0), -depth * (copies + .5));
+          this.bounds.max.set(x + offset + this.halfWidth, y + halfHeight + (source[i * 16 + 5] < 0 ? layout[6] : 0), depth / 2);
           if (!this.frustum.intersectsBox(this.bounds)) continue;
         }
         if (n >= this.capacity) throw Error('Background bars exceed the bounded seam capacity');

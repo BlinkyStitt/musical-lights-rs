@@ -42,11 +42,12 @@ export class PhysicsNotice {
 }
 
 export class PhysicsView {
-  constructor(layer, palette, onFrame, motion) {
+  constructor(layer, palette, onFrame, motion, waveLight) {
     this.layer = layer;
     this.graph = layer.parentElement;
     this.card = this.graph.closest('.audio-card');
     this.onFrame = onFrame;
+    this.waveLight = waveLight;
     this.palette = palette;
     this.closed = false;
     this.lost = false;
@@ -102,11 +103,16 @@ export class PhysicsView {
     });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
     this.lighting = new SceneLighting(palette, this.settings);
+    this.scene.fog = this.lighting.fog;
+    this.scene.onBeforeRender = (_renderer, _scene, camera) => { this.lighting.uniforms.fogViewFar.value = camera.far * .98; };
+    const fogColor = () => this.scene.fog.color.setStyle(getComputedStyle(this.graph).getPropertyValue('--plot').trim());
+    fogColor();
     const light = new THREE.DirectionalLight(0xffffff, 1.8); light.position.set(-1, 3, 4); this.scene.add(light);
     const fill = new THREE.DirectionalLight(0xffffff, .9); fill.position.set(2, 1, 1); this.scene.add(fill);
     this.pointerPoint = new THREE.Vector3(); this.pointerRay = new THREE.Raycaster(); this.pointerCoordinates = new THREE.Vector2(); this.pointerPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     this.object = new THREE.Object3D(); this.color = new THREE.Color(); this.quaternion = new THREE.Quaternion();
     this.listeners = [];
+    this.listen(matchMedia('(prefers-color-scheme: dark)'), 'change', fogColor);
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.sceneVisible = true;
@@ -394,7 +400,7 @@ export class PhysicsView {
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
     // The visible post spans the same depth as its physical support surface.
-    // Scale only its height; keep finite geometry inside both banks.
+    // Extend the outer ends in the vertex shader, using the physical support span.
     const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     this.barRoof = { value: this.height };
@@ -402,9 +408,9 @@ export class PhysicsView {
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
-      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz); glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
+      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
@@ -426,6 +432,10 @@ export class PhysicsView {
     this.sideBars = new SideBars(this.scene, this.bars, count);
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
     this.enclosure = this.mirrors.walls;
+    this.fogBank = this.lighting.makeFogBank(this.scene);
+    // Compile hidden depth-copy materials before Auto first draws them.
+    // Their first shader link must not interrupt live input during a trial.
+    this.renderer.compile(this.scene, this.camera);
     if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(); }
   }
   draw(now) {
@@ -463,6 +473,9 @@ export class PhysicsView {
     }
     for (let i = 0; i < count; i++) {
       const top = current[barOffset + i];
+      const wave = this.waveLight(i, top, current[this.layout[17] + 1], now / 1000, !this.listening);
+      const edge = this.listening ? this.edges[i] : wave * (this.reduced.matches ? .5 : 1);
+      for (let copy = 0; copy < 6; copy++) this.meshEdges[i + copy * count] = edge;
       const column = (i + phase) % count;
       this.object.scale.set(1, top, 1);
       for (let end = 0; end < 2; end++) {
@@ -475,7 +488,7 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
-    this.lighting.update(this, current, barOffset, phase, pitch, height, depth);
+    this.lighting.update(this, current, barOffset, phase, pitch, height, depth, now);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.renderedEnclosureHeight = height;
@@ -530,7 +543,7 @@ export class PhysicsView {
     if (wrapped !== this.wrappedLabels) {
       this.wrappedLabels = wrapped;
       const labels = this.card.querySelectorAll('.spectrum-labels span');
-      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? (i === 1 ? 'SCROLLING ↔' : '') : text; });
+      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? '' : text; });
     }
     // One accessible node per source; only the pointer surface is copied at
     // the seam. Stationary frames do not repeat layout/style writes.
@@ -554,7 +567,6 @@ export class PhysicsView {
       }
     }
     this.input.set(levels, 0); this.edges.set(edges);
-    for (let copy = 0; copy < 6; copy++) this.meshEdges.set(edges, copy * 24);
     this.input[33] = scrolling ? 1 : 0;
   }
   clearMotion() { this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38); }
@@ -575,7 +587,7 @@ export class PhysicsView {
   disposeMeshes() {
     this.sideBars?.dispose(); this.sideBars = null;
     this.mirrors?.dispose(); this.mirrors = null;
-    for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
+    for (const mesh of [this.balls, this.bars, this.fogBank]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
     this.closed = true; this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;

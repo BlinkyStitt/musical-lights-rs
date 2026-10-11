@@ -96,7 +96,12 @@ export async function startFrozen(page) {
   await page.evaluate(async () => {
     // Controlled clock fixture suppresses the real interruption event.
     // These controller fixtures isolate note-driven motion from the decorative floor.
-    document.querySelector('#dancinglights').physics.listening = false;
+    // Suppress only the decorative floor in the worker input. Keep the live
+    // microphone state, which also selects acoustic attack lighting.
+    const worker = document.querySelector('#dancinglights').physics.worker;
+    const postMessage = worker.postMessage.bind(worker);
+    worker.postMessage = (message, ...args) => postMessage(
+      message.type === 'pulse' ? { ...message, listening: false } : message, ...args);
     window.freezeClock = true;
     await window.testContext.suspend();
     await new Promise(resolve => setTimeout(resolve, 50));

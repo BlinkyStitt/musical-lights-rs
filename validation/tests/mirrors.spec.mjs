@@ -12,6 +12,186 @@ test.beforeEach(async ({ page }) => {
 });
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
 
+test('opaque lit fog fills empty air and blocks objects beyond the back row', async ({ page }, info) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const samples = [];
+  for (const theme of ['dark', 'light']) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.scene.fog.color.getHexString()))
+      .toBe(theme === 'dark' ? '111c29' : 'f3f6fa');
+    samples.push(...await page.evaluate(async theme => {
+      const v = document.querySelector('#dancinglights').physics;
+      const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+      const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+      const target = new THREE.WebGLRenderTarget(64, 64), pixels = new Uint8Array(64 * 64 * 4), samples = [];
+      const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+      const fogBase = v.scene.fog.color.clone();
+      // Setup draws use the same small target as the pixel probes.
+      v.renderer.setRenderTarget(target);
+      target.texture.colorSpace = THREE.SRGBColorSpace;
+      const marker = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0xff00ff, fog: false }));
+      v.scene.add(marker);
+      const camera = new THREE.OrthographicCamera(-.05, .05, .05, -.05, .01, 200);
+      const updateFog = count => {
+        v.mirrors.setCount(count);
+        v.lighting.update(v, v.current, v.layout[9], v.renderedPhase, v.layout[3], v.renderedEnclosureHeight, v.config[5], performance.now());
+      };
+      const render = (viewCamera = camera) => {
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, viewCamera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+        return Array.from(pixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 4));
+      };
+      try {
+        for (const count of [0, 1, 6, 50, 2048]) for (const angle of [-40, 0, 40]) {
+          v.cameraBase = angle; v.setCamera(angle); updateFog(count);
+          hidden.forEach(mesh => mesh.visible = false);
+          const z = v.fogBank.position.z, x = .6, y = v.renderedEnclosureHeight / 2, yaw = angle * Math.PI / 180;
+          camera.position.set(x + 2 * Math.sin(yaw), y, z + 2 * Math.cos(yaw));
+          camera.lookAt(x, y, z); camera.updateMatrixWorld();
+          marker.visible = false; const air = render();
+          marker.position.set(x, y, z - .1); marker.visible = true; const behind = render();
+          marker.position.z = z + .1; const front = render();
+          marker.visible = false; v.setCamera(angle); render(v.camera);
+          const emptyPixels = pixels.filter((value, i) => i % 4 === 3 && value < 255).length;
+          samples.push({ theme, count, angle, z, back: -v.config[5] * (count + .5), air, behind, front, emptyPixels });
+        }
+        // A bright object beyond 50 rows must become visible when depth grows.
+        const throughDepth = [];
+        for (const count of [50, 2048]) {
+          updateFog(count); hidden.forEach(mesh => mesh.visible = false);
+          marker.visible = true; marker.position.set(.6, v.renderedEnclosureHeight / 2, -v.config[5] * 60);
+          camera.position.set(.6, v.renderedEnclosureHeight / 2, 2); camera.lookAt(marker.position); camera.updateMatrixWorld();
+          throughDepth.push(render());
+        }
+        samples.push({ theme, throughDepth });
+        // Fog itself must receive color and attack light, with no surface behind it.
+        marker.visible = false;
+        const u = v.lighting.uniforms;
+        // Isolate source color below display saturation, including in the light theme.
+        u.mistBase.value.setRGB(.02, .02, .02); u.fogAttack.value.fill(0);
+        u.lightStrength.value.set(.8, .8, .5, 0); u.colorEmission.value.set(.5, .5);
+        u.stripColor.value.forEach(color => color.setRGB(0, 0, 0));
+        u.stripState.value.forEach(state => state.set(.6, v.renderedEnclosureHeight / 2, 0));
+        u.glowBallColor.value.forEach(color => color.setRGB(0, 0, 0));
+        const dark = render();
+        for (const source of ['red', 'blue', 'attack', 'ball']) {
+          u.stripColor.value[0].setRGB(source === 'red' ? 1 : 0, 0, source === 'blue' ? 1 : 0);
+          u.stripState.value[0].z = source === 'attack' ? 1 : 0;
+          u.fogAttack.value[0] = source === 'attack' ? 1 : 0;
+          u.glowBallPosition.value[0].set(.6, v.renderedEnclosureHeight / 2, v.fogBank.position.z);
+          u.glowBallColor.value[0].setRGB(0, source === 'ball' ? 1 : 0, 0);
+          samples.push({ theme, source, scatter: render().slice(0, 3).map((value, i) => value - dark[i]) });
+        }
+      } finally {
+        v.scene.fog.color.copy(fogBase);
+        v.lighting.uniforms.stripColor.value.forEach((color, i) => color.fromArray(v.palette, i * 3));
+        v.scene.remove(marker); marker.geometry.dispose(); marker.material.dispose();
+        hidden.forEach(mesh => mesh.visible = true); v.renderer.setRenderTarget(null); target.dispose();
+        v.lighting.configure(v.settings); v.mirrors.setCount(v.settings.mirrorCount); v.draw(performance.now());
+      }
+      return samples;
+    }, theme));
+  }
+  await info.attach('opaque-fog-pixels.json', { body: JSON.stringify(samples), contentType: 'application/json' });
+  for (const sample of samples) {
+    if (sample.throughDepth) {
+      const [near, far] = sample.throughDepth;
+      expect(Math.max(...far.slice(0, 3).map((value, i) => Math.abs(value - near[i])))).toBeGreaterThan(40);
+    } else if (sample.source) {
+      const channels = sample.source === 'red' ? [0] : sample.source === 'blue' ? [2] : sample.source === 'ball' ? [1] : [0, 1, 2];
+      for (let i = 0; i < 3; i++) {
+        if (channels.includes(i)) expect(sample.scatter[i], JSON.stringify(sample)).toBeGreaterThan(3);
+        else expect(Math.abs(sample.scatter[i]), JSON.stringify(sample)).toBeLessThanOrEqual(1);
+      }
+    } else {
+      expect(sample.air[3]).toBe(255);
+      expect(sample.emptyPixels, JSON.stringify(sample)).toBe(0);
+      expect(sample.behind, JSON.stringify(sample)).toEqual(sample.air);
+      expect(Math.max(...sample.front.slice(0, 3).map((value, i) => Math.abs(value - sample.air[i])))).toBeGreaterThan(30);
+      expect(sample.z).toBeGreaterThanOrEqual(sample.back - .00001);
+    }
+  }
+  expect(errors).toEqual([]);
+});
+
+test('fog light remains stable at rest and softens alternating attack frames', async ({ page }, info) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {};
+    v.previous = v.current.slice(); v.listening = true;
+    v.push(new Float32Array(24), new Float32Array(24));
+    v.current.fill(v.current[v.layout[17]] / 2, v.layout[9], v.layout[9] + 24);
+    v.mirrors.setCount(6); v.draw(performance.now());
+    const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    hidden.forEach(mesh => mesh.visible = false);
+    const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4);
+    target.texture.colorSpace = THREE.SRGBColorSpace;
+    const camera = new THREE.OrthographicCamera(-.02, .02, .02, -.02, .01, 20);
+    camera.position.set(.6, v.renderedEnclosureHeight / 2, 2); camera.lookAt(.6, v.renderedEnclosureHeight / 2, 0); camera.updateMatrixWorld();
+    const render = () => {
+      v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
+      return Array.from(pixels.slice((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 3));
+    };
+    try {
+      v.lighting.uniforms.fogAttack.value.fill(0);
+      const at = performance.now(); v.lighting.fogAt = at;
+      const resting = [], alternating = [], envelopes = [];
+      for (let i = 0; i < 30; i++) { v.draw(at + i * 1000 / 60); resting.push(render()); }
+      for (let i = 0; i < 60; i++) {
+        v.edges.fill(i % 2); v.push(v.input.subarray(0, 24), v.edges);
+        v.draw(at + (30 + i) * 1000 / 60);
+        alternating.push(render()); envelopes.push(v.lighting.uniforms.fogAttack.value[0]);
+      }
+      return { resting, alternating, envelopes };
+    } finally { v.renderer.setRenderTarget(null); target.dispose(); }
+  });
+  expect(result.resting.every(pixel => pixel.every((value, i) => value === result.resting[0][i]))).toBe(true);
+  for (let i = 1; i < result.alternating.length; i++) {
+    expect(Math.max(...result.alternating[i].map((value, channel) => Math.abs(value - result.alternating[i - 1][channel])))).toBeLessThanOrEqual(5);
+    expect(Math.abs(result.envelopes[i] - result.envelopes[i - 1])).toBeLessThan(.05);
+  }
+  expect(result.envelopes.at(-1)).toBeGreaterThan(.3);
+  expect(errors).toEqual([]);
+  await info.attach('fog-temporal-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
+});
+
+test('bars continue above and below the physical room', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const samples = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const hidden = [v.fogBank, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    hidden.forEach(mesh => mesh.visible = false);
+    const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4), samples = [];
+    const camera = new THREE.OrthographicCamera(-.01, .01, .01, -.01, .01, 10);
+    try {
+      for (const end of [0, 1]) {
+        const index = end * v.layout[0] * 3, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, index * 16);
+        v.bars.count = 1; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
+        const x = matrix.elements[12], y = end ? v.renderedEnclosureHeight + .25 : -.25;
+        camera.position.set(x, y, 2); camera.lookAt(x, y, 0); camera.updateMatrixWorld();
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
+        samples.push(Array.from(pixels.slice((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 4)));
+      }
+    } finally { hidden.forEach(mesh => mesh.visible = true); v.bars.count = v.layout[0] * 6; v.renderer.setRenderTarget(null); target.dispose(); v.draw(performance.now()); }
+    return samples;
+  });
+  for (const pixel of samples) { expect(pixel[3]).toBe(255); expect(Math.max(...pixel.slice(0, 3))).toBeGreaterThan(100); }
+});
+
 test('continuous depth surfaces have no color steps at old copy boundaries', async ({ page }, info) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
@@ -23,7 +203,7 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
     // Isolate one production bar to inspect its actual lit side surface.
-    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    const hidden = [v.fogBank, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
     const visibility = hidden.map(mesh => mesh.visible), count = v.bars.count;
     hidden.forEach(mesh => mesh.visible = false); v.bars.count = 1;
     const matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array);

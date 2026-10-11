@@ -721,6 +721,34 @@ reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
 exterior coatings preserve the side view. No picture adds ball physics. The
 browser owns this effect; embedded hardware uses physical mirrors.
 
+Scene fog leaves the physical room clear, then thickens toward an opaque bank
+at a distance that grows with the requested depth. Its distance eases toward
+80% of the camera range, so 2,048 rows show more depth than 50 rows.
+A single opaque plane fills empty air and blocks objects behind the bank. A
+fixed 128 by 16 grid samples the same bounded light field as the scene. Interior
+rows cover the physical sources and their light range; the outer rows cover the
+rest of the view with zero source light. Colored strips, white attacks and ball
+pigments illuminate the fog. Low-contrast cloud
+shading stays still. A 350 ms light response softens attack illumination, and a
+bounded color curve prevents large white flashes. Both themes use their plot
+color as the base. Surface haze fades into the bank before the camera clipping
+plane.
+The fog adds one draw call, with no reflection camera or extra render target.
+
+Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
+the published physical support span. Their inward tips, measured travel and
+physical simulation stay unchanged. Background culling includes the full vertical
+and depth extrusion. The browser suite checks visible pixels above and below the
+room, opaque fog in empty air, light scattering, and complete-batch culling.
+
+With the microphone off, the rising side of the wave receives sustained light.
+Equal-height frames retain that light, so tall held bars remain bright. The light
+uses a 180 ms release when the bar starts to fall. All paired bars, background
+banks and fog use that light. The shared core owns the calculation. Microphone
+input keeps its acoustic attack envelope. Raw
+loudness, filtered targets, accessible audio meters and direction eligibility
+stay separate.
+
 The shared core defaults to a 40 ms rise for every band. Advanced exposes the
 rise duration in milliseconds and preserves saved overrides. The brake duration
 accounts for opposing acceleration so a short stroke cannot reverse before it

@@ -128,8 +128,8 @@ for (const width of [375, 1440]) {
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
     // One batch draws visible background banks and one draws ball depth images.
-    // One outer coating covers all five banks, with no frame-line draw.
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(5);
+    // One outer coating covers all five banks, and one opaque fog bank fills the air.
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(6);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });

@@ -127,3 +127,54 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
     await physicsReady(page);
   });
 }
+
+for (const reducedMotion of ['no-preference', 'reduce']) {
+  test(`only the rising wave stays lit and held frames do not flash, ${reducedMotion}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page);
+    const result = await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {};
+      const offset = v.layout[9], original = Array.from(v.input.slice(0, 24));
+      let at = performance.now();
+      const frame = () => { v.draw(at += 1000 / 60); return { edges: Array.from(v.meshEdges), lights: v.lighting.uniforms.stripState.value.map(s => s.z) }; };
+      v.listening = true; frame(); // Reset the inactive visual envelopes.
+      v.listening = false; v.edges.fill(1); v.current.fill(.1, offset, offset + 24);
+      const first = frame();
+      v.current[offset] = .12; const rise = frame();
+      const heldFrames = Array.from({ length: 60 }, frame), held = heldFrames.at(-1);
+      v.current[offset] = .11; const fall = frame();
+      const fallingFrames = Array.from({ length: 60 }, frame), faded = fallingFrames.at(-1);
+      v.current[offset + 1] = .12;
+      const other = Array.from({ length: 60 }, frame).at(-1);
+      v.listening = true; v.edges.fill(0); v.edges[2] = .37;
+      v.current[offset] = .2; const microphone = frame();
+      v.positionMeters(2.5); const labels = [...v.card.querySelectorAll('.spectrum-labels span')].map(n => n.textContent);
+      return { first, rise, heldFrames, held, fall, fallingFrames, faded, other, microphone, labels,
+        maximum: v.current[v.layout[17] + 1], original, final: Array.from(v.input.slice(0, 24)) };
+    });
+    const intensity = reducedMotion === 'reduce' ? .5 : 1;
+    expect(result.first.edges).toEqual(Array(144).fill(0));
+    expect(result.rise.edges[0]).toBeGreaterThan(0);
+    expect(result.held.edges[0]).toBeGreaterThan(.12 / result.maximum * intensity * .99);
+    let previous = result.rise.edges[0];
+    for (const frame of result.heldFrames) { expect(frame.edges[0]).toBeGreaterThanOrEqual(previous); previous = frame.edges[0]; }
+    expect(result.fall.edges[0]).toBeLessThan(result.held.edges[0]);
+    expect(result.fall.edges[0]).toBeGreaterThan(result.held.edges[0] * .9);
+    for (const frame of result.fallingFrames) { expect(frame.edges[0]).toBeLessThan(previous); previous = frame.edges[0]; }
+    expect(result.faded.edges[0]).toBeLessThan(.004 * intensity);
+    expect(result.other.edges[1]).toBeGreaterThan(.12 / result.maximum * intensity * .99);
+    expect(result.other.edges[0]).toBeLessThan(.0001);
+    for (const key of ['rise', 'held', 'fall', 'faded', 'other']) {
+      const expected = result[key].edges.slice(0, 24);
+      expect(result[key].edges).toEqual(Array.from({ length: 6 }, () => expected).flat());
+      expect(result[key].lights).toEqual(expected);
+      expect(expected.slice(2)).toEqual(Array(22).fill(0));
+    }
+    const acoustic = Array(24).fill(0); acoustic[2] = Math.fround(.37);
+    expect(result.microphone.edges).toEqual(Array.from({ length: 6 }, () => acoustic).flat());
+    expect(result.microphone.lights).toEqual(acoustic);
+    expect(result.final).toEqual(result.original);
+    expect(result.labels).toEqual(['', '', '']);
+  });
+}
