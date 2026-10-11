@@ -1,4 +1,5 @@
-// Startup-only selection from observed frame intervals. No hardware inference.
+// Select depth from observed frame intervals. No hardware inference.
+export const STARTUP_DEPTH_CANDIDATES = Object.freeze([1, 2, 3, 4, 5, 6, 7]);
 export const DEPTH_CANDIDATES = Object.freeze([0, 6, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]);
 export function depthPass(intervals, period) {
   if (intervals.length < 60 || !Number.isFinite(period) || period <= 0) return false;
@@ -8,7 +9,7 @@ export function depthPass(intervals, period) {
     && intervals.filter(n => n > period * 1.5).length / intervals.length < .01;
 }
 export class AutoDepth {
-  constructor(apply, finish, start) { this.apply = apply; this.finish = finish; this.start = start; this.index = -1; this.last = null; this.samples = []; this.warm = 0; this.best = 0; this.apply(0); }
+  constructor(apply, finish, start, candidates = DEPTH_CANDIDATES) { this.apply = apply; this.finish = finish; this.start = start; this.candidates = candidates; this.index = -1; this.last = null; this.samples = []; this.warm = 0; this.best = candidates[0]; this.apply(0); }
   get baseline() { return this.index === -1; }
   cancel() { this.done = true; }
   sample(now) {
@@ -27,9 +28,9 @@ export class AutoDepth {
     if (this.samples.length >= 12 && this.samples.filter(n => n > this.period * 1.5).length >= 3) { this.complete(); return; }
     if (this.samples.length < 60) return;
     if (!depthPass(this.samples, this.period)) { this.complete(); return; }
-    this.best = DEPTH_CANDIDATES[this.index];
-    if (this.index === DEPTH_CANDIDATES.length - 1) this.complete(); else this.next();
+    this.best = this.candidates[this.index];
+    if (this.index === this.candidates.length - 1) this.complete(); else this.next();
   }
-  next() { this.index++; this.samples = []; this.warm = 0; this.apply(DEPTH_CANDIDATES[this.index]); }
+  next() { this.index++; this.samples = []; this.warm = 0; this.apply(this.candidates[this.index]); }
   complete() { this.done = true; this.apply(this.best); this.finish({ count: this.best, hz: 1000 / (this.period || 1000 / 60) }); }
 }

@@ -1,4 +1,4 @@
-import { AutoDepth } from './depth-auto.js';
+import { AutoDepth, DEPTH_CANDIDATES, STARTUP_DEPTH_CANDIDATES } from './depth-auto.js';
 import { SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
@@ -195,6 +195,7 @@ export class PhysicsView {
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
     this.listen(this.card, 'depth-retest', () => this.startDepthTest());
+    this.listen(this.card.querySelector('.display-reset'), 'click', () => this.startDepthTest(STARTUP_DEPTH_CANDIDATES));
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
       if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; }
       const difference = (detail.accentSequence ?? 0) - this.audioAccent;
@@ -436,7 +437,7 @@ export class PhysicsView {
     // Compile hidden depth-copy materials before Auto first draws them.
     // Their first shader link must not interrupt live input during a trial.
     this.renderer.compile(this.scene, this.camera);
-    if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(); }
+    if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(STARTUP_DEPTH_CANDIDATES); }
   }
   draw(now) {
     const [count, , , pitch, , , , , stride, barOffset] = this.layout;
@@ -504,12 +505,12 @@ export class PhysicsView {
     this.mirrors.setCount(this.settings.mirrorCount);
     this.card.dispatchEvent(new CustomEvent('depth-paused', { detail: this.settings.mirrorCount }));
   }
-  startDepthTest() {
+  startDepthTest(candidates = DEPTH_CANDIDATES) {
     this.depthProfile?.cancel();
     if (!this.mirrors || this.closed || this.lost || document.hidden || this.settings.depthMode !== 'auto') return;
     this.card.querySelector('.depth-status').textContent = 'Measuring…';
     this.depthProfile = new AutoDepth(count => { this.mirrors.setCount(count); this.settings.mirrorCount = count; },
-      result => this.card.dispatchEvent(new CustomEvent('depth-selected', { detail: result })), performance.now());
+      result => this.card.dispatchEvent(new CustomEvent('depth-selected', { detail: result })), performance.now(), candidates);
     if (!this.sceneVisible) this.pauseDepthTest();
   }
   renderedHeight(band, end = 0) {

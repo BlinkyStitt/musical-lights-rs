@@ -714,7 +714,7 @@ banks fill four adjacent background boxes; all five boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands.
 
-The mirror-count setting defaults to six images and controls a finite stack
+The mirror-count setting starts at six images and controls a finite stack
 of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
 instanced meshes draw copied bars, background bars and balls. They use no
 reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
@@ -968,3 +968,8 @@ The current large balls use 64 horizontal and 40 vertical sphere segments
 (4,992 triangles per sphere). Their depth copies use 24 by 16 segments
 (720 triangles), up from 12 by 8, to smooth nearby silhouettes. All eight
 physical balls, depth pooling, instancing and camera culling stay the same.
+
+Startup Auto now chooses from one through seven depth images, using the same
+frame-cadence checks as explicit Auto. Selecting Auto tests the full 0–2,048
+range. Reset display restores the startup range. Saved Auto counts start within
+1–7 before measurement; saved manual counts keep their full validated range.
