@@ -1,6 +1,6 @@
 //! Native production paths. Browser profiles measure rendering separately.
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use musical_lights_core::audio::{browser::BrowserSnapshot, tempo::TempoEstimator};
+use musical_lights_core::audio::{presentation::LoudnessSnapshot, tempo::TempoEstimator};
 use musical_lights_physics::{COST_OFFSET, HZ, Simulation, SimulationConfig, SimulationInput};
 use musical_lights_worklet as worklet;
 use std::{ffi::c_void, hint::black_box, time::Duration};
@@ -37,12 +37,16 @@ impl Processor {
         }
         self.sample += pcm.len() as u64;
     }
-    fn snapshot(&mut self) -> BrowserSnapshot {
+    fn snapshot(&mut self) -> LoudnessSnapshot {
         // SAFETY: copy/parse the snapshot during exclusive access; retain no
         // borrowed processor memory after this function returns.
         unsafe {
             let pointer = worklet::processor_snapshot(self.handle);
-            BrowserSnapshot::from_transport(std::slice::from_raw_parts(
+            black_box(std::slice::from_raw_parts(
+                worklet::processor_readouts(self.handle),
+                4,
+            ));
+            LoudnessSnapshot::from_transport(std::slice::from_raw_parts(
                 pointer,
                 worklet::processor_snapshot_length(self.handle),
             ))
@@ -74,7 +78,7 @@ fn analysis(c: &mut Criterion) {
     group.throughput(Throughput::Elements(pcm.len() as u64));
     for snapshot in [false, true] {
         let mut processor = Processor::new();
-        // Warm FFT history, display gain and the causal tempo estimator.
+        // Warm filter history, display gain and the causal tempo estimator.
         for _ in 0..3 {
             for block in pcm.chunks(QUANTUM) {
                 processor.block(block);

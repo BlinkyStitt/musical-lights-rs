@@ -23,31 +23,29 @@ upstream notice and license at `physics/THREE-LICENSE.txt`.
 The build resolves the official RoundedBoxGeometry module's import to the
 bundled Three.js copy. See <https://github.com/mrdoob/three.js>.
 
-# Source-band partial loudness
+# Historical partial-loudness validation
 
-`musical-lights-core/src/audio/partial` adapts the MGB1997 equations, numerical
-coefficients, ear-response interpolation data, and roex lookup convention from
-Dominic Ward's loudness, copyright 2014 Dominic Ward, under GPL-3.0-or-later:
-https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117.
-The applicable license is reproduced in `licenses/GPL-3.0-loudness.txt`.
-Browser builds containing this model must retain this notice, the GPL license,
-and access to corresponding source. The unchanged upstream implementation is
-fetched separately for the offline validation harness in `validation/partial`.
-The existing ISO model's separate Apache-2.0 notice above still applies.
+Earlier browser builds used Dominic Ward's loudness under GPL-3.0-or-later.
+The current processor no longer includes that implementation. Historical audit
+scripts and results remain in `validation/partial` and `docs`; their upstream
+reference is https://github.com/deeuu/loudness/tree/82de790f79c5b358040861e8bdb906a55009b117.
+The historical license remains in `licenses/GPL-3.0-loudness.txt`.
 
-# Browser presentation algorithms
+# Shared presentation algorithms
 
-The browser-only motion filter implements the equations of Casiez, Roussel,
-and Vogel, "1€ Filter: A Simple Speed-based Low-pass Filter for Noisy Input in
-Interactive Systems", CHI 2012, DOI 10.1145/2207676.2208639. Its shared-band
-coefficient is an application adaptation. Reference: https://gery.casiez.net/1euro/.
+The shared visual filter implements Casiez, Roussel, and Vogel, "1 Euro Filter",
+CHI 2012, DOI 10.1145/2207676.2208639: https://gery.casiez.net/1euro/.
+The shared-band coefficient is an application adaptation.
 
-The spectral novelty calculation implements Böck and Widmer, "Maximum Filter
-Vibrato Suppression for Onset Detection", DAFx 2013:
-https://phenicx.upf.edu/system/files/publications/Boeck_DAFx-13.pdf.
-Source-band attribution, loudness eligibility, bounded pending candidates,
-rearming, and white pulses are application-specific presentation choices.
-No upstream implementation source is bundled for these two algorithms.
+Canonical log-loudness onset features follow principles discussed by Bello et al.,
+"A Tutorial on Audio Transient Detection", 2005, DOI 10.1109/TSA.2005.851998.
+Thresholds, bounded candidates, acoustic prominence, rearming, and white pulses
+are application-specific engineering choices. No upstream detector source is bundled.
+
+The causal autocorrelation tempo estimator adapts principles from Ellis,
+"Beat Tracking by Dynamic Programming", 2007, DOI 10.1080/09298210701653344.
+It does not implement the complete dynamic-programming beat path.
+See `docs/loudness.md` for research links and each source's role.
 
 Runtime listening review excerpts (CC BY 3.0): “Jazz Trumpet Loops Pack in F
 90 bpm” by [Mihai Sorohan](https://freesound.org/s/77711/) and “Vibe Ace” by

@@ -2,19 +2,17 @@
 //! Allocation occurs at creation or diagnostic setup, never while processing audio.
 //! No browser API imports.
 use musical_lights_core::audio::{
-    browser::{BrowserPresentation, BrowserSnapshot},
-    loudness::{Calibration, LoudnessError, LoudnessFrame, LoudnessMeter, SAMPLE_RATE, SoundField},
-    partial::{HOP, PartialLoudnessMeter},
-    tempo::TempoEstimator,
-    visual::VisualGain,
+    loudness::{Calibration, LoudnessError, SAMPLE_RATE, SoundField},
+    presentation::LoudnessSnapshot,
+    processor::LoudnessProcessor,
+    readouts::Readouts,
+    settings::AudioSettings,
 };
-use musical_lights_core::lights::dance::{IdlePeak, RecentPeak};
-
+use musical_lights_core::lights::dance::IdlePeak;
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
-const TRACE_STRIDE: usize = 364 + SNAPSHOT_SIZE + 48;
-
-const SNAPSHOT_SIZE: usize = BrowserSnapshot::TRANSPORT_LEN;
+const SNAPSHOT_SIZE: usize = LoudnessSnapshot::TRANSPORT_LEN;
+const TRACE_STRIDE: usize = 315 + SNAPSHOT_SIZE + 48;
 
 /// Idle visual adapter; no processor, audio session, or heap allocation needed.
 #[unsafe(no_mangle)]
@@ -35,15 +33,12 @@ pub unsafe extern "C" fn preview_accent(handle: *mut IdlePeak, seconds: f64, red
 }
 
 struct AudioProcessor {
-    meter: LoudnessMeter,
-    partial: PartialLoudnessMeter,
-    partial_hop: usize,
-    iso_frame: LoudnessFrame,
-    gain: VisualGain,
-    display: BrowserPresentation,
-    tempo: TempoEstimator,
-    peak: RecentPeak,
-    accent_sequence: u32,
+    core: LoudnessProcessor,
+    readouts: Readouts,
+    calibration: Calibration,
+    settings: AudioSettings,
+    settings_input: [f64; AudioSettings::LEN],
+    readout_values: [f64; 4],
     input: [f32; INPUT_CAPACITY],
     snapshot: [f64; SNAPSHOT_SIZE],
     started: bool,
@@ -54,29 +49,21 @@ struct AudioProcessor {
     rms_count: u32,
     reference_level: Option<f64>,
     calibration_result: f32,
-    latest_sones: f64,
     clipped: u64,
     trace: Option<Box<[f64]>>,
     trace_count: usize,
     trace_dropped: u32,
 }
-
 impl AudioProcessor {
     fn new(calibration: Calibration, reduced: bool) -> Self {
+        let settings = AudioSettings::default();
         Self {
-            meter: LoudnessMeter::new(calibration, SoundField::Free),
-            partial: PartialLoudnessMeter::new(calibration),
-            partial_hop: 0,
-            iso_frame: LoudnessFrame {
-                sample_index: 0,
-                sones: 0.0,
-                specific_sones_per_bark: [0.0; 240],
-            },
-            gain: VisualGain::default(),
-            display: BrowserPresentation::new(0.0),
-            tempo: TempoEstimator::default(),
-            peak: RecentPeak::default(),
-            accent_sequence: 0,
+            core: LoudnessProcessor::new(calibration, SoundField::Free, settings),
+            readouts: Readouts::new(settings),
+            calibration,
+            settings,
+            settings_input: settings.values(),
+            readout_values: [0.0; 4],
             input: [0.0; INPUT_CAPACITY],
             snapshot: [0.0; SNAPSHOT_SIZE],
             started: false,
@@ -87,14 +74,24 @@ impl AudioProcessor {
             rms_count: 0,
             reference_level: None,
             calibration_result: 0.0,
-            latest_sones: 0.0,
             clipped: 0,
             trace: None,
             trace_count: 0,
             trace_dropped: 0,
         }
     }
-
+    fn configure(&mut self) -> bool {
+        if self.started {
+            return false;
+        }
+        let Some(settings) = AudioSettings::from_values(&self.settings_input) else {
+            return false;
+        };
+        self.settings = settings;
+        self.core = LoudnessProcessor::new(self.calibration, SoundField::Free, settings);
+        self.readouts = Readouts::new(settings);
+        true
+    }
     fn process(&mut self, len: usize, first_sample: u64) -> bool {
         if self.error_code != 0 {
             return false;
@@ -103,17 +100,14 @@ impl AudioProcessor {
             self.error_code = 1;
             return false;
         }
-        if !self.started {
-            self.meter.reset(first_sample);
-            self.partial.reset(first_sample);
-            self.display = BrowserPresentation::new(first_sample as f64 / SAMPLE_RATE as f64);
-            self.started = true;
-        }
-        // Validate before either calibration or model state changes.
         if let Some(index) = self.input[..len].iter().position(|v| !v.is_finite()) {
             self.error_code = 2;
             self.error_detail = index as u32;
             return false;
+        }
+        if !self.started {
+            self.core.reset(first_sample);
+            self.started = true;
         }
         self.clipped += self.input[..len].iter().filter(|v| v.abs() >= 1.0).count() as u64;
         let mut offset = 0;
@@ -123,100 +117,58 @@ impl AudioProcessor {
                 .map_or(len - offset, |_| {
                     (SAMPLE_RATE * 3 - self.rms_count) as usize
                 })
-                .min(len - offset)
-                .min(HOP - self.partial_hop);
-            let iso_frame = &mut self.iso_frame;
-            if let Err(error) = self.meter.push_pcm(
-                &self.input[offset..offset + count],
-                first_sample + offset as u64,
-                |frame| {
-                    *iso_frame = frame;
-                },
-            ) {
-                (self.error_code, self.error_detail) = match error {
-                    LoudnessError::NonFiniteSample { index } => (2, index as u32),
-                    LoudnessError::Discontinuity { expected, received } => (
-                        3,
-                        expected.abs_diff(received).min(u64::from(u32::MAX)) as u32,
-                    ),
-                    LoudnessError::LevelOutOfRange { band } => (4, band as u32),
-                    _ => (5, 0),
-                };
-                return false;
-            }
-            self.latest_sones = self.iso_frame.sones;
-            let gain = &mut self.gain;
-            let display = &mut self.display;
-            let tempo = &mut self.tempo;
-            let peak = &mut self.peak;
-            let accent_sequence = &mut self.accent_sequence;
-            let iso = &self.iso_frame;
-            let reduced = self.reduced;
+                .min(len - offset);
+            let pcm = &self.input[offset..offset + count];
+            let readouts = &mut self.readouts;
+            readouts.push_pcm(pcm);
             let trace = &mut self.trace;
             let trace_count = &mut self.trace_count;
             let trace_dropped = &mut self.trace_dropped;
-            if self
-                .partial
-                .push_pcm_with_spectrum(
-                    &self.input[offset..offset + count],
-                    first_sample + offset as u64,
-                    |frame, spectrum| {
-                        display.push(
-                            &frame,
-                            gain.map_browser_partial(
-                                frame.short_term_sones.map(|s| s as f32),
-                                iso.sones,
-                            ),
-                            spectrum,
-                            reduced,
-                        );
-                        tempo.push(&display.acoustic.novelty);
-                        let at = frame.sample_index as f64 / SAMPLE_RATE as f64;
-                        let attack = display.acoustic.events.contains(&Some(at));
-                        let loud = frame
-                            .short_term_sones
-                            .iter()
-                            .copied()
-                            .fold(0.0_f64, f64::max);
-                        if peak.push(at, loud, attack) {
-                            *accent_sequence = accent_sequence.wrapping_add(1);
-                        }
+            if let Err(error) =
+                self.core
+                    .push_pcm(pcm, first_sample + offset as u64, self.reduced, |result| {
+                        let frame = result.loudness;
+                        readouts.push_sones(frame.sones);
                         if let Some(trace) = trace.as_mut() {
                             if *trace_count < TRACE_CAPACITY {
                                 let row = &mut trace[*trace_count * TRACE_STRIDE
                                     ..(*trace_count + 1) * TRACE_STRIDE];
-                                row[0] = iso.sample_index as f64;
-                                row[1] = iso.sones;
-                                row[2..242].copy_from_slice(&iso.specific_sones_per_bark);
-                                for (out, value) in row[242..266].iter_mut().zip(iso.bands()) {
+                                row[0] = frame.sample_index as f64;
+                                row[1] = frame.sones;
+                                row[2..242].copy_from_slice(&frame.specific_sones_per_bark);
+                                for (out, value) in row[242..266].iter_mut().zip(frame.bands()) {
                                     *out = value as f64;
                                 }
-                                row[266] = frame.sample_index as f64;
-                                row[267..291].copy_from_slice(&frame.instantaneous_sones);
-                                row[291..315].copy_from_slice(&frame.short_term_sones);
-                                row[315] = gain.factor();
-                                row[316..340].copy_from_slice(&display.acoustic.novelty);
-                                row[340..364].copy_from_slice(&display.acoustic.magnitude);
-                                display.snapshot.write_transport(&mut row[364..463]);
+                                row[266] = result.snapshot.gain;
+                                row[267..291].copy_from_slice(result.novelty);
+                                row[291..315].copy_from_slice(result.magnitude);
+                                result
+                                    .snapshot
+                                    .write_transport(&mut row[315..315 + SNAPSHOT_SIZE]);
                                 for i in 0..24 {
-                                    row[463 + i] = display.acoustic.events[i].unwrap_or(-1.0);
-                                    row[487 + i] = f64::from(display.suppressed[i]);
+                                    row[315 + SNAPSHOT_SIZE + i] =
+                                        result.acoustic_events[i].unwrap_or(-1.0);
+                                    row[339 + SNAPSHOT_SIZE + i] = result.suppressed[i] as f64;
                                 }
                                 *trace_count += 1;
                             } else {
                                 *trace_dropped = trace_dropped.saturating_add(1);
                             }
                         }
-                    },
-                )
-                .is_err()
+                    })
             {
-                self.error_code = 5;
+                (self.error_code, self.error_detail) = match error {
+                    LoudnessError::NonFiniteSample { index } => (2, index as u32),
+                    LoudnessError::Discontinuity { expected, received } => {
+                        (3, expected.abs_diff(received).min(u32::MAX as u64) as u32)
+                    }
+                    LoudnessError::LevelOutOfRange { band } => (4, band as u32),
+                    _ => (5, 0),
+                };
                 return false;
             }
-            self.partial_hop = (self.partial_hop + count) % HOP;
             if let Some(level) = self.reference_level {
-                for &sample in &self.input[offset..offset + count] {
+                for &sample in pcm {
                     if sample.abs() >= 1.0 {
                         self.error_code = 6;
                         return false;
@@ -229,29 +181,19 @@ impl AudioProcessor {
                         (self.rms_power / self.rms_count as f64).sqrt(),
                         level,
                     ) {
-                        Ok(calibration) => calibration,
+                        Ok(value) => value,
                         Err(_) => {
                             self.error_code = 7;
                             return false;
                         }
                     };
                     self.calibration_result = calibration.pascals_per_unit();
+                    self.calibration = calibration;
                     self.reference_level = None;
-                    self.meter = LoudnessMeter::new(calibration, SoundField::Free);
-                    self.meter.reset(first_sample + (offset + count) as u64);
-                    self.partial = PartialLoudnessMeter::new(calibration);
-                    self.partial.reset(first_sample + (offset + count) as u64);
-                    self.partial_hop = 0;
-                    self.iso_frame = LoudnessFrame {
-                        sample_index: first_sample + (offset + count) as u64,
-                        sones: 0.0,
-                        specific_sones_per_bark: [0.0; 240],
-                    };
-                    self.gain = VisualGain::default();
-                    self.latest_sones = 0.0;
-                    self.display = BrowserPresentation::new(
-                        (first_sample + (offset + count) as u64) as f64 / SAMPLE_RATE as f64,
-                    );
+                    self.core =
+                        LoudnessProcessor::new(calibration, SoundField::Free, self.settings);
+                    self.core.reset(first_sample + (offset + count) as u64);
+                    self.readouts = Readouts::new(self.settings);
                 }
             }
             offset += count;
@@ -295,20 +237,20 @@ macro_rules! export {
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
 export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace = if enabled != 0 { Some(vec![0.0; TRACE_CAPACITY * TRACE_STRIDE].into_boxed_slice()) } else { None }; p.trace_count = 0; p.trace_dropped = 0; });
 export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ref().map_or(core::ptr::null(), |trace| trace.as_ptr()));
-export!(processor_trace_version(handle) -> u32, _p => 5);
+export!(processor_trace_version(handle) -> u32, _p => 6);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);
 export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);
 export!(processor_trace_clear(handle) -> (), p => { p.trace_count = 0; });
 export!(processor_input(handle) -> *const f32, p => p.input.as_ptr());
 export!(processor_capacity(handle) -> usize, _p => INPUT_CAPACITY);
-export!(processor_snapshot(handle) -> *const f64, p => { p.display.snapshot.write_transport(&mut p.snapshot); p.snapshot.as_ptr() });
+export!(processor_snapshot(handle) -> *const f64, p => { p.core.snapshot().write_transport(&mut p.snapshot); p.snapshot.as_ptr() });
 export!(processor_snapshot_length(handle) -> usize, _p => SNAPSHOT_SIZE);
 export!(processor_process(handle, len: usize, first: u64) -> u32, p => u32::from(p.process(len, first)));
 export!(processor_motion(handle, reduced: u32) -> (), p => { p.reduced = reduced != 0; });
-export!(processor_tempo(handle) -> f32, p => p.tempo.estimate().bpm);
-export!(processor_tempo_confidence(handle) -> f32, p => p.tempo.estimate().confidence);
-export!(processor_sones(handle) -> f64, p => p.latest_sones);
+export!(processor_tempo(handle) -> f32, p => p.core.tempo().bpm);
+export!(processor_tempo_confidence(handle) -> f32, p => p.core.tempo().confidence);
+export!(processor_sones(handle) -> f64, p => p.core.snapshot().total_sones);
 export!(processor_clipped(handle) -> f64, p => p.clipped as f64);
 export!(processor_error(handle) -> u32, p => p.error_code);
 export!(processor_error_detail(handle) -> u32, p => p.error_detail);
@@ -329,4 +271,13 @@ pub unsafe extern "C" fn processor_destroy(handle: *mut core::ffi::c_void) {
     }
 }
 
-export!(processor_accent_sequence(handle) -> u32, p => p.accent_sequence);
+export!(processor_accent_sequence(handle) -> u32, p => p.core.accent_sequence());
+
+export!(processor_settings_ptr(handle) -> *mut f64, p => p.settings_input.as_mut_ptr());
+export!(processor_settings_length(handle) -> usize, _p => AudioSettings::LEN);
+export!(processor_configure(handle) -> u32, p => u32::from(p.configure()));
+export!(processor_readouts(handle) -> *const f64, p => {
+    let value = p.readouts.current();
+    p.readout_values = [value.rms_dbfs, value.background_dbfs, value.background_sones, f64::from(value.learning)];
+    p.readout_values.as_ptr()
+});

@@ -20,11 +20,7 @@ use embassy_sync::{
 };
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use musical_lights_core::{
-    audio::{
-        jacket::JacketAudio,
-        loudness::SAMPLE_RATE,
-        visual::{DISPLAY_BANDS, DisplaySnapshot},
-    },
+    audio::{jacket::JacketAudio, loudness::SAMPLE_RATE, presentation::LoudnessSnapshot},
     lights::{
         Gradient,
         jacket::{self, PIXELS as MATRIX_N, WIDTH as MATRIX_X},
@@ -42,7 +38,7 @@ const MIC_SAMPLES: usize = 512;
 
 #[derive(Clone, Copy)]
 struct PanelAudio {
-    snapshot: DisplaySnapshot<DISPLAY_BANDS>,
+    snapshot: LoudnessSnapshot,
     origin: Instant,
 }
 

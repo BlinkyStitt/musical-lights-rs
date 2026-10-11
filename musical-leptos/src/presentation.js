@@ -1,15 +1,20 @@
+import { DEFAULT_AUDIO, validAudio, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
+  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, audio: DEFAULT_AUDIO, quantum: 'default', latency: 'interactive',
+  scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
-  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds] };
+  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO] };
   try {
     const saved = JSON.parse(storage.getItem(SETTINGS_KEY));
     if (saved?.version !== 1) return defaults;
     for (const [key, min, max] of [['flight', 0, 50], ['cameraAngle', -40, 40]]) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
+    if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
+    if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
+    if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;
     if (validDirectionOdds(saved.directionOdds)) defaults.directionOdds = [...saved.directionOdds];
     if (Number.isInteger(saved.mirrorCount) && saved.mirrorCount >= 0 && saved.mirrorCount <= 2048) defaults.mirrorCount = saved.mirrorCount;
     for (const key of ['cameraMotion', 'scrolling']) if (typeof saved[key] === 'boolean') defaults[key] = saved[key];
@@ -107,6 +112,7 @@ export class Presentation {
       if (key === 'scrolling') node.dispatchEvent(new Event('change', { bubbles: true }));
       this.listen(node, 'change', () => { const value = checkbox ? node.checked : Number(node.value); if (!checkbox && (!node.validity.valid || !Number.isFinite(value))) return; this.settings[key] = value; this.save(); });
     }
+    mountAudioControls(this);
     this.oddsInputs = ['.direction-slow-bpm', '.direction-fast-bpm', '.direction-low-chance', '.direction-high-chance', '.direction-curve'].map(s => card.querySelector(s));
     const writeOdds = () => this.oddsInputs.forEach((node, i) => { node.value = this.settings.directionOdds[i] * (i === 2 || i === 3 ? 100 : 1); });
     writeOdds();

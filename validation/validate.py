@@ -53,8 +53,6 @@ def validate(name):
             "validation/tooling",
             "validation/loudness/validate.py",
             "validation/loudness/tones.py",
-            "validation/partial/validate.py",
-            "validation/partial/window-audit.py",
             "validation/lights",
             "musical-lights-worklet/build.py",
             "musical-lights-physics/build.py",
@@ -110,20 +108,6 @@ def validate(name):
             ],
             ROOT,
         )
-        run(
-            [
-                "cargo",
-                f"+{NIGHTLY}",
-                "build",
-                "--locked",
-                "--release",
-                "--example",
-                "partial_trace",
-            ],
-            ROOT,
-        )
-        run([str(environment / "python"), "validation/partial/validate.py"], ROOT)
-        run([str(environment / "python"), "validation/partial/window-audit.py"], ROOT)
         return
     directory = ROOT / PACKAGES[name]
     toolchain = ESP if name.startswith("esp-") else NIGHTLY

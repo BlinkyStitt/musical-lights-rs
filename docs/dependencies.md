@@ -54,7 +54,6 @@ The user requested current releases and pre-releases. These major upgrades requi
 | leptos_router | `=0.9.0-beta1` | leptos |
 | log | `=0.4.34` | core, terminal, leptos, dioxus, feather, esp-idf |
 | lsm9ds1 | `eacd62cb6a1c2dda962ed8d2546566925472e586` | stm32, esp-embassy |
-| microfft | `=0.6.0` | core |
 | micromath | `=2.1.0` | core, stm32 |
 | musical-lights-core | `../musical-lights-core` | terminal, leptos, worklet, dioxus, feather, stm32, esp-embassy, esp-idf |
 | nalgebra | `=0.35.0` | core, stm32 |

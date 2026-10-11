@@ -76,22 +76,15 @@ mod tests {
     #[test]
     fn only_shared_acoustic_edges_make_the_tip_white() {
         let palette = Gradient::new_mermaid();
-        let mut snapshot = crate::audio::visual::DisplaySnapshot::new(0.0);
-        let mut levels = [crate::audio::visual::BandLevel {
-            activity: 0.5,
-            sones: 0.2,
-        }; DISPLAY_BANDS];
-        snapshot.push(0.0, levels, false);
+        let mut snapshot = crate::audio::presentation::LoudnessSnapshot::new(0.0);
+        snapshot.filtered = [0.5; DISPLAY_BANDS];
+        snapshot.attacks = [Some(0.0); DISPLAY_BANDS];
         let mut left = [BLACK; PIXELS];
         let mut right = [BLACK; PIXELS];
-        render(&snapshot.frame(0.1), &palette, &mut left, &mut right);
+        render(&snapshot.frame(0.0), &palette, &mut left, &mut right);
         assert_eq!(right[SnakeXY::xy_to_n(4, 0, WIDTH)], SILVER);
         // A gain-only rise after the envelope ends must not create a new edge.
-        levels.fill(crate::audio::visual::BandLevel {
-            activity: 1.0,
-            sones: 0.2,
-        });
-        snapshot.push(2.0, levels, false);
+        snapshot.filtered = [1.0; DISPLAY_BANDS];
         render(&snapshot.frame(2.0), &palette, &mut left, &mut right);
         assert_ne!(right[SnakeXY::xy_to_n(7, 0, WIDTH)], SILVER);
     }

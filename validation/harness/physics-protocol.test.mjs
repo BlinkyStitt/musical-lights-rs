@@ -59,14 +59,14 @@ test('ordered input tempo changes reproduce complete physical snapshots across r
 test('seeded loud-attack accents reproduce paired bar motion at every render rate', async () => {
   const config = Array.from(PhysicsSimulation.defaults()), palette = Array(72).fill(.5);
   const layout = Array.from(PhysicsSimulation.layout());
-  const danceOptions = { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1 };
+  const danceOptions = { odds: [60, 200, .05, .5, 1], scrollSpeed: 2, flight: .3, seed: 1 };
   const initialAccent = 1000;
   const values = Array(38).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
   const inputs = [{ tick: 0, values }, { tick: 60, values, accent: 1001 }, { tick: 100, values, accent: 1002 },
     { tick: 140, values, accent: 1003 }, { tick: 200, values, accent: 1003 }];
   const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
   try {
-    sim.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed);
+    sim.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);
     sim.accent(initialAccent);
     for (let tick = 0; tick < 400; tick++) {
       for (const event of inputs) if (event.tick === tick) {

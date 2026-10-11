@@ -26,7 +26,6 @@ pub fn parse_i2s_24_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
 }
 
 /// TODO: this needs some tests!
-/// I don't really want to turn everything into f32s, but thats what microfft wants. maybe we should find a library that can work on i16 and i24
 pub fn parse_i2s_16_bit_mono_to_f32_array<const IN: usize, const OUT: usize>(
     input: &[u8; IN],
     output: &mut [f32; OUT],

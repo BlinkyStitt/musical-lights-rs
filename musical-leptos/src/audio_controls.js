@@ -1,0 +1,52 @@
+// Engineering controls only. The ISO model and its 24 Bark bands stay fixed.
+export const AUDIO_CONTROLS = Object.freeze([["Display gain target", 0.8, 0.1, 1, 0.05], ["Gain reduction time (s)", 2, 0.05, 60, 0.05], ["Gain recovery time (s)", 20, 0.05, 120, 0.05], ["Motion minimum cutoff (Hz)", 1, 0.1, 30, 0.1], ["Motion derivative cutoff (Hz)", 1, 0.1, 30, 0.1], ["Motion speed coefficient", 0.8, 0, 5, 0.05], ["Attack comparison (s)", 0.01, 0.002, 0.02, 0.002], ["Attack baseline (s)", 0.1, 0.02, 0.1, 0.002], ["Attack peak history (s)", 0.03, 0.002, 0.1, 0.002], ["Attack startup guard (s)", 0.25, 0, 2, 0.01], ["Attack novelty threshold", 0.01, 0.001, 1, 0.001], ["Attack relative rise", 0.15, 0.01, 1, 0.01], ["Attack minimum (sones)", 0.1, 0, 10, 0.01], ["Attack band prominence", 0.3, 0, 1, 0.01], ["Acoustic quiet rearm (s)", 0.01, 0.002, 0.2, 0.002], ["Minimum flash interval (s)", 0.16, 0.02, 2, 0.01], ["Flash quiet rearm (s)", 0.06, 0.002, 1, 0.002], ["Flash duration (s)", 0.18, 0.02, 1, 0.01], ["Tempo minimum (BPM)", 60, 60, 190, 1], ["Tempo maximum (BPM)", 200, 70, 200, 1], ["Tempo history (s)", 8, 4, 8, 0.5], ["Tempo smoothing (s)", 3, 0.1, 20, 0.1], ["Tempo silence fallback (s)", 2, 0.1, 10, 0.1], ["RMS integration time (s)", 0.125, 0.01, 2, 0.005], ["Background history (s)", 30, 1, 60, 1], ["Background percentile", 0.1, 0, 0.5, 0.01], ["Number updates per second", 10, 1, 30, 1], ["Display packets per second", 240, 30, 500, 10]]);
+export const DEFAULT_AUDIO = Object.freeze(AUDIO_CONTROLS.map(row => row[1]));
+export function validAudio(values) {
+  return Array.isArray(values) && values.length === AUDIO_CONTROLS.length
+    && values.every((v, i) => Number.isFinite(v) && v >= AUDIO_CONTROLS[i][2] && v <= AUDIO_CONTROLS[i][3])
+    && values[18] < values[19] && values[8] <= values[7];
+}
+export function mountAudioControls(presentation) {
+  const { card, settings } = presentation;
+  const host = card.querySelector('.audio-tuning');
+  const help = document.createElement('p'); help.textContent = 'These controls change scheduling, readouts, and presentation. The ISO loudness model stays fixed. Audio changes apply when you next start audio.'; host.append(help);
+  const status = document.createElement('p'); status.setAttribute('role', 'status');
+  const inputs = AUDIO_CONTROLS.map(([label, , min, max, step], i) => {
+    const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
+    const input = document.createElement('input'); Object.assign(input, { type: 'number', min, max, step, value: settings.audio[i] });
+    input.dataset.audioSetting = i; row.append(input); host.append(row);
+    presentation.listen(input, 'change', () => {
+      const values = inputs.map(input => Number(input.value));
+      if (!inputs.every(input => input.value !== '' && input.validity.valid) || !validAudio(values)) { status.textContent = 'Use values in the displayed ranges, increasing tempo limits, and peak history no longer than baseline history.'; return; }
+      status.textContent = 'Saved. Start audio again to apply.'; settings.audio = values; presentation.save();
+    }); return input;
+  });
+  const row = document.createElement('label'); row.className = 'control-row'; row.textContent = 'Audio block request';
+  const quantum = document.createElement('select'); quantum.className = 'audio-quantum';
+  const supported = typeof AudioContext !== 'undefined' && 'renderQuantumSize' in AudioContext.prototype;
+  for (const value of ['default', 'hardware', 128, 256, 512, 1024]) {
+    const option = document.createElement('option'); option.value = value;
+    option.textContent = value === 'default' ? 'Browser Default (normally 128)' : value === 'hardware' ? 'Hardware' : `${value} samples`;
+    option.disabled = value !== 'default' && !supported; quantum.append(option);
+  }
+  quantum.value = supported ? String(settings.quantum) : 'default'; row.append(quantum); host.prepend(row);
+  presentation.listen(quantum, 'change', () => { settings.quantum = /^\d+$/.test(quantum.value) ? Number(quantum.value) : quantum.value; presentation.save(); });
+  const latencyRow = document.createElement('label'); latencyRow.className = 'control-row'; latencyRow.textContent = 'Audio latency request';
+  const latency = document.createElement('select'); latency.className = 'audio-latency';
+  for (const value of ['interactive', 'balanced', 'playback', .01, .02, .04]) { const option = document.createElement('option'); option.value = value; option.textContent = typeof value === 'number' ? `${value * 1000} ms request` : value; latency.append(option); }
+  latency.value = String(settings.latency); latencyRow.append(latency); host.prepend(latencyRow);
+  presentation.listen(latency, 'change', () => { settings.latency = Number.isFinite(Number(latency.value)) ? Number(latency.value) : latency.value; presentation.save(); });
+  const note = document.createElement('p'); note.textContent = 'Block and latency requests depend on browser support. They do not specify total microphone-to-screen delay. RMS uses exponential integration. Background is a readout only.'; host.append(note, status);
+  const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset audio controls'; host.append(reset);
+  presentation.listen(reset, 'click', () => { settings.audio = [...DEFAULT_AUDIO]; settings.quantum = 'default'; settings.latency = 'interactive'; inputs.forEach((input, i) => { input.value = settings.audio[i]; }); quantum.value = 'default'; latency.value = 'interactive'; presentation.save(); });
+
+}
+
+export function createAudioContext() {
+    const saved = document.querySelector('.audio-card')?.preferences;
+    const options = { sampleRate: 48000, latencyHint: saved?.latency ?? 'interactive' };
+    if ('renderQuantumSize' in AudioContext.prototype) options.renderSizeHint = saved?.quantum ?? 'default';
+    const context = new AudioContext(options);
+    context.loudnessSettings = validAudio(saved?.audio) ? [...saved.audio] : [...DEFAULT_AUDIO];
+    return context;
+}

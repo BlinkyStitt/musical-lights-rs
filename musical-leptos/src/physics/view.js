@@ -303,7 +303,7 @@ export class PhysicsView {
     this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0);
     this.fitCamera();
   }
-  danceOptions() { return { odds: this.settings.directionOdds, flight: this.settings.flight / 100, seed: this.seed }; }
+  danceOptions() { return { scrollSpeed: this.settings.scrollSpeed ?? 2, odds: this.settings.directionOdds, flight: this.settings.flight / 100, seed: this.seed }; }
   updateCamera(now) {
     const moving = this.settings.cameraMotion && !this.reduced.matches && !this.cameraDrag && document.activeElement !== this.cameraControl;
     const elapsed = this.cameraAt == null ? 0 : Math.max(0, now - this.cameraAt);
