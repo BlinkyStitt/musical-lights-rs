@@ -355,7 +355,7 @@ nav { flex-wrap: wrap; }
 
 .loudness-readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem 1rem; font-size: .8rem; }
 /* Reserve numeric slots before capture starts, so the first values do not resize the scene. */
-.loudness-readouts output { min-block-size: 2lh; }
+.loudness-readouts output { min-block-size: 3lh; white-space: pre-line; line-height: 1rem; font-variant-numeric: tabular-nums; }
 .loudness-readouts small { grid-column: 1 / -1; }
 @media (max-width: 700px) { .loudness-readouts { grid-template-columns: minmax(0, 1fr); } }
 .scene-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; min-width: 0; }
@@ -373,7 +373,7 @@ nav { flex-wrap: wrap; }
 .audio-tuning, .render-tuning { display: grid; gap: .5rem; }
 .audio-card[data-expanded] > .settings-section { display: none; }
 .audio-card[data-expanded] .loudness-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
-.audio-card[data-expanded] .loudness-readouts output { min-block-size: 3lh; }
+.audio-card[data-expanded] .loudness-readouts output { line-height: .8125rem; }
 .audio-card[data-expanded] .loudness-readouts small { display: none; }
 .audio-card[data-expanded] > .scene-controls { position: relative; inset: auto; width: 100%; grid-row: 4; grid-column: 1; }
 .audio-card[data-expanded] .scene-controls .camera-controls { grid-row: auto; grid-column: auto; }

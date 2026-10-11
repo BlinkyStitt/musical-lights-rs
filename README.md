@@ -15,7 +15,7 @@ The browser, terminal, ESP32 net, and Rust STM32 jacket use one continuous ISO 5
 
 Audio block size changes how samples arrive. It does not change the model or its 2 ms output grid. The browser defaults to its normal audio block, usually 128 samples. Filters still have frequency-dependent response time; a 2 ms update does not promise 2 ms total latency. Keep 48 kHz to retain treble and the model's validated coefficients.
 
-Below the browser scene, **Current loudness** shows sones and RMS dBFS. **Background estimate** tracks a lower percentile of recent input. It never subtracts sound or changes calibration. RMS uses exponential integration, with a default time constant of 125 ms. Uncalibrated sones depend on an assumed microphone scale. dBFS measures digital level; it does not measure hearing risk.
+Below the browser scene, **Current loudness** shows sones and RMS dBFS. **Background estimate** tracks a lower percentile of recent input. It never subtracts sound or changes calibration. RMS uses exponential integration, with a default time constant of 125 ms. `~` marks estimated sones from an assumed microphone scale. dBFS measures digital level; it does not measure hearing risk.
 
 New browser preferences use **Auto depth**. Startup frame measurements select a depth count for the observed screen cadence. The slider and numeric control allow 0–2048 images. Saved manual counts stay unchanged. Auto selects once; Retest starts a new measurement. Bars and balls emit faint color light. White attacks illuminate nearby surfaces throughout the depth. Advanced controls change presentation and scheduling while the ISO coefficients stay fixed.
 

@@ -25,7 +25,8 @@ function beginSession(context, card, source) {
         session.state = state;
         card.dataset.audioState = state;
         if (state !== 'playing') { const current = card.querySelector('.current-loudness'), background = card.querySelector('.background-loudness');
-            if (current) current.textContent = 'Current loudness: —'; if (background) background.textContent = 'Background estimate: —'; }
+            if (current) current.textContent = 'Current loudness: —'; if (background) background.textContent = 'Background estimate: —';
+            for (const output of [current, background]) output?.removeAttribute('aria-label'); }
 
         const status = card.querySelector('.mic-session-status');
         if (status) status.textContent = source === 'microphone' ? ({ starting: 'Starting microphone…', interrupted: 'Microphone interrupted.', stopped: reason === 'cleanup' ? '' : 'Microphone stopped.' }[state] ?? '') : '';
@@ -133,10 +134,19 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
             if (now - (session.readoutAt ?? -Infinity) >= 1000 / (context.loudnessSettings?.[26] ?? 10)) {
                 session.readoutAt = now;
                 const estimated = profiles.get(node).calibrated ? '' : 'estimated ';
-                card.querySelector('.current-loudness').textContent = `Current loudness: ${estimated}${data.sones.toFixed(2)} sones · ${data.readouts[0].toFixed(1)} dBFS RMS`;
+                const mark = estimated ? '~' : '';
+                const current = card.querySelector('.current-loudness'), background = card.querySelector('.background-loudness');
+                current.textContent = `Current loudness:
+${mark}${data.sones.toFixed(2)} sones
+${data.readouts[0].toFixed(1)} dBFS RMS`;
+                current.setAttribute('aria-label', `Current loudness: ${estimated}${data.sones.toFixed(2)} sones; ${data.readouts[0].toFixed(1)} dBFS RMS`);
                 const source = session.source === 'microphone' ? 'Background estimate' : 'Input background estimate';
-                card.querySelector('.background-loudness').textContent = `${source}: ${estimated}${data.readouts[2].toFixed(2)} sones · ${data.readouts[1].toFixed(1)} dBFS RMS${data.readouts[3] ? ' · learning' : ''}`;
-                card.querySelector('.audio-scheduling').textContent = `48 kHz · actual block ${data.quantum} samples (${(data.quantum / 48).toFixed(2)} ms). dBFS measures digital level; it does not measure hearing risk.`;
+                const learning = data.readouts[3] ? ' · learning' : '';
+                background.textContent = `${source}:
+${mark}${data.readouts[2].toFixed(2)} sones${learning}
+${data.readouts[1].toFixed(1)} dBFS RMS`;
+                background.setAttribute('aria-label', `${source}: ${estimated}${data.readouts[2].toFixed(2)} sones; ${data.readouts[1].toFixed(1)} dBFS RMS${learning}`);
+                card.querySelector('.audio-scheduling').textContent = `48 kHz · actual block ${data.quantum} samples (${(data.quantum / 48).toFixed(2)} ms). ~ marks estimated sones. dBFS measures digital level; it does not measure hearing risk.`;
             }
             card.dispatchEvent(new CustomEvent('audio-tempo' , { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence, accentSequence: event.data.accentSequence } }));
         }
