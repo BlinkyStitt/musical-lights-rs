@@ -487,22 +487,35 @@ test('camera depth culling preserves pixels from the complete copied-ball batch'
   await info.attach('depth-culling-pixels.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
 
-test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }) => {
+test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }, info) => {
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
-  await page.locator('.input-source').selectOption('generated');
-  await page.locator('.tone-repeat').check(); await page.locator('.tone-audible').uncheck();
-  await page.locator('.review-start').click();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
-  await expect(page.locator('.listening-toggle')).not.toBeChecked();
-  await expect(page.locator('.tempo-readout')).toBeVisible();
-  await page.locator('.tone-pause').click();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','paused');
-  await expect(page.locator('.tempo-readout')).toBeHidden();
-  await page.locator('.tone-pause').click();
-  await expect(page.locator('.tempo-readout')).toBeVisible();
-  await page.locator('.tone-repeat').uncheck();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
-  await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+  await page.evaluate(() => {
+    window.digitalTempoEvents = [];
+    document.querySelector('.audio-card').addEventListener('audio-session', ({ detail }) => {
+      window.digitalTempoEvents.push({ at: performance.now(), state: detail.state, reason: detail.reason });
+    });
+  });
+  try {
+    await page.locator('.input-source').selectOption('generated');
+    await page.locator('.tone-repeat').check(); await page.locator('.tone-audible').uncheck();
+    await page.locator('.review-start').click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+    await expect(page.locator('.listening-toggle')).not.toBeChecked();
+    await expect(page.locator('.tempo-readout')).toBeVisible();
+    await page.locator('.tone-pause').click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','paused');
+    await expect(page.locator('.tempo-readout')).toBeHidden();
+    await page.locator('.tone-pause').click();
+    await expect(page.locator('.tempo-readout')).toBeVisible();
+    await page.locator('.tone-repeat').uncheck();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
+    await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+  } catch (error) {
+    await info.attach('digital-tempo-events.json', {
+      body: JSON.stringify(await page.evaluate(() => window.digitalTempoEvents)), contentType: 'application/json',
+    });
+    throw error;
+  }
 });
 
 
