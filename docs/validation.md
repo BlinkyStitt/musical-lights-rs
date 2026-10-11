@@ -721,6 +721,16 @@ reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
 exterior coatings preserve the side view. No picture adds ball physics. The
 browser owns this effect; embedded hardware uses physical mirrors.
 
+Scene fog leaves the physical box clear and fades the final third of the copied
+depth into the plot background. It reaches full density at the back face of the
+last requested row. The fade follows world depth as the camera turns. At high
+counts it also reaches full density before the camera's far clipping plane.
+Bars, balls, emitted light and the outer coating share this fog. The color follows
+the light or dark theme. The fog scatters colored bar light, white attack light
+and the balls' current pigments through the existing bounded light samples.
+Scattering peaks inside the fade and disappears at the back row. Fog adds no
+reflection camera or render pass.
+
 The shared core defaults to a 40 ms rise for every band. Advanced exposes the
 rise duration in milliseconds and preserves saved overrides. The brake duration
 accounts for opposing acceleration so a short stroke cannot reverse before it

@@ -102,11 +102,16 @@ export class PhysicsView {
     });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
     this.lighting = new SceneLighting(palette, this.settings);
+    this.scene.fog = this.lighting.fog;
+    this.scene.onBeforeRender = (_renderer, _scene, camera) => { this.lighting.uniforms.fogViewFar.value = camera.far * .98; };
+    const fogColor = () => this.scene.fog.color.setStyle(getComputedStyle(this.graph).getPropertyValue('--plot').trim());
+    fogColor();
     const light = new THREE.DirectionalLight(0xffffff, 1.8); light.position.set(-1, 3, 4); this.scene.add(light);
     const fill = new THREE.DirectionalLight(0xffffff, .9); fill.position.set(2, 1, 1); this.scene.add(fill);
     this.pointerPoint = new THREE.Vector3(); this.pointerRay = new THREE.Raycaster(); this.pointerCoordinates = new THREE.Vector2(); this.pointerPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     this.object = new THREE.Object3D(); this.color = new THREE.Color(); this.quaternion = new THREE.Quaternion();
     this.listeners = [];
+    this.listen(matchMedia('(prefers-color-scheme: dark)'), 'change', fogColor);
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.sceneVisible = true;
