@@ -128,7 +128,7 @@ for (const width of [375, 1440]) {
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
     // One batch draws visible background banks and one draws ball depth images.
-    // One outer coating covers all five banks, and one opaque fog bank fills the air.
+    // One outer coating covers all five banks, followed by one fog volume pass.
     expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(6);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
@@ -157,7 +157,19 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   });
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
   const initial = await physicsState(page);
-  await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; window.originalView = v; window.originalCanvas = v.canvas; window.gl = v.renderer.getContext(); });
+  // The controlled reset can finish before its first render. Capture the
+  // resource baseline after the color and depth textures exist on the GPU.
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.renderer.info.memory.textures, v.fogVolume.target.width === v.canvas.width,
+      v.fogVolume.target.height === v.canvas.height];
+  })).toEqual([2, true, true]);
+  await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    window.originalView = v; window.originalCanvas = v.canvas; window.gl = v.renderer.getContext();
+    window.volumeTextures = v.renderer.info.memory.textures; window.volumeDisposals = 0;
+    v.fogVolume.target.addEventListener('dispose', () => window.volumeDisposals++);
+  });
   for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(size);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -171,6 +183,11 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
     const controls = await page.locator('.audio-controls').boundingBox();
     expect(scene.y + scene.height).toBeLessThanOrEqual(controls.y);
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
+    await expect.poll(() => page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return [v.fogVolume.target.width === v.canvas.width, v.fogVolume.target.height === v.canvas.height,
+        v.renderer.info.memory.textures === window.volumeTextures];
+    })).toEqual([true, true, true]);
     await page.keyboard.press('Escape');
   }
   expect(await page.evaluate(() => document.querySelector('canvas') === window.originalCanvas)).toBe(true);
@@ -179,8 +196,10 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   const tick = (await physicsState(page)).tick;
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(tick + 10);
+  const volumeDisposals = await page.evaluate(() => window.volumeDisposals);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect.poll(() => page.evaluate(() => [window.workers.size, window.observers.size, window.frames.size, window.testContext.state, window.gl.isContextLost()])).toEqual([0, 0, 0, 'closed', true]);
+  expect(await page.evaluate(() => window.volumeDisposals)).toBeGreaterThan(volumeDisposals);
 });
 
 test('pointer and device inputs apply recorded forces and reduced motion reduces their strength', async ({ page }) => {

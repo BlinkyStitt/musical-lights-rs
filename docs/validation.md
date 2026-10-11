@@ -724,16 +724,24 @@ browser owns this effect; embedded hardware uses physical mirrors.
 Scene fog leaves the physical room clear, then thickens toward an opaque bank
 at a distance that grows with the requested depth. Its distance eases toward
 80% of the camera range, so 2,048 rows show more depth than 50 rows.
-A single opaque plane fills empty air and blocks objects behind the bank. A
-fixed 128 by 16 grid samples the same bounded light field as the scene. Interior
-rows cover the physical sources and their light range; the outer rows cover the
-rest of the view with zero source light. Colored strips, white attacks and ball
-pigments illuminate the fog. Low-contrast cloud
-shading stays still. A 350 ms light response softens attack illumination, and a
-bounded color curve prevents large white flashes. Both themes use their plot
-color as the base. Surface haze fades into the bank before the camera clipping
-plane.
-The fog adds one draw call, with no reflection camera or extra render target.
+Fog density rises outside the physical room on all three axes. One volume pass
+integrates that density along each camera ray using Beer-Lambert transmission.
+Scene depth stops the integral at visible surfaces, including surfaces whose
+materials do not use Three.js fog. Side and vertical views receive the same
+volume treatment as views down the tunnel. Empty air ends in opaque fog.
+
+A fixed 48 by 24 screen grid uses three spatial samples of the shared source
+light field. This approximates incident light; the density integral stays exact
+per pixel. Colored strips, white attacks and ball pigments illuminate the fog.
+Low-contrast cloud shading stays still. The 350 ms light response and bounded
+color curve prevent attack flashes. Theme color is capped at .12 in linear
+light to retain soft grey fog in the light theme.
+
+The volume replaces the old bank draw with one composition draw and a bounded
+color/depth render target. Its sRGB byte texture preserves dark pigment detail
+while WebGL samples and blends in linear light. Up to four MSAA samples preserve
+geometry edges. Resizes and route cleanup release the target with the scene.
+No reflection camera, shadow map or bloom pass is added.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
