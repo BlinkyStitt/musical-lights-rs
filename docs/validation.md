@@ -964,8 +964,9 @@ The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
 upload bytes per frame. These use the same viewport, PCM, CPU throttle and
 fixed 20-degree camera; they do not establish physical-phone frame rate.
 
-The current large balls use indexed icospheres with 2,000 triangles and 1,002
-vertices, up from 1,216 triangles. Evenly divided faces smooth their outlines.
+The current large balls use indexed icospheres with 1,280 triangles and 642
+vertices, compared with 1,216 triangles and 693 vertices before. Evenly divided
+faces smooth their outlines while reducing repeated vertex lighting work.
 Depth copies use 180 triangles and 92 vertices, up from 168 triangles and down
 from 117 vertices. Shared vertices avoid repeated lighting work at UV seams;
 pigment uses 3D positions. All eight physical balls, depth pooling, instancing
