@@ -964,10 +964,12 @@ The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
 upload bytes per frame. These use the same viewport, PCM, CPU throttle and
 fixed 20-degree camera; they do not establish physical-phone frame rate.
 
-The current large balls use 48 horizontal and 32 vertical sphere segments
-(2,976 triangles per sphere). Their depth copies use 16 by 12 segments
-(352 triangles), up from 12 by 8, to smooth nearby silhouettes. All eight
-physical balls, depth pooling, instancing and camera culling stay the same.
+The current large balls use indexed icospheres with 2,000 triangles and 1,002
+vertices, up from 1,216 triangles. Evenly divided faces smooth their outlines.
+Depth copies use 180 triangles and 92 vertices, up from 168 triangles and down
+from 117 vertices. Shared vertices avoid repeated lighting work at UV seams;
+pigment uses 3D positions. All eight physical balls, depth pooling, instancing
+and camera culling stay the same.
 
 Startup Auto now chooses from one through seven depth images, using the same
 frame-cadence checks as explicit Auto. Selecting Auto tests the full 0–2,048

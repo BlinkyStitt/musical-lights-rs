@@ -221,14 +221,14 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
         return Array.from(pixels.slice(offset, offset + 3));
       };
       return { seams: [1, 2, 3].map(n => [sample(depth / 2 - n * depth + .002), sample(depth / 2 - n * depth - .002)]),
-        segments: v.balls.geometry.parameters.widthSegments, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
+        triangles: v.balls.geometry.index.count / 3, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
     } finally { hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.bars.count = count; v.renderer.setRenderTarget(null); target.dispose(); }
   });
   for (const [before, after] of evidence.seams) {
     expect(Math.max(...before)).toBeGreaterThan(30); expect(Math.max(...after)).toBeGreaterThan(30);
     expect(Math.max(...before.map((value, i) => Math.abs(value - after[i])))).toBeLessThanOrEqual(4);
   }
-  expect(evidence.segments).toBe(48); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
+  expect(evidence.triangles).toBe(2000); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
   await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
 

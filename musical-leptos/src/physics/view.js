@@ -4,6 +4,7 @@ import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
 import { MirrorRoom, barProjection } from './mirrors.js';
 import { SideBars } from './side-bars.js';
+import { sphereGeometry } from './spheres.js';
 
 const CAMERA_DISTANCE = 1.8;
 
@@ -383,7 +384,7 @@ export class PhysicsView {
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, gap] = this.layout;
-    const ballGeometry = new THREE.SphereGeometry(1, 48, 32);
+    const ballGeometry = sphereGeometry(9);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
     const ballMaterial = new THREE.MeshLambertMaterial();
     this.patternTime = { value: 0 };

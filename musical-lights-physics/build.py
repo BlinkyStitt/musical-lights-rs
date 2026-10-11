@@ -60,6 +60,12 @@ def main() -> None:
     (output / "RoundedBoxGeometry.js").write_text(
         geometry.replace("from 'three'", "from './three.module.js'")
     )
+    utilities = (
+        web / "node_modules/three/examples/jsm/utils/BufferGeometryUtils.js"
+    ).read_text()
+    (output / "BufferGeometryUtils.js").write_text(
+        utilities.replace("from 'three'", "from './three.module.js'")
+    )
     shutil.copyfile(root / "worker.js", output / "worker.js")
     for name in (
         "view.js",
@@ -67,6 +73,7 @@ def main() -> None:
         "depth-auto.js",
         "mirrors.js",
         "side-bars.js",
+        "spheres.js",
         "report.js",
         "demo-worker.js",
         "review.js",
