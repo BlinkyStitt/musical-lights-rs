@@ -431,6 +431,7 @@ export class PhysicsView {
     this.sideBars = new SideBars(this.scene, this.bars, count);
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
     this.enclosure = this.mirrors.walls;
+    this.fogBank = this.lighting.makeFogBank(this.scene);
     if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(); }
   }
   draw(now) {
@@ -480,7 +481,7 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
-    this.lighting.update(this, current, barOffset, phase, pitch, height, depth);
+    this.lighting.update(this, current, barOffset, phase, pitch, height, depth, now);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.renderedEnclosureHeight = height;
@@ -580,7 +581,7 @@ export class PhysicsView {
   disposeMeshes() {
     this.sideBars?.dispose(); this.sideBars = null;
     this.mirrors?.dispose(); this.mirrors = null;
-    for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
+    for (const mesh of [this.balls, this.bars, this.fogBank]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
     this.closed = true; this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
