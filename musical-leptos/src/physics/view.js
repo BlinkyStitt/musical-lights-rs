@@ -535,7 +535,7 @@ export class PhysicsView {
     if (wrapped !== this.wrappedLabels) {
       this.wrappedLabels = wrapped;
       const labels = this.card.querySelectorAll('.spectrum-labels span');
-      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? (i === 1 ? 'SCROLLING ↔' : '') : text; });
+      ['BASS', 'MIDRANGE', 'TREBLE'].forEach((text, i) => { labels[i].textContent = wrapped ? '' : text; });
     }
     // One accessible node per source; only the pointer surface is copied at
     // the seam. Stationary frames do not repeat layout/style writes.
