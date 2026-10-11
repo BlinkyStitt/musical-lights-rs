@@ -78,9 +78,10 @@ for (const resizeLayout of [false, true]) {
       const status = card.querySelector('.recognition-status'); delete status.dataset.routine;
       status.textContent = 'No song recognized. Try again during a clearer part of the song.';
       card.querySelector('.audio-error').textContent = 'Microphone capture was interrupted.';
-      // Both notices can coexist with a recognition message. Keep the layout
-      // case independent of whether the worker reports delay during this run.
-      card.querySelector('.physics-status').textContent = 'Motion updates are delayed.';
+      // Use the notice owner so an earlier incident timer cannot clear this
+      // fixed layout input while keyboard geometry is measured.
+      card.querySelector('#dancinglights').physics.notice.show(
+        'Motion updates are delayed.', 'Motion updates are delayed.');
     });
     const geometry = () => page.evaluate(() => {
       const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { width: r.width, height: r.height, top: r.top, bottom: r.bottom }; };
