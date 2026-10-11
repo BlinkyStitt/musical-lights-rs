@@ -433,6 +433,9 @@ export class PhysicsView {
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
     this.enclosure = this.mirrors.walls;
     this.fogBank = this.lighting.makeFogBank(this.scene);
+    // Compile hidden depth-copy materials before Auto first draws them.
+    // Their first shader link must not interrupt live input during a trial.
+    this.renderer.compile(this.scene, this.camera);
     if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(); }
   }
   draw(now) {
