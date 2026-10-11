@@ -228,7 +228,7 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
     expect(Math.max(...before)).toBeGreaterThan(30); expect(Math.max(...after)).toBeGreaterThan(30);
     expect(Math.max(...before.map((value, i) => Math.abs(value - after[i])))).toBeLessThanOrEqual(4);
   }
-  expect(evidence.triangles).toBe(2000); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
+  expect(evidence.triangles).toBe(1280); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
   await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
 
