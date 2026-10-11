@@ -167,6 +167,34 @@ test('fog light remains stable at rest and softens alternating attack frames', a
   await info.attach('fog-temporal-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
 });
 
+test('bars continue above and below the physical room', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const samples = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const hidden = [v.fogBank, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    hidden.forEach(mesh => mesh.visible = false);
+    const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4), samples = [];
+    const camera = new THREE.OrthographicCamera(-.01, .01, .01, -.01, .01, 10);
+    try {
+      for (const end of [0, 1]) {
+        const index = end * v.layout[0] * 3, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, index * 16);
+        v.bars.count = 1; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
+        const x = matrix.elements[12], y = end ? v.renderedEnclosureHeight + .25 : -.25;
+        camera.position.set(x, y, 2); camera.lookAt(x, y, 0); camera.updateMatrixWorld();
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
+        samples.push(Array.from(pixels.slice((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 4)));
+      }
+    } finally { hidden.forEach(mesh => mesh.visible = true); v.bars.count = v.layout[0] * 6; v.renderer.setRenderTarget(null); target.dispose(); v.draw(performance.now()); }
+    return samples;
+  });
+  for (const pixel of samples) { expect(pixel[3]).toBe(255); expect(Math.max(...pixel.slice(0, 3))).toBeGreaterThan(100); }
+});
+
 test('continuous depth surfaces have no color steps at old copy boundaries', async ({ page }, info) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);

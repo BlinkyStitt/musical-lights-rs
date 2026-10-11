@@ -734,6 +734,13 @@ plane.
 The fog adds one draw call, with no reflection camera or extra render target.
 
 
+Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
+the published physical support span. Their inward tips, measured travel and
+physical simulation stay unchanged. Background culling includes the full vertical
+and depth extrusion. The browser suite checks visible pixels above and below the
+room, opaque fog in empty air, light scattering, and complete-batch culling.
+
+
 The shared core defaults to a 40 ms rise for every band. Advanced exposes the
 rise duration in milliseconds and preserves saved overrides. The brake duration
 accounts for opposing acceleration so a short stroke cannot reverse before it

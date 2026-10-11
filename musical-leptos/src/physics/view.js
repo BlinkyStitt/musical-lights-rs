@@ -399,7 +399,7 @@ export class PhysicsView {
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
     // The visible post spans the same depth as its physical support surface.
-    // Scale only its height; keep finite geometry inside both banks.
+    // Extend the outer ends in the vertex shader, using the physical support span.
     const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     this.barRoof = { value: this.height };
@@ -407,9 +407,9 @@ export class PhysicsView {
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
-      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz); glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
+      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
