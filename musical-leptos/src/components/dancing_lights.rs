@@ -520,7 +520,6 @@ pub fn DancingLights(
             <div class="camera-controls depth-controls">
                 <label class="control-row"><span>"Depth "<output class="depth-status">"Auto"</output></span><input class="depth-slider" aria-label="Depth images" type="range" min="0" max="2048" step="1" value="6"/></label>
                 <button class="depth-auto" type="button">"Auto"</button>
-                <button class="depth-retest" type="button">"Retest"</button>
             </div>
             </div>
             <div class="display-note">

@@ -17,7 +17,7 @@ Audio block size changes how samples arrive. It does not change the model or its
 
 Below the browser scene, **Current loudness** shows sones and RMS dBFS. **Background estimate** tracks a lower percentile of recent input. It never subtracts sound or changes calibration. RMS uses exponential integration, with a default time constant of 125 ms. `~` marks estimated sones from an assumed microphone scale. dBFS measures digital level; it does not measure hearing risk.
 
-New browser preferences use **Auto depth**. Startup frame measurements select a depth count for the observed screen cadence. The slider and numeric control allow 0–2048 images. Saved manual counts stay unchanged. Auto selects once; Retest starts a new measurement. Bars and balls emit faint color light. White attacks illuminate nearby surfaces throughout the depth. Advanced controls change presentation and scheduling while the ISO coefficients stay fixed.
+New browser preferences use **Auto depth**. Startup frame measurements select a depth count for the observed screen cadence. The slider and numeric control allow 0–2048 images. Saved manual counts stay unchanged. Auto selects once; select Auto again to start a new measurement. Bars and balls emit faint color light. White attacks illuminate nearby surfaces throughout the depth. Advanced controls change presentation and scheduling while the ISO coefficients stay fixed.
 
 The 20×20 net combines the first five bands into one bass row. Each row of the jacket's two 8×32 panels maps to `floor(row × 24 / 32)`. Slow displays receive the latest snapshot while analysis consumes all audio.
 
