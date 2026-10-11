@@ -28,14 +28,24 @@ test('saved Auto depth and Reset display return to the shallow startup range', a
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
   const state = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    return { count: v.mirrors.count, pool: v.mirrors.poolCount, balls: v.balls.count };
+    return { count: v.mirrors.count, pool: v.mirrors.poolCount, balls: v.balls.count, measuredAt: v.depthProfile.start };
   });
   expect(state.count).toBeGreaterThanOrEqual(1); expect(state.count).toBeLessThanOrEqual(7);
   expect(state.pool).toBe(8); expect(state.balls).toBe(8);
-  await page.locator('.depth-slider').fill('128');
   await page.locator('.display-controls > summary').click();
+  await page.locator('.mirror-count').fill('128');
+  await page.locator('.mirror-count').dispatchEvent('change');
+  expect(await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.settings.depthMode, v.mirrors.count, v.balls.count];
+  })).toEqual(['manual', 128, 8]);
   await page.getByRole('button', { name: 'Reset display', exact: true }).click();
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.candidates.at(-1))).toBe(7);
+  const reset = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { mode: v.settings.depthMode, max: v.depthProfile.candidates.at(-1), measuredAt: v.depthProfile.start };
+  });
+  expect(reset.mode).toBe('auto'); expect(reset.max).toBe(7);
+  expect(reset.measuredAt).toBeGreaterThan(state.measuredAt);
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
   const count = Number(await page.locator('.depth-slider').inputValue());
