@@ -265,8 +265,8 @@ nav { flex-wrap: wrap; }
 .audio-card:not([data-expanded]) > .recovery-notices { order: 1; }
 .audio-card:not([data-expanded]) > .recognized-song { order: 2; }
 .audio-card:not([data-expanded]) > .scene-controls { order: 3; }
-.audio-card:not([data-expanded]) > .loudness-readouts { order: 4; }
-.audio-card:not([data-expanded]) > .audio-controls { order: 5; padding: .25rem; }
+.audio-card:not([data-expanded]) > .loudness-readouts { order: 5; }
+.audio-card:not([data-expanded]) > .audio-controls { order: 4; padding: .25rem; }
 .audio-card:not([data-expanded]) > .input-source-controls { order: 6; }
 .audio-card:not([data-expanded]) > .playback-controls { order: 7; }
 @media (min-width: 1000px) {
@@ -353,8 +353,11 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .camera-controls { position: relative; inset: auto; grid-row: 4; grid-column: 1; width: 100%; margin: 0; gap: .5rem; font-size: .8rem; }
 .audio-card[data-expanded] .camera-controls .control-row { flex-direction: row; align-items: center; flex-wrap: nowrap; min-width: 0; gap: .5rem; }
 
-.loudness-readouts { display: flex; flex-wrap: wrap; gap: .35rem 1rem; font-size: .8rem; }
-.loudness-readouts small { flex-basis: 100%; }
+.loudness-readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem 1rem; font-size: .8rem; }
+/* Reserve numeric slots before capture starts, so the first values do not resize the scene. */
+.loudness-readouts output { min-block-size: 2lh; }
+.loudness-readouts small { grid-column: 1 / -1; }
+@media (max-width: 700px) { .loudness-readouts { grid-template-columns: minmax(0, 1fr); } }
 .scene-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; min-width: 0; }
 .scene-controls .camera-controls { min-width: 0; margin: 0; }
 .scene-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
@@ -369,7 +372,7 @@ nav { flex-wrap: wrap; }
 .depth-controls button, .audio-tuning select { min-height: 44px; }
 .audio-tuning, .render-tuning { display: grid; gap: .5rem; }
 .audio-card[data-expanded] > .settings-section { display: none; }
-.audio-card[data-expanded] .loudness-readouts { position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
+.audio-card[data-expanded] .loudness-readouts { grid-template-columns: minmax(0, 1fr); position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
 .audio-card[data-expanded] .loudness-readouts small { display: none; }
 .audio-card[data-expanded] > .scene-controls { position: relative; inset: auto; width: 100%; grid-row: 4; grid-column: 1; }
 .audio-card[data-expanded] .scene-controls .camera-controls { grid-row: auto; grid-column: auto; }

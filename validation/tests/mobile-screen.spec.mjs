@@ -27,6 +27,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await page.locator('.tone-frequency').fill('150');
   await page.locator('.tone-level').fill('-20');
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.previewLevels))).toBeGreaterThan(0);
   await page.locator('.review-start').click();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
@@ -52,7 +53,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
     // Capture at the actual Stop event so protocol latency cannot consume the
     // fall before its starting height is measured.
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], balls: Array.from({ length: layout[21] }, (_, i) => {
+    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], idlePeak: Math.max(...document.querySelector('#dancinglights').physics.previewLevels), balls: Array.from({ length: layout[21] }, (_, i) => {
       const offset = 3 + i * layout[8];
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
@@ -61,7 +62,10 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   // protocol round trip/tap can arrive after that transient has already ended.
   await page.waitForFunction(button => {
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    const clearance = current[layout[17] + 1] * .5;
+    // Reduced Motion fixes the core preview's phase. Stop only above that
+    // pattern: a ball resting on its bars cannot demonstrate a free fall.
+    const idlePeak = Math.max(...document.querySelector('#dancinglights').physics.previewLevels);
+    const clearance = current[layout[17] + 1] * idlePeak + .01;
     const elevated = Array.from({ length: layout[21] }, (_, i) => 3 + i * layout[8])
       .some(offset => current[offset + 1] > current[offset + 7] + clearance);
     if (!elevated) return false;
@@ -70,7 +74,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   }, await stop.elementHandle(), { timeout: 5000 });
   const stopped = await page.evaluate(() => window.physicsAtStop);
   expect(stopped.barMax).toBeGreaterThan(0);
-  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.barMax * .5)).toBe(true);
+  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.barMax * stopped.idlePeak + .01)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
   try {
     await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
