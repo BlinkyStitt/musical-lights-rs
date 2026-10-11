@@ -1,3 +1,4 @@
+import { AutoDepth } from './depth-auto.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
 import { MirrorRoom, barProjection } from './mirrors.js';
@@ -92,7 +93,7 @@ export class PhysicsView {
     this.renderer.domElement.setAttribute('aria-label', '8 rigid balls, matching top and bottom audio bars, and an infinity mirror box');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
-      event.preventDefault(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
+      event.preventDefault(); this.pauseDepthTest(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
       this.report?.invalidate('WebGL context lost');
     });
     this.canvas.addEventListener('webglcontextrestored', this.contextRestored = () => {
@@ -108,11 +109,11 @@ export class PhysicsView {
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.sceneVisible = true;
-    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; });
+    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; if (!this.sceneVisible) this.pauseDepthTest(); });
     this.visibilityObserver.observe(layer);
     this.controls = this.card.querySelector('.audio-controls'); this.observer.observe(this.controls);
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
-    this.listen(document, 'visibilitychange', () => { if (document.hidden) this.report?.invalidate('Page hidden during test'); this.pause(); });
+    this.listen(document, 'visibilitychange', () => { if (document.hidden) { this.pauseDepthTest(); this.report?.invalidate('Page hidden during test'); } this.pause(); });
     this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'rigid-body-physics' });
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
@@ -143,8 +144,11 @@ export class PhysicsView {
         if (readout) { const playing = this.card.dataset.audioState === 'playing'; readout.hidden = !playing; readout.textContent = playing ? `${Math.round(this.tempo)} BPM` : ''; readout.title = this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'No reliable beat; easing toward 60 BPM'; }
       }
       this.updateCamera(now);
-      const rendered = this.current && this.sceneVisible;
-      if (rendered) this.draw(now);
+      let rendered = false;
+      if (this.current && this.sceneVisible) {
+        if (this.depthProfile && !this.depthProfile.done) this.depthProfile.sample(frameTime);
+        if (!this.depthProfile?.baseline || this.depthProfile.done || !Number.isFinite(this.renderedPhase)) { this.draw(now); rendered = true; }
+      }
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
       if (rendered) { this.metrics.frames++; this.metrics.renderMs += cost; }
@@ -175,12 +179,14 @@ export class PhysicsView {
     this.listen(this.card, 'camera-reset', () => { this.cameraBase = 0; this.setCamera(0); });
     this.listen(this.card, 'display-settings', ({ detail }) => {
       this.settings = detail;
+      if (detail.depthMode !== 'auto') this.depthProfile?.cancel();
       if (this.mirrors && this.mirrors.count !== detail.mirrorCount) {
         this.mirrors.setCount(detail.mirrorCount);
       }
       if (detail.cameraAngle !== this.cameraBase) this.cameraBase = detail.cameraAngle;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
+    this.listen(this.card, 'depth-retest', () => this.startDepthTest());
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
       if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; }
       const difference = (detail.accentSequence ?? 0) - this.audioAccent;
@@ -413,6 +419,7 @@ export class PhysicsView {
     this.sideBars = new SideBars(this.scene, this.bars, count);
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount);
     this.enclosure = this.mirrors.walls;
+    if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(); }
   }
   draw(now) {
     const [count, , , pitch, , , , , stride, barOffset] = this.layout;
@@ -477,6 +484,21 @@ export class PhysicsView {
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.renderer.render(this.scene, this.camera);
+  }
+  pauseDepthTest() {
+    if (!this.depthProfile || this.depthProfile.done) return;
+    this.depthProfile.cancel();
+    this.settings.mirrorCount = this.depthProfile.best;
+    this.mirrors.setCount(this.settings.mirrorCount);
+    this.card.dispatchEvent(new CustomEvent('depth-paused', { detail: this.settings.mirrorCount }));
+  }
+  startDepthTest() {
+    this.depthProfile?.cancel();
+    if (!this.mirrors || this.closed || this.lost || document.hidden || this.settings.depthMode !== 'auto') return;
+    this.card.querySelector('.depth-status').textContent = 'Measuring…';
+    this.depthProfile = new AutoDepth(count => { this.mirrors.setCount(count); this.settings.mirrorCount = count; },
+      result => this.card.dispatchEvent(new CustomEvent('depth-selected', { detail: result })), performance.now());
+    if (!this.sceneVisible) this.pauseDepthTest();
   }
   renderedHeight(band, end = 0) {
     const offset = (band + end * this.layout[0] * 3) * 16;
@@ -556,7 +578,7 @@ export class PhysicsView {
     this.mirrors?.dispose(); this.mirrors = null;
     for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
-    this.closed = true; this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
+    this.closed = true; this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
     this.observer.disconnect(); this.visibilityObserver.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();

@@ -2,7 +2,7 @@ import { DEFAULT_AUDIO, validAudio, mountAudioControls } from './audio_controls.
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, audio: DEFAULT_AUDIO, quantum: 'default', latency: 'interactive',
+  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, depthMode: 'auto', audio: DEFAULT_AUDIO, quantum: 'default', latency: 'interactive',
   scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO] };
@@ -16,7 +16,7 @@ export function readSettings(storage) {
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;
     if (validDirectionOdds(saved.directionOdds)) defaults.directionOdds = [...saved.directionOdds];
-    if (Number.isInteger(saved.mirrorCount) && saved.mirrorCount >= 0 && saved.mirrorCount <= 2048) defaults.mirrorCount = saved.mirrorCount;
+    if (Number.isInteger(saved.mirrorCount) && saved.mirrorCount >= 0 && saved.mirrorCount <= 2048) { defaults.mirrorCount = saved.mirrorCount; defaults.depthMode = saved.depthMode === 'auto' ? 'auto' : 'manual'; }
     for (const key of ['cameraMotion', 'scrolling']) if (typeof saved[key] === 'boolean') defaults[key] = saved[key];
     if (typeof saved.youtubeLink === 'string' && saved.youtubeLink.length <= 2048) defaults.youtubeLink = saved.youtubeLink;
     if (Array.isArray(saved.physics) && saved.physics.length === 8 && saved.physics.every((v, i) => Number.isFinite(v) && v >= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][0] && v <= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][1])) defaults.physics = saved.physics;
@@ -106,13 +106,20 @@ export class Presentation {
     this.listen(window, 'resize', () => this.positionHelp());
     this.listen(card, 'audio-session', ({ detail }) => { this.microphoneActive = detail.source === 'microphone' && !['stopped', 'ended'].includes(detail.state); this.updateAudioType(); if (this.anchor?.dataset.help === 'listening-toggle') this.showHelp(this.anchor, 'listening-toggle'); });
     this.listen(card, 'microphone-access', ({ detail }) => { this.permission = detail; });
-    for (const [selector, key, checkbox] of [['.flight-height', 'flight'], ['.mirror-count', 'mirrorCount'], ['.camera-motion', 'cameraMotion', true], ['.scroll-lights', 'scrolling', true]]) {
+    for (const [selector, key, checkbox] of [['.flight-height', 'flight'], ['.camera-motion', 'cameraMotion', true], ['.scroll-lights', 'scrolling', true]]) {
       const node = card.querySelector(selector); if (!node) continue;
       if (checkbox) node.checked = this.settings[key]; else node.value = this.settings[key];
       if (key === 'scrolling') node.dispatchEvent(new Event('change', { bubbles: true }));
       this.listen(node, 'change', () => { const value = checkbox ? node.checked : Number(node.value); if (!checkbox && (!node.validity.valid || !Number.isFinite(value))) return; this.settings[key] = value; this.save(); });
     }
     mountAudioControls(this);
+    const depths = [...card.querySelectorAll('.mirror-count, .depth-slider')];
+    const syncDepth = () => { for (const node of depths) node.value = this.settings.mirrorCount; card.querySelector('.depth-status').textContent = this.settings.depthMode === 'auto' ? `Auto: ${this.settings.mirrorCount}` : `${this.settings.mirrorCount}`; };
+    syncDepth();
+    for (const node of depths) this.listen(node, node.type === 'range' ? 'input' : 'change', () => { const count = Number(node.value); if (node.value === '' || !node.validity.valid || !Number.isInteger(count) || count < 0 || count > 2048) return; this.settings.depthMode = 'manual'; this.settings.mirrorCount = count; syncDepth(); this.save(); });
+    for (const selector of ['.depth-auto', '.depth-retest']) this.listen(card.querySelector(selector), 'click', () => { this.settings.depthMode = 'auto'; syncDepth(); this.save(); card.dispatchEvent(new Event('depth-retest')); });
+    this.listen(card, 'depth-paused', () => { syncDepth(); card.querySelector('.depth-status').textContent = 'Auto paused'; card.querySelector('.depth-status').title = 'Select Retest to measure again.'; this.save(); });
+    this.listen(card, 'depth-selected', ({ detail }) => { if (this.settings.depthMode !== 'auto') return; this.settings.mirrorCount = detail.count; syncDepth(); card.querySelector('.depth-status').textContent = `Auto: ${detail.count}`; card.querySelector('.depth-status').title = `${detail.count} depth images · ${Math.round(detail.hz)} Hz target`; this.save(); });
     this.oddsInputs = ['.direction-slow-bpm', '.direction-fast-bpm', '.direction-low-chance', '.direction-high-chance', '.direction-curve'].map(s => card.querySelector(s));
     const writeOdds = () => this.oddsInputs.forEach((node, i) => { node.value = this.settings.directionOdds[i] * (i === 2 || i === 3 ? 100 : 1); });
     writeOdds();
@@ -123,7 +130,7 @@ export class Presentation {
       if (valid) { this.settings.directionOdds = odds; this.save(); }
     });
     card.querySelector('.camera-rotation').value = this.settings.cameraAngle;
-    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, mirrorCount: DEFAULT_SETTINGS.mirrorCount, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle'], ['.mirror-count', 'mirrorCount']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, mirrorCount: DEFAULT_SETTINGS.mirrorCount, depthMode: 'auto', scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle'], ['.mirror-count', 'mirrorCount']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; syncDepth(); this.save(); card.dispatchEvent(new Event('depth-retest')); card.dispatchEvent(new CustomEvent('camera-reset')); });
     this.save(false);
     card.presentation = this;
   }

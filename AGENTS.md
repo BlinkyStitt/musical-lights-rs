@@ -69,8 +69,8 @@
   measure it; prefer instancing and avoid recursive reflection cameras, shadow
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
-- Mirror count controls drawing only; six depth images are the default, and
-  saved choices remain unchanged. Advanced allows 0–2048 images; validate the
+- Mirror count controls drawing only. New users start in Auto mode, which selects
+  depth images from measured startup frame cadence. Saved manual choices remain unchanged. Advanced allows 0–2048 images; validate the
   upper bound and saved settings without changing physical ball counts. Four
   full-size background boxes flank the
   physical center box and reuse all source bands in matching vertical banks.

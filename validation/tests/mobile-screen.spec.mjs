@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { normalView, physicsReady, physicsState } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
-test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }) => {
+test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }, info) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -72,7 +72,13 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   expect(stopped.barMax).toBeGreaterThan(0);
   expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.barMax * .5)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
-  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
+  try {
+    await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
+  } catch (error) {
+    await info.attach('stop-gravity-state.json', { body: JSON.stringify({ stopped, current: await physicsState(page),
+      visual: await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return { idle: v.idle, input: Array.from(v.input), audio: v.card.dataset.audioState }; }) }), contentType: 'application/json' });
+    throw error;
+  }
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toBeEmpty();
   expect(errors).toEqual([]);

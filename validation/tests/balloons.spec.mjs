@@ -103,6 +103,7 @@ for (const width of [375, 1440]) {
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.setViewportSize({ width, height: 900 });
     await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+    await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
     await expect(page.locator('#dancinglights canvas')).toHaveCount(1);
     await expect(page.getByRole('meter')).toHaveCount(24);
     const initial = await physicsState(page);
@@ -310,7 +311,7 @@ test('context loss pauses physics and restoration resumes without losing the Exi
 });
 
 test('phone page sends generated PCM through the audio processor and exports an honest incomplete report', async ({ page }) => {
-  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input'); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');

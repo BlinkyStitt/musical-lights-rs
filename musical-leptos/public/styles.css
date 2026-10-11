@@ -264,7 +264,7 @@ nav { flex-wrap: wrap; }
 .audio-card:not([data-expanded]) > .visual-content { order: 0; }
 .audio-card:not([data-expanded]) > .recovery-notices { order: 1; }
 .audio-card:not([data-expanded]) > .recognized-song { order: 2; }
-.audio-card:not([data-expanded]) > .camera-controls { order: 3; }
+.audio-card:not([data-expanded]) > .scene-controls { order: 3; }
 .audio-card:not([data-expanded]) > .loudness-readouts { order: 4; }
 .audio-card:not([data-expanded]) > .audio-controls { order: 5; padding: .25rem; }
 .audio-card:not([data-expanded]) > .input-source-controls { order: 6; }
@@ -355,11 +355,23 @@ nav { flex-wrap: wrap; }
 
 .loudness-readouts { display: flex; flex-wrap: wrap; gap: .35rem 1rem; font-size: .8rem; }
 .loudness-readouts small { flex-basis: 100%; }
-.camera-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
-.audio-tuning select { min-height: 44px; }
+.scene-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; min-width: 0; }
+.scene-controls .camera-controls { min-width: 0; margin: 0; }
+.scene-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
+.depth-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .25rem .5rem; }
+.depth-controls .control-row { grid-column: 1; }
+.depth-controls .control-row > span { display: flex; flex-direction: column; white-space: nowrap; }
+.depth-status { min-width: 0; font-size: .7rem; }
+@media (max-width: 700px) { .scene-controls { grid-template-columns: minmax(0, 1fr); } }
+@container visualizer (orientation: landscape) and (min-width: 500px) {
+  .audio-card[data-expanded] .scene-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.depth-controls button, .audio-tuning select { min-height: 44px; }
 .audio-tuning { display: grid; gap: .5rem; }
 .audio-card[data-expanded] > .settings-section { display: none; }
 .audio-card[data-expanded] .loudness-readouts { position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
 .audio-card[data-expanded] .loudness-readouts small { display: none; }
+.audio-card[data-expanded] > .scene-controls { position: relative; inset: auto; width: 100%; grid-row: 4; grid-column: 1; }
+.audio-card[data-expanded] .scene-controls .camera-controls { grid-row: auto; grid-column: auto; }
 .audio-card[data-expanded] { grid-template-rows: minmax(min(2rem, 10cqh), 1fr) minmax(0, max-content) minmax(0, max-content) auto auto auto; }
 @container visualizer (max-height: 500px) { .audio-card[data-expanded] .loudness-readouts { display: none; } }

@@ -509,10 +509,17 @@ pub fn DancingLights(
                 <output class="background-loudness">"Background estimate: —"</output>
                 <small class="audio-scheduling"></small>
             </div>
+            <div class="scene-controls">
             <div class="camera-controls">
                 <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
+            </div>
+            <div class="camera-controls depth-controls">
+                <label class="control-row"><span>"Depth "<output class="depth-status">"Auto"</output></span><input class="depth-slider" aria-label="Depth images" type="range" min="0" max="2048" step="1" value="6"/></label>
+                <button class="depth-auto" type="button">"Auto"</button>
+                <button class="depth-retest" type="button">"Retest"</button>
+            </div>
             </div>
             <div class="display-note">
                 <p class="display-status">

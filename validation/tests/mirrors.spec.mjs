@@ -3,6 +3,13 @@ import { writeFile } from 'node:fs/promises';
 import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
+// Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('musical-lights-display-v1'))
+      localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 }));
+  });
+});
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
 
 test('continuous depth surfaces have no color steps at old copy boundaries', async ({ page }, info) => {
@@ -273,8 +280,12 @@ test('mirror count saves, rejects fractions and resets without changing physics'
   }
   await page.reload(); await physicsReady(page); await normal(page); await page.locator('.display-controls > summary').click();
   await expect(page.locator('.mirror-count')).toHaveValue('2048');
-  await page.locator('.display-reset').click(); await expect(page.locator('.mirror-count')).toHaveValue('6');
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(6);
+  await page.locator('.display-reset').click();
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.settings.depthMode)).toBe('auto');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
+  const selected = Number(await page.locator('.mirror-count').inputValue());
+  expect(selected).toBeGreaterThanOrEqual(0); expect(selected).toBeLessThanOrEqual(2048);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(selected);
 });
 
 test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {

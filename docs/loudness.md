@@ -56,6 +56,10 @@ The background estimate never feeds the model, gain, attack detector, or calibra
 
 Advanced controls expose gain, smoothing, attack history and gates, flash timing, tempo range and response, RMS integration, background history and percentile, numeric updates, and display packet rate. The core validates all settings before use. ISO coefficients and band definitions stay fixed. Audio settings apply on the next explicit audio start. Latency and block requests are browser-dependent hints. Default uses the browser quantum, normally 128 samples (2.67 ms at 48 kHz). Unsupported requests remain unavailable. The UI reports actual block size. No setting inserts silence or drops input to hide an overrun.
 
+## Rendering
+
+Auto depth measures observed frame cadence, tests bounded increasing counts, then freezes the largest passing count. It requires at least 95% of the measured cadence, a 95th-percentile interval below 1.25 refresh periods, and fewer than 1% missed frames. It does not infer GPU speed from CPU or memory hints. Saved counts remain manual; Auto and Retest are explicit controls. Hiding the scene, hiding the page, or losing its graphics context stops a measurement at its best completed count. Retest starts a new measurement when the scene is visible.
+
 ## Scientific sources and implementation roles
 
 - [ISO 532-1:2017, Zwicker method](https://www.iso.org/standard/63077.html) defines the authoritative time-varying loudness calculation. The application uses its existing implementation rather than mixing loudness models.
