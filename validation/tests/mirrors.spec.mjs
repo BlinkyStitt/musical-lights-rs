@@ -278,14 +278,22 @@ test('mirror count saves, rejects fractions and resets without changing physics'
     expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount)).toBe(2048);
     expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(2048);
   }
-  await page.reload(); await physicsReady(page); await normal(page); await page.locator('.display-controls > summary').click();
-  await expect(page.locator('.mirror-count')).toHaveValue('2048');
+  // Reset from the maximum manual count while these controls are in view.
   await page.locator('.display-reset').click();
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.settings.depthMode)).toBe('auto');
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
   const selected = Number(await page.locator('.mirror-count').inputValue());
   expect(selected).toBeGreaterThanOrEqual(0); expect(selected).toBeLessThanOrEqual(2048);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(selected);
+  await page.locator('.mirror-count').fill('2048'); await page.locator('.mirror-count').dispatchEvent('change');
+  // Reload last: restoration needs no second scroll through the scene at
+  // the maximum manual count. The hidden control still exposes its value.
+  await page.reload(); await physicsReady(page);
+  await expect(page.locator('.mirror-count')).toHaveValue('2048');
+  expect(await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.settings.depthMode, v.mirrors.count, v.balls.count];
+  })).toEqual(['manual', 2048, 8]);
 });
 
 test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {
