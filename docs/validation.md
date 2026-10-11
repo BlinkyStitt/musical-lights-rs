@@ -57,6 +57,12 @@ changes do not require larger runners, paid images or increased cache storage.
 Docker image pulls and browser downloads are not used as substitutes for the
 isolated test jobs: the measured dominant cost is test execution.
 
+On macOS, the native crash guard reads each new browser IPS report. Actual crashes
+and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots
+as simulated; the guard retains and logs these separately. A simulated report can
+precede a process quit, so it does not replace Playwright's startup and page-crash
+checks. See [Apple's report fields](https://developer.apple.com/documentation/xcode/examining-the-fields-in-a-crash-report).
+
 For local checks, `python3 validation/validate.py browser` still runs all projects.
 `npm run test:site` and `npm run test:demos` retain their complete local subsets.
 Run from the repository root with pinned tools and macOS host access. To check
