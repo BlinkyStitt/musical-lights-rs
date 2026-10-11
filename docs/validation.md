@@ -725,8 +725,10 @@ Scene fog leaves the physical room clear, then thickens toward an opaque bank
 at a distance that grows with the requested depth. Its distance eases toward
 80% of the camera range, so 2,048 rows show more depth than 50 rows.
 A single opaque plane fills empty air and blocks objects behind the bank. A
-fixed 128 by 64 grid samples the same bounded light field as the scene. Colored
-strips, white attacks and ball pigments illuminate the fog. Low-contrast cloud
+fixed 128 by 16 grid samples the same bounded light field as the scene. Interior
+rows cover the physical sources and their light range; the outer rows cover the
+rest of the view with zero source light. Colored strips, white attacks and ball
+pigments illuminate the fog. Low-contrast cloud
 shading stays still. A 350 ms light response softens attack illumination, and a
 bounded color curve prevents large white flashes. Both themes use their plot
 color as the base. Surface haze fades into the bank before the camera clipping

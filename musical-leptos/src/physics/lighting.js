@@ -115,8 +115,11 @@ export class SceneLighting {
         varying vec3 fogPoint;
         void main() {
           fogPoint = (modelMatrix * vec4(position, 1.0)).xyz;
+          // Keep fourteen lighting intervals around the physical sources.
+          // The two outer rows cover empty air, where source light is zero.
+          if (abs(position.y) < .5) fogPoint.y = mix(-lightStrength.z, lightExtent.y + lightStrength.z, (position.y + .4375) / .875);
           nearbyIrradiance = localIllumination(fogPoint, vec3(0.0, 0.0, 1.0));
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * viewMatrix * vec4(fogPoint, 1.0);
           // Keep the opaque background across the far plane at oblique angles.
           gl_Position.z = min(gl_Position.z, gl_Position.w * .9999998);
         }`,
@@ -127,7 +130,7 @@ export class SceneLighting {
         }`,
       toneMapped: false,
     });
-    const bank = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 128, 64), material);
+    const bank = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 128, 16), material);
     bank.frustumCulled = false;
     scene.add(bank);
     return bank;
@@ -148,7 +151,7 @@ export class SceneLighting {
     view.fogBank.position.set(view.width / 2, height / 2, -depth / 2 - span);
     // Intersect all four view rays with the bank's world-Z plane. Oblique
     // views need more height on the far side than a centered FOV estimate.
-    let halfWidth = 2.5 * view.width, halfHeight = height;
+    let halfWidth = 2.5 * view.width, halfHeight = Math.max(height, height / 2 + this.uniforms.lightStrength.value.z);
     const eye = view.camera.position, bank = view.fogBank.position;
     for (let i = 0; i < 4; i++) {
       const ray = this.fogCorner.set(i & 1 ? 1 : -1, i & 2 ? 1 : -1, .5).unproject(view.camera).sub(eye);
