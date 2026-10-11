@@ -875,7 +875,7 @@ again. Older player callbacks cannot replace the current audio owner.
 Bars now use one continuous depth extrusion per rendered bar, with a smooth color
 fade instead of separate end faces and brightness steps at every copied box.
 Ball depth images still copy the eight physical transforms; the large physical
-balls use 32 horizontal and 20 vertical sphere segments. Background bar culling
+balls in that measurement used 32 by 20 sphere segments. Background bar culling
 uses the entire extruded box, including the trailing depth, and retains all 24
 source bands and accessible meters. Pixel tests compare culled and complete
 background banks at five angles and 0, 3, 8 and 17 depth settings. Side-surface
@@ -963,3 +963,8 @@ Its last measured frame submitted 7,032 ball images instead of all 16,384.
 The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
 upload bytes per frame. These use the same viewport, PCM, CPU throttle and
 fixed 20-degree camera; they do not establish physical-phone frame rate.
+
+The current large balls use 64 horizontal and 40 vertical sphere segments
+(4,992 triangles per sphere). Their depth copies use 24 by 16 segments
+(720 triangles), up from 12 by 8, to smooth nearby silhouettes. All eight
+physical balls, depth pooling, instancing and camera culling stay the same.

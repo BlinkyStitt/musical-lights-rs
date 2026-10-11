@@ -16,7 +16,7 @@ export function mirrorCells(count) {
 function imageGeometry(staged, count) {
   const { capacity, attributes } = staged;
   const cells = mirrorCells(count);
-  const geometry = new THREE.SphereGeometry(1, 12, 8);
+  const geometry = new THREE.SphereGeometry(1, 24, 16);
   for (const { name, attr } of attributes) geometry.setAttribute(name,
     new THREE.InstancedBufferAttribute(new Float32Array(capacity * attr.itemSize * count), attr.itemSize));
   const offsets = new Float32Array(count * capacity);
