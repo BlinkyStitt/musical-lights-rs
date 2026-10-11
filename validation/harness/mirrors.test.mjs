@@ -36,7 +36,7 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
   assert.deepEqual(room.sources[0].colors, balls.instanceColor.array);
   assert.equal(room.walls.instanceMatrix.array[10], Math.fround(.96));
   assert.equal(room.walls.instanceMatrix.array[14], Math.fround(-.36));
-  assert.equal(room.meshes[0].mesh.geometry.parameters.widthSegments, 12);
+  assert.equal(room.meshes[0].mesh.geometry.parameters.widthSegments, 24);
   for (const { mesh, staged } of room.meshes) {
     assert.equal(mesh.material.defines.PIXEL_RATIO, '2.0');
     assert.equal(mesh.material.isMeshLambertMaterial, true);
