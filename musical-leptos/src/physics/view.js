@@ -383,7 +383,7 @@ export class PhysicsView {
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, gap] = this.layout;
-    const ballGeometry = new THREE.SphereGeometry(1, 64, 40);
+    const ballGeometry = new THREE.SphereGeometry(1, 48, 32);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
     const ballMaterial = new THREE.MeshLambertMaterial();
     this.patternTime = { value: 0 };

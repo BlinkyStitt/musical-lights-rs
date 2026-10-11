@@ -964,9 +964,9 @@ The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
 upload bytes per frame. These use the same viewport, PCM, CPU throttle and
 fixed 20-degree camera; they do not establish physical-phone frame rate.
 
-The current large balls use 64 horizontal and 40 vertical sphere segments
-(4,992 triangles per sphere). Their depth copies use 24 by 16 segments
-(720 triangles), up from 12 by 8, to smooth nearby silhouettes. All eight
+The current large balls use 48 horizontal and 32 vertical sphere segments
+(2,976 triangles per sphere). Their depth copies use 16 by 12 segments
+(352 triangles), up from 12 by 8, to smooth nearby silhouettes. All eight
 physical balls, depth pooling, instancing and camera culling stay the same.
 
 Startup Auto now chooses from one through seven depth images, using the same
