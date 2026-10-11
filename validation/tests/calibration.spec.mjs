@@ -13,7 +13,7 @@ async function input(page, pending = false) {
       constructor(...args) {
         super(...args); window.analysisNode = this;
         window.initialMotion = args[2].processorOptions.reducedMotion;
-        this.port.addEventListener('message', ({ data }) => { if (data.type === 'frame') window.producerMotion = data.state[1]; });
+        this.port.addEventListener('message', ({ data }) => { if (data.type === 'frame') { window.producerMotion = data.state[1]; window.producerRms = data.readouts[0]; } });
       }
     };
     window.captureSettings = { deviceId: 'calibration-fixture', channelCount: 2, sampleRate: 48000, autoGainControl: false, echoCancellation: false, noiseSuppression: false };
@@ -47,6 +47,9 @@ test('calibration is optional, measures a known reference, and binds to reported
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   expect(await page.evaluate(()=>window.requestedConstraints.audio)).toEqual({autoGainControl:false, echoCancellation:false, noiseSuppression:false});
 
+  // Calibrate a steady reference, after the realtime MediaStream bridge has
+  // delivered the tone and the input RMS has settled. Keep the scale tolerance.
+  await expect.poll(() => page.evaluate(() => window.producerRms)).toBeCloseTo(20 * Math.log10(.1 / Math.sqrt(2)), 2);
   await page.getByRole('button', {name:'Measure reference'}).click();
   await expect(page.getByRole('button', {name:'Measure reference'})).toBeDisabled();
   await expect(page.locator('.calibration-status')).toHaveText('Calibrated for this input', {timeout:10000});

@@ -1,5 +1,5 @@
 use crate::wasm_audio::AudioSession;
-use musical_lights_core::audio::browser::BrowserSnapshot;
+use musical_lights_core::audio::presentation::LoudnessSnapshot;
 use musical_lights_core::audio::visual::{DISPLAY_BANDS, DisplayFrame};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsValue;
@@ -35,7 +35,7 @@ impl FrameRate {
 pub struct DisplayAnimation(Rc<RefCell<Option<AnimationResources>>>);
 struct AnimationResources {
     reduced_motion: Option<web_sys::MediaQueryList>,
-    display: BrowserSnapshot,
+    display: LoudnessSnapshot,
     session: AudioSession,
     motion: bool,
     frame_rate: FrameRate,
@@ -55,7 +55,7 @@ impl DisplayAnimation {
         session.set_reduced_motion(motion);
         Ok(Self(Rc::new(RefCell::new(Some(AnimationResources {
             reduced_motion,
-            display: BrowserSnapshot::new(session.time()),
+            display: LoudnessSnapshot::new(session.time()),
             session,
             motion,
             frame_rate: FrameRate::default(),
@@ -86,7 +86,7 @@ impl DisplayAnimation {
     pub fn stop(&self) {
         self.0.borrow_mut().take();
     }
-    pub fn push(&self, snapshot: BrowserSnapshot) {
+    pub fn push(&self, snapshot: LoudnessSnapshot) {
         if let Some(r) = self.0.borrow_mut().as_mut()
             && snapshot.timestamp() >= r.display.timestamp()
         {

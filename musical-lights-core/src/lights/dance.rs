@@ -16,9 +16,10 @@ pub struct RecentPeak {
     previous_at: Option<f64>,
     deadline: Option<f64>,
     eligible: bool,
+    candidate_eligible_until: Option<f64>,
 }
 impl RecentPeak {
-    pub fn push(&mut self, at: f64, loudness: f64, attack: bool) -> bool {
+    pub fn push(&mut self, at: f64, loudness: f64, attack: bool, candidate: bool) -> bool {
         if !at.is_finite() || !loudness.is_finite() || loudness < 0.0 {
             return false;
         }
@@ -33,9 +34,14 @@ impl RecentPeak {
             self.deadline = None;
             self.eligible = false;
         }
+        // Compare a rising candidate with the peak before this articulation.
+        // Confirmation can arrive later, after the current crest has set a peak.
+        if candidate && loudness > self.peak && loudness >= 0.1 {
+            self.candidate_eligible_until = Some(at + 0.060);
+        }
         if attack {
             self.deadline.get_or_insert(at + 0.060);
-            self.eligible |= loudness > self.peak && loudness >= 0.1;
+            self.eligible |= self.candidate_eligible_until.is_some_and(|end| at <= end);
         }
         self.peak = self.peak.max(loudness);
         emitted
@@ -66,8 +72,12 @@ impl IdlePeak {
         let cycle = Float::floor(self.moving_seconds / 6.0) as u64;
         let completed = self.cycle.is_some_and(|old| cycle > old);
         self.cycle = Some(cycle);
-        self.peak
-            .push(self.moving_seconds, 0.75, completed && !reduced)
+        self.peak.push(
+            self.moving_seconds,
+            0.75,
+            completed && !reduced,
+            completed && !reduced,
+        )
     }
 }
 
@@ -77,6 +87,7 @@ pub struct DanceMotion {
     pub direction: f64,
     pub tempo: f64,
     pub odds: DirectionOdds,
+    pub columns_per_beat: f64,
     speed: f64,
     enabled: bool,
     stop_from: f64,
@@ -89,6 +100,7 @@ impl DanceMotion {
             direction: 1.0,
             tempo: 120.0,
             odds: DirectionOdds::default(),
+            columns_per_beat: SCROLL_SPEED / 2.0,
             speed: 0.0,
             enabled: false,
             stop_from: 0.0,
@@ -133,7 +145,7 @@ impl DanceMotion {
             return self.stop_from * SCROLL_EASE * (integral(b) - integral(a));
         }
         self.enabled = true;
-        let target = self.direction * SCROLL_SPEED * bpm.clamp(60.0, 200.0) / 120.0;
+        let target = self.direction * self.columns_per_beat * bpm.clamp(60.0, 200.0) / 60.0;
         let before = self.speed;
         let decay = Float::exp(-dt / SCROLL_EASE);
         self.speed = target + (before - target) * decay;
@@ -195,16 +207,33 @@ mod tests {
     #[test]
     fn attacks_need_a_new_peak_and_multiband_attacks_are_grouped() {
         let mut peak = RecentPeak::default();
-        assert!(!peak.push(0.0, 2.0, false));
-        assert!(!peak.push(0.01, 1.0, true));
-        assert!(!peak.push(0.08, 1.0, false));
-        assert!(!peak.push(0.1, 3.0, true));
-        assert!(!peak.push(0.12, 4.0, true));
-        assert!(peak.push(0.17, 4.0, false));
-        assert!(!peak.push(0.18, 4.0, false));
-        assert!(!peak.push(0.2, 5.0, false));
-        assert!(!peak.push(0.3, 4.0, true));
-        assert!(!peak.push(0.37, 4.0, false));
+        assert!(!peak.push(0.0, 2.0, false, false));
+        assert!(!peak.push(0.01, 1.0, true, true));
+        assert!(!peak.push(0.08, 1.0, false, false));
+        assert!(!peak.push(0.1, 3.0, true, true));
+        assert!(!peak.push(0.12, 4.0, true, true));
+        assert!(peak.push(0.17, 4.0, false, false));
+        assert!(!peak.push(0.18, 4.0, false, false));
+        assert!(!peak.push(0.2, 5.0, false, false));
+        assert!(!peak.push(0.3, 4.0, true, true));
+        assert!(!peak.push(0.37, 4.0, false, false));
+    }
+    #[test]
+    fn candidate_eligibility_waits_for_confirmation_without_competing_with_its_own_crest() {
+        let mut peak = RecentPeak::default();
+        assert!(!peak.push(0.0, 0.0, false, false));
+        assert!(!peak.push(0.3, 1.0, false, true));
+        assert!(!peak.push(0.31, 2.0, false, false));
+        assert!(!peak.push(0.32, 1.9, true, false));
+        assert!(peak.push(0.381, 1.8, false, false));
+        assert!(!peak.push(0.4, 1.0, false, false));
+        assert!(!peak.push(1.0, 0.5, false, true));
+        assert!(!peak.push(1.02, 0.6, true, false));
+        assert!(!peak.push(1.081, 0.6, false, false));
+        assert!(!peak.push(2.0, 4.0, false, true));
+        assert!(!peak.push(2.1, 4.0, false, false));
+        assert!(!peak.push(2.2, 4.0, true, false));
+        assert!(!peak.push(2.261, 4.0, false, false));
     }
     #[test]
     fn flight_budget_is_bounded_and_reduced_motion_is_gentler() {

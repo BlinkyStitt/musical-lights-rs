@@ -2,11 +2,26 @@
 
 Rust applications that make lights respond to audio.
 
-The browser, terminal, and ESP32 share a continuous ISO 532-1 time-varying loudness model. It emits calibrated or explicitly uncalibrated sones every 2 ms. The browser separately estimates masking-aware partial loudness in 24 source-frequency bands, then applies shared proportional gain and 40 ms physical bar strokes. Terminal and hardware display behavior is unchanged.
+The browser, terminal, ESP32 net, and Rust STM32 jacket use one continuous ISO 532-1 time-varying loudness model. Every display starts with the same 24 perceived-loudness bands.
 
-The website and terminal show 24 bands. The 20×20 LED panel combines the first five into one bass row. Audio callbacks do not set the integration window, and slow displays do not drop audio samples.
+## How it works
 
-See [the measurement and display contracts](docs/loudness.md), [validation results](docs/validation.md), and the [earlier upgrade plan](docs/upgrade-plan.md). Hardware calibration and bench validation remain required for physical measurement claims.
+1. Capture mono audio at 48 kHz. Calibration converts digital samples to pressure.
+2. Run 28 internal third-octave filters continuously. Apply the model's hearing sensitivity, masking spread, and temporal response.
+3. Produce total loudness in sones and a specific-loudness pattern across 0–24 Bark. Integrate each one-Bark region into one of the 24 display bands.
+4. Apply one shared visual gain and motion filter. These change bar travel, not measured loudness. Detect attacks from changes in the same band measurements.
+
+**ISO 532-1 is the calculation method. Bark is its hearing-frequency scale.** The 28 internal filters and 24 displayed bands describe different stages. All 28 filters contribute. A pure tone can excite adjacent hearing regions, so several bars can respond to one pitch. The display does not identify separate musical notes.
+
+Audio block size changes how samples arrive. It does not change the model or its 2 ms output grid. The browser defaults to its normal audio block, usually 128 samples. Filters still have frequency-dependent response time; a 2 ms update does not promise 2 ms total latency. Keep 48 kHz to retain treble and the model's validated coefficients.
+
+Below the browser scene, **Current loudness** shows sones and RMS dBFS. **Background estimate** tracks a lower percentile of recent input. It never subtracts sound or changes calibration. RMS uses exponential integration, with a default time constant of 125 ms. `~` marks estimated sones from an assumed microphone scale. dBFS measures digital level; it does not measure hearing risk.
+
+New browser preferences use **Auto depth**. Startup frame measurements select a depth count for the observed screen cadence. The slider and numeric control allow 0–2048 images. Saved manual counts stay unchanged. Auto selects once; Retest starts a new measurement. Bars and balls emit faint color light. White attacks illuminate nearby surfaces throughout the depth. Advanced controls change presentation and scheduling while the ISO coefficients stay fixed.
+
+The 20×20 net combines the first five bands into one bass row. Each row of the jacket's two 8×32 panels maps to `floor(row × 24 / 32)`. Slow displays receive the latest snapshot while analysis consumes all audio.
+
+See [the scientific method, controls, and sources](docs/loudness.md), [validation procedures and evidence](docs/validation.md), and [physics and phone acceptance](docs/physics.md). Identical PCM, calibration, and settings produce consistent analysis; different microphones can record different signals. Firmware builds do not prove physical capture or lighting.
 
 The ISO reference validator uses Python 3.13 or newer and `uv` (tested with 0.10.5). Its dependency lockfile pins MoSQITo and the numerical tools.
 

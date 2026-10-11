@@ -160,7 +160,7 @@ fn review_regression_fifty_hz_is_steady_after_thirty_seconds() {
     for (index, block) in samples.chunks(128).enumerate() {
         meter
             .push_pcm(block, index as u64 * 128, |frame| {
-                let bass = gain.map(&frame).bands[0].activity;
+                let bass = gain.map(&frame)[0].activity;
                 if frame.sample_index >= 29 * 48_000 {
                     low = low.min(bass);
                     high = high.max(bass);

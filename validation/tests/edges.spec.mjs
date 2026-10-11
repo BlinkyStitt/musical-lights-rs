@@ -12,12 +12,12 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
         const start = window.audioNow, edges = [];
         for (const age of [...Array.from({ length: Math.ceil(.18 * fps) }, (_, i) => i / fps), .180001, 1]) {
           window.audioNow = start + age;
-          const state = new Float64Array(99);
-          state.set([window.audioNow, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0, 4]);
+          const state = new Float64Array(102); state.set([0, 1, .18], 99);
+          state.set([window.audioNow, matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0, 5]);
           for (let i = 0; i < 24; i++) state.set([.4, .4, start, 0], 3 + i * 4);
           // Deliver both a newer snapshot and a duplicate; neither renews the attack.
           for (let repeat = 0; repeat < 2; repeat++) window.testNode.port.dispatchEvent(new MessageEvent('message', {
-            data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
+            data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
           }));
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           edges.push({ age, edge: document.querySelector('#dancinglights').physics.edges[0] });

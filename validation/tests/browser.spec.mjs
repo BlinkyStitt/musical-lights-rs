@@ -189,6 +189,8 @@ async function prepareSpectrum(page, width, colorScheme) {
   }
   await page.emulateMedia({ colorScheme });
   await page.goto(leptos);
+  // Use fixed depth for these geometry fixtures; Auto has its own checks.
+  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
   // Geometry and contrast fixtures use stationary source columns. The idle
   // sine now scrolls them too; freeze scrolling for stationary hover targets.
   await page.locator('.scroll-lights').uncheck();
@@ -200,7 +202,8 @@ async function prepareSpectrum(page, width, colorScheme) {
   await page.waitForFunction(() => {
     const view = document.querySelector('#dancinglights').physics;
     return view?.current && view.previous
-      && view.current[view.layout[20]] === view.previous[view.layout[20]];
+      && view.current[view.layout[20]] === view.previous[view.layout[20]]
+      && Math.abs(view.renderedPhase - view.current[view.layout[20]]) < 1e-6;
   });
 }
 

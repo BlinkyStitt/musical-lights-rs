@@ -1,11 +1,11 @@
 use js_sys::{Float64Array, Reflect};
-use musical_lights_core::audio::browser::BrowserSnapshot;
+use musical_lights_core::audio::presentation::LoudnessSnapshot;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    AudioContext, AudioContextOptions, AudioWorkletNode, MediaStream, MediaStreamAudioSourceNode,
-    MediaStreamTrack, MessageEvent,
+    AudioContext, AudioWorkletNode, MediaStream, MediaStreamAudioSourceNode, MediaStreamTrack,
+    MessageEvent,
 };
 
 #[wasm_bindgen(module = "/src/audio_setup.js")]
@@ -44,6 +44,12 @@ extern "C" {
     fn is_current_processor_message(node: &AudioWorkletNode, data: &JsValue) -> bool;
 }
 
+#[wasm_bindgen(module = "/src/audio_controls.js")]
+extern "C" {
+    #[wasm_bindgen(catch, js_name = createAudioContext)]
+    fn create_audio_context() -> Result<AudioContext, JsValue>;
+}
+
 pub struct InputControlSession {
     controls: InputControls,
     _callback: Closure<dyn FnMut(String, bool)>,
@@ -67,7 +73,7 @@ impl Drop for InputControlSession {
 #[allow(clippy::large_enum_variant)]
 pub enum AudioUpdate {
     Frame {
-        snapshot: BrowserSnapshot,
+        snapshot: LoudnessSnapshot,
         clipped: u64,
     },
     Status(String),
@@ -90,9 +96,7 @@ struct AudioResources {
 
 impl AudioSession {
     pub fn new() -> Result<Self, JsValue> {
-        let options = AudioContextOptions::new();
-        options.set_sample_rate(48_000.0);
-        let context = AudioContext::new_with_context_options(&options)?;
+        let context = create_audio_context()?;
         if context.sample_rate() != 48_000.0 {
             let _ = context.close();
             return Err(JsValue::from_str(
@@ -200,7 +204,7 @@ impl AudioSession {
                     let parsed = Reflect::get(&data, &"state".into())
                         .ok()
                         .and_then(|v| v.dyn_into::<Float64Array>().ok())
-                        .and_then(|v| BrowserSnapshot::from_transport(&v.to_vec()));
+                        .and_then(|v| LoudnessSnapshot::from_transport(&v.to_vec()));
                     if let Some(snapshot) = parsed {
                         let clipped = Reflect::get(&data, &"clipped".into())
                             .ok()

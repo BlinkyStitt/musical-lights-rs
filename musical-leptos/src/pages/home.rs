@@ -45,7 +45,7 @@ pub fn Home() -> impl IntoView {
                         </article>
                         <article class="learning-card">
                             <h3>"Hann windows"</h3>
-                            <p>"Window functions taper the edges of a block of audio. The Hann window helps reduce artifacts when examining its frequency content."</p>
+                            <p>"Window functions taper the edges of a block of audio. The Hann window helps reduce artifacts when examining frequency content. Earlier versions used this method; the current loudness model uses continuous filters."</p>
                             <div class="learning-links"><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.windows.hann.html">"Explore window functions"</a></div>
                         </article>
                         <article class="learning-card">

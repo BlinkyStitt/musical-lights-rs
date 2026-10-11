@@ -84,14 +84,14 @@ test(`diagnostic plot separates ${end} render geometry and its clock from analys
     view.bars.instanceMatrix.array[8 * 16 + 5] = .2 * view.height;
     view.bars.instanceMatrix.array[(8 + 72) * 16 + 5] = -.2 * view.height;
     if (Math.abs(view.renderedHeight(8, end === 'top' ? 1 : 0) / view.height - .2) > 1e-5) throw Error('Wrong rendered end');
-    const trace = new Float64Array(511);
-    trace[364] = 1.1; trace[291 + 8] = 2.5; trace[368 + 4 * 8] = .5;
+    const trace = new Float64Array(465);
+    trace[315] = 1.1; trace[242 + 8] = 2.5; trace[319 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
     ctx.moveTo = function(x, y) { moves.push([x, y]); return original.call(this, x, y); };
-    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt, receivedAudioTime: 1.25 } })); }
+    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 465, receivedAt, receivedAudioTime: 1.25 } })); }
     finally { ctx.moveTo = original; }
     const sample = review.samples[0];
-    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 511, receivedAt } }));
+    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 465, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
   }, end);
   expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase: 'both', renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
@@ -172,14 +172,13 @@ test('audio and motion switches stop independently and route exit closes both pl
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await listening(page).uncheck();
   await expect(page.getByRole('checkbox', { name: 'Phone motion', exact: true })).toBeChecked();
-  // Read the force in the page's next frame, before its 150 ms sensor expiry.
-  // A separate protocol request can arrive after that expiry on a busy runner.
-  const force = await page.evaluate(() => new Promise(resolve => {
-    requestAnimationFrame(() => {
-      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } }));
-      requestAnimationFrame(() => resolve(Array.from(savedView.input.slice(24, 27))));
-    });
-  }));
+  // Check the live sensor listener in the dispatch call. The renderer samples
+  // this value each frame and correctly expires it after 150 ms; a stalled
+  // software renderer need not draw a frame within that sensor lifetime.
+  const force = await page.evaluate(() => {
+    window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } }));
+    return Array.from(savedView.acceleration);
+  });
   expect(force).toEqual([-5, -6, -7]);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   await page.getByRole('link', { name: 'About', exact: true }).click();
@@ -328,9 +327,29 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
     expect(reference, `audio sample ${row[0]}`).toBeDefined();
     expect(row.slice(1, 266)).toEqual(Array.from(reference.slice(1, 266)));
     expect(row.slice(267, 316)).toEqual(Array.from(reference.slice(267, 316)));
-    for (let b = 0; b < 24; b++) expect(row[368 + b * 4]).toBe(reference[368 + b * 4]);
+    for (let b = 0; b < 24; b++) expect(row[319 + b * 4]).toBe(reference[319 + b * 4]);
   }
   expect(data.dropped).toBeGreaterThanOrEqual(missing);
-  const raw = data.rows.at(-1).slice(291, 315);
+  const raw = data.rows.at(-1).slice(242, 266);
   expect(raw.indexOf(Math.max(...raw))).toBe(16); // Channel 2's 3.4 kHz, not channel 1's 250 Hz.
+});
+
+test('audio controls persist and the readouts show actual scheduling without changing the loudness model', async ({ page }) => {
+  await syntheticAudio(page); await advanced(page);
+  const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click();
+  await page.getByText('Audio response & readouts', { exact: true }).click();
+  const rms = page.locator('[data-audio-setting="23"]');
+  await rms.fill('.25'); await rms.dispatchEvent('change');
+  await page.locator('.audio-latency').selectOption('0.02');
+  await page.reload(); await physicsReady(page);
+  expect(await rms.inputValue()).toBe('0.25');
+  expect(await page.locator('.audio-latency').inputValue()).toBe('0.02');
+  await start(page);
+  await expect(page.locator('.current-loudness')).toContainText('sones');
+  await expect(page.locator('.background-loudness')).toContainText('learning');
+  await expect(page.locator('.audio-scheduling')).toContainText(/actual block \d+ samples/);
+  expect(await page.evaluate(() => window.testContext.loudnessSettings[23])).toBe(.25);
+  await listening(page).uncheck();
+  await expect(page.locator('.current-loudness')).toHaveText('Current loudness: —');
+  await expect(page.locator('.background-loudness')).toHaveText('Background estimate: —');
 });

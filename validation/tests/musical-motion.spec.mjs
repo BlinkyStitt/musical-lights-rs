@@ -58,9 +58,14 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     const pixels = new Uint8Array(240 * 160 * 4);
     const lights = v.scene.children.filter(n => n.isLight), intensities = lights.map(n => n.intensity);
     const sum = () => { v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.reduce((sum, value, i) => sum + (i % 4 === 3 ? 0 : value), 0); };
+    const u = v.lighting.uniforms, strength = u.lightStrength.value.clone(), emission = u.colorEmission.value.clone();
+    const edges = u.stripState.value.map(s => s.z);
+    u.lightStrength.value.set(0, 0, strength.z, 0); u.colorEmission.value.set(0, 0);
     const lit = sum(); lights.forEach(n => { n.intensity = 0; }); const dark = sum();
-    v.attackLights[0].position.set(v.width / 2, .2, 0); v.attackLights[0].intensity = .035;
+    u.stripState.value.forEach(s => { s.z = 1; }); u.lightStrength.value.y = .8;
     const attackOnly = sum();
+    u.stripState.value.forEach((s, i) => { s.z = edges[i]; });
+    u.lightStrength.value.copy(strength); u.colorEmission.value.copy(emission);
     lights.forEach((n, i) => { n.intensity = intensities[i]; });
     // Isolate one prescribed bar and sample its physical side face. The old
     // XY-only outline painted this entire face black, even under fill light.
@@ -76,10 +81,10 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     hidden.forEach(n => { n.visible = true; });
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
     return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
-      attacks: v.attackLights.length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
+      attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
-  expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(4); expect(state.shadows).toBe(false);
+  expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(24); expect(state.pointLights).toBe(0); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);
   expect(state.attackOnly).toBeGreaterThan(state.dark + 100);
   expect(state.sideBrightness).toBeGreaterThan(30);

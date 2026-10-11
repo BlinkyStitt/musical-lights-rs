@@ -17,7 +17,7 @@ async function worker(config = Array.from(PhysicsSimulation.defaults())) {
   runInNewContext(source, context);
   const send = data => self.onmessage({ data });
   await send({ type: 'init', height: .6, config, palette: new Float32Array(72).fill(.5),
-    danceOptions: { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1 }, paused: false });
+    danceOptions: { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1, scrollSpeed: 2 }, paused: false });
   const ready = messages.at(-1);
   return { ready, send, messages,
     elapse: ms => { now += ms; },

@@ -31,9 +31,9 @@ export class ListeningReview {
       <label class="control-row">Listening notes<textarea class="review-notes" rows="4" placeholder="Describe accents, swells and decay; include playback times."></textarea></label>
       <button class="review-note" type="button">Add timestamped observation</button>
       <button class="review-export" type="button">Export listening notes</button>
-      <p>With Diagnostic recording on, the plot shows separate raw partial sones, filtered targets and rendered height. Recording adds overhead and cannot qualify as phone FPS acceptance.</p>
-      <canvas class="review-plot" width="900" height="260" aria-label="Diagnostic plot: raw partial sones, filtered targets, rendered height"></canvas>
-      <p class="review-plot-key">Solid: raw partial sones / 10. Dashed: filtered target (0–1). Dotted: rendered height / enclosure height at its render time, estimated from the host/context timestamp pair. No fitted gains or shifted traces.</p>`;
+      <p>With Diagnostic recording on, the plot shows separate raw Bark-band sones, filtered targets and rendered height. Recording adds overhead and cannot qualify as phone FPS acceptance.</p>
+      <canvas class="review-plot" width="900" height="260" aria-label="Diagnostic plot: raw Bark-band sones, filtered targets, rendered height"></canvas>
+      <p class="review-plot-key">Solid: raw Bark-band sones / 10. Dashed: filtered target (0–1). Dotted: rendered height / enclosure height at its render time, estimated from the host/context timestamp pair. No fitted gains or shifted traces.</p>`;
     this.card.querySelector('.diagnostics-controls').append(this.root);
     const input = this.card.querySelector('.input-source-controls');
     this.file = this.root.querySelector('.review-file'); input.append(this.file.closest('label'));
@@ -86,7 +86,7 @@ export class ListeningReview {
       const v = this.view, b = 8; // Labelled 1 kHz source band; no normalized fitting.
       const renderedTime = Number.isFinite(v.renderedAt) && Number.isFinite(detail.receivedAudioTime) && Number.isFinite(detail.receivedAt)
         ? detail.receivedAudioTime + (v.renderedAt - detail.receivedAt) / 1000 : null;
-      this.samples.push({ at: trace[row + 364], band: b, raw: trace[row + 291 + b], filtered: trace[row + 368 + 4 * b],
+      this.samples.push({ at: trace[row + 315], band: b, raw: trace[row + 242 + b], filtered: trace[row + 319 + 4 * b],
         collider: v.current ? v.current[v.layout[9] + b] / v.height : 0,
         rendered: v.renderedHeight(b) / v.renderedEnclosureHeight, barBase: 'both',
         renderedAt: v.renderedAt, renderedTime, renderedTimeConfidence: renderedTime == null ? 'unverified' : 'host/context estimate',

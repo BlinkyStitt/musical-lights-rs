@@ -241,7 +241,8 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
 .audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
 .audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; border-radius: 0; padding: .35rem 0; background: none; font-size: clamp(1rem, min(3.5vw, 5cqh), 1.4rem); font-weight: 600; text-shadow: 0 0 4px var(--plot), 0 0 8px var(--plot); }
-.audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices > :empty { display: none; }
 .audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
 .input-source-controls .control-row { min-width: 0; gap: .5rem; }
 .input-source-controls :is(select, input) { min-height: 44px; min-width: 0; max-width: 100%; font: inherit; }
@@ -251,7 +252,9 @@ nav { flex-wrap: wrap; }
 
 /* A bounded scene and a reserved control grid, shared by Home and Advanced. */
 .button-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; align-items: start; }
-.button-row > .setting-switch, .button-row > button, .button-row > .recognition-control, .button-row > .motion-controls { min-width: 0; min-height: 44px; margin: 0; }
+.button-row > .setting-switch, .button-row > button, .button-row > .listening-controls, .button-row > .motion-controls { min-width: 0; min-height: 44px; margin: 0; }
+/* Keep microphone controls together and let their message use both columns. */
+.button-row .listening-controls { grid-column: span 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .5rem; align-items: start; }
 .button-row .setting-switch { white-space: normal; min-height: 44px; }
 .button-row .setting-switch span[role="button"] { cursor: help; padding: .3rem 0; }
 .button-row .setting-switch span[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
@@ -264,10 +267,11 @@ nav { flex-wrap: wrap; }
 .audio-card:not([data-expanded]) > .visual-content { order: 0; }
 .audio-card:not([data-expanded]) > .recovery-notices { order: 1; }
 .audio-card:not([data-expanded]) > .recognized-song { order: 2; }
-.audio-card:not([data-expanded]) > .camera-controls { order: 3; }
+.audio-card:not([data-expanded]) > .scene-controls { order: 3; }
+.audio-card:not([data-expanded]) > .loudness-readouts { order: 5; }
 .audio-card:not([data-expanded]) > .audio-controls { order: 4; padding: .25rem; }
-.audio-card:not([data-expanded]) > .input-source-controls { order: 5; }
-.audio-card:not([data-expanded]) > .playback-controls { order: 6; }
+.audio-card:not([data-expanded]) > .input-source-controls { order: 6; }
+.audio-card:not([data-expanded]) > .playback-controls { order: 7; }
 @media (min-width: 1000px) {
   .audio-card:not([data-expanded]).video-active > .visual-content { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
   .audio-card:not([data-expanded]).video-active .video-panel { display: flex; flex-direction: column; padding: 0; }
@@ -290,11 +294,11 @@ nav { flex-wrap: wrap; }
 .camera-controls input { flex: 1; min-width: 0; min-height: 44px; }
 .camera-angle { min-width: 5ch; font-variant-numeric: tabular-nums; }
 .control-help { pointer-events: none; position: fixed; z-index: 120; padding: .75rem; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--surface); box-shadow: 0 4px 20px #0004; font-size: .85rem; line-height: 1.5; max-height: calc(100dvh - 24px); overflow: auto; }
-.audio-card[data-expanded] { container: visualizer / size; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(min(2rem, 10dvh), 1fr) minmax(0, max-content) minmax(0, max-content) auto auto; gap: .35rem; }
+.audio-card[data-expanded] { container: visualizer / size; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(min(2rem, 10dvh), 1fr) minmax(0, max-content) minmax(0, max-content) auto auto; gap: .25rem; }
 .audio-card[data-expanded] > .visual-content { position: relative; inset: auto; grid-row: 1; grid-column: 1; min-height: 0; display: flex; flex-direction: column; }
 .audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: 1; height: auto; min-height: 0; display: flex; }
 .audio-card[data-expanded] #dancinglights { flex: 1; height: auto; min-height: 0; }
-.audio-card[data-expanded] .audio-controls { position: relative; inset: auto; grid-row: 5; grid-column: 1; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
+.audio-card[data-expanded] .audio-controls { position: relative; inset: auto; grid-row: 6; grid-column: 1; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
 .audio-card[data-expanded] .recognized-song { position: relative; grid-row: 3; grid-column: 1; min-height: 0; margin: 0; max-height: none; align-items: flex-start; pointer-events: auto; }
 .audio-card[data-expanded] .recovery-notices { grid-row: 2; grid-column: 1; min-height: 0; max-height: none; }
 .audio-card[data-expanded] .button-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .15rem .5rem; }
@@ -334,7 +338,7 @@ nav { flex-wrap: wrap; }
 .button-row .setting-switch input:checked::before { background: var(--primary); border-color: var(--primary); }
 .button-row .setting-switch input:checked::after { left: 23px; }
 .button-row .recognition-control { display: grid; grid-template-columns: minmax(0, 1fr) 18px; align-items: center; gap: .25rem; }
-.button-row .recognition-control .recognition-status { grid-column: 1 / -1; }
+.button-row .listening-controls > .recognition-status { grid-column: 1 / -1; max-width: none; }
 .button-row .recognition-ring { width: 18px; height: 18px; }
 .audio-card[data-expanded] .recognition-status { max-height: 12cqh; overflow: auto; }
 .recognition-status[data-routine="true"] { display: none; }
@@ -351,3 +355,30 @@ nav { flex-wrap: wrap; }
 
 .audio-card[data-expanded] .camera-controls { position: relative; inset: auto; grid-row: 4; grid-column: 1; width: 100%; margin: 0; gap: .5rem; font-size: .8rem; }
 .audio-card[data-expanded] .camera-controls .control-row { flex-direction: row; align-items: center; flex-wrap: nowrap; min-width: 0; gap: .5rem; }
+
+.loudness-readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem 1rem; font-size: .8rem; }
+/* Reserve numeric slots before capture starts, so the first values do not resize the scene. */
+.loudness-readouts output { min-block-size: 3lh; white-space: pre-line; line-height: 1rem; font-variant-numeric: tabular-nums; }
+.loudness-readouts small { grid-column: 1 / -1; }
+@media (max-width: 700px) { .loudness-readouts { grid-template-columns: minmax(0, 1fr); } }
+.scene-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; min-width: 0; }
+.scene-controls .camera-controls { min-width: 0; margin: 0; }
+.scene-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
+.depth-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .25rem .5rem; }
+.depth-controls .control-row { grid-column: 1; }
+.depth-controls .control-row > span { display: flex; flex-direction: column; white-space: nowrap; }
+.depth-status { min-width: 0; font-size: .7rem; }
+@media (max-width: 700px) { .scene-controls { grid-template-columns: minmax(0, 1fr); } }
+@container visualizer (orientation: landscape) and (min-width: 500px) {
+  .audio-card[data-expanded] .scene-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.depth-controls button, .audio-tuning select { min-height: 44px; }
+.audio-tuning, .render-tuning { display: grid; gap: .5rem; }
+.audio-card[data-expanded] > .settings-section { display: none; }
+.audio-card[data-expanded] .loudness-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
+.audio-card[data-expanded] .loudness-readouts output { line-height: .8125rem; }
+.audio-card[data-expanded] .loudness-readouts small { display: none; }
+.audio-card[data-expanded] > .scene-controls { position: relative; inset: auto; width: 100%; grid-row: 4; grid-column: 1; }
+.audio-card[data-expanded] .scene-controls .camera-controls { grid-row: auto; grid-column: auto; }
+.audio-card[data-expanded] { grid-template-rows: minmax(min(2rem, 10cqh), 1fr) minmax(0, max-content) minmax(0, max-content) auto auto auto; }
+@container visualizer (max-height: 500px) { .audio-card[data-expanded] .loudness-readouts { display: none; } }

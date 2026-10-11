@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { normalView, physicsReady, physicsState } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
-test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }) => {
+test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }, info) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -27,6 +27,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await page.locator('.tone-frequency').fill('150');
   await page.locator('.tone-level').fill('-20');
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.previewLevels))).toBeGreaterThan(0);
   await page.locator('.review-start').click();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
@@ -52,7 +53,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
     // Capture at the actual Stop event so protocol latency cannot consume the
     // fall before its starting height is measured.
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], balls: Array.from({ length: layout[21] }, (_, i) => {
+    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], idlePeak: Math.max(...document.querySelector('#dancinglights').physics.previewLevels), balls: Array.from({ length: layout[21] }, (_, i) => {
       const offset = 3 + i * layout[8];
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
@@ -61,7 +62,10 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   // protocol round trip/tap can arrive after that transient has already ended.
   await page.waitForFunction(button => {
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    const clearance = current[layout[17] + 1] * .5;
+    // Reduced Motion fixes the core preview's phase. Stop only above that
+    // pattern: a ball resting on its bars cannot demonstrate a free fall.
+    const idlePeak = Math.max(...document.querySelector('#dancinglights').physics.previewLevels);
+    const clearance = current[layout[17] + 1] * idlePeak + .01;
     const elevated = Array.from({ length: layout[21] }, (_, i) => 3 + i * layout[8])
       .some(offset => current[offset + 1] > current[offset + 7] + clearance);
     if (!elevated) return false;
@@ -70,9 +74,15 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   }, await stop.elementHandle(), { timeout: 5000 });
   const stopped = await page.evaluate(() => window.physicsAtStop);
   expect(stopped.barMax).toBeGreaterThan(0);
-  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.barMax * .5)).toBe(true);
+  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.barMax * stopped.idlePeak + .01)).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
-  await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
+  try {
+    await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
+  } catch (error) {
+    await info.attach('stop-gravity-state.json', { body: JSON.stringify({ stopped, current: await physicsState(page),
+      visual: await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return { idle: v.idle, input: Array.from(v.input), audio: v.card.dataset.audioState }; }) }), contentType: 'application/json' });
+    throw error;
+  }
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toBeEmpty();
   expect(errors).toEqual([]);
@@ -103,6 +113,15 @@ test('a tapped band shows its color and frequency above the graph for three seco
   await page.locator('.display-controls > summary').click();
   await page.locator('.camera-motion').uncheck();
   await page.locator('.display-controls > summary').click();
+  await page.locator('.spectrum-panel').scrollIntoViewIfNeeded();
+  const frame = await page.evaluate(() => document.querySelector('#dancinglights').physics.metrics.frames);
+  // Closing settings and scrolling the page can reproject the pointer surfaces.
+  // Confirm the stopped phase and camera in a fresh drawing before choosing a hit.
+  await page.waitForFunction(frame => {
+    const v = document.querySelector('#dancinglights').physics;
+    return !v.resizePending && v.metrics.frames > frame + 1 && v.input[33] === 0
+      && v.rotation === v.cameraBase && v.current[v.layout[20]] === v.previous?.[v.layout[20]];
+  }, frame, { timeout: 5000 });
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
   const bands = page.getByRole('meter');

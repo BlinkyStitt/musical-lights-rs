@@ -5,8 +5,10 @@ use cpal::{
     traits::{DeviceTrait, StreamTrait},
 };
 use musical_lights_core::audio::{
-    loudness::{Calibration, LoudnessMeter, SoundField},
-    visual::{DISPLAY_BANDS, DisplaySnapshot, VisualGain},
+    loudness::{Calibration, SoundField},
+    presentation::LoudnessSnapshot,
+    processor::LoudnessProcessor,
+    visual::DISPLAY_BANDS,
 };
 use resampler::{Attenuation, Latency, ResamplerFir, SampleRate};
 use serde::{Deserialize, Serialize};
@@ -34,7 +36,7 @@ pub struct InputProfile {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct LiveFrame {
-    pub snapshot: DisplaySnapshot<DISPLAY_BANDS>,
+    pub snapshot: LoudnessSnapshot,
     pub sones: f64,
     pub clipped: u64,
     pub input_samples: u64,
@@ -309,8 +311,7 @@ impl InputResampler {
 }
 struct CaptureProcessor {
     resampler: InputResampler,
-    meter: LoudnessMeter,
-    gain: VisualGain,
+    processor: LoudnessProcessor,
     frame: LiveFrame,
     sample_index: u64,
     reference_length: u64,
@@ -320,10 +321,9 @@ impl CaptureProcessor {
     fn new(rate: u32, calibration: Calibration) -> anyhow::Result<Self> {
         Ok(Self {
             resampler: InputResampler::new(rate)?,
-            meter: LoudnessMeter::new(calibration, SoundField::Free),
-            gain: VisualGain::default(),
+            processor: LoudnessProcessor::new(calibration, SoundField::Free, Default::default()),
             frame: LiveFrame {
-                snapshot: DisplaySnapshot::new(0.0),
+                snapshot: LoudnessSnapshot::new(0.0),
                 sones: 0.0,
                 clipped: 0,
                 input_samples: 0,
@@ -376,20 +376,15 @@ impl CaptureProcessor {
             }
             let Self {
                 resampler,
-                meter,
-                gain,
+                processor,
                 frame,
                 sample_index,
                 ..
             } = self;
             resampler.push(input, |pcm| {
-                meter.push_pcm(pcm, *sample_index, |loudness| {
-                    frame.snapshot.push(
-                        loudness.sample_index as f64 / 48_000.0,
-                        gain.map(&loudness).bands,
-                        false,
-                    );
-                    frame.sones = loudness.sones;
+                processor.push_pcm(pcm, *sample_index, false, |result| {
+                    frame.snapshot = *result.snapshot;
+                    frame.sones = result.loudness.sones;
                 })?;
                 *sample_index += pcm.len() as u64;
                 Ok(())

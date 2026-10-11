@@ -12,11 +12,11 @@ self.onmessage = async ({ data }) => {
     } catch (error) { self.postMessage({ type: 'error', message: error.message }); }
   }
   else if (data.type === 'pulse') {
-    const state = new Float64Array(99), time = data.time;
+    const state = new Float64Array(102), time = data.time;
     const dt = previousTime == null ? 0 : Math.max(0, time - previousTime);
     previousTime = Math.max(previousTime ?? time, time); elapsed += dt;
     if (!data.reduced) phase += dt * (data.direction ?? 1);
-    state[0] = time;
+    state[0] = time; state[2] = 5; state.set([0, 1, .18], 99);
     for (let i = 0; i < 24; i++) {
       state[4 + i * 4] = core.preview_level(phase, i, Number(data.reduced));
       state[5 + i * 4] = -1;

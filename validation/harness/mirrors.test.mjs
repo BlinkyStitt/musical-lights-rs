@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from '../../musical-lights-physics/pkg/three.module.js';
+import { SceneLighting } from '../../musical-lights-physics/pkg/lighting.js';
 import { MirrorRoom, mirrorCells, MAX_DEPTH_IMAGES } from '../../musical-lights-physics/pkg/mirrors.js';
 
 test('ball depth images keep bounded pools, source transforms and non-indexed geometry', () => {
@@ -14,7 +15,7 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
     balls.setMatrixAt(i, new THREE.Matrix4().makeScale(.12, .12, .12).setPosition(.3 + i * .6, .1, .02));
     balls.setColorAt(i, new THREE.Color(.4, .2 + i * .1, .1));
   }
-  const room = new MirrorRoom(scene, balls, 3);
+  const room = new MirrorRoom(scene, balls, 3, new SceneLighting(new Float32Array(72), {}));
   const camera = new THREE.PerspectiveCamera(150, 1, .01, 10000);
   camera.position.set(0, 0, 4); camera.updateMatrixWorld();
   room.update(1.2, .6, .24, camera);
@@ -71,7 +72,7 @@ test('depth culling keeps images that enter the view later and removes the invis
   balls.setColorAt(0, new THREE.Color(1, 0, 0));
   const camera = new THREE.PerspectiveCamera(30, 1, .01, 12);
   camera.position.set(0, 0, 4); camera.updateMatrixWorld();
-  const room = new MirrorRoom(scene, balls, 17);
+  const room = new MirrorRoom(scene, balls, 17, new SceneLighting(new Float32Array(72), {}));
   room.update(1.2, .6, .24, camera);
   assert.equal(room.meshes[0].mesh.count, 0);
   assert.equal(room.meshes[0].mesh.visible, false);

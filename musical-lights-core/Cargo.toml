@@ -18,9 +18,6 @@ heapless = { version = "=0.9.3", features = ["serde"] }
 i24 = { version = "=2.3.5", default-features = false }
 itertools = { version = "=0.15.0", default-features = false }
 log = { version = "=0.4.34", default-features = false, optional = true }
-microfft = { version = "=0.6.0", default-features = false, features = [
-    "size-2048",
-] }
 micromath = "=2.1.0"
 nalgebra = { version = "=0.35.0", default-features = false }
 num = { version = "=0.4.3", default-features = false }
@@ -67,7 +64,6 @@ std = [
     "enterpolation/std",
     "i24/std",
     "log?/std",
-    "microfft/std",
     "num/std",
     "palette/std",
     "postcard/use-std",

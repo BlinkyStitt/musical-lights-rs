@@ -3,6 +3,13 @@ import { writeFile } from 'node:fs/promises';
 import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
+// Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('musical-lights-display-v1'))
+      localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 }));
+  });
+});
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
 
 test('continuous depth surfaces have no color steps at old copy boundaries', async ({ page }, info) => {
@@ -130,7 +137,7 @@ test('all five bar banks share source lighting without internal wall partitions'
       }
       return { colors, walls: v.enclosure.count, wallWidth: v.enclosure.instanceMatrix.array[0],
         width: v.width, wallCenter: v.enclosure.instanceMatrix.array[12],
-        outlines: v.scene.children.some(n => n.isLine), lights: v.attackLights.length,
+        outlines: v.scene.children.some(n => n.isLine), lights: v.scene.children.filter(n => n.isPointLight).length,
         copyMaterials: v.mirrors.meshes.map(({ mesh }) => mesh.material.type) };
     } finally { v.renderer.setRenderTarget(null); target.dispose(); }
   });
@@ -140,7 +147,7 @@ test('all five bar banks share source lighting without internal wall partitions'
   }
   expect(result.walls).toBe(1); expect(result.wallWidth).toBeCloseTo(result.width * 5, 5);
   expect(result.wallCenter).toBeCloseTo(result.width / 2, 5);
-  expect(result.outlines).toBe(false); expect(result.lights).toBe(4);
+  expect(result.outlines).toBe(false); expect(result.lights).toBe(0);
   expect(result.copyMaterials).toEqual(['MeshLambertMaterial']);
 });
 
@@ -196,7 +203,7 @@ test('one transparent enclosure shows bounded depth copies and preserves source 
         if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) changes++;
         if (plain[i] + plain[i + 1] + plain[i + 2] > 60) sourcePixels++;
       }
-      const normals = Array.from({length:6},(_,i)=>new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal,i*4).negate().toArray());
+      const normals = v.enclosure.geometry.groups.map(group => new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal, v.enclosure.geometry.index.getX(group.start)).negate().toArray());
       const result = { changes, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
         passes, targets: v.mirrors.meshes.length, pixels: v.canvas.width * v.canvas.height,
         negativeScales: v.mirrors.meshes.some(({ mesh }) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array).determinant() < 0) };
@@ -271,10 +278,22 @@ test('mirror count saves, rejects fractions and resets without changing physics'
     expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount)).toBe(2048);
     expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(2048);
   }
-  await page.reload(); await physicsReady(page); await normal(page); await page.locator('.display-controls > summary').click();
+  // Reset from the maximum manual count while these controls are in view.
+  await page.locator('.display-reset').click();
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.settings.depthMode)).toBe('auto');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
+  const selected = Number(await page.locator('.mirror-count').inputValue());
+  expect(selected).toBeGreaterThanOrEqual(0); expect(selected).toBeLessThanOrEqual(2048);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(selected);
+  await page.locator('.mirror-count').fill('2048'); await page.locator('.mirror-count').dispatchEvent('change');
+  // Reload last: restoration needs no second scroll through the scene at
+  // the maximum manual count. The hidden control still exposes its value.
+  await page.reload(); await physicsReady(page);
   await expect(page.locator('.mirror-count')).toHaveValue('2048');
-  await page.locator('.display-reset').click(); await expect(page.locator('.mirror-count')).toHaveValue('6');
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(6);
+  expect(await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.settings.depthMode, v.mirrors.count, v.balls.count];
+  })).toEqual(['manual', 2048, 8]);
 });
 
 test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {
@@ -399,7 +418,10 @@ test('instanced depth copies match literal translated geometry from both camera 
               const shift=(layer+1)*v.config[5];
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;',`vViewPosition = -(modelViewMatrix * vec4(world + vec3(0.0, 0.0, ${shift}), 1.0)).xyz;`);
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;',`vViewPosition = -(mvPosition.xyz + (modelViewMatrix * vec4(0.0, 0.0, ${shift}, 0.0)).xyz);`);
-              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight *= ${.72**(layer+1)};\n#include <opaque_fragment>`);
+              shader.vertexShader=shader.vertexShader.replace('nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));', `nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz + vec3(0.0, 0.0, ${shift}), normalize(transformedNormal));`);
+              // The display contract retains emitted/spilled light through depth.
+              const fade = v.settings.depthFade ** (layer + 1);
+              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight = outgoingLight * ${fade} + (totalEmissiveRadiance + nearbyLight) * ${1 - fade};\n#include <opaque_fragment>`);
             };
             material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
             const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;
@@ -473,22 +495,35 @@ test('camera depth culling preserves pixels from the complete copied-ball batch'
   await info.attach('depth-culling-pixels.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
 
-test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }) => {
+test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }, info) => {
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
-  await page.locator('.input-source').selectOption('generated');
-  await page.locator('.tone-repeat').check(); await page.locator('.tone-audible').uncheck();
-  await page.locator('.review-start').click();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
-  await expect(page.locator('.listening-toggle')).not.toBeChecked();
-  await expect(page.locator('.tempo-readout')).toBeVisible();
-  await page.locator('.tone-pause').click();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','paused');
-  await expect(page.locator('.tempo-readout')).toBeHidden();
-  await page.locator('.tone-pause').click();
-  await expect(page.locator('.tempo-readout')).toBeVisible();
-  await page.locator('.tone-repeat').uncheck();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
-  await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+  await page.evaluate(() => {
+    window.digitalTempoEvents = [];
+    document.querySelector('.audio-card').addEventListener('audio-session', ({ detail }) => {
+      window.digitalTempoEvents.push({ at: performance.now(), state: detail.state, reason: detail.reason });
+    });
+  });
+  try {
+    await page.locator('.input-source').selectOption('generated');
+    await page.locator('.tone-repeat').check(); await page.locator('.tone-audible').uncheck();
+    await page.locator('.review-start').click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
+    await expect(page.locator('.listening-toggle')).not.toBeChecked();
+    await expect(page.locator('.tempo-readout')).toBeVisible();
+    await page.locator('.tone-pause').click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','paused');
+    await expect(page.locator('.tempo-readout')).toBeHidden();
+    await page.locator('.tone-pause').click();
+    await expect(page.locator('.tempo-readout')).toBeVisible();
+    await page.locator('.tone-repeat').uncheck();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','ended',{timeout:15000});
+    await expect(page.locator('.tempo-readout')).toBeHidden(); await expect(page.locator('.tempo-readout')).toHaveText('');
+  } catch (error) {
+    await info.attach('digital-tempo-events.json', {
+      body: JSON.stringify(await page.evaluate(() => window.digitalTempoEvents)), contentType: 'application/json',
+    });
+    throw error;
+  }
 });
 
 

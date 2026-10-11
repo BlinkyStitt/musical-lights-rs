@@ -1,4 +1,4 @@
-//! Causal tempo from the existing spectral novelty; no PCM/model changes.
+//! Causal tempo from the canonical log-loudness novelty; no PCM/model changes.
 //! Ellis (2007) onset autocorrelation, with bounded history as in causal BTrack.
 //! This estimates tempo, not beat phase or the paper's dynamic-programming path.
 use micromath::F32Ext;
@@ -24,6 +24,7 @@ pub struct TempoEstimator {
     smoothed: f32,
     confidence: f32,
     lost_seconds: f32,
+    settings: super::settings::AudioSettings,
 }
 impl Default for TempoEstimator {
     fn default() -> Self {
@@ -39,10 +40,17 @@ impl Default for TempoEstimator {
             smoothed: FALLBACK_BPM,
             confidence: 0.0,
             lost_seconds: 0.0,
+            settings: Default::default(),
         }
     }
 }
 impl TempoEstimator {
+    pub fn new(settings: super::settings::AudioSettings) -> Self {
+        Self {
+            settings,
+            ..Self::default()
+        }
+    }
     /// One production 2 ms novelty frame. Scaling novelty cannot change tempo.
     pub fn push(&mut self, novelty: &[f64]) {
         let value = novelty.iter().copied().sum::<f64>();
@@ -67,12 +75,14 @@ impl TempoEstimator {
         } else {
             self.lost_seconds += 0.020;
         }
-        let target = if !self.established || self.lost_seconds > 2.0 {
+        let target = if !self.established || self.lost_seconds > self.settings.tempo_silence as f32
+        {
             FALLBACK_BPM
         } else {
             self.accepted
         };
-        self.smoothed += (target - self.smoothed) * (1.0 - F32Ext::exp(-0.020 / 3.0));
+        self.smoothed += (target - self.smoothed)
+            * (1.0 - F32Ext::exp(-0.020 / self.settings.tempo_smoothing as f32));
     }
     pub fn estimate(&self) -> TempoEstimate {
         TempoEstimate {
@@ -84,7 +94,9 @@ impl TempoEstimator {
         self.envelope[(self.bins - 1 - age) % HISTORY]
     }
     fn evaluate(&mut self) {
-        let n = self.bins.min(HISTORY);
+        let n = self
+            .bins
+            .min((self.settings.tempo_history * ENVELOPE_HZ as f64) as usize);
         let mean = (0..n).map(|i| self.sample(i)).sum::<f32>() / n as f32;
         let energy = (0..n).map(|i| (self.sample(i) - mean).powi(2)).sum::<f32>();
         let recent = (0..50).map(|i| self.sample(i)).sum::<f32>();
@@ -107,7 +119,7 @@ impl TempoEstimator {
         }
         let mut best = (0.0_f32, FALLBACK_BPM, 0.0_f32);
         let mut sum = 0.0;
-        for bpm in 60..=200 {
+        for bpm in self.settings.tempo_min as usize..=self.settings.tempo_max as usize {
             let lag = 3000.0 / bpm as f32;
             let lower = lag as usize;
             let fraction = lag - lower as f32;
@@ -137,7 +149,13 @@ impl TempoEstimator {
                 best = (score, bpm as f32, correlation);
             }
         }
-        if best.2 >= 0.45 && best.2 - sum / 141.0 >= 0.12 {
+        if best.2 >= 0.45
+            && best.2
+                - sum
+                    / (self.settings.tempo_max as usize - self.settings.tempo_min as usize + 1)
+                        as f32
+                >= 0.12
+        {
             self.accepted = best.1;
             self.established = true;
             self.confidence = best.2.clamp(0.0, 1.0);

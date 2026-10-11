@@ -411,6 +411,7 @@ pub fn DancingLights(
         <section class="audio-card" data-mode=if advanced { "advanced" } else { "home" } aria-label="Live audio spectrum" node_ref=card>
             <div class="audio-controls">
                 <div class="button-row">
+                    <div class="listening-controls">
                     <SettingSwitch label="Listening" class="listening-toggle"
                         checked=Signal::derive(move || listening.get() || starting.get() && input_source.get() == "microphone")
                         disabled=Signal::derive(move || input_source.get() != "microphone")
@@ -419,6 +420,7 @@ pub fn DancingLights(
                                 stop();
                             }
                         })/>
+                    </div>
                     <p class="mic-status" role="status"><span class="mic-session-status"></span>
                         <span>{move || if input_source.get() == "microphone" && error_notice.get().is_some() {
                             "Microphone unavailable."
@@ -504,10 +506,22 @@ pub fn DancingLights(
                 <div class="spectrum-labels" aria-hidden="true"><span>"BASS"</span><span>"MIDRANGE"</span><span>"TREBLE"</span></div>
             </div>
             </div>
+            <div class="loudness-readouts" aria-live="off">
+                <output class="current-loudness">"Current loudness: —"</output>
+                <output class="background-loudness">"Background estimate: —"</output>
+                <small class="audio-scheduling"></small>
+            </div>
+            <div class="scene-controls">
             <div class="camera-controls">
                 <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
+            </div>
+            <div class="camera-controls depth-controls">
+                <label class="control-row"><span>"Depth "<output class="depth-status">"Auto"</output></span><input class="depth-slider" aria-label="Depth images" type="range" min="0" max="2048" step="1" value="6"/></label>
+                <button class="depth-auto" type="button">"Auto"</button>
+                <button class="depth-retest" type="button">"Retest"</button>
+            </div>
             </div>
             <div class="display-note">
                 <p class="display-status">
@@ -537,6 +551,8 @@ pub fn DancingLights(
                     <p>"Smooth left-to-right rotation. The angle slider sets the center. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
+            <details class="settings-section"><summary>"Audio response & readouts"</summary><div class="audio-tuning"></div></details>
+            <details class="settings-section"><summary>"Lighting & rendering"</summary><div class="render-tuning"></div></details>
             <Show when=move || advanced>
             <details class="calibration-controls settings-section">
                 <summary>"Input & calibration"</summary>
@@ -544,7 +560,7 @@ pub fn DancingLights(
                 <p class="control-note">{move || if sample_rate.get() > 0.0 { format!("Sample rate: {} Hz", sample_rate.get()) } else { String::new() }}</p>
                 <p class="capture-information"></p>
 
-                <p>"Bars estimate perceived loudness within the mix, with one automatically adjusting display scale. White borders accent detected attacks. Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
+                <p>"The 24 bars show ISO specific loudness across the Bark scale, with one automatically adjusting display scale. White borders accent detected attacks. Keep microphone gain fixed. Use a known, steady reference sound. Calibration measures three seconds of input."</p>
                 <label class="control-row">"Input channel "<input type="number" min="1" step="1" prop:value=move || input_channel.get() disabled=move || playing.get() || starting.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<u32>() { set_input_channel.set(value.max(1)); } }/></label>
                 <label class="control-row">"Reference level (dB SPL) "<input type="number" step="0.1" prop:value=move || reference_level.get() on:input=move |event| { if let Ok(value) = event_target_value(&event).parse::<f64>() { set_reference_level.set(value); } }/></label>
                 <button disabled=move || !listening.get() || generated.get() || calibrating.get() on:click=move |_| {

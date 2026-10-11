@@ -7,10 +7,8 @@ use esp_idf_svc::hal::{
 };
 use musical_lights_core::{
     audio::{
-        loudness::{LoudnessMeter, SoundField},
-        parse_i2s_16_bit_mono_to_f32_array,
-        visual::{DisplaySnapshot, VisualGain, PANEL_ROWS},
-        Samples,
+        loudness::SoundField, parse_i2s_16_bit_mono_to_f32_array, presentation::LoudnessSnapshot,
+        processor::LoudnessProcessor, visual::PANEL_ROWS, Samples,
     },
     errors::MyError,
     fps::FpsTracker,
@@ -42,13 +40,13 @@ const _: () = assert!(PANEL_ROWS * PIXELS_PER_ROW == NUM_FIBONACCI_NEOPIXELS);
 const MY_BAND_MAX: u8 = 128;
 #[derive(Clone, Copy)]
 struct PanelAudio {
-    snapshot: DisplaySnapshot<PANEL_ROWS>,
+    snapshot: LoudnessSnapshot,
     origin: Option<Instant>,
     failed: bool,
 }
 static PANEL_AUDIO: Lazy<Mutex<PanelAudio>> = Lazy::new(|| {
     Mutex::new(PanelAudio {
-        snapshot: DisplaySnapshot::new(0.0),
+        snapshot: LoudnessSnapshot::new(0.0),
         origin: None,
         failed: false,
     })
@@ -71,7 +69,7 @@ pub fn run() -> eyre::Result<()> {
         })?;
     let mic = thread::Builder::new()
         .name("mic".into())
-        .stack_size(16_000)
+        .stack_size(32_768)
         .spawn(move || {
             mic_task(peripherals.i2s0, pins.gpio26, pins.gpio33, pins.gpio25).inspect_err(|err| {
                 error!("Error in mic task: {err}");
@@ -111,7 +109,7 @@ fn blink_neopixels_task(
         let audio_time = state
             .origin
             .map_or(0.0, |origin| origin.elapsed().as_secs_f64());
-        let levels = state.snapshot.frame(audio_time).levels;
+        let levels = state.snapshot.panel_frame(audio_time).levels;
         for (i, pixel) in pixels.iter_mut().enumerate() {
             // Preserve the 8/255 ambient light intent and 128 drive cap.
             let light = (8.0 + (MY_BAND_MAX as f32 - 8.0) * levels[i / PIXELS_PER_ROW]) / 255.0;
@@ -158,9 +156,10 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
         calibration.pascals_per_unit(),
         calibration.is_measured()
     );
-    let mut meter = LoudnessMeter::new(calibration, SoundField::Free);
-    let mut gain = VisualGain::default();
-    let mut snapshot = DisplaySnapshot::new(0.0);
+    // The bounded shared processor needs about 16.5 kB on this target.
+    // The capture thread reserves 32 kB for its state and nested calls.
+    let mut processor = LoudnessProcessor::new(calibration, SoundField::Free, Default::default());
+    let mut snapshot = LoudnessSnapshot::new(0.0);
     let mut sample_index = 0u64;
     let mut i2s_driver = capture::Capture::new(i2s, bclk, ws, din, I2S_SAMPLE_SIZE)?;
     let origin = Instant::now();
@@ -173,12 +172,8 @@ fn mic_task(i2s: I2S0, bclk: Gpio26, ws: Gpio33, din: Gpio25) -> eyre::Result<()
         // TODO: compile time option to choose between 16-bit or 24-bit audio
         parse_i2s_16_bit_mono_to_f32_array(i2s_u8_buf, &mut i2s_sample_buf.0);
 
-        meter.push_pcm(&i2s_sample_buf.0, sample_index, |frame| {
-            snapshot.push(
-                frame.sample_index as f64 / 48_000.0,
-                gain.map(&frame).panel_rows,
-                false,
-            );
+        processor.push_pcm(&i2s_sample_buf.0, sample_index, false, |frame| {
+            snapshot = *frame.snapshot;
         })?;
         sample_index += I2S_SAMPLE_SIZE as u64;
         i2s_driver.check_continuity()?;

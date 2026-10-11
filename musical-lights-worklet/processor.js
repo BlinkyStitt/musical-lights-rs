@@ -1,11 +1,18 @@
 class LoudnessProcessor extends AudioWorkletProcessor {
     constructor({ processorOptions }) {
         super();
-        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics, sessionId } = processorOptions;
+        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics, sessionId, settings } = processorOptions;
         this.sessionId = sessionId;
         this.wasm = new WebAssembly.Instance(module).exports;
         this.processor = this.wasm.processor_create(pascalsPerUnit === undefined ? 0 : 1, pascalsPerUnit ?? 2, Number(reducedMotion));
         if (!this.processor) throw new Error('Invalid microphone calibration');
+        if (settings) {
+            const values = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_settings_ptr(this.processor), this.wasm.processor_settings_length(this.processor));
+            if (settings.length !== values.length) throw new Error('Invalid audio settings');
+            values.set(settings);
+            if (!this.wasm.processor_configure(this.processor)) throw new Error('Invalid audio settings');
+        }
+        this.messageHz = settings?.[27] ?? 240;
         this.diagnostics = Boolean(diagnostics);
         this.wasm.processor_trace_enable(this.processor, Number(this.diagnostics));
         this.channel = channel;
@@ -46,10 +53,11 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         }
         // At most one snapshot waits on the UI. The processor still consumes
         // every sample and every loudness frame while drawing is delayed.
-        if (!this.pending && currentFrame - this.lastSent >= sampleRate / 240) {
+        if (!this.pending && currentFrame - this.lastSent >= sampleRate / this.messageHz) {
             this.wasm.processor_snapshot(this.processor);
             const state = this.snapshot.slice();
-            const extra = { accentSequence: this.wasm.processor_accent_sequence(this.processor), tempo: this.wasm.processor_tempo(this.processor), tempoConfidence: this.wasm.processor_tempo_confidence(this.processor) }, transfer = [state.buffer];
+            const readouts = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_readouts(this.processor), 4).slice();
+            const extra = { readouts, quantum: samples.length, accentSequence: this.wasm.processor_accent_sequence(this.processor), tempo: this.wasm.processor_tempo(this.processor), tempoConfidence: this.wasm.processor_tempo_confidence(this.processor) }, transfer = [state.buffer];
             if (this.diagnostics) {
                 const stride = this.wasm.processor_trace_stride(this.processor);
                 const trace = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_trace_ptr(this.processor), this.wasm.processor_trace_count(this.processor) * stride).slice();

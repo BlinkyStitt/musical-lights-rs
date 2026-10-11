@@ -105,7 +105,7 @@ function reset(values) {
   input = new Float32Array(38); input[32] = config[0];
   simulation.input(input);
   simulation.set_tempo(tempo);
-  if (danceOptions) simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed);
+  if (danceOptions) simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);
   initialAccent = lastAccent; simulation.accent(initialAccent);
   pending = []; publishedTick = -2; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
   schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;
@@ -122,7 +122,7 @@ self.onmessage = async ({ data }) => {
         const defaults = Array.from(PhysicsSimulation.defaults());
         config = new Float32Array(defaults); config[0] = data.height;
         if (data.config?.length === 8) { config = new Float32Array(data.config); config[0] = data.height; }
-        danceOptions = data.danceOptions ?? { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1 };
+        danceOptions = data.danceOptions ?? { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1, scrollSpeed: 2 };
         reset(config); paused = data.paused;
         buffer = null;
         postMessage({ type: 'ready', config: Array.from(config), defaults, layout: Array.from(layout) });
@@ -145,7 +145,7 @@ self.onmessage = async ({ data }) => {
       case 'dance':
         if (recording) throw new Error('Finish recording before changing dance settings');
         danceOptions = data.options;
-        simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed);
+        simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);
         break;
       case 'pause':
         if (data.paused === paused) break;

@@ -12,7 +12,7 @@ export async function replayReport(report) {
   const results = [];
   for (const fps of [30, 60, 120]) {
     const sim = new PhysicsSimulation(new Float32Array(report.config), new Float32Array(report.palette));
-    if (report.danceOptions) sim.configure_dance(new Float64Array(report.danceOptions.odds), report.danceOptions.flight, report.danceOptions.seed);
+    if (report.danceOptions) sim.configure_dance(new Float64Array(report.danceOptions.odds), report.danceOptions.flight, report.danceOptions.seed, report.danceOptions.scrollSpeed);
     sim.set_tempo(report.initialTempo);
     sim.accent(report.initialAccent ?? 0);
     let cursor = 0;

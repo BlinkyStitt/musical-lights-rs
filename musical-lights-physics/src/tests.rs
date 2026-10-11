@@ -1551,7 +1551,7 @@ fn paired_bars_move_inward_together_and_leave_ball_clearance() {
 fn reduced_motion_and_scrolling_off_consume_accents_without_flips() {
     for reduced in [true, false] {
         let mut sim = world(SimulationConfig::default());
-        sim.configure_dance(DirectionOdds::default().values(), 0.3, 42)
+        sim.configure_dance(DirectionOdds::default().values(), 0.3, 42, 2.0)
             .unwrap();
         sim.apply(SimulationInput {
             reduced_motion: reduced,

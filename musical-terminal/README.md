@@ -2,7 +2,7 @@
 
 Use Rust `nightly-2026-09-10`. The default binary uses the shared Bark processor:
 24 separate analysis and display bands, including all five bass bands.
-The separate FFT binary and Pacman example remain available.
+The Pacman example remains available. Audio uses the shared continuous ISO loudness filters and 24 Bark bands.
 
 On macOS:
 

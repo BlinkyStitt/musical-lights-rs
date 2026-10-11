@@ -396,8 +396,13 @@ impl Simulation {
         odds: [f64; 5],
         flight: f32,
         seed: u32,
+        scroll_speed: f64,
     ) -> Result<(), &'static str> {
-        if !flight.is_finite() || !(0.0..=0.5).contains(&flight) {
+        if !flight.is_finite()
+            || !(0.0..=0.5).contains(&flight)
+            || !scroll_speed.is_finite()
+            || !(0.25..=8.0).contains(&scroll_speed)
+        {
             return Err("Invalid dance settings");
         }
         let odds = DirectionOdds::new(odds)?;
@@ -405,6 +410,7 @@ impl Simulation {
             self.dance = DanceMotion::new(seed);
         }
         self.dance.odds = odds;
+        self.dance.columns_per_beat = scroll_speed;
         self.dance.tempo = self.tempo;
         self.flight_target = flight;
         if self.tick == 0 {
@@ -900,13 +906,20 @@ impl PhysicsSimulation {
     pub fn set_tempo(&mut self, bpm: f32) {
         self.0.set_tempo(bpm);
     }
-    pub fn configure_dance(&mut self, odds: &[f64], flight: f32, seed: u32) -> Result<(), JsError> {
+    pub fn configure_dance(
+        &mut self,
+        odds: &[f64],
+        flight: f32,
+        seed: u32,
+        scroll_speed: f64,
+    ) -> Result<(), JsError> {
         self.0
             .configure_dance(
                 odds.try_into()
                     .map_err(|_| JsError::new("Expected five direction settings"))?,
                 flight,
                 seed,
+                scroll_speed,
             )
             .map_err(JsError::new)
     }

@@ -24,6 +24,10 @@ function beginSession(context, card, source) {
         if (card.dataset.audioSession !== String(session.sessionId) || session.closed) return;
         session.state = state;
         card.dataset.audioState = state;
+        if (state !== 'playing') { const current = card.querySelector('.current-loudness'), background = card.querySelector('.background-loudness');
+            if (current) current.textContent = 'Current loudness: —'; if (background) background.textContent = 'Background estimate: —';
+            for (const output of [current, background]) output?.removeAttribute('aria-label'); }
+
         const status = card.querySelector('.mic-session-status');
         if (status) status.textContent = source === 'microphone' ? ({ starting: 'Starting microphone…', interrupted: 'Microphone interrupted.', stopped: reason === 'cleanup' ? '' : 'Microphone stopped.' }[state] ?? '') : '';
         const { publish, close, ...detail } = session;
@@ -116,7 +120,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
         channelCountMode: 'max', channelInterpretation: 'discrete',
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
         processorOptions: { module, pascalsPerUnit, channel: session.source === 'microphone' ? channel : 0, reducedMotion,
-            diagnostics: session.diagnostics, sessionId: session.sessionId },
+            settings: context.loudnessSettings, diagnostics: session.diagnostics, sessionId: session.sessionId },
     });
     const card = document.querySelector('.audio-card');
     const trace = event => {
@@ -125,7 +129,26 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
                 ...event.data, receivedAt: performance.timeOrigin + performance.now(), receivedAudioTime: context.currentTime,
             } }));
         if (event.data.type === 'frame' && isCurrentProcessorMessage(node, event.data)) {
-            card.dispatchEvent(new CustomEvent('audio-tempo', { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence, accentSequence: event.data.accentSequence } }));
+            const data = event.data;
+            const now = performance.now();
+            if (now - (session.readoutAt ?? -Infinity) >= 1000 / (context.loudnessSettings?.[26] ?? 10)) {
+                session.readoutAt = now;
+                const estimated = profiles.get(node).calibrated ? '' : 'estimated ';
+                const mark = estimated ? '~' : '';
+                const current = card.querySelector('.current-loudness'), background = card.querySelector('.background-loudness');
+                current.textContent = `Current loudness:
+${mark}${data.sones.toFixed(2)} sones
+${data.readouts[0].toFixed(1)} dBFS RMS`;
+                current.setAttribute('aria-label', `Current loudness: ${estimated}${data.sones.toFixed(2)} sones; ${data.readouts[0].toFixed(1)} dBFS RMS`);
+                const source = session.source === 'microphone' ? 'Background estimate' : 'Input background estimate';
+                const learning = data.readouts[3] ? ' · learning' : '';
+                background.textContent = `${source}:
+${mark}${data.readouts[2].toFixed(2)} sones${learning}
+${data.readouts[1].toFixed(1)} dBFS RMS`;
+                background.setAttribute('aria-label', `${source}: ${estimated}${data.readouts[2].toFixed(2)} sones; ${data.readouts[1].toFixed(1)} dBFS RMS${learning}`);
+                card.querySelector('.audio-scheduling').textContent = `48 kHz · actual block ${data.quantum} samples (${(data.quantum / 48).toFixed(2)} ms). ~ marks estimated sones. dBFS measures digital level; it does not measure hearing risk.`;
+            }
+            card.dispatchEvent(new CustomEvent('audio-tempo' , { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence, accentSequence: event.data.accentSequence } }));
         }
         if (event.data.type === 'error') session.publish('interrupted', event.data.message);
     };

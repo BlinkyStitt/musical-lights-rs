@@ -6,14 +6,24 @@ export async function normalView(page) {
   if (await exit.isVisible()) await exit.click();
 }
 export async function physicsReady(page) {
-  await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('#dancinglights')?.physics?.current))).toBe(true);
-  // A reset restarts the simulation tick. Wait for a fresh, advancing snapshot
-  // on the host clock rather than comparing it with the previous world's tick.
-  const received = await page.evaluate(() => document.querySelector('#dancinglights').physics.received);
-  await expect.poll(() => page.evaluate(() => {
-    const view = document.querySelector('#dancinglights').physics;
-    return view.ready && !view.closed && !view.lost && !view.notice.persistent && view.current?.[2] > 0 ? view.received : -1;
-  })).toBeGreaterThan(received);
+  // One browser call waits for both initial and advancing state. Separate
+  // protocol/trace snapshots can stall a busy software renderer between waits.
+  await page.waitForFunction(() => new Promise(resolve => {
+    let received;
+    const sample = () => {
+      const view = document.querySelector('#dancinglights')?.physics;
+      if (view?.current) {
+        // A reset restarts the tick. Compare fresh receipts on the host clock.
+        received ??= view.received;
+        if (view.ready && !view.closed && !view.lost && !view.notice.persistent
+          && view.current[2] > 0 && view.received > received) {
+          resolve(true); return;
+        }
+      }
+      requestAnimationFrame(sample);
+    };
+    sample();
+  }), null, { timeout: 5000 });
 }
 export async function physicsState(page) {
   return page.evaluate(() => {
@@ -67,9 +77,9 @@ export async function syntheticAudio(page, permission = 'granted') {
       // Partial frames use an end-exclusive clock, potentially one quantum
       // ahead of currentTime. Always supersede the last real/fake packet.
       const at = window.audioNow = Math.max(window.audioNow, window.lastAnalysisTime ?? 0) + .01;
-      const state = new Float64Array(99); state[0] = at; state[1] = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0; state[2] = 4;
+      const state = new Float64Array(102); state.set([0, 1, .18], 99); state[0] = at; state[1] = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0; state[2] = 5;
       for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], edge ? at : -1, 0], 3 + i * 4);
-      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
+      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
     };
   }, { permission });
 }

@@ -1,4 +1,5 @@
 import { runtimeRoot } from './runtime-assets.mjs';
+import { traceLayout } from './trace-layout.mjs';
 // Deterministic 12-second generated-audio workload, including portrait/landscape
 // resize transitions. Run each engine in a separate Node process so its WASM
 // module and warmup cannot be confused with another revision.
@@ -13,6 +14,7 @@ if (!path || !output) throw new Error('Usage: node validation/physics-cost.mjs P
 const pcm = new Float32Array(48000 * 12), loop = tonePCM('exercise');
 pcm.set(loop); pcm.set(loop, loop.length);
 const rows = flashTrace(new WebAssembly.Module(await readFile(`${await runtimeRoot('musical-leptos/dist')}/loudness/loudness.wasm`)), pcm);
+const schema = traceLayout(rows[0].length);
 const bytes = await readFile(path);
 const wasm = await init({ module_or_path: bytes });
 const layout = PhysicsSimulation.layout(), runs = [];
@@ -24,7 +26,7 @@ for (let run = 0; run < 3; run++) {
     if (tick % 2 === 0) {
       input[32] = [.927803, 2.596923, .554502, 2.596923, .927803][Math.min(4, Math.floor(tick / 288))];
       const row = rows[Math.min(rows.length - 1, Math.floor(tick / 120 / .002))];
-      for (let i = 0; i < 24; i++) input[i] = row[368 + 4 * i];
+      for (let i = 0; i < 24; i++) input[i] = row[schema.display + schema.header + schema.filtered + schema.step * i];
       sim.input(input);
     }
     const start = performance.now(); sim.step(); const cost = performance.now() - start;

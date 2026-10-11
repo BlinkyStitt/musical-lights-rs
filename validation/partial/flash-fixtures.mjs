@@ -21,9 +21,9 @@ export function flashTrace(module, pcm, reduced = false, { calibration = 2, chun
   const h = w.processor_create(1, calibration, Number(reduced)), rows = [];
   w.processor_trace_enable(h, 1);
   const stride = w.processor_trace_stride(h);
-  assert.ok([463, 511].includes(stride));
-  assert.equal(w.processor_trace_version(h), stride === 511 ? 5 : 4);
-  assert.equal(w.processor_snapshot_length(h), 99);
+  assert.equal(stride, 465);
+  assert.equal(w.processor_trace_version(h), 6);
+  assert.equal(w.processor_snapshot_length(h), 102);
   try {
     for (let at = 0; at < pcm.length; at += chunk) {
       const block = pcm.subarray(at, at + chunk);
@@ -40,8 +40,8 @@ export function flashTrace(module, pcm, reduced = false, { calibration = 2, chun
 
 export function flashSummary(rows, band) {
   return {
-    peakTarget: Math.max(...rows.map(row => row[367 + 4 * band])),
-    peakFiltered: Math.max(...rows.map(row => row[368 + 4 * band])),
-    attacks: [...new Set(rows.map(row => row[369 + 4 * band]).filter(at => at >= 0))],
+    peakTarget: Math.max(...rows.map(row => row[318 + 4 * band])),
+    peakFiltered: Math.max(...rows.map(row => row[319 + 4 * band])),
+    attacks: [...new Set(rows.map(row => row[320 + 4 * band]).filter(at => at >= 0))],
   };
 }

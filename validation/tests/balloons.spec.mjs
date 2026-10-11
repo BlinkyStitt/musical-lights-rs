@@ -35,10 +35,10 @@ test('continuous scrolling carries source identity and stops in place', async ({
   await page.evaluate(() => {
     const levels = Array(24).fill(0); levels[0] = .6; levels[23] = .2;
     window.sendBars(levels);
-    const state = new Float64Array(99); state.set([window.audioNow, 0, 4]);
+    const state = new Float64Array(102); state.set([0, 1, .18], 99); state.set([window.audioNow, 0, 5]);
     for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], i === 0 ? window.audioNow : -1, 0], 3 + i * 4);
     window.testNode.port.dispatchEvent(new MessageEvent('message', { data: {
-      type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
+      type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
     } }));
   });
   const sourceLabel = await page.getByRole('meter').first().getAttribute('aria-label');
@@ -103,6 +103,7 @@ for (const width of [375, 1440]) {
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.setViewportSize({ width, height: 900 });
     await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+    await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
     await expect(page.locator('#dancinglights canvas')).toHaveCount(1);
     await expect(page.getByRole('meter')).toHaveCount(24);
     const initial = await physicsState(page);
@@ -310,7 +311,7 @@ test('context loss pauses physics and restoration resumes without losing the Exi
 });
 
 test('phone page sends generated PCM through the audio processor and exports an honest incomplete report', async ({ page }) => {
-  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input'); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
@@ -559,6 +560,9 @@ for (const scenario of [
 test('rotation-locked phone can enable shaking without starting the microphone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);
+  // This steady-force fixture sends sensor samples at the rendered cadence.
+  // Finish startup's trial counts before measuring its 240 ms motion interval.
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
   await page.locator('.scroll-lights').uncheck();
   // Measure sensor-only travel from rest. The independent idle sine must not
   // keep prescribing moving supports while this fixture establishes its floor.
