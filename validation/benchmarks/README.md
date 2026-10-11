@@ -14,9 +14,10 @@ This separate package keeps Criterion and its host dependencies out of the
 core's embedded feature matrix and production packages.
 
 The audio cases call the actual worklet processor through its exported API,
-with contiguous 128-sample input blocks. They include input copies, ISO and
-partial loudness, display filtering, novelty and tempo. One case also copies
-and parses the production snapshot every second callback, matching the
+with contiguous 128-sample input blocks. They include input copies, continuous
+ISO loudness, display filtering, log-loudness novelty and tempo. One case also
+reads the current and background level estimates, and copies and parses the
+production snapshot every second callback, matching the
 240 Hz send threshold with 128-sample quanta. Diagnostics stay off. The
 fixture repeats exactly two seconds of 80 Hz percussion and a 1 kHz tone.
 The processor warms for six seconds and retains its continuous sample clock.
