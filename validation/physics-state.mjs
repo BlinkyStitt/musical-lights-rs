@@ -6,14 +6,17 @@ export async function normalView(page) {
   if (await exit.isVisible()) await exit.click();
 }
 export async function physicsReady(page) {
-  await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('#dancinglights')?.physics?.current))).toBe(true);
+  // Poll in the browser. Repeated protocol calls also record DOM snapshots,
+  // which can stall a busy software renderer before the result reaches the test.
+  await page.waitForFunction(() => Boolean(document.querySelector('#dancinglights')?.physics?.current), null, { timeout: 5000 });
   // A reset restarts the simulation tick. Wait for a fresh, advancing snapshot
   // on the host clock rather than comparing it with the previous world's tick.
   const received = await page.evaluate(() => document.querySelector('#dancinglights').physics.received);
-  await expect.poll(() => page.evaluate(() => {
+  await page.waitForFunction(received => {
     const view = document.querySelector('#dancinglights').physics;
-    return view.ready && !view.closed && !view.lost && !view.notice.persistent && view.current?.[2] > 0 ? view.received : -1;
-  })).toBeGreaterThan(received);
+    return view.ready && !view.closed && !view.lost && !view.notice.persistent
+      && view.current?.[2] > 0 && view.received > received;
+  }, received, { timeout: 5000 });
 }
 export async function physicsState(page) {
   return page.evaluate(() => {

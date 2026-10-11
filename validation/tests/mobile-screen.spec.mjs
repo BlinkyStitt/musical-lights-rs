@@ -113,6 +113,15 @@ test('a tapped band shows its color and frequency above the graph for three seco
   await page.locator('.display-controls > summary').click();
   await page.locator('.camera-motion').uncheck();
   await page.locator('.display-controls > summary').click();
+  await page.locator('.spectrum-panel').scrollIntoViewIfNeeded();
+  const frame = await page.evaluate(() => document.querySelector('#dancinglights').physics.metrics.frames);
+  // Closing settings and scrolling the page can reproject the pointer surfaces.
+  // Confirm the stopped phase and camera in a fresh drawing before choosing a hit.
+  await page.waitForFunction(frame => {
+    const v = document.querySelector('#dancinglights').physics;
+    return !v.resizePending && v.metrics.frames > frame + 1 && v.input[33] === 0
+      && v.rotation === v.cameraBase && v.current[v.layout[20]] === v.previous?.[v.layout[20]];
+  }, frame, { timeout: 5000 });
   // Use native timers: Playwright Clock returns IDs above the Web IDL i32
   // range, so a WASM clearTimeout cannot cancel those synthetic IDs.
   const bands = page.getByRole('meter');

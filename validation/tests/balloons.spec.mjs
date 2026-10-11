@@ -560,6 +560,9 @@ for (const scenario of [
 test('rotation-locked phone can enable shaking without starting the microphone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);
+  // This steady-force fixture sends sensor samples at the rendered cadence.
+  // Finish startup's trial counts before measuring its 240 ms motion interval.
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
   await page.locator('.scroll-lights').uncheck();
   // Measure sensor-only travel from rest. The independent idle sine must not
   // keep prescribing moving supports while this fixture establishes its floor.
