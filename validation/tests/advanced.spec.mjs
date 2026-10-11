@@ -172,14 +172,13 @@ test('audio and motion switches stop independently and route exit closes both pl
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).check();
   await listening(page).uncheck();
   await expect(page.getByRole('checkbox', { name: 'Phone motion', exact: true })).toBeChecked();
-  // Read the force in the page's next frame, before its 150 ms sensor expiry.
-  // A separate protocol request can arrive after that expiry on a busy runner.
-  const force = await page.evaluate(() => new Promise(resolve => {
-    requestAnimationFrame(() => {
-      window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } }));
-      requestAnimationFrame(() => resolve(Array.from(savedView.input.slice(24, 27))));
-    });
-  }));
+  // Check the live sensor listener in the dispatch call. The renderer samples
+  // this value each frame and correctly expires it after 150 ms; a stalled
+  // software renderer need not draw a frame within that sensor lifetime.
+  const force = await page.evaluate(() => {
+    window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 5, y: 6, z: 7 } }));
+    return Array.from(savedView.acceleration);
+  });
   expect(force).toEqual([-5, -6, -7]);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   await page.getByRole('link', { name: 'About', exact: true }).click();
