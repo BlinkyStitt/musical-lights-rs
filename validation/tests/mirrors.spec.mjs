@@ -35,6 +35,10 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
       const marker = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0xff00ff, fog: false }));
       v.scene.add(marker);
       const camera = new THREE.OrthographicCamera(-.05, .05, .05, -.05, .01, 200);
+      const updateFog = count => {
+        v.mirrors.setCount(count);
+        v.lighting.update(v, v.current, v.layout[9], v.renderedPhase, v.layout[3], v.renderedEnclosureHeight, v.config[5], performance.now());
+      };
       const render = (viewCamera = camera) => {
         v.renderer.setRenderTarget(target); v.renderer.render(v.scene, viewCamera);
         v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
@@ -42,8 +46,8 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
       };
       try {
         for (const count of [0, 1, 6, 50, 2048]) for (const angle of [-40, 0, 40]) {
-          v.mirrors.setCount(count); v.cameraBase = angle; v.setCamera(angle);
-          v.draw(performance.now()); hidden.forEach(mesh => mesh.visible = false);
+          v.cameraBase = angle; v.setCamera(angle); updateFog(count);
+          hidden.forEach(mesh => mesh.visible = false);
           const z = v.fogBank.position.z, x = .6, y = v.renderedEnclosureHeight / 2, yaw = angle * Math.PI / 180;
           camera.position.set(x + 2 * Math.sin(yaw), y, z + 2 * Math.cos(yaw));
           camera.lookAt(x, y, z); camera.updateMatrixWorld();
@@ -57,7 +61,7 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
         // A bright object beyond 50 rows must become visible when depth grows.
         const throughDepth = [];
         for (const count of [50, 2048]) {
-          v.mirrors.setCount(count); v.draw(performance.now()); hidden.forEach(mesh => mesh.visible = false);
+          updateFog(count); hidden.forEach(mesh => mesh.visible = false);
           marker.visible = true; marker.position.set(.6, v.renderedEnclosureHeight / 2, -v.config[5] * 60);
           camera.position.set(.6, v.renderedEnclosureHeight / 2, 2); camera.lookAt(marker.position); camera.updateMatrixWorld();
           throughDepth.push(render());
@@ -90,13 +94,6 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
       }
       return samples;
     }, theme));
-    for (const count of [6, 2048]) {
-      await page.evaluate(count => {
-        const v = document.querySelector('#dancinglights').physics;
-        v.mirrors.setCount(count); v.cameraBase = 25; v.setCamera(25); v.draw(performance.now());
-      }, count);
-      await page.locator('#dancinglights').screenshot({ path: info.outputPath(`fog-${theme}-${count}.png`) });
-    }
   }
   await info.attach('opaque-fog-pixels.json', { body: JSON.stringify(samples), contentType: 'application/json' });
   for (const sample of samples) {
