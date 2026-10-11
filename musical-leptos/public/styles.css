@@ -241,7 +241,8 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
 .audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
 .audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; border-radius: 0; padding: .35rem 0; background: none; font-size: clamp(1rem, min(3.5vw, 5cqh), 1.4rem); font-weight: 600; text-shadow: 0 0 4px var(--plot), 0 0 8px var(--plot); }
-.audio-card[data-expanded] .recovery-notices { position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices > :empty { display: none; }
 .audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
 .input-source-controls .control-row { min-width: 0; gap: .5rem; }
 .input-source-controls :is(select, input) { min-height: 44px; min-width: 0; max-width: 100%; font: inherit; }
@@ -251,7 +252,9 @@ nav { flex-wrap: wrap; }
 
 /* A bounded scene and a reserved control grid, shared by Home and Advanced. */
 .button-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; align-items: start; }
-.button-row > .setting-switch, .button-row > button, .button-row > .recognition-control, .button-row > .motion-controls { min-width: 0; min-height: 44px; margin: 0; }
+.button-row > .setting-switch, .button-row > button, .button-row > .listening-controls, .button-row > .motion-controls { min-width: 0; min-height: 44px; margin: 0; }
+/* Keep microphone controls together and let their message use both columns. */
+.button-row .listening-controls { grid-column: span 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .5rem; align-items: start; }
 .button-row .setting-switch { white-space: normal; min-height: 44px; }
 .button-row .setting-switch span[role="button"] { cursor: help; padding: .3rem 0; }
 .button-row .setting-switch span[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
@@ -335,7 +338,7 @@ nav { flex-wrap: wrap; }
 .button-row .setting-switch input:checked::before { background: var(--primary); border-color: var(--primary); }
 .button-row .setting-switch input:checked::after { left: 23px; }
 .button-row .recognition-control { display: grid; grid-template-columns: minmax(0, 1fr) 18px; align-items: center; gap: .25rem; }
-.button-row .recognition-control .recognition-status { grid-column: 1 / -1; }
+.button-row .listening-controls > .recognition-status { grid-column: 1 / -1; max-width: none; }
 .button-row .recognition-ring { width: 18px; height: 18px; }
 .audio-card[data-expanded] .recognition-status { max-height: 12cqh; overflow: auto; }
 .recognition-status[data-routine="true"] { display: none; }

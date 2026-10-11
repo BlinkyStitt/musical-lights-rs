@@ -411,6 +411,7 @@ pub fn DancingLights(
         <section class="audio-card" data-mode=if advanced { "advanced" } else { "home" } aria-label="Live audio spectrum" node_ref=card>
             <div class="audio-controls">
                 <div class="button-row">
+                    <div class="listening-controls">
                     <SettingSwitch label="Listening" class="listening-toggle"
                         checked=Signal::derive(move || listening.get() || starting.get() && input_source.get() == "microphone")
                         disabled=Signal::derive(move || input_source.get() != "microphone")
@@ -419,6 +420,7 @@ pub fn DancingLights(
                                 stop();
                             }
                         })/>
+                    </div>
                     <p class="mic-status" role="status"><span class="mic-session-status"></span>
                         <span>{move || if input_source.get() == "microphone" && error_notice.get().is_some() {
                             "Microphone unavailable."

@@ -102,10 +102,11 @@ export class SongRecognition {
     this.control = document.createElement('div'); this.control.className = 'recognition-control';
     this.control.innerHTML = `<label class="setting-switch song-detection"><input type="checkbox" class="identify-song" aria-describedby="recognition-disclosure recognition-progress"><span>Identify song</span></label>
       <svg class="recognition-ring" viewBox="0 0 24 24" role="img" aria-label="Song identification off"><circle class="ring-track" cx="12" cy="12" r="9"/><circle class="ring-progress" cx="12" cy="12" r="9" pathLength="1"/></svg>
-      <span id="recognition-progress" class="visually-hidden"></span><p class="recognition-status" role="status"></p>`;
+      <span id="recognition-progress" class="visually-hidden"></span>`;
     this.button = this.control.querySelector('.identify-song');
-    const row = card.querySelector('.button-row'); row.insertBefore(this.control, row.querySelector('.listening-toggle').closest('.setting-switch').nextSibling);
-    this.status = this.control.querySelector('.recognition-status');
+    this.status = document.createElement('p');
+    this.status.className = 'recognition-status'; this.status.setAttribute('role', 'status');
+    card.querySelector('.listening-controls').append(this.control, this.status);
     this.ring = this.control.querySelector('.recognition-ring');
     this.progress = this.control.querySelector('#recognition-progress');
     this.button.onchange = () => {
@@ -323,6 +324,6 @@ export class SongRecognition {
     this.card.removeEventListener('audio-session', this.onSession);
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('storage', this.onStorage);
-    this.resize.disconnect(); this.control.remove(); this.tools.remove(); this.strip.remove();
+    this.resize.disconnect(); this.control.remove(); this.status.remove(); this.tools.remove(); this.strip.remove();
   }
 }
