@@ -2,6 +2,24 @@ import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
+test('Auto baseline keeps live bar motion visible', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
+  await page.locator('.depth-slider').fill('1');
+  await page.getByRole('button', { name: 'Auto', exact: true }).click();
+  const travel = await page.evaluate(() => new Promise(resolve => {
+    const v = document.querySelector('#dancinglights').physics;
+    const first = v.renderedHeight(0); let maximum = first;
+    window.sendBars(Array(24).fill(.6), 1);
+    const sample = () => {
+      maximum = Math.max(maximum, v.renderedHeight(0));
+      if (!v.depthProfile.baseline) { resolve(maximum - first); return; }
+      requestAnimationFrame(sample);
+    };
+    sample();
+  }));
+  expect(travel).toBeGreaterThan(.05);
+});
+
 test('Auto measures startup, freezes its choice, and manual depth cancels a retest', async ({ page }) => {
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);

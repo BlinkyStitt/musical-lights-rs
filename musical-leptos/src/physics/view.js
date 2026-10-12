@@ -157,7 +157,7 @@ export class PhysicsView {
       let rendered = false;
       if (this.current && this.sceneVisible) {
         if (this.depthProfile && !this.depthProfile.done) this.depthProfile.sample(frameTime);
-        if (!this.depthProfile?.baseline || this.depthProfile.done || !Number.isFinite(this.renderedPhase)) { this.draw(now); rendered = true; }
+        this.draw(now); rendered = true;
       }
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;

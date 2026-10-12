@@ -714,7 +714,7 @@ banks fill four adjacent background boxes; all five boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands.
 
-The mirror-count setting starts at six images and controls a finite stack
+The mirror-count setting starts in Auto over one through seven images and controls a finite stack
 of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
 instanced meshes draw copied bars, background bars and balls. They use no
 reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
@@ -984,3 +984,5 @@ Startup Auto now chooses from one through seven depth images, using the same
 frame-cadence checks as explicit Auto. Selecting Auto tests the full 0–2,048
 range. Reset display restores the startup range. Saved Auto counts start within
 1–7 before measurement; saved manual counts keep their full validated range.
+The baseline draws the physical scene with zero depth copies. Bars and balls
+keep moving during measurement, including short captured audio bursts.
