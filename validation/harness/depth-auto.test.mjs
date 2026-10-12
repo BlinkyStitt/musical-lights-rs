@@ -10,12 +10,18 @@ for (const hz of [60, 90, 120, 144]) test(`Auto selects once at ${hz} Hz and rej
   assert.equal(result.count, 128); assert(Math.abs(result.hz - hz) < .01);
   selection.sample(now + 1000); assert.equal(count, 128);
 });
-for (const supported of [0, 3, 7]) test(`startup depth stays between 1 and 7 with support through ${supported}`, () => {
+for (const [supported, expected] of [[0, 1], [3, 2], [7, 4], [16, 16], [32, 32]]) test(`startup depth stays between 1 and 32 with support through ${supported}`, () => {
   let count, result, now = 0; const applied = [];
   const selection = new AutoDepth(value => { count = value; applied.push(value); }, value => { result = value; }, 0, STARTUP_DEPTH_CANDIDATES);
   while (!selection.done) { now += count <= supported ? 1000 / 60 : 2000 / 60; selection.sample(now); }
-  assert.equal(result.count, Math.max(1, supported));
-  assert(applied.slice(1).every(value => value >= 1 && value <= 7));
+  assert.equal(result.count, expected);
+  assert(applied.slice(1).every(value => value >= 1 && value <= 32));
+});
+test('startup can reach 32 images at 30 Hz within the existing deadline', () => {
+  let result, now = 0;
+  const selection = new AutoDepth(() => {}, value => { result = value; }, 0, STARTUP_DEPTH_CANDIDATES);
+  while (!selection.done) { now += 1000 / 30; selection.sample(now); }
+  assert.equal(result.count, 32); assert(now < 20000);
 });
 test('explicit Auto can select the full 2048-image range', () => {
   let result, now = 0;
@@ -34,7 +40,7 @@ test('new preferences select Auto while every old count stays manual', () => {
   assert.equal(read(null).depthMode, 'auto');
   for (const count of [0, 6, 128, 2048]) { const saved = read({ version: 1, mirrorCount: count }); assert.equal(saved.depthMode, 'manual'); assert.equal(saved.mirrorCount, count); }
   assert.equal(read({ version: 1, mirrorCount: 128, depthMode: 'auto' }).depthMode, 'auto');
-  for (const [mirrorCount, expected] of [[0, 1], [3, 3], [7, 7], [128, 7], [2048, 7]])
+  for (const [mirrorCount, expected] of [[0, 1], [3, 3], [7, 7], [32, 32], [128, 32], [2048, 32]])
     assert.equal(read({ version: 1, mirrorCount, depthMode: 'auto' }).mirrorCount, expected);
 });
 test('audio preferences reject invalid controls without changing the model contract', () => {

@@ -24,7 +24,7 @@ test('Auto measures startup, freezes its choice, and manual depth cancels a rete
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
   const count = await page.locator('.depth-slider').inputValue();
-  expect(Number(count)).toBeGreaterThanOrEqual(1); expect(Number(count)).toBeLessThanOrEqual(7);
+  expect(Number(count)).toBeGreaterThanOrEqual(1); expect(Number(count)).toBeLessThanOrEqual(32);
   await expect(page.locator('.depth-status')).toHaveAttribute('title', /Hz target/);
   const measuredAt = await page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.start);
   await page.getByRole('button', { name: 'Auto', exact: true }).click();
@@ -48,8 +48,8 @@ test('saved Auto depth and Reset display return to the shallow startup range', a
     const v = document.querySelector('#dancinglights').physics;
     return { count: v.mirrors.count, pool: v.mirrors.poolCount, balls: v.balls.count, measuredAt: v.depthProfile.start };
   });
-  expect(state.count).toBeGreaterThanOrEqual(1); expect(state.count).toBeLessThanOrEqual(7);
-  expect(state.pool).toBe(8); expect(state.balls).toBe(8);
+  expect(state.count).toBeGreaterThanOrEqual(1); expect(state.count).toBeLessThanOrEqual(32);
+  expect(state.pool).toBe(32); expect(state.balls).toBe(8);
   await page.locator('.display-controls > summary').click();
   await page.locator('.mirror-count').fill('128');
   await page.locator('.mirror-count').dispatchEvent('change');
@@ -62,12 +62,12 @@ test('saved Auto depth and Reset display return to the shallow startup range', a
     const v = document.querySelector('#dancinglights').physics;
     return { mode: v.settings.depthMode, max: v.depthProfile.candidates.at(-1), measuredAt: v.depthProfile.start };
   });
-  expect(reset.mode).toBe('auto'); expect(reset.max).toBe(7);
+  expect(reset.mode).toBe('auto'); expect(reset.max).toBe(32);
   expect(reset.measuredAt).toBeGreaterThan(state.measuredAt);
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
   const count = Number(await page.locator('.depth-slider').inputValue());
-  expect(count).toBeGreaterThanOrEqual(1); expect(count).toBeLessThanOrEqual(7);
+  expect(count).toBeGreaterThanOrEqual(1); expect(count).toBeLessThanOrEqual(32);
 });
 
 test('Auto stops when its scene leaves the viewport and waits for an explicit retest', async ({ page }) => {

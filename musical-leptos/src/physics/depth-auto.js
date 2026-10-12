@@ -1,5 +1,5 @@
 // Select depth from observed frame intervals. No hardware inference.
-export const STARTUP_DEPTH_CANDIDATES = Object.freeze([1, 2, 3, 4, 5, 6, 7]);
+export const STARTUP_DEPTH_CANDIDATES = Object.freeze([1, 2, 4, 8, 16, 32]);
 export const DEPTH_CANDIDATES = Object.freeze([0, 6, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]);
 export function depthPass(intervals, period) {
   if (intervals.length < 60 || !Number.isFinite(period) || period <= 0) return false;

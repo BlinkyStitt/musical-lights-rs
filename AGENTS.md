@@ -70,7 +70,7 @@
   maps and bloom for this phone-oriented view. Reduced Motion disables
   automatic scrolling, camera motion and additional pigment drift.
 - Mirror count controls drawing only. New users start in Auto mode, which selects
-  1–7 depth images from measured startup frame cadence. Selecting Auto explicitly
+  1–32 depth images from measured startup frame cadence. Selecting Auto explicitly
   tests the full 0–2048 range. Saved manual choices remain unchanged. Advanced allows 0–2048 images; validate the
   upper bound and saved settings without changing physical ball counts. Four
   full-size background boxes flank the
