@@ -945,6 +945,12 @@ for (const path of ['/', '/advanced/']) {
     for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+      // Expanded controls appear before native fullscreen entry finishes.
+      // Wait for that transition before measuring the first scroll.
+      await page.waitForFunction(() => {
+        const card = document.querySelector('.audio-card');
+        return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+      });
       await expect(tempo).toHaveText('132 BPM');
       const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation', '.fullscreen-button']);
       expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1, '.fullscreen-button': 1 });
