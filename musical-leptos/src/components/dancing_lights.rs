@@ -431,7 +431,6 @@ pub fn DancingLights(
                     <div class="scroll-controls">
                     <SettingSwitch label="Scroll lights" class="scroll-lights"
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
-                    <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                     </div>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
@@ -515,6 +514,7 @@ pub fn DancingLights(
             <div class="camera-controls">
                 <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
+                <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
             </div>
             <div class="camera-controls depth-controls">

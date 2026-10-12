@@ -928,6 +928,33 @@ test('all bars show current physical travel without a previous-snapshot delay', 
   await info.attach('all-band-render-travel.json', { body: JSON.stringify(errors), contentType: 'application/json' });
 });
 
+for (const path of ['/', '/advanced/']) {
+  test(`active tempo stays beside FPS in normal and expanded views on ${path}`, async ({ page }) => {
+    await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(origin + path); await physicsReady(page); await normalView(page); await startFrozen(page);
+    await page.evaluate(() => document.querySelector('.audio-card').dispatchEvent(new CustomEvent('audio-tempo', {
+      detail: { bpm: 132, confidence: .9, accentSequence: 0 },
+    })));
+    const tempo = page.locator('.tempo-readout'), fps = page.locator('.frame-rate');
+    await expect(tempo).toHaveText('132 BPM');
+    await fps.scrollIntoViewIfNeeded();
+    await expect(tempo).toBeInViewport({ ratio: 1 });
+    expect(await tempo.evaluate(node => node.parentElement === document.querySelector('.frame-rate').parentElement)).toBe(true);
+    await expect(tempo).toHaveCount(1); await expect(tempo).toHaveAttribute('aria-live', 'off');
+    for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
+      await page.setViewportSize(viewport);
+      await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+      await expect(tempo).toHaveText('132 BPM');
+      for (const control of [tempo, fps, page.locator('.camera-rotation'), page.getByRole('button', { name: 'Exit fullscreen', exact: true })])
+        await expect(control).toBeInViewport({ ratio: 1 });
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
+    }
+    await page.locator('.listening-toggle').uncheck();
+    await expect(tempo).toBeHidden(); await expect(tempo).toHaveText('');
+  });
+}
+
 test('Home and expanded mode share a small rendered FPS readout', async ({ page }) => {
   await page.addInitScript(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Capture disabled for presentation check'); }; });
   await page.goto(origin); await physicsReady(page);
