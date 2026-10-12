@@ -161,17 +161,20 @@ for (const width of [375, 1440]) {
     expect(raised.balls.some((b, i) => b.color.some((c, j) => c !== initial.balls[i].color[j]))).toBe(true);
     const render = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      // Sample one complete draw. Bars use the current physical snapshot.
+      // Sample one complete draw. Bars and balls share an interpolated snapshot.
       // Comparing a fast moving render to a different worker snapshot is invalid.
       v.draw(performance.now());
-      const expected = Array.from({ length: 24 }, (_, i) => v.current[v.layout[9] + i]);
+      const expected = Array.from({ length: 24 }, (_, i) => {
+        const offset = v.layout[9] + i, previous = (v.previous ?? v.current)[offset];
+        return previous * (1 - v.renderAlpha) + v.current[offset] * v.renderAlpha;
+      });
       return { expected, ballInstances: v.balls.count, barInstances: v.bars.count, type: v.renderer.getContext().constructor.name, calls: v.renderer.info.render.calls,
         tops: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i)),
         roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i, 1)) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
     // One batch draws visible background banks and one draws ball depth images.
-    // One outer coating covers all five banks, followed by one fog volume pass.
+    // One outer coating covers all nine banks, followed by one fog volume pass.
     expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(6);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
@@ -543,6 +546,40 @@ test('wrapped pointer surfaces and keyboard focus retain the source frequency', 
   await expect(page.getByRole('meter').last()).toBeFocused();
   await expect(page.getByRole('meter').last()).toHaveAttribute('aria-label', before);
   await expect(page.getByRole('meter')).toHaveCount(24);
+});
+
+test('small balls, paired bar tips and light sources share the same interpolated frame', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  const samples = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    const previous = v.previous, current = v.current, received = v.received;
+    const samples = [];
+    try {
+      for (const ceiling of [false, true]) for (const rising of [false, true]) for (const alpha of [0, .25, .5, .75, 1]) {
+        v.previous = new Float32Array(previous ?? current); v.current = new Float32Array(current);
+        v.previous[0] = 1; v.current[0] = 1.02;
+        const radius = v.current[10];
+        for (const [snapshot, top, height] of [[v.previous, rising ? .02 : .10, .6], [v.current, rising ? .10 : .02, .7]]) {
+          snapshot[v.layout[17]] = height;
+          snapshot.fill(top, v.layout[9], v.layout[10]);
+          snapshot[4] = ceiling ? height - top - radius : top + radius;
+        }
+        v.received = performance.now();
+        v.draw(v.received + (v.current[0] - v.previous[0]) * 1000 * alpha);
+        const y = v.balls.instanceMatrix.array[13], top = v.renderedHeight(0);
+        samples.push({ ceiling, rising, alpha,
+          clearance: ceiling ? v.renderedEnclosureHeight - top - y - radius : y - radius - top,
+          lightTip: v.lighting.uniforms.stripState.value[0].y, top,
+          roof: v.barRoof.value, height: v.renderedEnclosureHeight });
+      }
+      return samples;
+    } finally { v.previous = previous; v.current = current; v.received = received; v.draw(performance.now()); }
+  });
+  for (const sample of samples) {
+    expect(Math.abs(sample.clearance), JSON.stringify(sample)).toBeLessThan(.00001);
+    expect(sample.lightTip).toBeCloseTo(sample.top, 6);
+    expect(sample.roof).toBeCloseTo(sample.height, 6);
+  }
 });
 
 test('leftward scrolling interpolates through the seam without sweeping the pattern right', async ({ page }) => {

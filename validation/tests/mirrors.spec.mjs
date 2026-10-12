@@ -279,9 +279,10 @@ test('fog light remains stable at rest and softens alternating attack frames', a
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {};
-    v.previous = v.current.slice(); v.listening = true;
+    v.listening = true;
     v.push(new Float32Array(24).fill(1), new Float32Array(24));
     v.current.fill(v.current[v.layout[17]] / 2, v.layout[9], v.layout[9] + 24);
+    v.previous = v.current.slice();
     v.mirrors.setCount(6); v.draw(performance.now());
     const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
     hidden.forEach(mesh => mesh.visible = false);
@@ -917,14 +918,18 @@ test('full-size background bands show lit faces and depth copies separate at obl
   await info.attach('visible-background-fills.json', { body: JSON.stringify(results), contentType: 'application/json' });
 });
 
-test('all bars show current physical travel without a previous-snapshot delay', async ({ page }, info) => {
+test('all bars share the balls interpolation time during physical travel', async ({ page }, info) => {
   await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await startFrozen(page);
   await page.evaluate(() => window.sendBars(Array.from({ length: 24 }, (_, i) => .1 + .7 * i / 23)));
   const errors = await page.evaluate(async () => {
     const v = document.querySelector('#dancinglights').physics, errors = [];
     for (let frame = 0; frame < 12; frame++) {
       await new Promise(resolve => requestAnimationFrame(resolve)); v.draw(performance.now());
-      errors.push(Math.max(...Array.from({ length: 24 }, (_, i) => Math.abs(v.renderedHeight(i) - v.current[v.layout[9] + i]))));
+      errors.push(Math.max(...Array.from({ length: 24 }, (_, i) => {
+        const offset = v.layout[9] + i, previous = (v.previous ?? v.current)[offset];
+        const expected = previous * (1 - v.renderAlpha) + v.current[offset] * v.renderAlpha;
+        return Math.abs(v.renderedHeight(i) - expected);
+      })));
     }
     return errors;
   });

@@ -408,6 +408,7 @@ export class PhysicsView {
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
+    this.renderedTops = new Float32Array(count);
     // The visible post spans the same depth as its physical support surface.
     // Extend the outer ends in the vertex shader, using the physical support span.
     const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
@@ -454,7 +455,10 @@ export class PhysicsView {
     const [count, , , pitch, , , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
-    const height = current[this.layout[17]], depth = this.config[5];
+    const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
+    const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
+    const geometry = this.layout[17];
+    const height = previous[geometry] + (current[geometry] - previous[geometry]) * alpha, depth = this.config[5];
     this.barRoof.value = height; this.barDepth.value = 1 + this.mirrors.count;
     if (!this.reduced.matches) this.patternTime.value = now / 10000;
     for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
@@ -465,8 +469,6 @@ export class PhysicsView {
       }
       attr.needsUpdate = true;
     }
-    const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
-    const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
     const phaseOffset = this.layout[20];
     const phaseDelta = ((current[phaseOffset] - previous[phaseOffset] + count * 1.5) % count) - count / 2;
     const phase = (previous[phaseOffset] + phaseDelta * alpha + count) % count;
@@ -484,8 +486,9 @@ export class PhysicsView {
       this.color.fromArray(current, offset + 15); this.balls.setColorAt(i, this.color);
     }
     for (let i = 0; i < count; i++) {
-      const top = current[barOffset + i];
-      const wave = this.waveLight(i, top, current[this.layout[17] + 1], now / 1000, !this.listening);
+      const top = this.renderedTops[i] = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
+      const maximum = previous[geometry + 1] + (current[geometry + 1] - previous[geometry + 1]) * alpha;
+      const wave = this.waveLight(i, top, maximum, now / 1000, !this.listening);
       const edge = this.listening ? this.edges[i] : wave * (this.reduced.matches ? .5 : 1);
       // Shared display levels contain audio loudness; physical travel also
       // includes the decorative listening floor and must not set brightness.
@@ -506,7 +509,7 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
-    this.lighting.update(this, current, barOffset, phase, pitch, height, depth, now);
+    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth, now);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.bars.geometry.attributes.pulse.needsUpdate = true;
