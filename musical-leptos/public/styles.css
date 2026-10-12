@@ -297,7 +297,7 @@ nav { flex-wrap: wrap; }
 .control-help { pointer-events: none; position: fixed; z-index: 120; padding: .75rem; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--surface); box-shadow: 0 4px 20px #0004; font-size: .85rem; line-height: 1.5; max-height: calc(100dvh - 24px); overflow: auto; }
 .audio-card[data-expanded] { container: visualizer / size; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(6, max-content); align-content: start; gap: .25rem; }
 .audio-card[data-expanded] > .visual-content { position: relative; inset: auto; grid-row: 1; grid-column: 1; min-height: 0; display: flex; flex-direction: column; }
-.audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: none; height: max(200px, 60cqh); min-height: 200px; display: flex; }
+.audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: none; height: max(200px, 80cqh); min-height: 200px; display: flex; }
 .audio-card[data-expanded] #dancinglights { flex: 1; height: auto; min-height: 0; }
 .audio-card[data-expanded] .audio-controls { position: relative; inset: auto; grid-row: 6; grid-column: 1; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
 .audio-card[data-expanded] .recognized-song { position: relative; grid-row: 3; grid-column: 1; min-height: 0; margin: 0; max-height: none; overflow: visible; align-items: flex-start; pointer-events: auto; }
