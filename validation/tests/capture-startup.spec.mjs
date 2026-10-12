@@ -48,10 +48,6 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
   await expect(page.locator('.mic-status')).toBeEmpty();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'false');
     const targets = () => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)));
-    const rendered = () => page.evaluate(() => {
-      const v = document.querySelector('#dancinglights').physics;
-      return Math.max(...Array.from({ length: 24 }, (_, i) => v.renderedHeight(i) - v.layout[13]));
-    });
     const renderedRatio = () => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
       const travel = v.current[v.layout[17] + 1] - v.layout[13];
@@ -65,10 +61,27 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     // Silence has a small decorative floor without fabricated audio targets.
     await expect.poll(renderedRatio).toBeGreaterThan(.12);
     await expect.poll(renderedRatio).toBeLessThan(.18);
-    await page.evaluate(() => captureBurst());
-    await expect.poll(targets, { intervals: [10] }).toBeGreaterThan(.2);
-    await expect.poll(rendered, { intervals: [10] }).toBeGreaterThan(.05);
-    await expect.poll(renderedRatio, { intervals: [10] }).toBeGreaterThan(.2);
+    // Observe the short burst in the page. Separate protocol/trace snapshots
+    // can take longer than the burst on a software renderer. Require actual
+    // rendered travel and its ratio in the same frame, beyond the idle floor.
+    const burst = await page.evaluate(() => new Promise(resolve => {
+      const v = document.querySelector('#dancinglights').physics;
+      const start = performance.now(), peak = { target: 0, rendered: 0, ratio: 0 };
+      const sample = () => {
+        peak.target = Math.max(peak.target, ...v.input.slice(0, 24));
+        const rendered = Math.max(...Array.from({ length: 24 }, (_, i) => v.renderedHeight(i) - v.layout[13]));
+        const ratio = rendered / (v.current[v.layout[17] + 1] - v.layout[13]);
+        if (ratio > peak.ratio) { peak.rendered = rendered; peak.ratio = ratio; }
+        if ((peak.target > .2 && peak.rendered > .05 && peak.ratio > .2) || performance.now() - start >= 5000) {
+          resolve(peak); return;
+        }
+        requestAnimationFrame(sample);
+      };
+      captureBurst(); sample();
+    }));
+    expect(burst.target).toBeGreaterThan(.2);
+    expect(burst.rendered).toBeGreaterThan(.05);
+    expect(burst.ratio).toBeGreaterThan(.2);
     await expect.poll(targets).toBeLessThan(1e-6); // The filter decays asymptotically.
     if (action === 'Fullscreen') await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await expect(listening(page)).toBeChecked();
