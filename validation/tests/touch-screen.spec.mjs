@@ -20,7 +20,9 @@ async function touchInput(page, context) {
   await page.mouse.move(-100, -100);
   const box = await page.getByRole('meter').nth(4).boundingBox();
   const session = await context.newCDPSession(page);
-  const point = { x: Math.round(box.x + box.width / 2), y: box.y + box.height - 200, id: 1 };
+  // Recovery notices can shorten the scene. Start at the bar's center;
+  // subtracting a fixed height can instead hit the top-edge Exit target.
+  const point = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2), id: 1 };
   const send = (type, touchPoints) => session.send('Input.dispatchTouchEvent', { type, touchPoints });
   const move = async (dx, dy) => {
     for (let step = 1; step <= 10; step++) {
