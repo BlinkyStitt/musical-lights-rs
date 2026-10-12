@@ -29,11 +29,46 @@ test('explicit Auto can select the full 2048-image range', () => {
   while (!selection.done) { now += 1000 / 60; selection.sample(now); }
   assert.equal(result.count, 2048);
 });
-test('Auto cancellation prevents further writes and frame criteria reject missed refreshes', () => {
+for (const hz of [60, 90, 120, 144]) test(`occasional missed refreshes do not change the selected depth at ${hz} Hz`, () => {
+  let result, now = 0, frame = 0;
+  const selection = new AutoDepth(() => {}, value => { result = value; }, 0);
+  while (!selection.done) { now += (++frame % 60 === 0 ? 2 : 1) * 1000 / hz; selection.sample(now); }
+  assert.equal(result.count, 2048); assert(now <= 25000);
+});
+test('Auto allows scene changes to settle before measuring each depth', () => {
+  let count, result, now = 0, appliedAt = 0;
+  const selection = new AutoDepth(value => { count = value; appliedAt = now; }, value => { result = value; }, 0);
+  while (!selection.done) { now += (now - appliedAt < 400 ? 2 : 1) * 1000 / 60; selection.sample(now); }
+  assert.equal(result.count, 2048);
+});
+test('one interrupted measurement is confirmed at the same depth before rejecting it', () => {
+  let count, result, now = 0, interrupted = false; const applied = [];
+  const selection = new AutoDepth(value => { count = value; applied.push(value); }, value => { result = value; }, 0);
+  while (!selection.done) {
+    if (count === 32 && selection.samples.length === 35 && !interrupted) { now += 250; interrupted = true; }
+    else now += 1000 / 60;
+    selection.sample(now);
+  }
+  assert(interrupted); assert.equal(result.count, 2048);
+  assert.equal(applied.filter(count => count === 32).length, 1, 'confirmation must retain the current scene');
+});
+test('Auto confirms a sustained slowdown before choosing the prior passing depth', () => {
+  let count, result, now = 0, slowFrames = 0;
+  const selection = new AutoDepth(value => { count = value; }, value => { result = value; }, 0);
+  while (!selection.done) {
+    if (count > 128) slowFrames++;
+    now += count <= 128 ? 1000 / 60 : 2000 / 60; selection.sample(now);
+  }
+  assert.equal(result.count, 128); assert(slowFrames >= 120);
+});
+test('Auto cancellation prevents further writes and frame criteria tolerate isolated misses but reject sustained loss', () => {
   let writes = 0; const selection = new AutoDepth(() => { writes++; }, () => assert.fail('canceled'), 0);
   selection.cancel(); selection.sample(100); assert.equal(writes, 1);
   assert(depthPass(Array(60).fill(1000 / 120), 1000 / 120));
-  assert(!depthPass([...Array(59).fill(1000 / 120), 20], 1000 / 120));
+  assert(depthPass([...Array(59).fill(1000 / 120), 20], 1000 / 120));
+  assert(!depthPass([...Array(54).fill(1000 / 120), ...Array(6).fill(20)], 1000 / 120));
+  assert(!depthPass([...Array(110).fill(1000 / 120), ...Array(10).fill(11)], 1000 / 120));
+  assert(!depthPass([...Array(119).fill(1000 / 120), 200], 1000 / 120));
 });
 test('new preferences select Auto while every old count stays manual', () => {
   const read = saved => readSettings({ getItem(key) { assert.equal(key, SETTINGS_KEY); return JSON.stringify(saved); } });
