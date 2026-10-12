@@ -548,7 +548,7 @@ pub fn DancingLights(
                     <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. Copies use the same bars and balls."</p>
                     <p>"Startup chooses 1–32 images. Select Auto to test the full range for your device."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
-                    <p>"Smooth left-to-right rotation. The angle slider sets the center. Reduced Motion stops the automatic rotation."</p>
+                    <p>"Smooth left-to-right rotation from the selected angle. The sweep stays within ±40°. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
             <details class="settings-section"><summary>"Audio response & readouts"</summary><div class="audio-tuning"></div></details>

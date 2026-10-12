@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs';
+import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 // Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
@@ -891,6 +891,40 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
   await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
 });
 
+for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
+  test(`saved camera angle ${angle} resumes its inward sweep on ${path}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript(angle => localStorage.setItem('musical-lights-display-v1', JSON.stringify({
+      version: 1, cameraAngle: angle, cameraMotion: true, mirrorCount: 1, depthMode: 'manual',
+    })), angle);
+    await page.goto(origin + path); await physicsReady(page); await normalView(page);
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+    const initial = await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      window.cameraWorld = { worker: v.worker, renderer: v.renderer };
+      return { yaw: v.rotation, tick: v.current[2], base: v.cameraBase };
+    });
+    expect(initial.base).toBe(angle);
+    await expect.poll(() => page.evaluate(angle => {
+      const v = document.querySelector('#dancinglights').physics;
+      return angle < 0 ? v.rotation - angle : angle - v.rotation;
+    }, angle), { timeout: 5000 }).toBeGreaterThan(.2);
+    const state = await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return { yaw: v.rotation, tick: v.current[2], base: v.cameraBase,
+        slider: Number(v.cameraControl.value), saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')).cameraAngle,
+        sameWorld: v.worker === cameraWorld.worker && v.renderer === cameraWorld.renderer };
+    });
+    expect(state.yaw).toBeGreaterThanOrEqual(-40); expect(state.yaw).toBeLessThanOrEqual(40);
+    expect(state.tick).toBeGreaterThan(initial.tick); expect(state.sameWorld).toBe(true);
+    expect(state.base).toBe(angle); expect(state.saved).toBe(angle);
+    expect(Math.abs(state.yaw - state.slider)).toBeLessThan(1);
+    await page.locator('.display-controls > summary').click();
+    await page.locator('.camera-motion').uncheck();
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(angle);
+  });
+}
+
 test('camera sweep turns smoothly on the horizontal plane without attack shake', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(origin); await physicsReady(page);
@@ -916,7 +950,8 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
   });
   expect(result.outlines).toBe(false);
   expect(result.manual).toBe(35);
-  expect(Math.min(...result.bounded)).toBeCloseTo(30,6); expect(Math.max(...result.bounded)).toBeCloseTo(40,6);
+  expect(result.bounded[0]).toBeCloseTo(35,6); expect(result.bounded.at(-1)).toBeCloseTo(35,6);
+  expect(Math.min(...result.bounded)).toBeCloseTo(20,6); expect(Math.max(...result.bounded)).toBeCloseTo(40,6);
   for(const sample of result.samples){expect(sample.y).toBeCloseTo(result.centerY,8);expect(sample.attackDelta).toBe(0);}
   for(const [start,end,direction] of [[0,12000,1],[12000,36000,-1],[36000,48000,1]]) {
     const span=result.samples.filter(s=>s.time>=start&&s.time<=end);

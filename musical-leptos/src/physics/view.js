@@ -330,9 +330,12 @@ export class PhysicsView {
     const elapsed = this.cameraAt == null ? 0 : Math.max(0, now - this.cameraAt);
     this.cameraAt = now;
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
-    // Ease through both turns without a clamp, attack kick or vertical wobble.
-    const amplitude = Math.min(this.settings.sweepAngle ?? 10, 40 - Math.abs(this.cameraBase));
-    const yaw = this.cameraBase + (moving ? amplitude * Math.sin(this.cameraTime * 2 * Math.PI / ((this.settings.sweepSeconds ?? 48) * 1000)) : 0);
+    // Move the sweep center inward at the limits. Start at the selected angle
+    // and ease through both turns without clipping or losing the sweep width.
+    const amplitude = this.settings.sweepAngle ?? 10;
+    const center = THREE.MathUtils.clamp(this.cameraBase, -40 + amplitude, 40 - amplitude);
+    const phase = amplitude ? Math.asin(THREE.MathUtils.clamp((this.cameraBase - center) / amplitude, -1, 1)) : 0;
+    const yaw = moving ? center + amplitude * Math.sin(this.cameraTime * 2 * Math.PI / ((this.settings.sweepSeconds ?? 48) * 1000) + phase) : this.cameraBase;
     this.automaticCamera = true;
     this.setCamera(yaw);
     this.automaticCamera = false;

@@ -778,8 +778,10 @@ An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
 automatic camera motion while the user sets the angle. Automatic rotation uses a
-48-second horizontal sine cycle through ±10° around the selected center angle,
-with less travel near the slider limits. It has no attack shake or vertical wobble.
+48-second horizontal sine cycle with a default amplitude of 10°. Near the slider
+limits, its center moves inward so it retains the configured travel within ±40°.
+It starts at the selected angle; a saved −40° angle sweeps through −40° to −20°.
+It has no attack shake or vertical wobble.
 Reduced Motion stops the sweep. The renderer draws no box-frame outlines.
 Expanded Home and Advanced show rendered FPS beside the angle slider, updated
 once per second from actual rendered frames. This readout also works during idle
