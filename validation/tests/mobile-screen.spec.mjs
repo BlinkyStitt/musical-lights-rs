@@ -203,10 +203,12 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   for (const label of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
     await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeVisible();
   }
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
   for (const viewport of [{ width: 390, height: 664 }, { width: 844, height: 390 }, { width: 390, height: 664 }]) {
     await page.setViewportSize(viewport);
     await expect.poll(async () => (await page.locator('.audio-card').boundingBox()).height).toBe(viewport.height);
+    await page.locator('.audio-controls').scrollIntoViewIfNeeded();
     const graph = await page.locator('#dancinglights').boundingBox();
     const controls = await page.locator('.audio-controls').boundingBox();
     expect(graph.height).toBeGreaterThan(160);
@@ -217,6 +219,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await page.screenshot({ path: 'test-results/iphone-lights-only.png' });
   expect(await page.evaluate(() => inputRequests)).toBe(1);
   expect(await page.evaluate(() => sourceStream.getTracks()[0].readyState)).toBe('live');
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   // A tap, sideways drag, or short drag cannot exit.
   for (const gesture of [[0, 0], [100, 90], [0, 79]]) {
     await drag(page, ...gesture);

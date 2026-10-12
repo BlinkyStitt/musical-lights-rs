@@ -20,7 +20,9 @@ async function touchInput(page, context) {
   await page.mouse.move(-100, -100);
   const box = await page.getByRole('meter').nth(4).boundingBox();
   const session = await context.newCDPSession(page);
-  const point = { x: Math.round(box.x + box.width / 2), y: box.y + box.height - 200, id: 1 };
+  // Start at the bar's center; subtracting a fixed height can instead hit
+  // the top-edge Exit target in a short scene.
+  const point = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2), id: 1 };
   const send = (type, touchPoints) => session.send('Input.dispatchTouchEvent', { type, touchPoints });
   const move = async (dx, dy) => {
     for (let step = 1; step <= 10; step++) {
@@ -140,4 +142,42 @@ test('touch scrolling the normal page does not trigger a band tap', async ({ pag
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
   await expect(page.getByRole('tooltip')).toBeHidden();
   await expect(page.locator('[data-expanded]')).toHaveCount(0);
+});
+
+test('native touch scrolls the expanded footer without exiting or resizing the scene', async ({ page, context }) => {
+  await page.goto('http://127.0.0.1:8101');
+  await physicsReady(page);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+  const geometry = () => page.evaluate(() => {
+    const view = document.querySelector('#dancinglights').physics;
+    const rect = view.layer.getBoundingClientRect();
+    return { width: rect.width, height: rect.height, enclosure: view.input[32] };
+  });
+  const before = await geometry();
+  await page.evaluate(() => {
+    const card = document.querySelector('.audio-card');
+    card.querySelector('.audio-error').textContent = 'Microphone input ended. Restart Listening when the input is available. '.repeat(12);
+  });
+  expect(await geometry()).toEqual(before);
+  const notice = await page.locator('.audio-error').boundingBox();
+  const point = { x: Math.round(notice.x + notice.width / 2), y: Math.round(Math.min(notice.y + 80, 600)), id: 1 };
+  await page.mouse.move(-100, -100);
+  const session = await context.newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  for (let step = 1; step <= 10; step++) {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, y: point.y - step * 15 }] });
+  }
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => page.locator('.audio-card').evaluate(n => n.scrollTop)).toBeGreaterThan(80);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+  await expect(page.getByRole('tooltip')).toBeHidden();
+  expect(await geometry()).toEqual(before);
+  const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+  await exit.scrollIntoViewIfNeeded();
+  await expect(exit).toBeInViewport({ ratio: 1 });
+  await exit.tap();
+  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
+  expect(await page.locator('.audio-card').evaluate(n => n.scrollTop)).toBe(0);
+  await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
 });

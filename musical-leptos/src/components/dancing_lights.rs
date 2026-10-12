@@ -431,7 +431,6 @@ pub fn DancingLights(
                     <div class="scroll-controls">
                     <SettingSwitch label="Scroll lights" class="scroll-lights"
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
-                    <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                     </div>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
@@ -515,6 +514,7 @@ pub fn DancingLights(
             <div class="camera-controls">
                 <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
+                <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
             </div>
             <div class="camera-controls depth-controls">
@@ -546,8 +546,9 @@ pub fn DancingLights(
                     <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
                     <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="2048" step="1" value="6"/></label>
                     <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. Copies use the same bars and balls."</p>
+                    <p>"Startup chooses 1–32 images. Select Auto to test the full range for your device."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
-                    <p>"Smooth left-to-right rotation. The angle slider sets the center. Reduced Motion stops the automatic rotation."</p>
+                    <p>"Smooth left-to-right rotation from the selected angle. The sweep stays within ±40°. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
                 </details>
             <details class="settings-section"><summary>"Audio response & readouts"</summary><div class="audio-tuning"></div></details>

@@ -65,6 +65,7 @@ export class VisualizerScreen {
           && !this.element.classList.contains('video-active')
           && !this.element.classList.contains('video-editing')
           && event.clientY <= this.topTapHeight
+          && event.target?.closest?.('#dancinglights')
           && !event.target?.closest?.('button, input, label, summary')) {
         // iOS may not deliver a complete captured drag after a viewport
         // gesture. Keep a direct, reliable touch target for leaving the view.
@@ -74,6 +75,7 @@ export class VisualizerScreen {
       }
       if ((this.expanded || touch) && event.isPrimary && event.button === 0
           && this.element.contains(event.target)
+          && (!this.expanded || event.target.closest('#dancinglights'))
           && !event.target.closest('button, input, label, summary, .video-panel, .control-help, [role=button]')) {
         const band = event.target.closest('[data-source-band], [role="meter"]');
         if (!this.expanded && !band) return;
@@ -130,7 +132,7 @@ export class VisualizerScreen {
       if (event.target?.closest?.('button, input, label, summary')
           && !event.target.closest('.fullscreen-button')) return;
       const touch = event.touches[0];
-      if (!this.element.classList.contains('video-active') && !this.element.classList.contains('video-editing') && touch.clientY <= this.topTapHeight) {
+      if (!this.element.classList.contains('video-active') && !this.element.classList.contains('video-editing') && touch.clientY <= this.topTapHeight && event.target?.closest?.('#dancinglights')) {
         // Safari can omit the matching pointer stream during viewport changes.
         // Capture the native touch before closing, so it cannot activate the
         // page underneath the fullscreen view.
@@ -186,6 +188,7 @@ export class VisualizerScreen {
     this.expanded = expanded;
     this.clearGesture();
     this.element.toggleAttribute('data-expanded', expanded);
+    if (expanded) this.element.scrollTop = 0;
     this.emit();
   }
 

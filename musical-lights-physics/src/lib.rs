@@ -2,12 +2,14 @@
 use musical_lights_core::lights::bar_motion::{DEFAULT_ATTACK_SECONDS, Motion};
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
 use musical_lights_core::lights::musical_motion::{
-    DirectionOdds, paired_bar_extent, remember_pigment, sphere_drag_factor,
+    DirectionOdds, contact_pigment_blend, paired_bar_extent, remember_pigment, sphere_drag_factor,
 };
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
 
 pub const COUNT: usize = 24;
+pub const ATTACK_OFFSET: usize = 38;
+pub const INPUT_LEN: usize = ATTACK_OFFSET + COUNT;
 pub const BALL_COUNT: usize = 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
@@ -132,6 +134,8 @@ impl SimulationConfig {
 pub struct SimulationInput {
     pub tick: u64,
     pub levels: [f32; COUNT],
+    /// Current audio attack edges, separate from physical and decorative travel.
+    pub attacks: [f32; COUNT],
     pub acceleration: [f32; 3],
     pub gravity: Option<[f32; 3]>,
     pub pointer: Option<[f32; 3]>,
@@ -144,6 +148,7 @@ impl Default for SimulationInput {
         Self {
             tick: 0,
             levels: [0.0; COUNT],
+            attacks: [0.0; COUNT],
             acceleration: [0.0; 3],
             gravity: None,
             pointer: None,
@@ -366,6 +371,10 @@ impl Simulation {
         if input.tick != self.tick
             || input
                 .levels
+                .iter()
+                .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+            || input
+                .attacks
                 .iter()
                 .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
             || input.acceleration.iter().any(|v| !v.is_finite())
@@ -705,7 +714,12 @@ impl Simulation {
                             pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
                         if touching[j] && !self.touching[i][j] && impulse > 0.0 {
-                            // Blend only on contact onset. Resting load cannot keep changing color.
+                            let mass = self.world.bodies[self.balls[i].0].mass();
+                            let blend = contact_pigment_blend(self.input.attacks[j], impulse, mass);
+                            if blend == 0.0 {
+                                continue;
+                            }
+                            // Contact onset and the source's audio attack must coincide.
                             let start = i * 9;
                             remember_pigment(
                                 (&mut self.pigments[start..start + 9])
@@ -713,8 +727,6 @@ impl Simulation {
                                     .expect("fixed pigment history"),
                                 self.palette[j],
                             );
-                            let mass = self.world.bodies[self.balls[i].0].mass();
-                            let blend = (impulse / mass * 0.15).clamp(0.0, 0.5);
                             for c in 0..3 {
                                 self.colors[i][c] +=
                                     (self.palette[j][c] - self.colors[i][c]) * blend;
@@ -868,16 +880,17 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            11.0, // contiguous rectangular bar colliders; replay requires this engine
+            12.0, // attack-qualified pigment transfer; replay requires this engine
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
-            38.0, // input length including gravity xyz and its enabled flag
+            INPUT_LEN as f32, // physical inputs followed by each source's audio attack edge
         ]
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
-        // 24 levels, acceleration xyz, pointer active + xyz, reduced, height, scrolling, gravity xyz + active.
-        if values.len() != 38
+        // 24 levels, acceleration xyz, pointer active + xyz, reduced, height,
+        // scrolling, gravity xyz + active, then 24 audio attack edges.
+        if values.len() != INPUT_LEN
             || values.iter().any(|v| !v.is_finite())
             || ![0.0, 1.0].contains(&values[27])
             || ![0.0, 1.0].contains(&values[31])
@@ -885,12 +898,13 @@ impl PhysicsSimulation {
             || ![0.0, 1.0].contains(&values[37])
         {
             return Err(JsError::new(
-                "Expected 38 simulation inputs with scrolling and gravity enablement",
+                "Expected 62 simulation inputs with scrolling and gravity enablement and audio attacks",
             ));
         }
         let input = SimulationInput {
             tick: self.0.tick,
             levels: std::array::from_fn(|i| values[i]),
+            attacks: std::array::from_fn(|i| values[ATTACK_OFFSET + i]),
             acceleration: [values[24], values[25], values[26]],
             gravity: (values[37] == 1.0).then_some([values[34], values[35], values[36]]),
             pointer: (values[27] == 1.0).then_some([values[28], values[29], values[30]]),

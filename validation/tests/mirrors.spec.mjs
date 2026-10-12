@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { physicsReady, syntheticAudio, startFrozen } from '../physics-state.mjs';
+import { scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 // Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
@@ -12,7 +12,76 @@ test.beforeEach(async ({ page }) => {
 });
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
 
-test('opaque lit fog fills empty air and blocks objects beyond the back row', async ({ page }, info) => {
+test('colored light reaches three progressively thicker fog regions including depth zero', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    cancelAnimationFrame(v.request); v.stopPreview();
+    const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    hidden.forEach(mesh => mesh.visible = false);
+    const target = new THREE.WebGLRenderTarget(64, 64); target.texture.colorSpace = THREE.SRGBColorSpace;
+    const pixels = new Uint8Array(64 * 64 * 4), samples = [];
+    const camera = new THREE.OrthographicCamera(-.01, .01, .01, -.01, .01, 2000);
+    const center = v.renderedEnclosureHeight / 2, depth = v.config[5];
+    camera.position.set(.95, center, 2); camera.lookAt(.95, center, -1); camera.updateMatrixWorld();
+    const marker = new THREE.Mesh(new THREE.PlaneGeometry(.1, .1), new THREE.MeshBasicMaterial({ color: 0, fog: false }));
+    v.scene.add(marker);
+    const u = v.lighting.uniforms;
+    u.mistBase.value.setRGB(.02, .02, .02); u.fogAttack.value.fill(0);
+    u.stripState.value.forEach(state => state.set(.6, center, 0));
+    u.stripColor.value.forEach(color => color.setRGB(0, 0, 0));
+    u.glowBallColor.value.forEach(color => color.setRGB(0, 0, 0));
+    u.lightStrength.value.set(.18, .8, .22, 0);
+    const read = () => {
+      v.renderer.setRenderTarget(target); v.render(camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+      return Array.from(pixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 3));
+    };
+    const linear = byte => { const x = byte / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; };
+    try {
+      for (const count of [0, 1, 3, 6, 32]) {
+        v.mirrors.setCount(count); v.mirrors.meshes.forEach(({ mesh }) => { mesh.visible = false; });
+        v.fogVolume.update(v.width, v.renderedEnclosureHeight, depth, count, v.camera.far);
+        const span = v.fogVolume.uniforms.volumeSpan.value.z;
+        const regions = [];
+        for (const fraction of [.25, .5, .75]) {
+          marker.position.set(.95, center, -depth / 2 - span * fraction);
+          u.stripColor.value[0].setRGB(0, 0, 0); const dark = read();
+          marker.material.color.setRGB(1, 1, 1); const white = read(); marker.material.color.setRGB(0, 0, 0);
+          u.stripColor.value[0].setRGB(1, 0, 0); const red = read();
+          u.stripColor.value[0].setRGB(0, 0, 1); const blue = read();
+          u.stripColor.value[0].setRGB(0, 0, 0);
+          regions.push({ fraction, transmission: linear(white[0]) - linear(dark[0]),
+            red: red.map((value, i) => value - dark[i]), blue: blue.map((value, i) => value - dark[i]) });
+        }
+        samples.push({ count, span, regions, images: v.mirrors.meshes.reduce((sum, { mesh }) => sum + mesh.count, 0) });
+      }
+      return { samples, balls: v.balls.count, physicalDepth: depth };
+    } finally {
+      v.renderer.setRenderTarget(null); target.dispose(); v.scene.remove(marker); marker.geometry.dispose(); marker.material.dispose();
+    }
+  });
+  await info.attach('fog-color-depth.json', { body: JSON.stringify(result), contentType: 'application/json' });
+  for (const sample of result.samples) {
+    expect(sample.span).toBeGreaterThanOrEqual(result.physicalDepth * 3);
+    if (sample.count === 0) expect(sample.images).toBe(0);
+    for (const [i, region] of sample.regions.entries()) {
+      expect(Math.abs(region.transmission - Math.exp(-8 * region.fraction ** 3))).toBeLessThan(.015);
+      expect(region.red[0], JSON.stringify(sample)).toBeGreaterThan(i === 0 ? 0 : 3);
+      expect(region.blue[2], JSON.stringify(sample)).toBeGreaterThan(i === 0 ? 0 : 3);
+      expect(Math.abs(region.red[1])).toBeLessThanOrEqual(1); expect(Math.abs(region.red[2])).toBeLessThanOrEqual(1);
+      expect(Math.abs(region.blue[0])).toBeLessThanOrEqual(1); expect(Math.abs(region.blue[1])).toBeLessThanOrEqual(1);
+    }
+    expect(sample.regions[0].transmission).toBeGreaterThan(sample.regions[1].transmission);
+    expect(sample.regions[1].transmission).toBeGreaterThan(sample.regions[2].transmission);
+  }
+  expect(result.balls).toBe(8);
+});
+
+test('volumetric fog fills back, side and vertical rays and blocks distant objects', async ({ page }, info) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -20,43 +89,49 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
   const samples = [];
   for (const theme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: theme });
-    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.scene.fog.color.getHexString()))
-      .toBe(theme === 'dark' ? '111c29' : 'f3f6fa');
+    const ambient = () => page.evaluate(() => { const c = document.querySelector('#dancinglights').physics.lighting.mistColor; return Math.max(c.r, c.g, c.b); });
+    if (theme === 'dark') await expect.poll(ambient).toBeLessThan(.03);
+    else await expect.poll(ambient).toBeCloseTo(.12, 5);
     samples.push(...await page.evaluate(async theme => {
       const v = document.querySelector('#dancinglights').physics;
       const base = document.querySelector('meta[name="musical-lights-assets"]').content;
       const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
       const target = new THREE.WebGLRenderTarget(64, 64), pixels = new Uint8Array(64 * 64 * 4), samples = [];
       const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
-      const fogBase = v.scene.fog.color.clone();
+      const fogBase = v.lighting.mistColor.clone();
       // Setup draws use the same small target as the pixel probes.
       v.renderer.setRenderTarget(target);
       target.texture.colorSpace = THREE.SRGBColorSpace;
-      const marker = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0xff00ff, fog: false }));
+      const marker = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0xff00ff, fog: false, side: THREE.DoubleSide }));
       v.scene.add(marker);
-      const camera = new THREE.OrthographicCamera(-.05, .05, .05, -.05, .01, 200);
+      const camera = new THREE.OrthographicCamera(-.05, .05, .05, -.05, .01, 2000);
       const updateFog = count => {
         v.mirrors.setCount(count);
         v.lighting.update(v, v.current, v.layout[9], v.renderedPhase, v.layout[3], v.renderedEnclosureHeight, v.config[5], performance.now());
+        v.fogVolume.update(v.width, v.renderedEnclosureHeight, v.config[5], count, v.camera.far);
       };
       const render = (viewCamera = camera) => {
-        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, viewCamera);
+        v.renderer.setRenderTarget(target); v.render(viewCamera);
         v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
         return Array.from(pixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 4));
       };
       try {
-        for (const count of [0, 1, 6, 50, 2048]) for (const angle of [-40, 0, 40]) {
-          v.cameraBase = angle; v.setCamera(angle); updateFog(count);
-          hidden.forEach(mesh => mesh.visible = false);
-          const z = v.fogBank.position.z, x = .6, y = v.renderedEnclosureHeight / 2, yaw = angle * Math.PI / 180;
-          camera.position.set(x + 2 * Math.sin(yaw), y, z + 2 * Math.cos(yaw));
-          camera.lookAt(x, y, z); camera.updateMatrixWorld();
+        for (const count of [0, 1, 6, 50, 2048]) for (const angle of [-40, 0, 40, 90, 180]) {
+          updateFog(count); hidden.forEach(mesh => mesh.visible = false);
+          const u = v.fogVolume.uniforms, center = new THREE.Vector3(v.width / 2, v.renderedEnclosureHeight / 2, 0);
+          const yaw = angle * Math.PI / 180;
+          const direction = angle === 180 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+          camera.position.copy(center).addScaledVector(direction, angle >= 90 ? -.05 : -1.8);
+          camera.lookAt(center); camera.updateMatrixWorld(); marker.quaternion.copy(camera.quaternion);
           marker.visible = false; const air = render();
-          marker.position.set(x, y, z - .1); marker.visible = true; const behind = render();
-          marker.position.z = z + .1; const front = render();
-          marker.visible = false; v.setCamera(angle); render(v.camera);
+          const distance = angle === 90 ? v.width / 2 + u.volumeSpan.value.x * 1.5
+            : angle === 180 ? v.renderedEnclosureHeight / 2 + u.volumeSpan.value.y * 1.5
+            : (v.config[5] / 2 + u.volumeSpan.value.z * 1.5 + .1) / Math.cos(yaw);
+          marker.position.copy(center).addScaledVector(direction, distance); marker.visible = true; const behind = render();
+          marker.position.copy(center); const front = render();
+          marker.visible = false; v.setCamera(Math.min(40, angle)); render(v.camera);
           const emptyPixels = pixels.filter((value, i) => i % 4 === 3 && value < 255).length;
-          samples.push({ theme, count, angle, z, back: -v.config[5] * (count + .5), air, behind, front, emptyPixels });
+          samples.push({ theme, count, angle, air, behind, front, emptyPixels, span: u.volumeSpan.value.z, requested: v.config[5] * count });
         }
         // A bright object beyond 50 rows must become visible when depth grows.
         const throughDepth = [];
@@ -64,7 +139,7 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
           updateFog(count); hidden.forEach(mesh => mesh.visible = false);
           marker.visible = true; marker.position.set(.6, v.renderedEnclosureHeight / 2, -v.config[5] * 60);
           camera.position.set(.6, v.renderedEnclosureHeight / 2, 2); camera.lookAt(marker.position); camera.updateMatrixWorld();
-          throughDepth.push(render());
+          marker.quaternion.copy(camera.quaternion); throughDepth.push(render());
         }
         samples.push({ theme, throughDepth });
         // Fog itself must receive color and attack light, with no surface behind it.
@@ -81,12 +156,12 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
           u.stripColor.value[0].setRGB(source === 'red' ? 1 : 0, 0, source === 'blue' ? 1 : 0);
           u.stripState.value[0].z = source === 'attack' ? 1 : 0;
           u.fogAttack.value[0] = source === 'attack' ? 1 : 0;
-          u.glowBallPosition.value[0].set(.6, v.renderedEnclosureHeight / 2, v.fogBank.position.z);
+          u.glowBallPosition.value[0].set(.6, v.renderedEnclosureHeight / 2, 0);
           u.glowBallColor.value[0].setRGB(0, source === 'ball' ? 1 : 0, 0);
           samples.push({ theme, source, scatter: render().slice(0, 3).map((value, i) => value - dark[i]) });
         }
       } finally {
-        v.scene.fog.color.copy(fogBase);
+        v.lighting.mistColor.copy(fogBase);
         v.lighting.uniforms.stripColor.value.forEach((color, i) => color.fromArray(v.palette, i * 3));
         v.scene.remove(marker); marker.geometry.dispose(); marker.material.dispose();
         hidden.forEach(mesh => mesh.visible = true); v.renderer.setRenderTarget(null); target.dispose();
@@ -109,12 +184,90 @@ test('opaque lit fog fills empty air and blocks objects beyond the back row', as
     } else {
       expect(sample.air[3]).toBe(255);
       expect(sample.emptyPixels, JSON.stringify(sample)).toBe(0);
-      expect(sample.behind, JSON.stringify(sample)).toEqual(sample.air);
+      expect(Math.max(...sample.behind.map((value, i) => Math.abs(value - sample.air[i]))), JSON.stringify(sample)).toBeLessThanOrEqual(1);
       expect(Math.max(...sample.front.slice(0, 3).map((value, i) => Math.abs(value - sample.air[i])))).toBeGreaterThan(30);
-      expect(sample.z).toBeGreaterThanOrEqual(sample.back - .00001);
+      expect(sample.span).toBeLessThanOrEqual(Math.max(sample.requested, 3 * .24) + .001);
     }
   }
   expect(errors).toEqual([]);
+});
+
+test('volume preserves clear colors and integrates clear, oblique and reversed rays', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    cancelAnimationFrame(v.request); v.stopPreview();
+    const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    hidden.forEach(mesh => mesh.visible = false);
+    const u = v.fogVolume.uniforms; u.volumeMin.value.set(-1, -1, -1); u.volumeMax.value.set(1, 1, 1); u.volumeSpan.value.set(2, 3, 4);
+    u.lightStrength.value.set(0, 0, .5, 0);
+    const marker = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ fog: false, side: THREE.DoubleSide }));
+    v.scene.add(marker);
+    let camera;
+    const target = new THREE.WebGLRenderTarget(64, 64); target.texture.colorSpace = THREE.SRGBColorSpace;
+    const pixels = new Uint8Array(64 * 64 * 4), samples = [], colors = []; let smoothEdgePixels = 0;
+    const linear = byte => { const n = byte / 255; return n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4; };
+    try {
+      for (const projection of ['orthographic', 'perspective']) for (const [eye, end] of [
+        [[0,0,0],[0,0,.5]], [[0,0,0],[0,0,-3]], [[0,0,0],[0,0,-5]],
+        [[0,0,0],[2,0,0]], [[0,0,0],[0,2.5,0]], [[1.6,0,0],[0,0,0]],
+        [[1.5,0,0],[1.5,0,-1]], [[0,0,0],[3,4,-5]],
+      ]) {
+        camera = projection === 'perspective' ? new THREE.PerspectiveCamera(20, 1, .01, 100)
+          : new THREE.OrthographicCamera(-.05, .05, .05, -.05, .01, 100);
+        camera.position.fromArray(eye); camera.lookAt(new THREE.Vector3().fromArray(end)); camera.updateMatrixWorld();
+        marker.position.fromArray(end); marker.quaternion.copy(camera.quaternion);
+        const colors = [];
+        for (const color of [0, 0xffffff]) {
+          marker.material.color.setHex(color); v.renderer.setRenderTarget(target); v.render(camera);
+          v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+          colors.push(Array.from(pixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 3)).map(linear));
+        }
+        // Independent midpoint integration of the world-space density rule.
+        // Include this pixel's offset and the camera's near clipping plane.
+        const a = new THREE.Vector3(1 / 64, 1 / 64, -1).unproject(camera);
+        const direction = new THREE.Vector3(1 / 64, 1 / 64, 1).unproject(camera).sub(a).normalize();
+        const normal = new THREE.Vector3().subVectors(marker.position, camera.position).normalize();
+        const length = new THREE.Vector3().subVectors(marker.position, a).dot(normal) / direction.dot(normal);
+        const point = new THREE.Vector3(), span = [2, 3, 4]; let optical = 0;
+        for (let i = 0; i < 4096; i++) {
+          point.copy(a).addScaledVector(direction, length * (i + .5) / 4096);
+          optical += point.toArray().reduce((sum, value, axis) => sum + 24 * Math.max(0, Math.abs(value) - 1) ** 2 / span[axis] ** 3, 0) * length / 4096;
+        }
+        samples.push({ projection, eye, end, expected: Math.exp(-optical), transmission: colors[1].map((value, i) => value - colors[0][i]) });
+      }
+      camera.position.set(0, 0, 0); camera.lookAt(0, 0, -.5); camera.updateMatrixWorld();
+      marker.position.set(0, 0, -.5); marker.quaternion.copy(camera.quaternion);
+      for (const color of [0x020406, 0x445566, 0x7f7f7f, 0xfafafa]) {
+        marker.material.color.setHex(color); const pair = [];
+        for (const volume of [false, true]) {
+          v.renderer.setRenderTarget(target);
+          if (volume) v.render(camera); else v.renderer.render(v.scene, camera);
+          v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+          pair.push(Array.from(pixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 3)));
+        }
+        colors.push({ color, direct: pair[0], volume: pair[1] });
+      }
+      marker.scale.set(.04, .04, 1); marker.rotateZ(Math.PI / 6); marker.material.color.setHex(0xffffff);
+      marker.visible = false; v.render(camera); v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+      const air = pixels.slice(); marker.visible = true;
+      v.render(camera); v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+      for (let i = 0; i < pixels.length; i += 4)
+        if (pixels[i] > air[i] + 3 && pixels[i] < 252) smoothEdgePixels++;
+    } finally {
+      v.renderer.setRenderTarget(null); target.dispose(); v.scene.remove(marker); marker.geometry.dispose(); marker.material.dispose();
+    }
+    return { samples, colors, smoothEdgePixels };
+  });
+  for (const sample of evidence.samples) for (const transmission of sample.transmission)
+    expect(Math.abs(transmission - sample.expected), JSON.stringify(sample)).toBeLessThan(.015);
+  for (const color of evidence.colors)
+    expect(Math.max(...color.direct.map((value, i) => Math.abs(value - color.volume[i]))), JSON.stringify(color)).toBeLessThanOrEqual(1);
+  await info.attach('volume-transmission.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+  expect(evidence.smoothEdgePixels).toBeGreaterThan(16);
 });
 
 test('fog light remains stable at rest and softens alternating attack frames', async ({ page }, info) => {
@@ -127,7 +280,7 @@ test('fog light remains stable at rest and softens alternating attack frames', a
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {};
     v.previous = v.current.slice(); v.listening = true;
-    v.push(new Float32Array(24), new Float32Array(24));
+    v.push(new Float32Array(24).fill(1), new Float32Array(24));
     v.current.fill(v.current[v.layout[17]] / 2, v.layout[9], v.layout[9] + 24);
     v.mirrors.setCount(6); v.draw(performance.now());
     const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
@@ -137,12 +290,13 @@ test('fog light remains stable at rest and softens alternating attack frames', a
     const camera = new THREE.OrthographicCamera(-.02, .02, .02, -.02, .01, 20);
     camera.position.set(.6, v.renderedEnclosureHeight / 2, 2); camera.lookAt(.6, v.renderedEnclosureHeight / 2, 0); camera.updateMatrixWorld();
     const render = () => {
-      v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+      v.renderer.setRenderTarget(target); v.render(camera);
       v.renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
       return Array.from(pixels.slice((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 3));
     };
     try {
       v.lighting.uniforms.fogAttack.value.fill(0);
+      v.lighting.uniforms.stripPulse.value.forEach(pulse => pulse.set(0, 0));
       const at = performance.now(); v.lighting.fogAt = at;
       const resting = [], alternating = [], envelopes = [];
       for (let i = 0; i < 30; i++) { v.draw(at + i * 1000 / 60); resting.push(render()); }
@@ -172,7 +326,7 @@ test('bars continue above and below the physical room', async ({ page }) => {
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
-    const hidden = [v.fogBank, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
     hidden.forEach(mesh => mesh.visible = false);
     const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4), samples = [];
     const camera = new THREE.OrthographicCamera(-.01, .01, .01, -.01, .01, 10);
@@ -203,7 +357,7 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
     // Isolate one production bar to inspect its actual lit side surface.
-    const hidden = [v.fogBank, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
     const visibility = hidden.map(mesh => mesh.visible), count = v.bars.count;
     hidden.forEach(mesh => mesh.visible = false); v.bars.count = 1;
     const matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array);
@@ -221,14 +375,14 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
         return Array.from(pixels.slice(offset, offset + 3));
       };
       return { seams: [1, 2, 3].map(n => [sample(depth / 2 - n * depth + .002), sample(depth / 2 - n * depth - .002)]),
-        segments: v.balls.geometry.parameters.widthSegments, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
+        triangles: v.balls.geometry.index.count / 3, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
     } finally { hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.bars.count = count; v.renderer.setRenderTarget(null); target.dispose(); }
   });
   for (const [before, after] of evidence.seams) {
     expect(Math.max(...before)).toBeGreaterThan(30); expect(Math.max(...after)).toBeGreaterThan(30);
     expect(Math.max(...before.map((value, i) => Math.abs(value - after[i])))).toBeLessThanOrEqual(4);
   }
-  expect(evidence.segments).toBe(32); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
+  expect(evidence.triangles).toBe(1280); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
   await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
 
@@ -239,7 +393,7 @@ test('off-screen bar culling preserves visible pixels across angles and depth se
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     const target = new THREE.WebGLRenderTarget(320, 240), pixels = new Uint8Array(320 * 240 * 4), evidence = [];
-    const render = () => { v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
+    const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
     try {
       for (const count of [0, 3, 8, 17]) for (const angle of [-40, -10, 0, 10, 40]) {
         v.mirrors.setCount(count); v.setCamera(angle); v.draw(performance.now());
@@ -263,22 +417,25 @@ test('normal scenes fill a larger centered frame before and after fullscreen', a
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     for (const route of ['/', '/advanced/']) {
-      await page.goto(origin + route); await physicsReady(page); await normal(page);
+      await page.goto(origin + route); await physicsReady(page); await page.keyboard.press('Escape');
       for (let pass = 0; pass < 2; pass++) {
         await expect.poll(() => page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
           const graph = v.graph.getBoundingClientRect(), panel = v.graph.parentElement.getBoundingClientRect();
-          return { centeredX: Math.abs(graph.x + graph.width / 2 - panel.x - panel.width / 2) < 1,
+          return { normal: !v.card.hasAttribute('data-expanded'), centeredX: Math.abs(graph.x + graph.width / 2 - panel.x - panel.width / 2) < 1,
             centeredY: Math.abs(graph.y + graph.height / 2 - panel.y - panel.height / 2) < 1,
             sized: v.canvasWidth === graph.width && v.canvasHeight === graph.height,
             large: graph.height >= (innerWidth >= 1000 ? 500 : 320),
             bounded: v.canvas.width * v.canvas.height <= 200000,
             noOverflow: graph.x >= 0 && graph.right <= innerWidth };
-        })).toEqual({ centeredX: true, centeredY: true, sized: true, large: true, bounded: true, noOverflow: true });
+        })).toEqual({ normal: true, centeredX: true, centeredY: true, sized: true, large: true, bounded: true, noOverflow: true });
         if (pass === 0) {
           await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-          await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
-          await normal(page);
+          await page.waitForFunction(() => {
+            const card = document.querySelector('.audio-card');
+            return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+          }, null, { timeout: 5000 });
+          await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).press('Enter');
         }
       }
     }
@@ -374,7 +531,7 @@ test('one transparent enclosure shows bounded depth copies and preserves source 
       const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
       v.cameraBase = angle; v.setCamera(angle); v.draw(performance.now());
       const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4);
-      const render = () => { v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
+      const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
       const reflected = render(), passes = v.renderer.info.render.calls;
       v.mirrors.meshes.forEach(({ mesh }) => { mesh.visible = false; });
       const plain = render(); v.mirrors.meshes.forEach(({ mesh }) => { mesh.visible = true; });
@@ -496,7 +653,7 @@ test('full-size background boxes repeat all source bands beside the physical cen
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
     const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4);
-    const render = () => { v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
+    const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
     const results = [];
     try {
       for (const angle of [-40, 40]) {
@@ -579,7 +736,7 @@ test('instanced depth copies match literal translated geometry from both camera 
     const base=document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE=await import(new URL(`${base}physics/three.module.js`,document.baseURI));
     const target=new THREE.WebGLRenderTarget(240,160),pixels=new Uint8Array(240*160*4),results=[];
-    const render=()=>{v.renderer.setRenderTarget(target);v.renderer.render(v.scene,v.camera);v.renderer.readRenderTargetPixels(target,0,0,240,160,pixels);return pixels.slice();};
+    const render=()=>{v.renderer.setRenderTarget(target);v.render(v.camera);v.renderer.readRenderTargetPixels(target,0,0,240,160,pixels);return pixels.slice();};
     try {
       for(const [angle,vertical] of [[-40,0],[0,0],[40,0],[20,.8],[-20,-.8]]) {
         v.setCamera(angle,vertical);v.draw(performance.now());const actual=render(),references=[];
@@ -634,7 +791,7 @@ test('camera depth culling preserves pixels from the complete copied-ball batch'
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4), results = [];
     const render = () => {
-      v.renderer.setRenderTarget(target); v.renderer.render(v.scene, v.camera);
+      v.renderer.setRenderTarget(target); v.render(v.camera);
       v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice();
     };
     try {
@@ -775,6 +932,39 @@ test('all bars show current physical travel without a previous-snapshot delay', 
   await info.attach('all-band-render-travel.json', { body: JSON.stringify(errors), contentType: 'application/json' });
 });
 
+for (const path of ['/', '/advanced/']) {
+  test(`active tempo stays beside FPS in normal and expanded views on ${path}`, async ({ page }) => {
+    await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(origin + path); await physicsReady(page); await normalView(page); await startFrozen(page);
+    await page.evaluate(() => document.querySelector('.audio-card').dispatchEvent(new CustomEvent('audio-tempo', {
+      detail: { bpm: 132, confidence: .9, accentSequence: 0 },
+    })));
+    const tempo = page.locator('.tempo-readout'), fps = page.locator('.frame-rate');
+    await expect(tempo).toHaveText('132 BPM');
+    await fps.scrollIntoViewIfNeeded();
+    await expect(tempo).toBeInViewport({ ratio: 1 });
+    expect(await tempo.evaluate(node => node.parentElement === document.querySelector('.frame-rate').parentElement)).toBe(true);
+    await expect(tempo).toHaveCount(1); await expect(tempo).toHaveAttribute('aria-live', 'off');
+    for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
+      await page.setViewportSize(viewport);
+      await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+      // Expanded controls appear before native fullscreen entry finishes.
+      // Wait for that transition before measuring the first scroll.
+      await page.waitForFunction(() => {
+        const card = document.querySelector('.audio-card');
+        return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+      });
+      await expect(tempo).toHaveText('132 BPM');
+      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation', '.fullscreen-button']);
+      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1, '.fullscreen-button': 1 });
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
+    }
+    await page.locator('.listening-toggle').uncheck();
+    await expect(tempo).toBeHidden(); await expect(tempo).toHaveText('');
+  });
+}
+
 test('Home and expanded mode share a small rendered FPS readout', async ({ page }) => {
   await page.addInitScript(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Capture disabled for presentation check'); }; });
   await page.goto(origin); await physicsReady(page);
@@ -796,8 +986,10 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
     await page.setViewportSize(viewport);
     await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
     await expect(fps).toHaveText(/^\d+ FPS$/);
+    await fps.scrollIntoViewIfNeeded();
     await expect(fps).toBeInViewport({ratio:1});
     await expect(page.locator('.camera-rotation')).toBeInViewport({ratio:1});
+    await page.getByRole('button',{name:'Exit fullscreen',exact:true}).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button',{name:'Exit fullscreen',exact:true})).toBeInViewport({ratio:1});
     expect(await fps.evaluate(node => node.parentElement.className)).toBe('camera-controls');
   }
@@ -806,6 +998,40 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
   await expect(fps).toBeVisible();
   await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
 });
+
+for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
+  test(`saved camera angle ${angle} resumes its inward sweep on ${path}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript(angle => localStorage.setItem('musical-lights-display-v1', JSON.stringify({
+      version: 1, cameraAngle: angle, cameraMotion: true, mirrorCount: 1, depthMode: 'manual',
+    })), angle);
+    await page.goto(origin + path); await physicsReady(page); await normalView(page);
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+    const initial = await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      window.cameraWorld = { worker: v.worker, renderer: v.renderer };
+      return { yaw: v.rotation, tick: v.current[2], base: v.cameraBase };
+    });
+    expect(initial.base).toBe(angle);
+    await expect.poll(() => page.evaluate(angle => {
+      const v = document.querySelector('#dancinglights').physics;
+      return angle < 0 ? v.rotation - angle : angle - v.rotation;
+    }, angle), { timeout: 5000 }).toBeGreaterThan(.2);
+    const state = await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return { yaw: v.rotation, tick: v.current[2], base: v.cameraBase,
+        slider: Number(v.cameraControl.value), saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')).cameraAngle,
+        sameWorld: v.worker === cameraWorld.worker && v.renderer === cameraWorld.renderer };
+    });
+    expect(state.yaw).toBeGreaterThanOrEqual(-40); expect(state.yaw).toBeLessThanOrEqual(40);
+    expect(state.tick).toBeGreaterThan(initial.tick); expect(state.sameWorld).toBe(true);
+    expect(state.base).toBe(angle); expect(state.saved).toBe(angle);
+    expect(Math.abs(state.yaw - state.slider)).toBeLessThan(1);
+    await page.locator('.display-controls > summary').click();
+    await page.locator('.camera-motion').uncheck();
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(angle);
+  });
+}
 
 test('camera sweep turns smoothly on the horizontal plane without attack shake', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -832,7 +1058,8 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
   });
   expect(result.outlines).toBe(false);
   expect(result.manual).toBe(35);
-  expect(Math.min(...result.bounded)).toBeCloseTo(30,6); expect(Math.max(...result.bounded)).toBeCloseTo(40,6);
+  expect(result.bounded[0]).toBeCloseTo(35,6); expect(result.bounded.at(-1)).toBeCloseTo(35,6);
+  expect(Math.min(...result.bounded)).toBeCloseTo(20,6); expect(Math.max(...result.bounded)).toBeCloseTo(40,6);
   for(const sample of result.samples){expect(sample.y).toBeCloseTo(result.centerY,8);expect(sample.attackDelta).toBe(0);}
   for(const [start,end,direction] of [[0,12000,1],[12000,36000,-1],[36000,48000,1]]) {
     const span=result.samples.filter(s=>s.time>=start&&s.time<=end);

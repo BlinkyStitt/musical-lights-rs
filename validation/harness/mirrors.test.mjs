@@ -3,6 +3,34 @@ import { test } from 'node:test';
 import * as THREE from '../../musical-lights-physics/pkg/three.module.js';
 import { SceneLighting } from '../../musical-lights-physics/pkg/lighting.js';
 import { MirrorRoom, mirrorCells, MAX_DEPTH_IMAGES } from '../../musical-lights-physics/pkg/mirrors.js';
+import { sphereGeometry } from '../../musical-lights-physics/pkg/spheres.js';
+
+test('sphere meshes have a closed outward surface, unit normals and shared vertices', () => {
+  for (const detail of [2, 7]) {
+    const geometry = sphereGeometry(detail), points = geometry.attributes.position, normals = geometry.attributes.normal;
+    const index = geometry.index.array, edges = new Map(), seen = new Set();
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), normal = new THREE.Vector3();
+    for (let i = 0; i < points.count; i++) {
+      a.fromBufferAttribute(points, i); normal.fromBufferAttribute(normals, i);
+      assert(Math.abs(a.length() - 1) < 1e-6); assert(Math.abs(normal.length() - 1) < 1e-6);
+      assert(a.dot(normal) > .999999);
+      const key = a.toArray().map(n => Math.round(n * 1e6)).join(',');
+      assert(!seen.has(key)); seen.add(key);
+    }
+    for (let i = 0; i < index.length; i += 3) {
+      const triangle = Array.from(index.slice(i, i + 3));
+      a.fromBufferAttribute(points, triangle[0]); b.fromBufferAttribute(points, triangle[1]); c.fromBufferAttribute(points, triangle[2]);
+      assert(b.sub(a).cross(c.sub(a)).dot(a) > 0);
+      for (let j = 0; j < 3; j++) {
+        const key = [triangle[j], triangle[(j + 1) % 3]].sort((x, y) => x - y).join(',');
+        edges.set(key, (edges.get(key) ?? 0) + 1);
+      }
+    }
+    assert([...edges.values()].every(n => n === 2));
+    assert.equal(points.count - edges.size + index.length / 3, 2);
+    geometry.dispose();
+  }
+});
 
 test('ball depth images keep bounded pools, source transforms and non-indexed geometry', () => {
   const scene = new THREE.Scene();
@@ -36,7 +64,8 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
   assert.deepEqual(room.sources[0].colors, balls.instanceColor.array);
   assert.equal(room.walls.instanceMatrix.array[10], Math.fround(.96));
   assert.equal(room.walls.instanceMatrix.array[14], Math.fround(-.36));
-  assert.equal(room.meshes[0].mesh.geometry.parameters.widthSegments, 12);
+  assert(room.meshes[0].mesh.geometry.index.count / 3 > 168);
+  assert(room.meshes[0].mesh.geometry.attributes.position.count < 117);
   for (const { mesh, staged } of room.meshes) {
     assert.equal(mesh.material.defines.PIXEL_RATIO, '2.0');
     assert.equal(mesh.material.isMeshLambertMaterial, true);

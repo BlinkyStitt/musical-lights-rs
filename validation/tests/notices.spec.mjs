@@ -1,6 +1,42 @@
 import { test, expect } from '@playwright/test';
 import { physicsReady } from '../physics-state.mjs';
 const origin='http://127.0.0.1:8101';
+test.describe('expanded recovery notice geometry', () => {
+  test.use({ hasTouch: true });
+  for (const route of ['/', '/advanced/']) for (const viewport of [{ width: 390, height: 844 }, { width: 568, height: 320 }]) {
+    test(`notices appear and clear without resizing ${route} at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 })));
+      await page.goto(origin + route); await physicsReady(page);
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+      await expect.poll(() => page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics;
+        return v.canvasHeight === v.layer.getBoundingClientRect().height;
+      })).toBe(true);
+      const geometry = () => page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics, rect = v.layer.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, enclosure: v.input[32] };
+      });
+      await page.evaluate(() => document.querySelector('#dancinglights').physics.notice.clear());
+      const before = await geometry();
+      await page.evaluate(() => document.querySelector('#dancinglights').physics.notice.show('Motion updates are delayed.', 'Motion updates are delayed.'));
+      expect(await geometry()).toEqual(before);
+      await page.locator('.physics-status').scrollIntoViewIfNeeded();
+      await expect(page.locator('.physics-status')).toBeInViewport({ ratio: 1 });
+      expect(await page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect();
+        const scene = rect('.balloon-layer'), notices = rect('.recovery-notices'), controls = rect('.scene-controls');
+        return { belowScene: notices.top >= scene.bottom, aboveControls: notices.bottom <= controls.top };
+      })).toEqual({ belowScene: true, aboveControls: true });
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
+      await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
+      await page.evaluate(() => document.querySelector('#dancinglights').physics.notice.clear());
+      await expect(page.locator('.physics-status')).toBeEmpty();
+      await page.locator('.audio-card').evaluate(n => { n.scrollTop = 0; });
+      expect(await geometry()).toEqual(before);
+    });
+  }
+});
 test('physics incidents expire, rearm after recovery, and keep stopped state', async ({page}) => {
   await page.goto(origin);await physicsReady(page);
   // Only the isolated notice uses this clock; no WASM timer handles are involved.

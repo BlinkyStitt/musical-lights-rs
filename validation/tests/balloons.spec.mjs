@@ -5,6 +5,49 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
+test('idle waves preserve ball pigments despite real bar contacts', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  const evidence = await page.evaluate(() => new Promise(resolve => {
+    const v = document.querySelector('#dancinglights').physics;
+    const initial = Array.from(v.pigments), tick = v.current[2];
+    const levels = Array.from(v.input.slice(0, 24));
+    let contacts = 0, changed = false;
+    const sample = () => {
+      contacts += v.current.slice(v.layout[10], v.layout[11]).reduce((sum, value) => sum + value, 0);
+      changed ||= v.pigments.some((value, i) => value !== initial[i]);
+      if (v.current[2] < tick + 120) { requestAnimationFrame(sample); return; }
+      resolve({ changed, contacts, moved: v.input.slice(0, 24).some((value, i) => Math.abs(value - levels[i]) > .01),
+        attacks: Array.from(v.input.slice(38)), edges: Array.from(v.meshEdges) });
+    };
+    sample();
+  }));
+  expect(evidence.contacts).toBeGreaterThan(0);
+  expect(evidence.moved).toBe(true);
+  expect(evidence.edges.some(value => value > 0)).toBe(true);
+  expect(evidence.attacks).toEqual(Array(24).fill(0));
+  expect(evidence.changed).toBe(false);
+});
+
+test('only acoustic attack edges qualify new bar contacts for ball color', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  const before = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments));
+  await page.evaluate(() => window.sendBars(Array(24).fill(1)));
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return Math.min(...v.current.slice(v.layout[9], v.layout[10])) / v.current[v.layout[17] + 1];
+  })).toBeGreaterThan(.95);
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments))).toEqual(before);
+  await page.evaluate(() => window.sendBars(Array(24).fill(0)));
+  await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeLessThan(.0031);
+  await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38)))).toEqual(Array(24).fill(1));
+  await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value, i) => value !== before[i]), before)).toBe(true);
+  await page.evaluate(() => { window.audioNow += .181; });
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38)))).toEqual(Array(24).fill(0));
+});
+
 test('a subpixel seam fragment uses its visible wrapped copy for native hover', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(url); await physicsReady(page);
@@ -128,7 +171,7 @@ for (const width of [375, 1440]) {
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
     // One batch draws visible background banks and one draws ball depth images.
-    // One outer coating covers all five banks, and one opaque fog bank fills the air.
+    // One outer coating covers all five banks, followed by one fog volume pass.
     expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(6);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
@@ -157,7 +200,19 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   });
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
   const initial = await physicsState(page);
-  await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; window.originalView = v; window.originalCanvas = v.canvas; window.gl = v.renderer.getContext(); });
+  // The controlled reset can finish before its first render. Capture the
+  // resource baseline after the color and depth textures exist on the GPU.
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.renderer.info.memory.textures, v.fogVolume.target.width === v.canvas.width,
+      v.fogVolume.target.height === v.canvas.height];
+  })).toEqual([2, true, true]);
+  await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    window.originalView = v; window.originalCanvas = v.canvas; window.gl = v.renderer.getContext();
+    window.volumeTextures = v.renderer.info.memory.textures; window.volumeDisposals = 0;
+    v.fogVolume.target.addEventListener('dispose', () => window.volumeDisposals++);
+  });
   for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(size);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -171,6 +226,11 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
     const controls = await page.locator('.audio-controls').boundingBox();
     expect(scene.y + scene.height).toBeLessThanOrEqual(controls.y);
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
+    await expect.poll(() => page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return [v.fogVolume.target.width === v.canvas.width, v.fogVolume.target.height === v.canvas.height,
+        v.renderer.info.memory.textures === window.volumeTextures];
+    })).toEqual([true, true, true]);
     await page.keyboard.press('Escape');
   }
   expect(await page.evaluate(() => document.querySelector('canvas') === window.originalCanvas)).toBe(true);
@@ -179,8 +239,10 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   const tick = (await physicsState(page)).tick;
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(tick + 10);
+  const volumeDisposals = await page.evaluate(() => window.volumeDisposals);
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect.poll(() => page.evaluate(() => [window.workers.size, window.observers.size, window.frames.size, window.testContext.state, window.gl.isContextLost()])).toEqual([0, 0, 0, 'closed', true]);
+  expect(await page.evaluate(() => window.volumeDisposals)).toBeGreaterThan(volumeDisposals);
 });
 
 test('pointer and device inputs apply recorded forces and reduced motion reduces their strength', async ({ page }) => {

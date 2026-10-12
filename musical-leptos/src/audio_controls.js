@@ -10,6 +10,8 @@ export const RENDER_CONTROLS = Object.freeze([
   ['resolution', 'Scene resolution scale', 1, .25, 1.5, .05],
   ['depthFade', 'Depth brightness retention', .72, .1, .99, .01],
   ['barGlow', 'Bar color emission', .08, 0, 1, .01],
+  ['attackGlow', 'Bar attack glow', 1, 0, 3, .05],
+  ['colorAttack', 'Colored attack light', 1, 0, 3, .05],
   ['ballGlow', 'Ball color emission', .12, 0, 1, .01],
   ['colorSpill', 'Colored light strength', .18, 0, 2, .01],
   ['attackLight', 'White attack light strength', .8, 0, 3, .05],
@@ -55,6 +57,8 @@ export function mountAudioControls(presentation) {
   for (const [key, label, , min, max, step] of RENDER_CONTROLS) {
     const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
     const input = document.createElement('input'); Object.assign(input, { type: 'number', min, max, step, value: settings[key] }); input.dataset.renderSetting = key; row.append(input); renderHost.append(row);
+    if (key === 'attackGlow') input.title = 'White emission along attack edges. Raise this value for a brighter flash. Audio response settings control attack detection.';
+    if (key === 'colorAttack') input.title = 'Bar-colored attack light on the bars, nearby surfaces and fog. Louder bands produce brighter pulses. The white outline has its own Bar attack glow control.';
     presentation.listen(input, 'change', () => { if (input.value === '' || !input.validity.valid) return; settings[key] = Number(input.value); presentation.save(); });
   }
 }

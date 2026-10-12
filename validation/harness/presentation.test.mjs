@@ -28,6 +28,21 @@ test('direction endpoints and curve reject inverted, non-finite and out-of-music
   for (const v of [[59, 200, .05, .5, 1], [60, 201, .05, .5, 1], [60, 60, .05, .5, 1], [60, 200, .6, .5, 1], [60, 200, .05, .5, 0], [60, 200, .05, .5, NaN]]) assert(!validDirectionOdds(v));
 });
 
+test('bar attack glow defaults brighter and restores only bounded numeric preferences', () => {
+  const read = attackGlow => readSettings({ getItem() { return JSON.stringify({ version: 1, attackGlow }); } });
+  assert.equal(read(undefined).attackGlow, 1);
+  for (const value of [0, .8, 1, 2.5, 3]) assert.equal(read(value).attackGlow, value);
+  for (const value of [-.05, 3.05, '1', null]) assert.equal(read(value).attackGlow, 1);
+});
+
+test('colored attack strength restores independently of the white edge strength', () => {
+  const read = colorAttack => readSettings({ getItem() { return JSON.stringify({ version: 1, colorAttack, attackGlow: .8 }); } });
+  assert.equal(read(undefined).colorAttack, 1);
+  for (const value of [0, .5, 1, 2.5, 3]) assert.equal(read(value).colorAttack, value);
+  for (const value of [-.05, 3.05, '1', null]) assert.equal(read(value).colorAttack, 1);
+  assert.equal(read(2).attackGlow, .8);
+});
+
 test('saved Physics settings retain the complete configuration at 20 and 30 ms rises', () => {
   const read = physics => readSettings({ getItem() { return JSON.stringify({ version: 1, physics }); } });
   for (const rise of [.02, .03, 2]) {

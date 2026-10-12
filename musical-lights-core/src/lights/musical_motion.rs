@@ -134,7 +134,21 @@ pub fn sphere_drag_factor(radius: f32, speed: f32, mass: f32, dt: f32) -> f32 {
     1.0 / (1.0 + coefficient * speed.max(0.0) * dt / mass)
 }
 
-/// Retains three recent contact pigments. Call only on a new contact, so
+/// A new physical contact can transfer pigment only during an audio attack.
+/// Decorative bar motion and resting pressure cannot qualify as an attack.
+pub fn contact_pigment_blend(attack: f32, impulse: f32, mass: f32) -> f32 {
+    if ![attack, impulse, mass].iter().all(|v| v.is_finite())
+        || !(0.0..=1.0).contains(&attack)
+        || attack == 0.0
+        || impulse <= 0.0
+        || mass <= 0.0
+    {
+        return 0.0;
+    }
+    (impulse / mass * 0.15).clamp(0.0, 0.5)
+}
+
+/// Retains three recent contact pigments. Call only on a new attacking contact, so
 /// persistent resting pressure cannot continuously recolor a ball or LED.
 pub fn remember_pigment(history: &mut [f32; 9], pigment: [f32; 3]) {
     history.copy_within(0..6, 3);
@@ -244,6 +258,23 @@ mod tests {
         assert!(sphere_drag_factor(0.1, 10.0, 1.0, 0.01) < slow);
         assert!(sphere_drag_factor(0.2, 1.0, 1.0, 0.01) < slow);
         assert!((0.0..=1.0).contains(&sphere_drag_factor(0.1, 1e9, 1e-6, 1.0)));
+    }
+    #[test]
+    fn pigment_requires_an_active_attack_and_a_physical_impulse() {
+        assert_eq!(contact_pigment_blend(0.0, 1.0, 1.0), 0.0);
+        assert_eq!(contact_pigment_blend(1.0, 0.0, 1.0), 0.0);
+        assert_eq!(contact_pigment_blend(0.01, 1.0, 1.0), 0.15);
+        assert_eq!(contact_pigment_blend(1.0, 100.0, 1.0), 0.5);
+        for (attack, impulse, mass) in [
+            (f32::NAN, 1.0, 1.0),
+            (1.1, 1.0, 1.0),
+            (-1.0, 1.0, 1.0),
+            (1.0, f32::INFINITY, 1.0),
+            (1.0, -1.0, 1.0),
+            (1.0, 1.0, 0.0),
+        ] {
+            assert_eq!(contact_pigment_blend(attack, impulse, mass), 0.0);
+        }
     }
     #[test]
     fn remembers_contacts_in_order() {

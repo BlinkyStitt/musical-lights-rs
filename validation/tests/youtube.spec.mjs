@@ -84,7 +84,7 @@ for (const resizeLayout of [false, true]) {
         'Motion updates are delayed.', 'Motion updates are delayed.');
     });
     const geometry = () => page.evaluate(() => {
-      const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { width: r.width, height: r.height, top: r.top, bottom: r.bottom }; };
+      const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { width: r.width, height: r.height }; };
       const view = document.querySelector('#dancinglights').physics;
       return { scene: rect('.balloon-layer'), video: rect('.youtube-frame'), enclosure: view.input[32] };
     });
@@ -103,7 +103,7 @@ for (const resizeLayout of [false, true]) {
     const editor = page.locator('.video-form');
     const box = await editor.boundingBox();
     expect(box.y).toBeGreaterThanOrEqual(40); expect(box.y + box.height).toBeLessThanOrEqual(360);
-    expect(before.scene.bottom).toBeGreaterThan(360); // The keyboard covers it; no squash.
+    expect(before.scene.height).toBeGreaterThanOrEqual(200); // The keyboard does not squash the enclosure.
     for (const name of ['Clear YouTube link', 'Load video', 'Remove video']) {
       const rect = await page.getByRole('button', { name, exact: true }).boundingBox();
       expect(rect.height).toBeGreaterThanOrEqual(44); expect(rect.y + rect.height).toBeLessThanOrEqual(360);
@@ -182,6 +182,7 @@ for (const path of ['/', '/advanced/']) {
         const portrait = innerHeight > innerWidth;
         return { minimum: video.width >= 200 && video.height >= 200, bounded: scene.bottom <= controls.top, separated: portrait ? video.bottom <= scene.top : video.right <= scene.left, fits: document.documentElement.scrollWidth <= innerWidth };
       })).toEqual({ minimum: true, bounded: true, separated: true, fits: true });
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
       await expect.poll(() => page.evaluate(() => {
         const v = document.querySelector('#dancinglights').physics;
@@ -198,7 +199,7 @@ for (const path of ['/', '/advanced/']) {
   });
 }
 for (const reducedMotion of ['reduce', 'no-preference']) {
-  test(`short landscape keeps YouTube, recognition, recovery and all controls visible with ${reducedMotion}`, async ({ page }, info) => {
+  test(`short landscape scrolls to recognition, recovery and all controls below YouTube with ${reducedMotion}`, async ({ page }, info) => {
     await page.emulateMedia({ reducedMotion, colorScheme: reducedMotion === 'reduce' ? 'light' : 'dark' });
     await page.setViewportSize({ width: 568, height: 320 });
     await setup(page); await load(page);
@@ -217,24 +218,33 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
       const video = rect('.youtube-frame iframe'), scene = rect('.balloon-layer');
       const recovery = rect('.recovery-notices'), song = rect('.recognized-song'), controls = rect('.audio-controls');
       return { videoVisible: video.width > 0 && video.height > 0,
-        sceneVisible: scene.height > 0, separated: video.right <= scene.left,
+        sceneVisible: scene.height >= 200, separated: video.right <= scene.left,
         sceneAboveNotices: scene.bottom <= recovery.top, noticesAboveSong: recovery.bottom <= song.top,
-        songAboveControls: song.bottom <= controls.top, controlsFit: controls.bottom <= innerHeight,
+        songAboveControls: song.bottom <= controls.top, scrolls: document.querySelector('.audio-card').scrollHeight > document.querySelector('.audio-card').clientHeight,
         widthFits: document.documentElement.scrollWidth <= innerWidth };
     })).toEqual({ videoVisible: true, sceneVisible: true, separated: true, sceneAboveNotices: true,
-      noticesAboveSong: true, songAboveControls: true, controlsFit: true, widthFits: true });
+      noticesAboveSong: true, songAboveControls: true, scrolls: true, widthFits: true });
+    for (const selector of ['.audio-error', '.recognized-song', '.recognition-status']) {
+      const row = page.locator(selector);
+      await row.evaluate(n => n.scrollIntoView({ block: 'center' }));
+      await expect(row).toBeInViewport({ ratio: 1 });
+      expect(await row.evaluate(n => n.scrollHeight <= n.clientHeight)).toBe(true);
+    }
     for (const name of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
       const control = page.getByRole('checkbox', { name, exact: true });
+      await control.locator('..').scrollIntoViewIfNeeded();
       await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
       expect(await control.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     }
+    await page.getByRole('button', { name: 'Video', exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeInViewport({ ratio: 1 });
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
     if (reducedMotion === 'reduce') {
       expect(await page.locator('.recognized-song').evaluate(n => n.querySelector('.song-window').getBoundingClientRect().top >= n.getBoundingClientRect().top)).toBe(true);
     }
     await page.screenshot({ path: info.outputPath('short-landscape-youtube-notices.png') });
-    // The reserved regions must not intercept the exit gesture.
+    // Exit remains reachable after scrolling through the footer.
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
   });

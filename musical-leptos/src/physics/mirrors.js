@@ -1,4 +1,5 @@
 import * as THREE from './three.module.js';
+import { sphereGeometry } from './spheres.js';
 
 export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - transformed.y); mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
 // This exceeds the camera’s visible depth even at the minimum enclosure depth
@@ -16,7 +17,7 @@ export function mirrorCells(count) {
 function imageGeometry(staged, count) {
   const { capacity, attributes } = staged;
   const cells = mirrorCells(count);
-  const geometry = new THREE.SphereGeometry(1, 12, 8);
+  const geometry = sphereGeometry(2);
   for (const { name, attr } of attributes) geometry.setAttribute(name,
     new THREE.InstancedBufferAttribute(new Float32Array(capacity * attr.itemSize * count), attr.itemSize));
   const offsets = new Float32Array(count * capacity);

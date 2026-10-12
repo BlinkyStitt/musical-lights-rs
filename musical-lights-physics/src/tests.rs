@@ -131,6 +131,16 @@ fn input(sim: &mut Simulation, levels: [f32; COUNT]) {
     })
     .unwrap();
 }
+fn attack(sim: &mut Simulation, band: usize) {
+    let mut attacks = [0.0; COUNT];
+    attacks[band] = 1.0;
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        attacks,
+        ..sim.input
+    })
+    .unwrap();
+}
 #[test]
 fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
     let mut sim = world(SimulationConfig::default());
@@ -779,6 +789,13 @@ fn recorded_inputs_replay_identically_at_all_render_rates() {
         .map(|tick| SimulationInput {
             tick,
             levels: std::array::from_fn(|i| ((tick as usize / 5 + i) % 11) as f32 / 10.0),
+            attacks: std::array::from_fn(|i| {
+                if (tick / 5 + i as u64).is_multiple_of(7) {
+                    0.5
+                } else {
+                    0.0
+                }
+            }),
             acceleration: [((tick / 5) % 3) as f32 - 1.0, 0.0, 0.0],
             scrolling: (tick / 50) % 3 != 0,
             ..SimulationInput::default()
@@ -794,7 +811,7 @@ fn recorded_inputs_replay_identically_at_all_render_rates() {
                 sim.step();
             }
         }
-        sim.snapshot
+        (sim.snapshot, sim.pigments)
     };
     assert_eq!(replay(30), replay(60));
     assert_eq!(replay(60), replay(120));
@@ -899,6 +916,12 @@ fn invalid_inputs_and_configuration_leave_state_unchanged() {
     };
     assert!(sim.apply(input).is_err());
     assert_eq!(before, sim.snapshot);
+    for value in [f32::NAN, -0.1, 1.1] {
+        let mut input = SimulationInput::default();
+        input.attacks[6] = value;
+        assert!(sim.apply(input).is_err());
+        assert_eq!(before, sim.snapshot);
+    }
 }
 
 #[test]
@@ -966,7 +989,7 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
         sim.step();
     }
     let resting = sim.colors[0];
-    assert_ne!(initial, resting);
+    assert_eq!(initial, resting);
     for _ in 0..HZ * 2 {
         sim.step();
     }
@@ -1277,6 +1300,7 @@ fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
     // Source 23 is now across the left seam; the collider copy at x=0.025
     // must retain source 23's impulse column and palette entry.
     sim.scroll_phase = 1.0;
+    attack(&mut sim, 23);
     sim.step();
     place(
         &mut sim,
@@ -1450,9 +1474,129 @@ fn air_drag_dissipates_fast_free_motion_without_changing_gravity() {
 }
 
 #[test]
+fn quiet_bar_contacts_do_not_transfer_color() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    attack(&mut sim, 7); // An attack in another source cannot qualify source 6.
+    place(
+        &mut sim,
+        0,
+        Vector::new(PITCH * 6.5, radius(0) + 0.025, 0.0),
+        Vector::ZERO,
+    );
+    let colors = sim.colors;
+    let pigments = sim.pigments;
+    let mut impulse = 0.0;
+    for _ in 0..HZ * 2 {
+        sim.step();
+        impulse += sim.snapshot.values[IMPULSE_OFFSET + 6];
+    }
+    assert!(impulse > 0.0, "The quiet bar must make physical contact");
+    assert_eq!(sim.colors, colors);
+    assert_eq!(sim.pigments, pigments);
+}
+
+#[test]
+fn idle_and_listening_waves_move_bars_without_transferring_color() {
+    use musical_lights_core::lights::musical_motion::{idle_wave, listening_level};
+    for listening in [false, true] {
+        let mut sim = world(SimulationConfig::default());
+        isolate(&mut sim, &[0]);
+        place(
+            &mut sim,
+            0,
+            Vector::new(PITCH * 6.5, 0.3, 0.0),
+            Vector::ZERO,
+        );
+        let colors = sim.colors;
+        let pigments = sim.pigments;
+        let mut impulse = 0.0;
+        let mut minimum = f64::INFINITY;
+        let mut maximum = 0.0_f64;
+        for _ in 0..HZ * 6 {
+            let seconds = sim.tick as f64 / f64::from(HZ);
+            input(
+                &mut sim,
+                std::array::from_fn(|band| {
+                    if listening {
+                        listening_level(0.0, band, seconds, false)
+                    } else {
+                        idle_wave(band, COUNT, seconds, false) as f32
+                    }
+                }),
+            );
+            sim.step();
+            impulse += sim.snapshot.values[IMPULSE_OFFSET..CONTACT_OFFSET]
+                .iter()
+                .sum::<f32>();
+            minimum = minimum.min(sim.bar_positions[6]);
+            maximum = maximum.max(sim.bar_positions[6]);
+        }
+        assert!(impulse > 0.0, "The wave must make physical contact");
+        assert!(maximum - minimum > 0.01, "The bars must move");
+        assert_eq!(sim.colors, colors);
+        assert_eq!(sim.pigments, pigments);
+    }
+}
+
+#[test]
+fn both_bar_ends_require_the_contacted_sources_current_attack() {
+    for roof in [false, true] {
+        for strength in [0.0, 0.001, 1.0] {
+            let mut sim = world(SimulationConfig {
+                gravity: 0.0,
+                ..SimulationConfig::default()
+            });
+            isolate(&mut sim, &[0]);
+            let mut levels = [0.0; COUNT];
+            levels[12] = 0.6;
+            input(&mut sim, levels);
+            for _ in 0..HZ {
+                sim.step();
+            }
+            attack(&mut sim, 12);
+            let mut attacks = [0.0; COUNT];
+            attacks[12] = strength; // Zero also tests a completed attack before contact.
+            attacks[7] = 1.0; // A different source must not qualify this contact.
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                attacks,
+                ..sim.input
+            })
+            .unwrap();
+            let top = sim.bar_positions[12] as f32;
+            let sign = if roof { -1.0 } else { 1.0 };
+            let y = if roof { sim.ceiling_height - top } else { top };
+            place(
+                &mut sim,
+                0,
+                Vector::new(0.625, y + sign * (radius(0) + 0.02), 0.0),
+                Vector::new(0.0, -sign, 0.0),
+            );
+            let colors = sim.colors;
+            let pigments = sim.pigments;
+            let mut impulse = 0.0;
+            for _ in 0..HZ / 3 {
+                sim.step();
+                impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
+            }
+            assert!(impulse > 0.0);
+            if strength > 0.0 {
+                assert_ne!(sim.colors, colors);
+                assert_eq!(&sim.pigments[..3], &sim.palette[12]);
+            } else {
+                assert_eq!(sim.colors, colors);
+                assert_eq!(sim.pigments, pigments);
+            }
+        }
+    }
+}
+
+#[test]
 fn contact_pigments_remember_source_and_resting_load_does_not_change_history() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
+    attack(&mut sim, 6);
     place(
         &mut sim,
         0,
@@ -1580,6 +1724,7 @@ fn roof_bar_deflects_inward_and_reports_its_source_pigment() {
         sim.step();
     }
     let tip = sim.ceiling_height - sim.bar_positions[12] as f32;
+    attack(&mut sim, 12);
     place(
         &mut sim,
         0,

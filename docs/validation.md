@@ -714,7 +714,7 @@ banks fill four adjacent background boxes; all five boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands.
 
-The mirror-count setting defaults to six images and controls a finite stack
+The mirror-count setting starts in Auto over one through 32 images and controls a finite stack
 of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
 instanced meshes draw copied bars, background bars and balls. They use no
 reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
@@ -724,16 +724,28 @@ browser owns this effect; embedded hardware uses physical mirrors.
 Scene fog leaves the physical room clear, then thickens toward an opaque bank
 at a distance that grows with the requested depth. Its distance eases toward
 80% of the camera range, so 2,048 rows show more depth than 50 rows.
-A single opaque plane fills empty air and blocks objects behind the bank. A
-fixed 128 by 16 grid samples the same bounded light field as the scene. Interior
-rows cover the physical sources and their light range; the outer rows cover the
-rest of the view with zero source light. Colored strips, white attacks and ball
-pigments illuminate the fog. Low-contrast cloud
-shading stays still. A 350 ms light response softens attack illumination, and a
-bounded color curve prevents large white flashes. Both themes use their plot
-color as the base. Surface haze fades into the bank before the camera clipping
-plane.
-The fog adds one draw call, with no reflection camera or extra render target.
+Fog density rises outside the physical room on all three axes. One volume pass
+integrates that density along each camera ray using Beer-Lambert transmission.
+Scene depth stops the integral at visible surfaces, including surfaces whose
+materials do not use Three.js fog. Side and vertical views receive the same
+volume treatment as views down the tunnel. Empty air ends in opaque fog.
+
+A fixed 48 by 24 screen grid uses three spatial samples of the shared source
+light field. This approximates incident light; the density integral stays exact
+per pixel. Colored strips, white attacks and ball pigments illuminate the fog.
+Low-contrast cloud shading stays still. The 350 ms light response and bounded
+color curve prevent attack flashes. Theme color is capped at .12 in linear
+light to retain soft grey fog in the light theme.
+
+The volume replaces the old bank draw with one composition draw and a bounded
+color/depth render target. Its sRGB byte texture preserves dark pigment detail
+while WebGL samples and blends in linear light. The composition smooths high
+contrast edges with the pinned Three.js FXAA edge search, using neighboring
+pixels after applying each ray's fog. A 24-by-12 grid interpolates incident
+light; each fragment still integrates density exactly. It keeps
+flat colors unchanged and avoids multisampled color/depth resolves. Resizes and
+route cleanup release the target with the scene.
+No reflection camera, shadow map or bloom pass is added.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
@@ -766,8 +778,10 @@ An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses
 automatic camera motion while the user sets the angle. Automatic rotation uses a
-48-second horizontal sine cycle through ±10° around the selected center angle,
-with less travel near the slider limits. It has no attack shake or vertical wobble.
+48-second horizontal sine cycle with a default amplitude of 10°. Near the slider
+limits, its center moves inward so it retains the configured travel within ±40°.
+It starts at the selected angle; a saved −40° angle sweeps through −40° to −20°.
+It has no attack shake or vertical wobble.
 Reduced Motion stops the sweep. The renderer draws no box-frame outlines.
 Expanded Home and Advanced show rendered FPS beside the angle slider, updated
 once per second from actual rendered frames. This readout also works during idle
@@ -875,7 +889,7 @@ again. Older player callbacks cannot replace the current audio owner.
 Bars now use one continuous depth extrusion per rendered bar, with a smooth color
 fade instead of separate end faces and brightness steps at every copied box.
 Ball depth images still copy the eight physical transforms; the large physical
-balls use 32 horizontal and 20 vertical sphere segments. Background bar culling
+balls in that measurement used 32 by 20 sphere segments. Background bar culling
 uses the entire extruded box, including the trailing depth, and retains all 24
 source bands and accessible meters. Pixel tests compare culled and complete
 background banks at five angles and 0, 3, 8 and 17 depth settings. Side-surface
@@ -963,3 +977,18 @@ Its last measured frame submitted 7,032 ball images instead of all 16,384.
 The prior complete-batch sample used 3.264 ms mean GPU time and 1,862,532
 upload bytes per frame. These use the same viewport, PCM, CPU throttle and
 fixed 20-degree camera; they do not establish physical-phone frame rate.
+
+The current large balls use indexed icospheres with 1,280 triangles and 642
+vertices, compared with 1,216 triangles and 693 vertices before. Evenly divided
+faces smooth their outlines while reducing repeated vertex lighting work.
+Depth copies use 180 triangles and 92 vertices, up from 168 triangles and down
+from 117 vertices. Shared vertices avoid repeated lighting work at UV seams;
+pigment uses 3D positions. All eight physical balls, depth pooling, instancing
+and camera culling stay the same.
+
+Startup Auto now chooses from 1, 2, 4, 8, 16 and 32 depth images, using the same
+frame-cadence checks as explicit Auto. Selecting Auto tests the full 0–2,048
+range. Reset display restores the startup range. Saved Auto counts start within
+1–32 before measurement; saved manual counts keep their full validated range.
+The baseline draws the physical scene with zero depth copies. Bars and balls
+keep moving during measurement, including short captured audio bursts.

@@ -27,10 +27,14 @@ for (const theme of ['light', 'dark']) {
       await page.setViewportSize(viewport);
       for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
         const control = page.getByRole('checkbox', { name: label, exact: true });
+        await control.locator('..').evaluate(n => n.scrollIntoView({ block: 'center' }));
         await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
         expect(await control.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       }
-      await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
+      const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+      await exit.evaluate(n => n.scrollIntoView({ block: 'center' }));
+      await expect(exit).toBeInViewport({ ratio: 1 });
+      expect(await exit.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
@@ -55,7 +59,6 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     // snapshot before comparing its contact history with mesh attributes.
     v.draw(performance.now());
     // Measure physical surface lighting separately from the opaque atmosphere.
-    v.fogBank.visible = false;
     const target = new THREE.WebGLRenderTarget(240, 160);
     const pixels = new Uint8Array(240 * 160 * 4);
     const lights = v.scene.children.filter(n => n.isLight), intensities = lights.map(n => n.intensity);
@@ -82,7 +85,6 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     v.bars.count = count; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
     hidden.forEach(n => { n.visible = true; });
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
-    v.fogBank.visible = true;
     return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };

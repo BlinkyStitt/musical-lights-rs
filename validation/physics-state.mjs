@@ -5,6 +5,24 @@ export async function normalView(page) {
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   if (await exit.isVisible()) await exit.click();
 }
+// Sample real viewport intersections after each scroll without taking a DOM
+// trace snapshot for every intermediate scroll/expect transport round trip.
+export async function scrollingIntersections(page, selectors) {
+  return page.evaluate(async selectors => {
+    const result = {};
+    for (const selector of selectors) {
+      const node = document.querySelector(selector);
+      node.scrollIntoView({ block: 'center' });
+      result[selector] = await new Promise(resolve => {
+        const observer = new IntersectionObserver(([entry]) => {
+          observer.disconnect(); resolve(entry.intersectionRatio);
+        });
+        observer.observe(node);
+      });
+    }
+    return result;
+  }, selectors);
+}
 export async function physicsReady(page) {
   // One browser call waits for both initial and advancing state. Separate
   // protocol/trace snapshots can stall a busy software renderer between waits.

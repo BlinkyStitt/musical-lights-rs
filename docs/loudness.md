@@ -58,9 +58,15 @@ Advanced controls expose gain, smoothing, attack history and gates, flash timing
 
 ## Rendering
 
-Auto depth measures observed frame cadence, tests bounded increasing counts, then freezes the largest passing count. It requires at least 95% of the measured cadence, a 95th-percentile interval below 1.25 refresh periods, and fewer than 1% missed frames. It does not infer GPU speed from CPU or memory hints. Saved counts remain manual; Auto explicitly starts a measurement. Hiding the scene, hiding the page, or losing its graphics context stops a measurement at its best completed count. Select Auto again to start a new measurement when the scene is visible.
+Auto depth measures observed frame cadence, tests bounded increasing counts, then freezes the largest passing count. It lets the scene settle for 500 ms before measuring a one-second baseline, then lets each depth settle for 500 ms and samples it for at least 1.25 seconds and 60 frames.
+
+It requires at least 95% of the measured cadence, a 95th-percentile interval below 1.25 refresh periods, and no more than 5% long intervals above 1.5 refresh periods. A failed window must fail a second measurement at the same depth before Auto lowers its choice. The full test stops after 25 seconds at its best completed count.
+
+Auto does not infer GPU speed from CPU or memory hints. Saved counts remain manual; Auto explicitly starts a measurement. Hiding the scene, hiding the page, or losing its graphics context stops a measurement at its best completed count. Select Auto again to start a new measurement when the scene is visible.
 
 A bounded field uses 24 paired light strips and eight physical ball sources. Bars emit their palette colors; balls emit their pigment colors. White attacks illuminate nearby surfaces through the full tunnel depth. The shader samples the field at mesh vertices and interpolates across faces. The single outer coating has fixed subdivisions. All five banks and translated depth images reuse these sources. There are no additional physical balls, per-copy light objects, shadow maps, recursive reflection cameras, or bloom passes. Controls expose glow, spill strength/range, depth fade, resolution, camera sweep, and scrolling speed.
+
+**Lighting & rendering → Bar attack glow** controls white emission along bar attack edges, from 0 to 3. The default is 1, up from the previous fixed strength of 0.8. It applies immediately and persists with display preferences. Acoustic attack detection, quiet bar color, the rising-side preview envelope, and fog illumination retain their existing inputs. **White attack light strength** controls light cast onto nearby surfaces and fog separately.
 
 ## Scientific sources and implementation roles
 

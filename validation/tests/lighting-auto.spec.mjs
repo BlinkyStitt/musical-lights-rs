@@ -2,23 +2,223 @@ import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
-test('Auto measures startup, freezes its choice, and manual depth cancels a retest', async ({ page }) => {
-  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
-  const count = await page.locator('.depth-slider').inputValue();
-  expect(Number(count)).toBeGreaterThanOrEqual(0); expect(Number(count)).toBeLessThanOrEqual(2048);
-  await expect(page.locator('.depth-status')).toHaveAttribute('title', /Hz target/);
-  const measuredAt = await page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.start);
+test('colored attack light follows band loudness on bars, nearby surfaces and fog without changing white edges', async ({ page }, info) => {
+  await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
+  await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedHeight(0))).toBeGreaterThan(.01);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const { LIGHT_FIELD } = await import(new URL(`${base}physics/lighting.js`, document.baseURI));
+    cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {}; v.receive = () => {};
+    v.worker.postMessage({ type: 'pause', paused: true }); v.previous = v.current.slice();
+    const height = v.current[v.layout[17]], top = height / 4, x = v.layout[3] / 2;
+    v.current.fill(top, v.layout[9], v.layout[10]); v.mirrors.setCount(3);
+    const color = new THREE.Color(.2, .025, .01);
+    for (let i = 0; i < v.bars.count; i++) v.bars.setColorAt(i, color);
+    v.bars.instanceColor.needsUpdate = true;
+    v.scene.children.forEach(node => { node.visible = node === v.bars; });
+    const camera = new THREE.OrthographicCamera(-.005, .005, .005, -.005, .01, 10);
+    camera.position.set(x, top * .75, 2); camera.lookAt(x, top * .75, 0); camera.updateMatrixWorld();
+    const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4);
+    const u = v.lighting.uniforms, scene = new THREE.Scene();
+    const material = new THREE.ShaderMaterial({ uniforms: { ...u, probeFog: { value: 0 } },
+      vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: LIGHT_FIELD + `uniform float probeFog; void main() {
+        vec3 point = vec3(${x + .08}, ${top}, 0.0);
+        gl_FragColor = vec4(mix(localIllumination(point, vec3(-1.0, 0.0, 0.0)), scatteredIllumination(point), probeFog), 1.0);
+      }`, depthTest: false, depthWrite: false });
+    const probe = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material); scene.add(probe);
+    let at = performance.now();
+    const read = scene => {
+      v.renderer.setRenderTarget(target); v.renderer.render(scene, camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
+      return Array.from(pixels.slice((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 3));
+    };
+    const sample = (level, edge, strength, microphone = true) => {
+      v.idle = false; v.listening = microphone; v.waveLight = () => 0;
+      v.input.fill(level, 0, 24); v.edges.fill(edge);
+      v.lighting.configure({ ...v.settings, colorAttack: strength, colorSpill: 0, attackLight: 0 });
+      v.draw(at += 100);
+      const bar = read(v.scene);
+      // Settle the real fog envelope on its normal bounded time steps.
+      for (let i = 0; i < 30; i++) v.lighting.update(v, v.current, v.layout[9], v.renderedPhase, v.layout[3], height, v.config[5], at += 100);
+      u.stripColor.value.forEach((c, i) => c.copy(i === 0 ? color : new THREE.Color(0, 0, 0)));
+      u.glowBallColor.value.forEach(c => c.setRGB(0, 0, 0));
+      material.uniforms.probeFog.value = 0; const nearby = read(scene);
+      material.uniforms.probeFog.value = 1; const fog = read(scene);
+      return { bar, nearby, fog };
+    };
+    try {
+      const off = sample(.8, .5, 0), low = sample(.2, .5, 1), high = sample(.8, .5, 1), brighter = sample(.8, .5, 3);
+      const quietOff = sample(.8, 0, 0), quietOn = sample(.8, 0, 3);
+      const zeroLevel = sample(0, .5, 3), digital = sample(.8, .5, 1, false);
+      const side = v.sideBars.geometry.attributes.pulse;
+      return { off, low, high, brighter, quietOff, quietOn, zeroLevel, digital,
+        whiteGlow: u.attackGlow.value, edges: Array.from(v.edges),
+        sidePulsesMatch: !!side && Array.from(side.array.slice(0, v.sideBars.mesh.count)).every((value, i) => value === v.bars.geometry.attributes.pulse.array[v.sideBars.sourceBands[i]]) };
+    } finally { v.renderer.setRenderTarget(null); target.dispose(); probe.geometry.dispose(); material.dispose(); }
+  });
+  await info.attach('colored-attack-light.json', { body: JSON.stringify(result), contentType: 'application/json' });
+  for (const kind of ['bar', 'nearby', 'fog']) {
+    expect(result.low[kind][0], kind).toBeGreaterThan(result.off[kind][0]);
+    expect(result.high[kind][0], kind).toBeGreaterThan(result.low[kind][0] + 3);
+    expect(result.brighter[kind][0], kind).toBeGreaterThan(result.high[kind][0]);
+    expect(result.high[kind][0] - result.off[kind][0], kind).toBeGreaterThan(2 * (result.high[kind][1] - result.off[kind][1]));
+  }
+  expect(result.quietOn).toEqual(result.quietOff); expect(result.zeroLevel.bar).toEqual(result.off.bar);
+  expect(result.digital.nearby).toEqual(result.high.nearby); expect(result.digital.fog).toEqual(result.high.fog);
+  expect(result.whiteGlow).toBe(1); expect(result.edges).toEqual(Array(24).fill(.5)); expect(result.sidePulsesMatch).toBe(true);
+  await page.reload(); await physicsReady(page); await normalView(page);
+  await page.getByText('Lighting & rendering', { exact: true }).click();
+  const input = page.getByRole('spinbutton', { name: 'Colored attack light', exact: true });
+  await expect(input).toHaveValue('1'); await input.fill('2'); await input.dispatchEvent('change');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.colorAttack.value)).toBe(2);
+  await input.fill('4'); await input.dispatchEvent('change');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.colorAttack.value)).toBe(2);
+  await page.reload(); await physicsReady(page); await normalView(page);
+  await page.getByText('Lighting & rendering', { exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Colored attack light', exact: true })).toHaveValue('2');
+});
+
+for (const path of ['/', '/advanced/']) {
+  test(`bar attack glow changes edge pixels and preserves quiet bars and attack inputs on ${path}`, async ({ page }, info) => {
+    await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(origin + path); await normalView(page); await startFrozen(page);
+    await page.locator('.depth-slider').fill('1');
+    await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
+    await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(.5);
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedHeight(0))).toBeGreaterThan(.01);
+    await page.getByText('Lighting & rendering', { exact: true }).click();
+    const input = page.getByRole('spinbutton', { name: 'Bar attack glow', exact: true });
+    await expect(input).toHaveValue('1');
+    await input.fill('3'); await input.dispatchEvent('change');
+    const result = await page.evaluate(async () => {
+      const v = document.querySelector('#dancinglights').physics;
+      const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+      const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+      v.draw(performance.now());
+      const camera = new THREE.OrthographicCamera(-v.width / 2, v.width / 2, v.height / 2, -v.height / 2, .01, 10);
+      camera.position.set(v.width / 2, v.height / 2, 2); camera.lookAt(v.width / 2, v.height / 2, 0); camera.updateMatrixWorld();
+      const target = new THREE.WebGLRenderTarget(600, 400), pixels = new Uint8Array(600 * 400 * 4);
+      const u = v.lighting.uniforms, savedGlow = u.attackGlow.value, strength = u.lightStrength.value.clone();
+      const visible = v.scene.children.map(node => node.visible), edges = v.meshEdges.slice();
+      const draw = glow => {
+        u.attackGlow.value = glow;
+        v.bars.geometry.attributes.edge.needsUpdate = true;
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 600, 400, pixels); return pixels.slice();
+      };
+      const difference = (a, b) => {
+        let sum = 0, changed = 0;
+        for (let i = 0; i < a.length; i++) if (i % 4 !== 3) { sum += b[i] - a[i]; if (a[i] !== b[i]) changed++; }
+        return { sum, changed };
+      };
+      try {
+        v.scene.children.forEach(node => { node.visible = node === v.bars || node.isLight; });
+        u.lightStrength.value.set(0, 0, strength.z, 0);
+        const old = draw(.8), brighter = draw(1), maximum = draw(3);
+        v.meshEdges.fill(0);
+        const quietOff = draw(0), quietBright = draw(3);
+        return { oldToDefault: difference(old, brighter), defaultToMaximum: difference(brighter, maximum),
+          quiet: difference(quietOff, quietBright), configured: savedGlow, sourceEdges: Array.from(v.edges),
+          saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')).attackGlow };
+      } finally {
+        v.meshEdges.set(edges); v.bars.geometry.attributes.edge.needsUpdate = true;
+        v.scene.children.forEach((node, i) => { node.visible = visible[i]; });
+        u.attackGlow.value = savedGlow; u.lightStrength.value.copy(strength);
+        v.renderer.setRenderTarget(null); target.dispose();
+      }
+    });
+    await info.attach('attack-glow.json', { body: JSON.stringify(result), contentType: 'application/json' });
+    expect(result.oldToDefault.sum).toBeGreaterThan(0); expect(result.oldToDefault.changed).toBeGreaterThan(10);
+    expect(result.defaultToMaximum.sum).toBeGreaterThan(0); expect(result.defaultToMaximum.changed).toBeGreaterThan(10);
+    expect(result.quiet).toEqual({ sum: 0, changed: 0 });
+    expect(result.configured).toBe(3); expect(result.saved).toBe(3);
+    expect(result.sourceEdges).toEqual(Array(24).fill(.5));
+    await input.fill('4'); await input.dispatchEvent('change');
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.attackGlow.value)).toBe(3);
+    await page.reload(); await physicsReady(page); await normalView(page);
+    await page.getByText('Lighting & rendering', { exact: true }).click();
+    await expect(page.getByRole('spinbutton', { name: 'Bar attack glow', exact: true })).toHaveValue('3');
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.attackGlow.value)).toBe(3);
+  });
+}
+
+test('Auto baseline keeps live bar motion visible and manual depth cancels its test', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
+  await page.locator('.depth-slider').fill('1');
   await page.getByRole('button', { name: 'Auto', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.start)).toBeGreaterThan(measuredAt);
+  const travel = await page.evaluate(() => new Promise(resolve => {
+    const v = document.querySelector('#dancinglights').physics;
+    const first = v.renderedHeight(0); let maximum = first;
+    window.sendBars(Array(24).fill(.6), 1);
+    const sample = () => {
+      maximum = Math.max(maximum, v.renderedHeight(0));
+      if (!v.depthProfile.baseline) { resolve(maximum - first); return; }
+      requestAnimationFrame(sample);
+    };
+    sample();
+  }));
+  expect(travel).toBeGreaterThan(.05);
   await page.locator('.depth-slider').fill('128');
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     return [v.settings.depthMode, v.mirrors.count, v.depthProfile.done, v.balls.count];
   })).toEqual(['manual', 128, true, 8]);
   await page.reload(); await physicsReady(page);
-  expect(await page.locator('.depth-slider').inputValue()).toBe('128');
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile)).toBeUndefined();
+  expect(await page.evaluate(() => ({ count: document.querySelector('.depth-slider').value,
+    profiling: document.querySelector('#dancinglights').physics.depthProfile !== undefined }))).toEqual({ count: '128', profiling: false });
+});
+
+test('Auto measures shallow startup and clicking Auto retests the full range', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.depthProfile?.done, null, { timeout: 30000 });
+  const measured = await page.evaluate(() => {
+    const view = document.querySelector('#dancinglights').physics;
+    return { count: Number(document.querySelector('.depth-slider').value),
+      title: document.querySelector('.depth-status').title, start: view.depthProfile.start };
+  });
+  expect(measured.count).toBeGreaterThanOrEqual(1); expect(measured.count).toBeLessThanOrEqual(32);
+  expect(measured.title).toMatch(/Hz target/);
+  await page.getByRole('button', { name: 'Auto', exact: true }).click();
+  const retest = await page.evaluate(() => {
+    const profile = document.querySelector('#dancinglights').physics.depthProfile;
+    return { start: profile.start, maximum: profile.candidates.at(-1) };
+  });
+  expect(retest.start).toBeGreaterThan(measured.start); expect(retest.maximum).toBe(2048);
+});
+
+test('saved Auto depth and Reset display return to the shallow startup range', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 2048, depthMode: 'auto' })));
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
+  const state = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { count: v.mirrors.count, pool: v.mirrors.poolCount, balls: v.balls.count, measuredAt: v.depthProfile.start };
+  });
+  expect(state.count).toBeGreaterThanOrEqual(1); expect(state.count).toBeLessThanOrEqual(32);
+  expect(state.pool).toBe(32); expect(state.balls).toBe(8);
+  await page.locator('.display-controls > summary').click();
+  await page.locator('.mirror-count').fill('128');
+  await page.locator('.mirror-count').dispatchEvent('change');
+  expect(await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.settings.depthMode, v.mirrors.count, v.balls.count];
+  })).toEqual(['manual', 128, 8]);
+  await page.getByRole('button', { name: 'Reset display', exact: true }).click();
+  const reset = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { mode: v.settings.depthMode, max: v.depthProfile.candidates.at(-1), measuredAt: v.depthProfile.start };
+  });
+  expect(reset.mode).toBe('auto'); expect(reset.max).toBe(32);
+  expect(reset.measuredAt).toBeGreaterThan(state.measuredAt);
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
+  const count = Number(await page.locator('.depth-slider').inputValue());
+  expect(count).toBeGreaterThanOrEqual(1); expect(count).toBeLessThanOrEqual(32);
 });
 
 test('Auto stops when its scene leaves the viewport and waits for an explicit retest', async ({ page }) => {
