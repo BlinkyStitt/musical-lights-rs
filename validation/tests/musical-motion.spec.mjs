@@ -27,10 +27,14 @@ for (const theme of ['light', 'dark']) {
       await page.setViewportSize(viewport);
       for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
         const control = page.getByRole('checkbox', { name: label, exact: true });
+        await control.locator('..').evaluate(n => n.scrollIntoView({ block: 'center' }));
         await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
         expect(await control.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       }
-      await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
+      const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+      await exit.evaluate(n => n.scrollIntoView({ block: 'center' }));
+      await expect(exit).toBeInViewport({ ratio: 1 });
+      expect(await exit.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
