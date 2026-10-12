@@ -946,8 +946,10 @@ for (const path of ['/', '/advanced/']) {
       await page.setViewportSize(viewport);
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
       await expect(tempo).toHaveText('132 BPM');
-      for (const control of [tempo, fps, page.locator('.camera-rotation'), page.getByRole('button', { name: 'Exit fullscreen', exact: true })])
+      for (const control of [tempo, fps, page.locator('.camera-rotation'), page.getByRole('button', { name: 'Exit fullscreen', exact: true })]) {
+        await control.scrollIntoViewIfNeeded();
         await expect(control).toBeInViewport({ ratio: 1 });
+      }
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     }
@@ -977,8 +979,10 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
     await page.setViewportSize(viewport);
     await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
     await expect(fps).toHaveText(/^\d+ FPS$/);
+    await fps.scrollIntoViewIfNeeded();
     await expect(fps).toBeInViewport({ratio:1});
     await expect(page.locator('.camera-rotation')).toBeInViewport({ratio:1});
+    await page.getByRole('button',{name:'Exit fullscreen',exact:true}).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button',{name:'Exit fullscreen',exact:true})).toBeInViewport({ratio:1});
     expect(await fps.evaluate(node => node.parentElement.className)).toBe('camera-controls');
   }

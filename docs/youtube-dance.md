@@ -21,8 +21,11 @@ This API selection does not prove that an actual iPhone routes both streams.
 
 Fullscreen portrait reserves separate video, visualizer, song ticker, recovery,
 and bottom control regions. Landscape places video and visualizer side by side.
-Balls and bars stay inside the scene, outside the controls. The player uses a 200-pixel minimum in tall views and shares the available
-height with the scene on short landscape screens. Mobile opens in this expanded
+Balls and bars stay inside the scene, outside the controls. The video and
+scene keep at least 200 pixels of height. Expanded content scrolls vertically
+when the messages, song and controls do not fit. Messages and wrapped titles
+grow below the scene without changing its size. Scroll the footer to reach
+controls; downward swipes on the scene still exit. Mobile opens in this expanded
 layout without microphone capture or a native fullscreen request. Exit returns
 to the normal page; the next viewport resize does not reopen it. Listening and Identify song occupy the first
 two grid cells. Native switches keep 44-pixel touch targets and keyboard focus.

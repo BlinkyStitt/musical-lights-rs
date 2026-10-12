@@ -268,6 +268,7 @@ for (const { result, routePath, colorScheme, name } of [
       expect(travel.twoSeconds).toBeCloseTo(-90, 1);
       expect(travel.nextLap).toBeCloseTo(travel.oneSecond, 1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
       await page.screenshot({ path: testInfo.outputPath(`fullscreen-${name}-ticker-${viewport.width}.png`) });
     }
@@ -275,6 +276,7 @@ for (const { result, routePath, colorScheme, name } of [
     await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
     await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
     await expect(page.locator('.recognized-song')).toHaveText(text);
+    await page.locator('.song-title').scrollIntoViewIfNeeded();
     await expect(page.locator('.song-title')).toBeInViewport({ ratio: 1 });
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await expect(page.locator('.recognized-song')).toHaveText(text);
@@ -337,6 +339,7 @@ test('the song toggle sits beside Listening below the lights on a narrow phone a
   await expect(identify).toHaveCSS('font-weight', '700');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await identify.scrollIntoViewIfNeeded();
   await expect(identify).toBeInViewport();
   await expect(identify).toBeEnabled();
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
@@ -394,6 +397,7 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
     await page.setViewportSize(viewport);
     await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
     await expect(page.locator('.song-title')).toHaveCSS('animation-name', 'none');
+    await page.locator('.song-title').scrollIntoViewIfNeeded();
     await expect.poll(() => page.evaluate(() => {
       const status = document.querySelector('.recognition-ring').getBoundingClientRect();
         const strip = document.querySelector('.recognized-song').getBoundingClientRect();
@@ -403,6 +407,7 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
         titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
     })).toEqual({ statusBelowSong: true, titleInsideStrip: true, titleInsideViewport: true });
     for (const selector of ['.recognition-ring', '.recognized-song']) {
+      await page.locator(selector).scrollIntoViewIfNeeded();
       await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -442,6 +447,8 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
 
     async function expectUncoveredNotice(selector, imageName) {
       const notice = page.locator(selector);
+      // The fixture clock is paused; scroll directly, then check actual visibility.
+      await notice.evaluate(n => n.scrollIntoView({ block: 'center' }));
       await expect(notice).toBeInViewport({ ratio: 1 });
       const bounds = await notice.boundingBox(), songBounds = await strip.boundingBox();
       // This fixture actually overlaps the opaque song footer. Visibility

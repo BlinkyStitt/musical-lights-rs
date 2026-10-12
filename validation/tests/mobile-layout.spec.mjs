@@ -3,7 +3,7 @@ import { physicsReady } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
-test('phone opens expanded without capture and keeps video, notices, song and Exit visible in short landscape', async ({ browser }) => {
+test('phone opens expanded without capture and allows scrolling to notices, song and Exit in short landscape', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();
@@ -22,9 +22,16 @@ test('phone opens expanded without capture and keeps video, notices, song and Ex
       });
       for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
         await page.setViewportSize(viewport);
-        for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) await expect(page.getByRole('checkbox', { name: label, exact: true }).locator('..')).toBeInViewport({ ratio: 1 });
+        for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
+          const target = page.getByRole('checkbox', { name: label, exact: true }).locator('..');
+          await target.scrollIntoViewIfNeeded();
+          await expect(target).toBeInViewport({ ratio: 1 });
+        }
+        await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
         await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
-        await expect(page.locator('.physics-status')).toBeVisible();
+        await page.locator('.physics-status').scrollIntoViewIfNeeded();
+        await expect(page.locator('.physics-status')).toBeInViewport({ ratio: 1 });
+        await page.locator('.camera-rotation').scrollIntoViewIfNeeded();
         await expect(page.locator('.camera-rotation')).toBeInViewport({ ratio: 1 });
         await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
         await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
@@ -40,7 +47,7 @@ test('phone opens expanded without capture and keeps video, notices, song and Ex
         await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(30);
         await page.locator('.camera-rotation').focus(); await page.keyboard.press('ArrowLeft');
         await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(29);
-        const scene = await page.locator('#dancinglights').boundingBox(); expect(scene.height).toBeGreaterThan(20);
+        const scene = await page.locator('#dancinglights').boundingBox(); expect(scene.height).toBeGreaterThanOrEqual(200);
       }
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
       await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
