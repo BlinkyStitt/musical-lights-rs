@@ -67,7 +67,7 @@ export class FogVolume {
     };
     this.scene = new THREE.Scene();
     this.camera = new THREE.Camera();
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 48, 24), new THREE.ShaderMaterial({
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 24, 12), new THREE.ShaderMaterial({
       uniforms: this.uniforms, depthTest: false, depthWrite: false, toneMapped: false,
       vertexShader: LIGHT_FIELD + DENSITY + RAYS + `
         varying vec2 fogUv; varying vec3 fogLight; varying vec3 fogProbe;
