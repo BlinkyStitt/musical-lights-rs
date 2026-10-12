@@ -57,6 +57,7 @@ export class SceneLighting {
       lightView: { value: new THREE.Matrix3() },
       lightStrength: { value: new THREE.Vector4() },
       colorEmission: { value: new THREE.Vector2() },
+      attackGlow: { value: 1 },
       reflectionFade: { value: settings.depthFade ?? .72 },
     };
     this.configure(settings);
@@ -64,6 +65,7 @@ export class SceneLighting {
   configure(settings) {
     this.uniforms.lightStrength.value.set(settings.colorSpill ?? .18, settings.attackLight ?? .8, settings.lightRange ?? .22, 0);
     this.uniforms.colorEmission.value.set(settings.barGlow ?? .08, settings.ballGlow ?? .12);
+    this.uniforms.attackGlow.value = settings.attackGlow ?? 1;
     this.uniforms.reflectionFade.value = settings.depthFade ?? .72;
   }
   apply(shader) {

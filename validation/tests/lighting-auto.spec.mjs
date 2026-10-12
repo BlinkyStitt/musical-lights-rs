@@ -2,6 +2,70 @@ import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
+for (const path of ['/', '/advanced/']) {
+  test(`bar attack glow changes edge pixels and preserves quiet bars and attack inputs on ${path}`, async ({ page }, info) => {
+    await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(origin + path); await normalView(page); await startFrozen(page);
+    await page.locator('.depth-slider').fill('1');
+    await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
+    await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(.5);
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedHeight(0))).toBeGreaterThan(.01);
+    await page.getByText('Lighting & rendering', { exact: true }).click();
+    const input = page.getByRole('spinbutton', { name: 'Bar attack glow', exact: true });
+    await expect(input).toHaveValue('1');
+    await input.fill('3'); await input.dispatchEvent('change');
+    const result = await page.evaluate(async () => {
+      const v = document.querySelector('#dancinglights').physics;
+      const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+      const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+      v.draw(performance.now());
+      const camera = new THREE.OrthographicCamera(-v.width / 2, v.width / 2, v.height / 2, -v.height / 2, .01, 10);
+      camera.position.set(v.width / 2, v.height / 2, 2); camera.lookAt(v.width / 2, v.height / 2, 0); camera.updateMatrixWorld();
+      const target = new THREE.WebGLRenderTarget(600, 400), pixels = new Uint8Array(600 * 400 * 4);
+      const u = v.lighting.uniforms, savedGlow = u.attackGlow.value, strength = u.lightStrength.value.clone();
+      const visible = v.scene.children.map(node => node.visible), edges = v.meshEdges.slice();
+      const draw = glow => {
+        u.attackGlow.value = glow;
+        v.bars.geometry.attributes.edge.needsUpdate = true;
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 600, 400, pixels); return pixels.slice();
+      };
+      const difference = (a, b) => {
+        let sum = 0, changed = 0;
+        for (let i = 0; i < a.length; i++) if (i % 4 !== 3) { sum += b[i] - a[i]; if (a[i] !== b[i]) changed++; }
+        return { sum, changed };
+      };
+      try {
+        v.scene.children.forEach(node => { node.visible = node === v.bars || node.isLight; });
+        u.lightStrength.value.set(0, 0, strength.z, 0);
+        const old = draw(.8), brighter = draw(1), maximum = draw(3);
+        v.meshEdges.fill(0);
+        const quietOff = draw(0), quietBright = draw(3);
+        return { oldToDefault: difference(old, brighter), defaultToMaximum: difference(brighter, maximum),
+          quiet: difference(quietOff, quietBright), configured: savedGlow, sourceEdges: Array.from(v.edges),
+          saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')).attackGlow };
+      } finally {
+        v.meshEdges.set(edges); v.bars.geometry.attributes.edge.needsUpdate = true;
+        v.scene.children.forEach((node, i) => { node.visible = visible[i]; });
+        u.attackGlow.value = savedGlow; u.lightStrength.value.copy(strength);
+        v.renderer.setRenderTarget(null); target.dispose();
+      }
+    });
+    await info.attach('attack-glow.json', { body: JSON.stringify(result), contentType: 'application/json' });
+    expect(result.oldToDefault.sum).toBeGreaterThan(0); expect(result.oldToDefault.changed).toBeGreaterThan(10);
+    expect(result.defaultToMaximum.sum).toBeGreaterThan(0); expect(result.defaultToMaximum.changed).toBeGreaterThan(10);
+    expect(result.quiet).toEqual({ sum: 0, changed: 0 });
+    expect(result.configured).toBe(3); expect(result.saved).toBe(3);
+    expect(result.sourceEdges).toEqual(Array(24).fill(.5));
+    await input.fill('4'); await input.dispatchEvent('change');
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.attackGlow.value)).toBe(3);
+    await page.reload(); await physicsReady(page); await normalView(page);
+    await page.getByText('Lighting & rendering', { exact: true }).click();
+    await expect(page.getByRole('spinbutton', { name: 'Bar attack glow', exact: true })).toHaveValue('3');
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.attackGlow.value)).toBe(3);
+  });
+}
+
 test('Auto baseline keeps live bar motion visible', async ({ page }) => {
   await syntheticAudio(page); await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
   await page.locator('.depth-slider').fill('1');

@@ -62,6 +62,8 @@ Auto depth measures observed frame cadence, tests bounded increasing counts, the
 
 A bounded field uses 24 paired light strips and eight physical ball sources. Bars emit their palette colors; balls emit their pigment colors. White attacks illuminate nearby surfaces through the full tunnel depth. The shader samples the field at mesh vertices and interpolates across faces. The single outer coating has fixed subdivisions. All five banks and translated depth images reuse these sources. There are no additional physical balls, per-copy light objects, shadow maps, recursive reflection cameras, or bloom passes. Controls expose glow, spill strength/range, depth fade, resolution, camera sweep, and scrolling speed.
 
+**Lighting & rendering → Bar attack glow** controls white emission along bar attack edges, from 0 to 3. The default is 1, up from the previous fixed strength of 0.8. It applies immediately and persists with display preferences. Acoustic attack detection, quiet bar color, the rising-side preview envelope, and fog illumination retain their existing inputs. **White attack light strength** controls light cast onto nearby surfaces and fog separately.
+
 ## Scientific sources and implementation roles
 
 - [ISO 532-1:2017, Zwicker method](https://www.iso.org/standard/63077.html) defines the authoritative time-varying loudness calculation. The application uses its existing implementation rather than mixing loudness models.

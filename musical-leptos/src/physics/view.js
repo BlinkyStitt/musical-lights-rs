@@ -420,7 +420,7 @@ export class PhysicsView {
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
       shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;');
-      shader.fragmentShader = 'varying float depthDistance; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'varying float depthDistance; uniform float attackGlow; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
           float distance = min(halfWidth - abs(local.x), barHeight * (.5 - abs(local.y)));
@@ -429,7 +429,7 @@ export class PhysicsView {
           float inner = (1.0 - smoothstep(1.25 * pixel, 2.5 * pixel, distance)) * front;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fade = pow(reflectionFade, max(0.0, depthDistance)); outgoingLight = outgoingLight * fade + (totalEmissiveRadiance + nearbyLight) * (1.0 - fade);\n#include <opaque_fragment>');
-      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + vec3(glow * inner * .8);');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + vec3(glow * inner * attackGlow);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
