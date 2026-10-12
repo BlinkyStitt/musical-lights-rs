@@ -122,7 +122,7 @@ export class FogVolume {
           // A shared exposure rolloff retains saturated source hues as their
           // halos overlap. The neutral base and smoothed white attacks stay soft.
           float peak = max(fogLight.r, max(fogLight.g, fogLight.b));
-          vec3 mist = mistBase + vec3(.0185 + .0025 * cloud) + .28 * fogLight / (1.0 + peak);
+          vec3 mist = .85 * mistBase + vec3(.0155 + .0025 * cloud) + .28 * fogLight / (1.0 + peak);
           return mix(mist, texture2D(volumeColor, uv).rgb, transmission);
         }
         void main() {
