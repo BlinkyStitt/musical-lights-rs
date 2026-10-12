@@ -26,7 +26,6 @@ test('phone opens expanded without capture and allows scrolling to notices, song
           'label:has(.motion-button)', 'label:has(.scroll-lights)', '.fullscreen-button',
           '.physics-status', '.frame-rate', '.camera-rotation'];
         expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
-        await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
         expect(await page.evaluate(() => {
           const camera = document.querySelector('.camera-controls').getBoundingClientRect();
           const controls = document.querySelector('.audio-controls').getBoundingClientRect();
@@ -38,8 +37,11 @@ test('phone opens expanded without capture and allows scrolling to notices, song
         await page.locator('.camera-rotation').fill('30');
         await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(30);
         await page.keyboard.press('ArrowLeft');
-        await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(29);
-        const scene = await page.locator('#dancinglights').boundingBox(); expect(scene.height).toBeGreaterThanOrEqual(200);
+        await expect.poll(() => page.evaluate(() => ({
+          angle: document.querySelector('#dancinglights').physics.cameraBase,
+          sceneLarge: document.querySelector('#dancinglights').getBoundingClientRect().height >= 200,
+          fps: /^\d+ FPS$/.test(document.querySelector('.frame-rate').textContent),
+        }))).toEqual({ angle: 29, sceneLarge: true, fps: true });
       }
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
       await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');

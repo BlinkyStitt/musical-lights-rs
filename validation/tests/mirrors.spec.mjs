@@ -417,22 +417,22 @@ test('normal scenes fill a larger centered frame before and after fullscreen', a
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     for (const route of ['/', '/advanced/']) {
-      await page.goto(origin + route); await physicsReady(page); await normal(page);
+      await page.goto(origin + route); await physicsReady(page); await page.keyboard.press('Escape');
       for (let pass = 0; pass < 2; pass++) {
         await expect.poll(() => page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
           const graph = v.graph.getBoundingClientRect(), panel = v.graph.parentElement.getBoundingClientRect();
-          return { centeredX: Math.abs(graph.x + graph.width / 2 - panel.x - panel.width / 2) < 1,
+          return { normal: !v.card.hasAttribute('data-expanded'), centeredX: Math.abs(graph.x + graph.width / 2 - panel.x - panel.width / 2) < 1,
             centeredY: Math.abs(graph.y + graph.height / 2 - panel.y - panel.height / 2) < 1,
             sized: v.canvasWidth === graph.width && v.canvasHeight === graph.height,
             large: graph.height >= (innerWidth >= 1000 ? 500 : 320),
             bounded: v.canvas.width * v.canvas.height <= 200000,
             noOverflow: graph.x >= 0 && graph.right <= innerWidth };
-        })).toEqual({ centeredX: true, centeredY: true, sized: true, large: true, bounded: true, noOverflow: true });
+        })).toEqual({ normal: true, centeredX: true, centeredY: true, sized: true, large: true, bounded: true, noOverflow: true });
         if (pass === 0) {
           await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
           await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
-          await normal(page);
+          await page.keyboard.press('Escape');
         }
       }
     }

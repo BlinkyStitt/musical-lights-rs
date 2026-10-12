@@ -147,7 +147,7 @@ for (const path of ['/', '/advanced/']) {
   });
 }
 
-test('Auto baseline keeps live bar motion visible', async ({ page }) => {
+test('Auto baseline keeps live bar motion visible and manual depth cancels its test', async ({ page }) => {
   await syntheticAudio(page); await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
   await page.locator('.depth-slider').fill('1');
   await page.getByRole('button', { name: 'Auto', exact: true }).click();
@@ -163,11 +163,19 @@ test('Auto baseline keeps live bar motion visible', async ({ page }) => {
     sample();
   }));
   expect(travel).toBeGreaterThan(.05);
+  await page.locator('.depth-slider').fill('128');
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.settings.depthMode, v.mirrors.count, v.depthProfile.done, v.balls.count];
+  })).toEqual(['manual', 128, true, 8]);
+  await page.reload(); await physicsReady(page);
+  expect(await page.evaluate(() => ({ count: document.querySelector('.depth-slider').value,
+    profiling: document.querySelector('#dancinglights').physics.depthProfile !== undefined }))).toEqual({ count: '128', profiling: false });
 });
 
-test('Auto measures startup, freezes its choice, and manual depth cancels a retest', async ({ page }) => {
+test('Auto measures shallow startup and clicking Auto retests the full range', async ({ page }) => {
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.depthProfile?.done, null, { timeout: 30000 });
   const measured = await page.evaluate(() => {
     const view = document.querySelector('#dancinglights').physics;
     return { count: Number(document.querySelector('.depth-slider').value),
@@ -181,14 +189,6 @@ test('Auto measures startup, freezes its choice, and manual depth cancels a rete
     return { start: profile.start, maximum: profile.candidates.at(-1) };
   });
   expect(retest.start).toBeGreaterThan(measured.start); expect(retest.maximum).toBe(2048);
-  await page.locator('.depth-slider').fill('128');
-  await expect.poll(() => page.evaluate(() => {
-    const v = document.querySelector('#dancinglights').physics;
-    return [v.settings.depthMode, v.mirrors.count, v.depthProfile.done, v.balls.count];
-  })).toEqual(['manual', 128, true, 8]);
-  await page.reload(); await physicsReady(page);
-  expect(await page.evaluate(() => ({ count: document.querySelector('.depth-slider').value,
-    profiling: document.querySelector('#dancinglights').physics.depthProfile !== undefined }))).toEqual({ count: '128', profiling: false });
 });
 
 test('saved Auto depth and Reset display return to the shallow startup range', async ({ page }) => {
