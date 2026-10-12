@@ -1,5 +1,13 @@
 import * as THREE from './three.module.js';
 import { LIGHT_FIELD } from './lighting.js';
+import { FXAAShader } from './FXAAShader.js';
+
+// Use the pinned Three.js edge search to find a subpixel sample. Compose fog
+// at its contributing pixel centers before interpolation, retaining each
+// surface's depth instead of interpolating across a depth discontinuity.
+const EDGE_UV = FXAAShader.fragmentShader.slice(0, FXAAShader.fragmentShader.lastIndexOf('void main()'))
+  .replace('uniform sampler2D tDiffuse;', '').replace('uniform vec2 resolution;', '').replace('varying vec2 vUv;', '')
+  .replace('vec4 ApplyFXAA(', 'vec2 edgeUv(').replaceAll('return Sample( tex2D, uv );', 'return uv;');
 
 // The density rises quadratically outside the clear room on all three axes.
 // Integrate each positive part exactly along the view ray. This avoids a
@@ -37,11 +45,10 @@ const RAYS = `
 `;
 
 export class FogVolume {
-  constructor(lighting, renderer) {
+  constructor(lighting) {
     this.size = new THREE.Vector2();
     this.target = new THREE.WebGLRenderTarget(1, 1, {
       depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType),
-      samples: Math.min(4, renderer.capabilities.maxSamples),
     });
     // Store color in sRGB to preserve dark pigment detail with byte textures.
     // WebGL decodes samples to linear light before the volume composition.
@@ -54,6 +61,7 @@ export class FogVolume {
       volumeMax: { value: new THREE.Vector3() },
       volumeSpan: { value: new THREE.Vector3() },
       volumeDensity: { value: new THREE.Vector3() },
+      volumePixel: { value: new THREE.Vector2() },
       volumeProjectionInverse: { value: new THREE.Matrix4() },
       volumeWorld: { value: new THREE.Matrix4() },
     };
@@ -98,20 +106,41 @@ export class FogVolume {
           fogProbe /= max(weight, .0000001);
           gl_Position = vec4(position.xy, 0.0, 1.0);
         }`,
-      fragmentShader: DENSITY + `
+      fragmentShader: DENSITY + EDGE_UV + `
         uniform sampler2D volumeColor; uniform sampler2D volumeDepth; uniform vec3 mistBase;
+        uniform vec2 volumePixel;
         varying vec2 fogUv; varying vec3 fogLight; varying vec3 fogProbe;
         varying vec3 fogOrigin; varying vec3 fogRay;
         varying vec2 fogClipW;
-        void main() {
-          float depth = texture2D(volumeDepth, fogUv).x;
+        vec3 shadeVolume(vec2 uv, vec3 origin, vec3 ray) {
+          float depth = texture2D(volumeDepth, uv).x;
           float distance = depth * fogClipW.y / mix(fogClipW.x, fogClipW.y, depth);
-          vec3 end = fogOrigin + fogRay * distance;
-          float transmission = depth >= .9999999 ? 0.0 : exp(-min(16.0, opticalDepth(fogOrigin, end)));
+          vec3 end = origin + ray * distance;
+          float transmission = depth >= .9999999 ? 0.0 : exp(-min(16.0, opticalDepth(origin, end)));
           vec3 p = fogProbe * vec3(2.8, 4.0, 2.1);
           float cloud = sin(p.x + sin(p.z)) * sin(p.y - sin(p.x * .8));
           vec3 mist = mistBase + vec3(.0185 + .0025 * cloud) + .12 * fogLight / (vec3(1.0) + fogLight);
-          gl_FragColor = vec4(mix(mist, texture2D(volumeColor, fogUv).rgb, transmission), 1.0);
+          return mix(mist, texture2D(volumeColor, uv).rgb, transmission);
+        }
+        void main() {
+          // Reconstruct high-contrast edges after volume composition. Each
+          // contributing pixel uses its own ray and depth, so foreground
+          // pigment cannot bleed through an opaque bank. Smooth regions keep
+          // their original color. No multisampled depth resolve is needed.
+          vec3 originX = dFdx(fogOrigin), originY = dFdy(fogOrigin);
+          vec3 rayX = dFdx(fogRay), rayY = dFdy(fogRay);
+          vec3 color = shadeVolume(fogUv, fogOrigin, fogRay);
+          vec2 offset = (edgeUv(volumeColor, volumePixel, fogUv) - fogUv) / volumePixel;
+          float blend = max(abs(offset.x), abs(offset.y));
+          if (blend > 0.0) {
+            vec2 step = sign(offset);
+            vec2 uv = clamp(fogUv + step * volumePixel, volumePixel * .5, vec2(1.0) - volumePixel * .5);
+            step = (uv - fogUv) / volumePixel;
+            vec3 neighbor = shadeVolume(uv, fogOrigin + originX * step.x + originY * step.y,
+              fogRay + rayX * step.x + rayY * step.y);
+            color = mix(color, neighbor, blend);
+          }
+          gl_FragColor = vec4(color, 1.0);
           #include <colorspace_fragment>
         }`,
     }));
@@ -132,6 +161,7 @@ export class FogVolume {
     this.uniforms.volumeProjectionInverse.value.copy(camera.projectionMatrixInverse);
     this.uniforms.volumeWorld.value.copy(camera.matrixWorld);
     const span = this.uniforms.volumeSpan.value;
+    this.uniforms.volumePixel.value.set(1 / this.size.x, 1 / this.size.y);
     this.uniforms.volumeDensity.value.set(24 / span.x ** 3, 24 / span.y ** 3, 24 / span.z ** 3);
     renderer.info.autoReset = false; renderer.info.reset();
     try {

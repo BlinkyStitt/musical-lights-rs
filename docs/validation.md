@@ -739,8 +739,11 @@ light to retain soft grey fog in the light theme.
 
 The volume replaces the old bank draw with one composition draw and a bounded
 color/depth render target. Its sRGB byte texture preserves dark pigment detail
-while WebGL samples and blends in linear light. Up to four MSAA samples preserve
-geometry edges. Resizes and route cleanup release the target with the scene.
+while WebGL samples and blends in linear light. The composition smooths high
+contrast edges with the pinned Three.js FXAA edge search, using neighboring
+pixels after applying each ray's fog. It keeps
+flat colors unchanged and avoids multisampled color/depth resolves. Resizes and
+route cleanup release the target with the scene.
 No reflection camera, shadow map or bloom pass is added.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using

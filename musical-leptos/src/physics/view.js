@@ -87,7 +87,8 @@ export class PhysicsView {
     this.notice = new PhysicsNotice(this.status);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
-    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+    // The volume composition smooths edges without a multisampled depth resolve.
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, powerPreference: 'high-performance' });
     // Bound fragment work on large and high-density displays. CSS controls
     // and text keep their native resolution. Physical and reflected edges
     // share the actual render scale, including after fullscreen resizes.
@@ -436,7 +437,7 @@ export class PhysicsView {
     this.sideBars = new SideBars(this.scene, this.bars, count);
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
     this.enclosure = this.mirrors.walls;
-    this.fogVolume = new FogVolume(this.lighting, this.renderer);
+    this.fogVolume = new FogVolume(this.lighting);
     // Compile hidden depth-copy materials before Auto first draws them.
     // Their first shader link must not interrupt live input during a trial.
     this.renderer.compile(this.scene, this.camera);

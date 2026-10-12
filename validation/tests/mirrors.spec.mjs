@@ -139,7 +139,7 @@ test('volume preserves clear colors and integrates clear, oblique and reversed r
     v.scene.add(marker);
     let camera;
     const target = new THREE.WebGLRenderTarget(64, 64); target.texture.colorSpace = THREE.SRGBColorSpace;
-    const pixels = new Uint8Array(64 * 64 * 4), samples = [], colors = [];
+    const pixels = new Uint8Array(64 * 64 * 4), samples = [], colors = []; let smoothEdgePixels = 0;
     const linear = byte => { const n = byte / 255; return n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4; };
     try {
       for (const projection of ['orthographic', 'perspective']) for (const [eye, end] of [
@@ -182,16 +182,23 @@ test('volume preserves clear colors and integrates clear, oblique and reversed r
         }
         colors.push({ color, direct: pair[0], volume: pair[1] });
       }
+      marker.scale.set(.04, .04, 1); marker.rotateZ(Math.PI / 6); marker.material.color.setHex(0xffffff);
+      marker.visible = false; v.render(camera); v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+      const air = pixels.slice(); marker.visible = true;
+      v.render(camera); v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+      for (let i = 0; i < pixels.length; i += 4)
+        if (pixels[i] > air[i] + 3 && pixels[i] < 252) smoothEdgePixels++;
     } finally {
       v.renderer.setRenderTarget(null); target.dispose(); v.scene.remove(marker); marker.geometry.dispose(); marker.material.dispose();
     }
-    return { samples, colors };
+    return { samples, colors, smoothEdgePixels };
   });
   for (const sample of evidence.samples) for (const transmission of sample.transmission)
     expect(Math.abs(transmission - sample.expected), JSON.stringify(sample)).toBeLessThan(.015);
   for (const color of evidence.colors)
     expect(Math.max(...color.direct.map((value, i) => Math.abs(value - color.volume[i]))), JSON.stringify(color)).toBeLessThanOrEqual(1);
   await info.attach('volume-transmission.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+  expect(evidence.smoothEdgePixels).toBeGreaterThan(16);
 });
 
 test('fog light remains stable at rest and softens alternating attack frames', async ({ page }, info) => {
