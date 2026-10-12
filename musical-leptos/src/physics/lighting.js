@@ -7,7 +7,9 @@ export const LIGHT_FIELD = `
   uniform vec4 lightStrength; uniform vec2 colorEmission; uniform float reflectionFade;
   vec3 sourceIllumination(vec3 delta, vec3 normal, vec3 color, float isotropic) {
     float squared = dot(delta, delta);
-    float radius = lightStrength.z;
+    // Air scatters a wider halo than the nearby surface-light footprint.
+    // Keep the local surface range unchanged and share the same source budget.
+    float radius = lightStrength.z * mix(1.0, 3.0, isotropic);
     if (squared >= radius * radius) return vec3(0.0);
     float inverseDistance = inversesqrt(max(squared, .0000000001));
     float falloff = 1.0 - squared * inverseDistance / radius;

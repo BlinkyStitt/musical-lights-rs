@@ -368,3 +368,12 @@ highlights. Four reusable point lights illuminate nearby surfaces during attacks
 with hemisphere/directional fill and lit enclosure surfaces. Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;
 physical-iPhone and human-listening acceptance remain pending.
+
+Volumetric fog keeps at least three rows of gradual transition, including at
+depth 0. Zero still draws no extra ball images. Larger depth settings extend
+the fog transition with the scene. Density grows continuously outside the clear
+room, so successive regions become thicker from all viewing angles.
+Source colors scatter across three times the local surface-light range.
+A shared brightness limit keeps their hues as the glows overlap. The grey base
+and smoothed attack light keep the fog soft. Fog uses the existing bounded
+source field and one composition pass, without bloom or extra light objects.

@@ -12,6 +12,75 @@ test.beforeEach(async ({ page }) => {
 });
 async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
 
+test('colored light reaches three progressively thicker fog regions including depth zero', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    cancelAnimationFrame(v.request); v.stopPreview();
+    const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    hidden.forEach(mesh => mesh.visible = false);
+    const target = new THREE.WebGLRenderTarget(64, 64); target.texture.colorSpace = THREE.SRGBColorSpace;
+    const pixels = new Uint8Array(64 * 64 * 4), samples = [];
+    const camera = new THREE.OrthographicCamera(-.01, .01, .01, -.01, .01, 2000);
+    const center = v.renderedEnclosureHeight / 2, depth = v.config[5];
+    camera.position.set(.95, center, 2); camera.lookAt(.95, center, -1); camera.updateMatrixWorld();
+    const marker = new THREE.Mesh(new THREE.PlaneGeometry(.1, .1), new THREE.MeshBasicMaterial({ color: 0, fog: false }));
+    v.scene.add(marker);
+    const u = v.lighting.uniforms;
+    u.mistBase.value.setRGB(.02, .02, .02); u.fogAttack.value.fill(0);
+    u.stripState.value.forEach(state => state.set(.6, center, 0));
+    u.stripColor.value.forEach(color => color.setRGB(0, 0, 0));
+    u.glowBallColor.value.forEach(color => color.setRGB(0, 0, 0));
+    u.lightStrength.value.set(.18, .8, .22, 0);
+    const read = () => {
+      v.renderer.setRenderTarget(target); v.render(camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+      return Array.from(pixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 3));
+    };
+    const linear = byte => { const x = byte / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; };
+    try {
+      for (const count of [0, 1, 3, 6, 32]) {
+        v.mirrors.setCount(count); v.mirrors.meshes.forEach(({ mesh }) => { mesh.visible = false; });
+        v.fogVolume.update(v.width, v.renderedEnclosureHeight, depth, count, v.camera.far);
+        const span = v.fogVolume.uniforms.volumeSpan.value.z;
+        const regions = [];
+        for (const fraction of [.25, .5, .75]) {
+          marker.position.set(.95, center, -depth / 2 - span * fraction);
+          u.stripColor.value[0].setRGB(0, 0, 0); const dark = read();
+          marker.material.color.setRGB(1, 1, 1); const white = read(); marker.material.color.setRGB(0, 0, 0);
+          u.stripColor.value[0].setRGB(1, 0, 0); const red = read();
+          u.stripColor.value[0].setRGB(0, 0, 1); const blue = read();
+          u.stripColor.value[0].setRGB(0, 0, 0);
+          regions.push({ fraction, transmission: linear(white[0]) - linear(dark[0]),
+            red: red.map((value, i) => value - dark[i]), blue: blue.map((value, i) => value - dark[i]) });
+        }
+        samples.push({ count, span, regions, images: v.mirrors.meshes.reduce((sum, { mesh }) => sum + mesh.count, 0) });
+      }
+      return { samples, balls: v.balls.count, physicalDepth: depth };
+    } finally {
+      v.renderer.setRenderTarget(null); target.dispose(); v.scene.remove(marker); marker.geometry.dispose(); marker.material.dispose();
+    }
+  });
+  await info.attach('fog-color-depth.json', { body: JSON.stringify(result), contentType: 'application/json' });
+  for (const sample of result.samples) {
+    expect(sample.span).toBeGreaterThanOrEqual(result.physicalDepth * 3);
+    if (sample.count === 0) expect(sample.images).toBe(0);
+    for (const [i, region] of sample.regions.entries()) {
+      expect(Math.abs(region.transmission - Math.exp(-8 * region.fraction ** 3))).toBeLessThan(.015);
+      expect(region.red[0], JSON.stringify(sample)).toBeGreaterThan(i === 0 ? 0 : 3);
+      expect(region.blue[2], JSON.stringify(sample)).toBeGreaterThan(i === 0 ? 0 : 3);
+      expect(Math.abs(region.red[1])).toBeLessThanOrEqual(1); expect(Math.abs(region.red[2])).toBeLessThanOrEqual(1);
+      expect(Math.abs(region.blue[0])).toBeLessThanOrEqual(1); expect(Math.abs(region.blue[1])).toBeLessThanOrEqual(1);
+    }
+    expect(sample.regions[0].transmission).toBeGreaterThan(sample.regions[1].transmission);
+    expect(sample.regions[1].transmission).toBeGreaterThan(sample.regions[2].transmission);
+  }
+  expect(result.balls).toBe(8);
+});
+
 test('volumetric fog fills back, side and vertical rays and blocks distant objects', async ({ page }, info) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -117,7 +186,7 @@ test('volumetric fog fills back, side and vertical rays and blocks distant objec
       expect(sample.emptyPixels, JSON.stringify(sample)).toBe(0);
       expect(Math.max(...sample.behind.map((value, i) => Math.abs(value - sample.air[i]))), JSON.stringify(sample)).toBeLessThanOrEqual(1);
       expect(Math.max(...sample.front.slice(0, 3).map((value, i) => Math.abs(value - sample.air[i])))).toBeGreaterThan(30);
-      expect(sample.span).toBeLessThanOrEqual(sample.requested + .001);
+      expect(sample.span).toBeLessThanOrEqual(Math.max(sample.requested, 3 * .24) + .001);
     }
   }
   expect(errors).toEqual([]);

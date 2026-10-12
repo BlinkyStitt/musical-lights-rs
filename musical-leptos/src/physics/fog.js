@@ -119,7 +119,10 @@ export class FogVolume {
           float transmission = depth >= .9999999 ? 0.0 : exp(-min(16.0, opticalDepth(origin, end)));
           vec3 p = fogProbe * vec3(2.8, 4.0, 2.1);
           float cloud = sin(p.x + sin(p.z)) * sin(p.y - sin(p.x * .8));
-          vec3 mist = mistBase + vec3(.0185 + .0025 * cloud) + .12 * fogLight / (vec3(1.0) + fogLight);
+          // A shared exposure rolloff retains saturated source hues as their
+          // halos overlap. The neutral base and smoothed white attacks stay soft.
+          float peak = max(fogLight.r, max(fogLight.g, fogLight.b));
+          vec3 mist = mistBase + vec3(.0185 + .0025 * cloud) + .28 * fogLight / (1.0 + peak);
           return mix(mist, texture2D(volumeColor, uv).rgb, transmission);
         }
         void main() {
@@ -151,7 +154,9 @@ export class FogVolume {
     const span = far * .8 * -Math.expm1(-depth * count / (far * .8));
     this.uniforms.volumeMin.value.set(0, 0, -depth / 2);
     this.uniforms.volumeMax.value.set(width, height, 2.1);
-    this.uniforms.volumeSpan.value.set(width * 4, Math.max(width, height) * 2, Math.max(.001, span));
+    // Even zero images need space for light to disappear into the medium.
+    // Image count still controls geometry; it does not collapse the fog bank.
+    this.uniforms.volumeSpan.value.set(width * 4, Math.max(width, height) * 2, Math.max(depth * 3, span));
   }
   render(renderer, scene, camera) {
     const output = renderer.getRenderTarget(), autoReset = renderer.info.autoReset;
