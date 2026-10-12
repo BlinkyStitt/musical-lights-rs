@@ -22,6 +22,11 @@ test.describe('expanded recovery notice geometry', () => {
       await page.evaluate(() => document.querySelector('#dancinglights').physics.notice.show('Motion updates are delayed.', 'Motion updates are delayed.'));
       await expect(page.locator('.physics-status')).toBeInViewport({ ratio: 1 });
       expect(await geometry()).toEqual(before);
+      expect(await page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect();
+        const scene = rect('.balloon-layer'), notices = rect('.recovery-notices'), controls = rect('.scene-controls');
+        return { belowScene: notices.top >= scene.bottom, aboveControls: notices.bottom <= controls.top };
+      })).toEqual({ belowScene: true, aboveControls: true });
       await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
       await page.evaluate(() => document.querySelector('#dancinglights').physics.notice.clear());
       await expect(page.locator('.physics-status')).toBeEmpty();
