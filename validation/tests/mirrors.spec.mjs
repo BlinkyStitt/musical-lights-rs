@@ -431,8 +431,11 @@ test('normal scenes fill a larger centered frame before and after fullscreen', a
         })).toEqual({ normal: true, centeredX: true, centeredY: true, sized: true, large: true, bounded: true, noOverflow: true });
         if (pass === 0) {
           await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-          await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
-          await page.keyboard.press('Escape');
+          await page.waitForFunction(() => {
+            const card = document.querySelector('.audio-card');
+            return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+          }, null, { timeout: 5000 });
+          await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).press('Enter');
         }
       }
     }
