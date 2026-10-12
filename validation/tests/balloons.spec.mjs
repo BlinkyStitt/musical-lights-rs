@@ -5,6 +5,49 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
+test('idle waves preserve ball pigments despite real bar contacts', async ({ page }) => {
+  await page.goto(url); await physicsReady(page);
+  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  const evidence = await page.evaluate(() => new Promise(resolve => {
+    const v = document.querySelector('#dancinglights').physics;
+    const initial = Array.from(v.pigments), tick = v.current[2];
+    const levels = Array.from(v.input.slice(0, 24));
+    let contacts = 0, changed = false;
+    const sample = () => {
+      contacts += v.current.slice(v.layout[10], v.layout[11]).reduce((sum, value) => sum + value, 0);
+      changed ||= v.pigments.some((value, i) => value !== initial[i]);
+      if (v.current[2] < tick + 120) { requestAnimationFrame(sample); return; }
+      resolve({ changed, contacts, moved: v.input.slice(0, 24).some((value, i) => Math.abs(value - levels[i]) > .01),
+        attacks: Array.from(v.input.slice(38)), edges: Array.from(v.meshEdges) });
+    };
+    sample();
+  }));
+  expect(evidence.contacts).toBeGreaterThan(0);
+  expect(evidence.moved).toBe(true);
+  expect(evidence.edges.some(value => value > 0)).toBe(true);
+  expect(evidence.attacks).toEqual(Array(24).fill(0));
+  expect(evidence.changed).toBe(false);
+});
+
+test('only acoustic attack edges qualify new bar contacts for ball color', async ({ page }) => {
+  await syntheticAudio(page); await page.goto(url); await startFrozen(page);
+  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  const before = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments));
+  await page.evaluate(() => window.sendBars(Array(24).fill(1)));
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return Math.min(...v.current.slice(v.layout[9], v.layout[10])) / v.current[v.layout[17] + 1];
+  })).toBeGreaterThan(.95);
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments))).toEqual(before);
+  await page.evaluate(() => window.sendBars(Array(24).fill(0)));
+  await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeLessThan(.0031);
+  await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38)))).toEqual(Array(24).fill(1));
+  await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value, i) => value !== before[i]), before)).toBe(true);
+  await page.evaluate(() => { window.audioNow += .181; });
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38)))).toEqual(Array(24).fill(0));
+});
+
 test('a subpixel seam fragment uses its visible wrapped copy for native hover', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(url); await physicsReady(page);

@@ -203,9 +203,9 @@ the existing velocity and overlap limits.
 are independent of browser types. Snapshots contain sphere position, rotation,
 radius, mass, linear/angular velocity and color, actual bar tops, 8×24 bar
 contact impulses, and each sphere's total normal contact impulse in N·s.
-Protocol 7 adds independent device gravity at input[34..36], enabled by
-input[37], and publishes the 38-value input length at layout[22]. It also
-preserves SI shake magnitudes and uses the separate contact speed bounds above.
+Independent device gravity uses input[34..36], enabled by input[37]. Protocol 12
+adds audio attack edges at input[38..61] and publishes the 62-value input length
+at layout[22]. SI shake magnitudes and the separate contact speed bounds stay unchanged.
 The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 6 changes the engine to gravity release and balanced scrolling; historical replays require their matching engine. Protocol 5 separates the 24 source bands in `layout[0]` from the 8 balls in `layout[21]`, with compact body and contact arrays. The ball count stays constant across normal and fullscreen views, so resizing never removes or respawns bodies. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
 
 The worker clock runs independently of render frames. Each batch processes at
@@ -234,13 +234,14 @@ Tempo changes integrate into the running phase. Switching scrolling off eases
 to a stop in place; Reduced Motion disables automatic travel. Source colors,
 contacts, accessible labels and audio data keep their source identity.
 
-The separate tempo setter leaves the 38-value held input and 99-value audio
-transport unchanged. New reports include the random seed, starting accent
+The separate tempo setter leaves the held physical input and audio transport
+unchanged. Physics input contains 38 motion values followed by 24 current audio
+attack edges. Recording retains those edges separately from decorative bar travel.
+New reports include the random seed, starting accent
 ordinal and tempo, dance settings, and tick-stamped input events with their
-tempo and accent in worker application order. Phone report v4 replay applies
+tempo and accent in worker application order. Phone report v5 replay applies
 each input and its cue together before stepping, including inputs at the same
-tick. Older report formats require their historical replay tool. Protocol 8
-requires its matching engine.
+tick. Older report formats and physics protocols require their historical replay tool.
 
 The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
 contact-pigment history, and quintic bar motion are hardware-neutral
@@ -261,10 +262,11 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 11 rejects replays from the previous rounded-bar engine.
+Physics protocol 12 requires attack edges and rejects replays from previous engines.
 Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
 white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
-intensity. Only distinct bar impacts blend sphere colors.
+intensity. Only distinct impacts with a source that has an active audio attack
+blend sphere colors. Quiet bars, idle waves and the listening floor cannot transfer color.
 
 Hidden pages and lost WebGL contexts pause both clocks. Return resets the
 frame clock. Route cleanup closes audio, terminates the worker, removes sensor
@@ -358,7 +360,8 @@ color. LED palettes and acoustic analysis are unchanged.
 Three recent contact pigments per ball drive a smooth procedural pattern in
 object coordinates. Its appearance rotates with the physical quaternion;
 Reduced Motion stops additional pattern drift. Existing average-color snapshot
-diagnostics stay intact, and resting contacts do not keep adding pigments.
+diagnostics stay intact. A new contact adds pigment only while the contacted
+source has an active audio attack. Resting contacts and decorative waves do not add pigments.
 
 Bars use diffuse Lambert lighting with contiguous colored boundaries and white emissive attack
 highlights. Four reusable point lights illuminate nearby surfaces during attacks,

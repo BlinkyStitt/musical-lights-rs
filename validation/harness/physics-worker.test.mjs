@@ -60,7 +60,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
   const w = await worker();
   try {
     await w.send({ type: 'record', config: w.ready.config });
-    const values = new Float32Array(38); values[32] = .6;
+    const values = new Float32Array(w.ready.layout[22]); values[32] = .6;
     for (let frame = 0; frame < 60; frame++) {
       await w.send({ type: 'pulse', timestamp: 1000 + frame * 1000 / 60,
         input: values.slice(), listening: true, tempo: 60, accent: 0 });
@@ -73,6 +73,8 @@ test('worker records listening-floor inputs for exact replay without adding acce
     assert(report.inputs.some(event => Math.max(...event.values.slice(0, 24)) > .15));
     assert(report.inputs.every(event => Math.max(...event.values.slice(0, 24)) <= 1 / 6 + 1e-7));
     assert(report.inputs.every(event => event.accent === 0));
+    assert(report.inputs.every(event => event.values.slice(38).every(value => value === 0)),
+      'The decorative listening floor must not create audio attacks');
     assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
     assert(values.slice(0, 24).every(value => value === 0));
     assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v5',
@@ -85,7 +87,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
     const w = await worker();
     try {
       await w.send({ type: 'record', config: w.ready.config });
-      const values = Array(38).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
+      const values = Array(w.ready.layout[22]).fill(0); values[0] = .3; values[32] = .6; values[33] = 1;
       const off = [...values]; off[flag] = disabled;
       await w.send({ type: 'pulse', timestamp: 1000, input: values, tempo: 160, accent: 1 });
       await w.send({ type: 'pulse', timestamp: 1000, input: off, tempo: 80, accent: 2 });
