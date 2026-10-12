@@ -2,6 +2,7 @@ import * as THREE from './three.module.js';
 
 export const LIGHT_FIELD = `
   uniform vec3 stripState[24]; uniform vec3 stripColor[24]; uniform float fogAttack[24];
+  uniform vec2 stripPulse[24]; uniform float colorAttack;
   uniform vec3 glowBallPosition[8]; uniform vec3 glowBallColor[8];
   uniform vec3 lightExtent; uniform mat3 lightView;
   uniform vec4 lightStrength; uniform vec2 colorEmission; uniform float reflectionFade;
@@ -23,7 +24,7 @@ export const LIGHT_FIELD = `
       float lower = stripState[i].y - point.y;
       float upper = lightExtent.y - stripState[i].y - point.y;
       vec3 delta = vec3(dx, abs(lower) < abs(upper) ? lower : upper, 0.0);
-      vec3 color = stripColor[i] * lightStrength.x;
+      vec3 color = stripColor[i] * (lightStrength.x + colorAttack * mix(stripPulse[i].x, stripPulse[i].y, isotropic));
       color += vec3(mix(stripState[i].z, fogAttack[i] * .18, isotropic) * lightStrength.y);
       illumination += sourceIllumination(delta, normal, color, isotropic);
     }
@@ -50,6 +51,8 @@ export class SceneLighting {
     this.mistColor = new THREE.Color(0xffffff);
     this.uniforms = {
       fogAttack: { value: new Float32Array(24) },
+      stripPulse: { value: Array.from({ length: 24 }, () => new THREE.Vector2()) },
+      colorAttack: { value: 1 },
       mistBase: { value: this.mistColor },
       stripState: { value: Array.from({ length: 24 }, () => new THREE.Vector3()) },
       stripColor: { value: Array.from({ length: 24 }, (_, i) => new THREE.Color().fromArray(palette, i * 3)) },
@@ -68,6 +71,7 @@ export class SceneLighting {
     this.uniforms.lightStrength.value.set(settings.colorSpill ?? .18, settings.attackLight ?? .8, settings.lightRange ?? .22, 0);
     this.uniforms.colorEmission.value.set(settings.barGlow ?? .08, settings.ballGlow ?? .12);
     this.uniforms.attackGlow.value = settings.attackGlow ?? 1;
+    this.uniforms.colorAttack.value = settings.colorAttack ?? 1;
     this.uniforms.reflectionFade.value = settings.depthFade ?? .72;
   }
   apply(shader) {
@@ -81,7 +85,12 @@ export class SceneLighting {
     const dt = Math.max(0, Math.min(.1, (now - (this.fogAt ?? now)) / 1000));
     this.fogAt = now;
     const blend = -Math.expm1(-dt / .35);
-    for (let i = 0; i < 24; i++) this.uniforms.fogAttack.value[i] += (view.meshEdges[i] - this.uniforms.fogAttack.value[i]) * blend;
+    for (let i = 0; i < 24; i++) {
+      this.uniforms.fogAttack.value[i] += (view.meshEdges[i] - this.uniforms.fogAttack.value[i]) * blend;
+      const pulse = this.uniforms.stripPulse.value[i];
+      pulse.x = view.meshPulses[i];
+      pulse.y += (pulse.x - pulse.y) * blend;
+    }
     this.uniforms.lightExtent.value.set(view.width, height, depth);
     this.uniforms.lightView.value.setFromMatrix4(view.camera.matrixWorldInverse);
     for (let i = 0; i < 24; i++) this.uniforms.stripState.value[i].set(((i + phase) % 24 + .5) * pitch, heights[offset + i], view.meshEdges[i]);

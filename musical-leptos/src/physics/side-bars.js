@@ -12,9 +12,11 @@ export class SideBars {
     this.geometry = bars.geometry.clone();
     this.halfWidth = this.geometry.boundingBox.max.x;
     this.edges = new Float32Array(this.capacity);
+    this.pulses = new Float32Array(this.capacity);
     this.offsets = new Float32Array(this.capacity);
     this.sourceBands = new Uint8Array(this.capacity);
     this.geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.edges, 1));
+    this.geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.pulses, 1));
     this.geometry.setAttribute('backgroundOffset', new THREE.InstancedBufferAttribute(this.offsets, 1));
     this.material = bars.material.clone();
     this.material.onBeforeCompile = shader => {
@@ -55,12 +57,13 @@ export class SideBars {
         target[n * 16 + 12] += offset;
         this.mesh.instanceColor.array.set(this.bars.instanceColor.array.subarray(i * 3, i * 3 + 3), n * 3);
         this.edges[n] = this.bars.geometry.attributes.edge.array[i];
+        this.pulses[n] = this.bars.geometry.attributes.pulse.array[i];
         this.offsets[n] = offset; this.sourceBands[n] = i % count;
         n++;
       }
     }
     this.mesh.count = n;
-    for (const attr of [this.geometry.attributes.edge, this.geometry.attributes.backgroundOffset, this.mesh.instanceMatrix, this.mesh.instanceColor]) {
+    for (const attr of [this.geometry.attributes.edge, this.geometry.attributes.pulse, this.geometry.attributes.backgroundOffset, this.mesh.instanceMatrix, this.mesh.instanceColor]) {
       attr.clearUpdateRanges(); attr.addUpdateRange(0, n * attr.itemSize); attr.needsUpdate = true;
     }
   }

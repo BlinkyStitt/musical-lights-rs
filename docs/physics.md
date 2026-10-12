@@ -364,8 +364,14 @@ diagnostics stay intact. A new contact adds pigment only while the contacted
 source has an active audio attack. Resting contacts and decorative waves do not add pigments.
 
 Bars use diffuse Lambert lighting with contiguous colored boundaries and white emissive attack
-highlights. Four reusable point lights illuminate nearby surfaces during attacks,
-with hemisphere/directional fill and lit enclosure surfaces. Rendering remains
+highlights. A separate colored pulse multiplies the source attack envelope by
+its shared display loudness level. Physical bar travel, including the listening
+floor, does not set audio brightness. Silent preview uses only its rising wave.
+The saved **Colored attack light** control sets pulse strength from 0 to 3,
+independently of the white **Bar attack glow** control. One bounded field of
+24 paired strips and eight balls lights nearby surfaces and fog; the fog pulse
+uses a 350 ms envelope to soften rapid changes. Hemisphere/directional fill
+lights the enclosure. Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;
 physical-iPhone and human-listening acceptance remain pending.
 

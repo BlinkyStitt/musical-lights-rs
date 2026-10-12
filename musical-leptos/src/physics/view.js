@@ -65,6 +65,7 @@ export class PhysicsView {
     this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
+    this.meshPulses = new Float32Array(144);
     this.timing = { snapshots: [], resizes: [] };
     this.meters = [...this.graph.querySelectorAll('[role="meter"]')];
     this.meterValues = new Uint8Array(24);
@@ -411,28 +412,30 @@ export class PhysicsView {
     // Extend the outer ends in the vertex shader, using the physical support span.
     const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
+    geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.meshPulses, 1));
     this.barRoof = { value: this.height };
     this.barDepth = { value: 1 + this.settings.mirrorCount };
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
       Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; coloredPulse = pulse; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
       shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;');
-      shader.fragmentShader = 'varying float depthDistance; uniform float attackGlow; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'varying float depthDistance; uniform float attackGlow; uniform float colorAttack; varying float coloredPulse; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
           float distance = min(halfWidth - abs(local.x), barHeight * (.5 - abs(local.y)));
           float pixel = max(0.000001, min(pixelRatio * fwidth(distance), min(halfWidth, barHeight * .5) / 3.0));
           float front = faceIsFront;
           float inner = (1.0 - smoothstep(1.25 * pixel, 2.5 * pixel, distance)) * front;
+          vec3 barColor = diffuseColor.rgb;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fade = pow(reflectionFade, max(0.0, depthDistance)); outgoingLight = outgoingLight * fade + (totalEmissiveRadiance + nearbyLight) * (1.0 - fade);\n#include <opaque_fragment>');
-      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + vec3(glow * inner * attackGlow);');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + barColor * coloredPulse * colorAttack + vec3(glow * inner * attackGlow);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
@@ -484,7 +487,13 @@ export class PhysicsView {
       const top = current[barOffset + i];
       const wave = this.waveLight(i, top, current[this.layout[17] + 1], now / 1000, !this.listening);
       const edge = this.listening ? this.edges[i] : wave * (this.reduced.matches ? .5 : 1);
-      for (let copy = 0; copy < 6; copy++) this.meshEdges[i + copy * count] = edge;
+      // Shared display levels contain audio loudness; physical travel also
+      // includes the decorative listening floor and must not set brightness.
+      const pulse = (this.idle ? edge : this.edges[i]) * this.input[i];
+      for (let copy = 0; copy < 6; copy++) {
+        this.meshEdges[i + copy * count] = edge;
+        this.meshPulses[i + copy * count] = pulse;
+      }
       const column = (i + phase) % count;
       this.object.scale.set(1, top, 1);
       for (let end = 0; end < 2; end++) {
@@ -500,6 +509,7 @@ export class PhysicsView {
     this.lighting.update(this, current, barOffset, phase, pitch, height, depth, now);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
+    this.bars.geometry.attributes.pulse.needsUpdate = true;
     this.renderedEnclosureHeight = height;
     this.mirrors.update(this.width, height, depth, this.camera);
     this.renderedAt = performance.timeOrigin + now;

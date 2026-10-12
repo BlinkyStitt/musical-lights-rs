@@ -280,7 +280,7 @@ test('fog light remains stable at rest and softens alternating attack frames', a
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {};
     v.previous = v.current.slice(); v.listening = true;
-    v.push(new Float32Array(24), new Float32Array(24));
+    v.push(new Float32Array(24).fill(1), new Float32Array(24));
     v.current.fill(v.current[v.layout[17]] / 2, v.layout[9], v.layout[9] + 24);
     v.mirrors.setCount(6); v.draw(performance.now());
     const hidden = [v.bars, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
@@ -296,6 +296,7 @@ test('fog light remains stable at rest and softens alternating attack frames', a
     };
     try {
       v.lighting.uniforms.fogAttack.value.fill(0);
+      v.lighting.uniforms.stripPulse.value.forEach(pulse => pulse.set(0, 0));
       const at = performance.now(); v.lighting.fogAt = at;
       const resting = [], alternating = [], envelopes = [];
       for (let i = 0; i < 30; i++) { v.draw(at + i * 1000 / 60); resting.push(render()); }
