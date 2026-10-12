@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady } from '../physics-state.mjs';
+import { physicsReady, scrollingIntersections } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
@@ -22,19 +22,11 @@ test('phone opens expanded without capture and allows scrolling to notices, song
       });
       for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
         await page.setViewportSize(viewport);
-        for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
-          const target = page.getByRole('checkbox', { name: label, exact: true }).locator('..');
-          await target.scrollIntoViewIfNeeded();
-          await expect(target).toBeInViewport({ ratio: 1 });
-        }
-        await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
-        await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
-        await page.locator('.physics-status').scrollIntoViewIfNeeded();
-        await expect(page.locator('.physics-status')).toBeInViewport({ ratio: 1 });
-        await page.locator('.camera-rotation').scrollIntoViewIfNeeded();
-        await expect(page.locator('.camera-rotation')).toBeInViewport({ ratio: 1 });
+        const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
+          'label:has(.motion-button)', 'label:has(.scroll-lights)', '.fullscreen-button',
+          '.physics-status', '.frame-rate', '.camera-rotation'];
+        expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
         await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
-        await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
         expect(await page.evaluate(() => {
           const camera = document.querySelector('.camera-controls').getBoundingClientRect();
           const controls = document.querySelector('.audio-controls').getBoundingClientRect();
@@ -45,7 +37,7 @@ test('phone opens expanded without capture and allows scrolling to notices, song
         })).toEqual({ separate: true, touchSize: true, aligned: true, touchable: true });
         await page.locator('.camera-rotation').fill('30');
         await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(30);
-        await page.locator('.camera-rotation').focus(); await page.keyboard.press('ArrowLeft');
+        await page.keyboard.press('ArrowLeft');
         await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraBase)).toBe(29);
         const scene = await page.locator('#dancinglights').boundingBox(); expect(scene.height).toBeGreaterThanOrEqual(200);
       }

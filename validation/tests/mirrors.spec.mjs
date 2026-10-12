@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
+import { scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 // Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
@@ -946,10 +946,8 @@ for (const path of ['/', '/advanced/']) {
       await page.setViewportSize(viewport);
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
       await expect(tempo).toHaveText('132 BPM');
-      for (const control of [tempo, fps, page.locator('.camera-rotation'), page.getByRole('button', { name: 'Exit fullscreen', exact: true })]) {
-        await control.scrollIntoViewIfNeeded();
-        await expect(control).toBeInViewport({ ratio: 1 });
-      }
+      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation', '.fullscreen-button']);
+      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1, '.fullscreen-button': 1 });
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     }
