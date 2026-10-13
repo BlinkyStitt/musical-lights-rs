@@ -61,6 +61,9 @@ pub struct State {
     pub overruns: u32,
 }
 fn now() -> u64 {
+    now_us() / 1000
+}
+fn now_us() -> u64 {
     // TIM2 keeps counting while flash stalls code fetch. Extend its 32-bit
     // hardware count for acquisition ages; TIM5 schedules Embassy futures.
     static CLOCK: embassy_sync::blocking_mutex::Mutex<Raw, core::cell::RefCell<PpsCounter>> =
@@ -69,7 +72,6 @@ fn now() -> u64 {
         counter
             .borrow_mut()
             .capture(embassy_stm32::pac::TIM2.cnt().read())
-            / 1000
     })
 }
 pub struct BoardFlash(pub embassy_stm32::flash::Flash<'static, embassy_stm32::flash::Blocking>);
@@ -223,7 +225,6 @@ pub async fn controller(
 }
 #[embassy_executor::task]
 pub async fn pps(mut capture: InputCapture<'static, peripherals::TIM2>, state: Shared) {
-    let mut counter = PpsCounter::default();
     loop {
         match with_timeout(
             Duration::from_secs(2),
@@ -232,11 +233,11 @@ pub async fn pps(mut capture: InputCapture<'static, peripherals::TIM2>, state: S
         .await
         {
             Ok(value) => {
-                let extended = counter.capture(value);
-                state.lock().await.pps = Some((extended, now()));
+                state.lock().await.pps = musical_lights_core::gps::pps_timestamp(value, now_us())
+                    .map(|edge| (edge, edge / 1000));
             }
             Err(_) => {
-                let _ = counter.capture(embassy_stm32::pac::TIM2.cnt().read());
+                let _ = now_us();
                 state.lock().await.pps = None;
             }
         }

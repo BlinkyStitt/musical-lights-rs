@@ -868,3 +868,18 @@ fn amulet_magnetic_north_survives_gps_loss_and_ring_overlap_keeps_identity() {
         assert_eq!(frame[index], LinSrgb::new(0.0, 0.05, 0.125));
     }
 }
+
+#[test]
+fn pps_anchor_uses_capture_time_across_wrap_and_rejects_stale_edges() {
+    use crate::gps::pps_timestamp;
+    assert_eq!(pps_timestamp(1_000_000, 1_012_345), Some(1_000_000));
+    let now = (u32::MAX as u64) + 1001;
+    assert_eq!(
+        pps_timestamp(u32::MAX - 999, now),
+        Some(u32::MAX as u64 - 999)
+    );
+    assert_eq!(pps_timestamp(500, now), Some(u32::MAX as u64 + 501));
+    assert_eq!(pps_timestamp(1001, now), None); // Future edge, not a previous wrap.
+    assert_eq!(pps_timestamp(5, 2_000_005), Some(5));
+    assert_eq!(pps_timestamp(5, 2_000_006), None);
+}

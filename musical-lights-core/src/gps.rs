@@ -133,3 +133,13 @@ impl PpsCounter {
         self.elapsed_us
     }
 }
+
+/// Resolve a captured edge against the extended counter, including timer wrap.
+/// Discard stale or future captures instead of labeling task wake-up time as PPS.
+pub fn pps_timestamp(captured: u32, current_us: u64) -> Option<u64> {
+    let delay = (current_us as u32).wrapping_sub(captured);
+    if delay > 2_000_000 {
+        return None;
+    }
+    current_us.checked_sub(delay as u64)
+}
