@@ -9,7 +9,7 @@ import { flashPCM, flashTrace, flashSummary } from '../partial/flash-fixtures.mj
 const bytes = await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url));
 const module = new WebAssembly.Module(bytes);
 const source = await readFile(new URL('../../musical-lights-worklet/processor.js', import.meta.url), 'utf8');
-function processor(channel = 0, diagnostics = false) {
+function processor(channel = 0, diagnostics = false, options = {}) {
   const messages = [];
   const scope = { currentFrame: 0, sampleRate: 48000, WebAssembly, Float32Array, Float64Array,
     AudioWorkletProcessor: class { port = { postMessage(data, transfer = []) {
@@ -21,7 +21,7 @@ function processor(channel = 0, diagnostics = false) {
     registerProcessor: (_, value) => { scope.Processor = value; },
   };
   vm.runInNewContext(source, scope);
-  const value = new scope.Processor({ processorOptions: { module, channel, diagnostics, reducedMotion: false } });
+  const value = new scope.Processor({ processorOptions: { module, channel, diagnostics, reducedMotion: false, ...options } });
   return { value, scope, messages, push(samples, extra) {
     const ok = value.process([extra ? [samples, extra] : [samples]]);
     scope.currentFrame += samples.length;
@@ -294,4 +294,73 @@ test('browser and Rust share defaults and reject invalid audio settings before c
     settings[23] = .25; expect(w.processor_configure(h)).toBe(1);
     settings[18] = 190; settings[19] = 100; expect(w.processor_configure(h)).toBe(0);
   } finally { w.processor_destroy(h); }
+});
+
+
+test('live settings apply at a fixed boundary and acknowledge only the active session and revision', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const p = processor(0, false, { sessionId: 41, settings: [...DEFAULT_AUDIO] });
+  assert(p.push(new Float32Array(128)));
+  const send = data => p.value.port.onmessage({ data });
+  const update = { type: 'settings', sessionId: 41, revision: 2, settings: [...DEFAULT_AUDIO], visual: [0, -60, 0, 2] };
+  send({ ...update, sessionId: 40 });
+  assert.equal(p.value.wasm.processor_revision(p.value.processor), 1);
+  send(update);
+  assert.equal(p.value.wasm.processor_revision(p.value.processor), 1);
+  assert(p.push(new Float32Array(128)));
+  assert.equal(p.value.wasm.processor_revision(p.value.processor), 2);
+  assert.deepEqual(p.messages.filter(x => x.data.type === 'settings-ack').at(-1).data,
+    { type: 'settings-ack', sessionId: 41, revision: 2, accepted: true });
+  assert.equal(p.snapshot()[100], 2);
+  const count = p.messages.length;
+  send(update); // Duplicate cannot reapply.
+  assert.equal(p.messages.length, count);
+  send({ ...update, revision: 3, visual: [1, -100, 0, 2] });
+  assert.equal(p.messages.at(-1).data.accepted, false);
+  assert(p.push(new Float32Array(128)));
+  assert.equal(p.value.wasm.processor_revision(p.value.processor), 2);
+  assert.equal(p.value.wasm.processor_accent_sequence(p.value.processor), 0);
+});
+
+test('rejected visual settings cannot poison a later calibration or its accepted gain', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const p = processor(0, false, { sessionId: 71, settings: [...DEFAULT_AUDIO], visual: [0, -60, 0, 2] });
+  const samples = tone(48000, 1000, .002);
+  assert(p.push(samples.subarray(0, 128)));
+  p.value.port.onmessage({ data: { type: 'settings', sessionId: 71, revision: 2, settings: [...DEFAULT_AUDIO], visual: [1, -100, 0, 3] } });
+  p.value.port.onmessage({ data: { type: 'calibrate', dbSpl: 60 } });
+  for (let sample = 128; sample < 145000; sample += 128) assert(p.push(samples.subarray(sample % 48000, sample % 48000 + 128)));
+  assert.equal(p.value.failed, false);
+  assert.equal(p.snapshot()[100], 2);
+});
+
+test('live RMS tuning uses the same analysis boundary for every callback size', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const samples = tone(24000, 1000, .02);
+  let reference;
+  for (const size of [1, 13, 128, 4096]) {
+    const p = processor(0, false, { sessionId: 93, settings: [...DEFAULT_AUDIO] });
+    for (let at = 0; at < 12000; at += size) assert(p.push(samples.subarray(at, Math.min(at + size, 12000))));
+    const settings = [...DEFAULT_AUDIO]; settings[23] = .5;
+    p.value.port.onmessage({ data: { type: 'settings', sessionId: 93, revision: 2, settings, visual: [0, -60, 1, 1] } });
+    for (let at = 12000; at < samples.length; at += size) assert(p.push(samples.subarray(at, Math.min(at + size, samples.length))));
+    const w = p.value.wasm, h = p.value.processor;
+    const actual = [...new Float64Array(w.memory.buffer, w.processor_readouts(h), 4)];
+    if (!reference) reference = actual;
+    else expect(actual).toEqual(reference);
+    assert.equal(w.processor_revision(h), 2);
+  }
+});
+
+test('initial microphone gate survives saved-settings configuration while digital playback bypasses it', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  for (const microphone of [true, false]) {
+    const p = processor(0, false, { sessionId: 117, microphone, settings: [...DEFAULT_AUDIO], visual: [1, -20, 1, 1] });
+    const samples = tone(24000, 1000, .005);
+    for (let at = 0; at < samples.length; at += 128) assert(p.push(samples.subarray(at, at + 128)));
+    assert(p.value.wasm.processor_sones(p.value.processor) > 0);
+    const targets = Array.from({length:24},(_,band)=>p.snapshot()[3 + band*4]);
+    if (microphone) assert(targets.every(value=>value===0), 'saved settings must retain microphone gating');
+    else assert(targets.some(value=>value>0), 'digital input must bypass the gate');
+  }
 });

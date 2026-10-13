@@ -66,15 +66,11 @@ def main() -> None:
     (output / "BufferGeometryUtils.js").write_text(
         utilities.replace("from 'three'", "from './three.module.js'")
     )
-    fxaa = (web / "node_modules/three/examples/jsm/shaders/FXAAShader.js").read_text()
-    (output / "FXAAShader.js").write_text(
-        fxaa.replace("from 'three'", "from './three.module.js'")
-    )
     shutil.copyfile(root / "worker.js", output / "worker.js")
     for name in (
         "view.js",
         "lighting.js",
-        "fog.js",
+        "stars.js",
         "depth-auto.js",
         "mirrors.js",
         "side-bars.js",

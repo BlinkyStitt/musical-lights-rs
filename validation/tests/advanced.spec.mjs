@@ -353,3 +353,66 @@ test('audio controls persist and the readouts show actual scheduling without cha
   await expect(page.locator('.current-loudness')).toHaveText('Current loudness: —');
   await expect(page.locator('.background-loudness')).toHaveText('Background estimate: —');
 });
+
+
+test('audio tuning applies live and context settings restart active playback while retaining pause', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await advanced(page);
+  await page.locator('.display-controls').evaluate(node => node.open = true);
+  await page.locator('.audio-tuning').evaluate(node => node.parentElement.open = true);
+  await page.locator('.visual-gain-mode').selectOption('0');
+  await expect(page.locator('.manual-visual-gain')).toBeEnabled();
+  await page.locator('.manual-visual-gain').fill('2');
+  await page.locator('.manual-visual-gain').dispatchEvent('change');
+  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-audio-session');
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.review-start').click();
+  await page.locator('.diagnostics-controls').evaluate(node => node.open = true);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  const session = await page.locator('.audio-card').getAttribute('data-audio-session');
+  await page.locator('[data-audio-setting="0"]').fill('0.7');
+  await page.locator('[data-audio-setting="0"]').dispatchEvent('change');
+  await expect(page.locator('.audio-settings-status')).toHaveText('Audio settings applied.');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-session', session);
+  await page.locator('.tone-pause').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'paused');
+  await page.locator('.audio-latency').selectOption('balanced');
+  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-audio-session', session);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'paused');
+  await expect(page.locator('.tone-pause')).toHaveText('Resume playback');
+  await page.locator('.review-stop').click();
+  const stopped = await page.locator('.audio-card').getAttribute('data-audio-session');
+  await page.locator('.audio-latency').selectOption('playback');
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-session', stopped);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+  expect(errors).toEqual([]);
+});
+
+test('live audio settings during microphone startup cannot undo Stop or route cleanup', async ({ page }) => {
+  await syntheticAudio(page);
+  await advanced(page);
+  await page.evaluate(() => {
+    window.microphoneCalls = 0; window.pendingMicrophones = [];
+    const acquire = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    MediaDevices.prototype.getUserMedia = async (...args) => {
+      window.microphoneCalls++;
+      const stream = await acquire(...args);
+      return new Promise(resolve => window.pendingMicrophones.push({ stream, resolve: () => resolve(stream) }));
+    };
+  });
+  await listening(page).check();
+  await expect.poll(() => page.evaluate(() => window.microphoneCalls)).toBe(1);
+  await page.locator('.audio-tuning').evaluate(node => node.parentElement.open = true);
+  await page.locator('.audio-latency').selectOption('balanced');
+  await expect.poll(() => page.evaluate(() => window.microphoneCalls)).toBe(2);
+  await listening(page).uncheck();
+  await page.locator('.audio-latency').selectOption('playback');
+  await expect(listening(page)).not.toBeChecked();
+  expect(await page.evaluate(() => window.microphoneCalls)).toBe(2);
+  await expect.poll(() => page.evaluate(() => pendingMicrophones.length)).toBe(2);
+  await page.evaluate(() => pendingMicrophones.forEach(pending => pending.resolve()));
+  await expect.poll(() => page.evaluate(() => pendingMicrophones.every(pending => pending.stream.getTracks().every(track => track.readyState === 'ended')))).toBe(true);
+  await expect(listening(page)).not.toBeChecked();
+  await page.goto(`${origin}/advanced/`); await physicsReady(page);
+  await expect(listening(page)).not.toBeChecked();
+});

@@ -2,39 +2,7 @@ import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
-test('paired lights add their fog illumination across the middle of the tunnel', async ({ page }) => {
-  await page.goto(origin); await physicsReady(page);
-  const result = await page.evaluate(async () => {
-    const v = document.querySelector('#dancinglights').physics;
-    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
-    const { LIGHT_FIELD } = await import(new URL(`${base}physics/lighting.js`, document.baseURI));
-    const u = v.lighting.uniforms, scene = new THREE.Scene();
-    u.stripColor.value.forEach(color => color.setRGB(0, 0, 0));
-    u.stripColor.value[0].setRGB(.5, 0, 0);
-    u.glowBallColor.value.forEach(color => color.setRGB(0, 0, 0));
-    u.stripState.value.forEach(state => state.set(.6, .15, 0));
-    u.fogAttack.value.fill(0); u.colorAttack.value = 0; u.lightStrength.value.set(1, 0, .22, 0);
-    const material = new THREE.ShaderMaterial({ uniforms: u, toneMapped: false,
-      vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: LIGHT_FIELD + 'void main() { gl_FragColor = vec4(scatteredIllumination(vec3(.6, .6, 0.0)), 1.0); }' });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material); scene.add(plane);
-    const target = new THREE.WebGLRenderTarget(2, 2), pixels = new Uint8Array(16);
-    const read = (height, tip) => {
-      u.lightExtent.value.set(1.2, height, .24); u.stripState.value[0].y = tip;
-      v.renderer.setRenderTarget(target); v.renderer.render(scene, new THREE.Camera());
-      v.renderer.readRenderTargetPixels(target, 0, 0, 2, 2, pixels);
-      return pixels[0];
-    };
-    try {
-      return { lower: read(10, .15), upper: read(10, 1.05), paired: read(1.2, .15) };
-    } finally { v.renderer.setRenderTarget(null); target.dispose(); plane.geometry.dispose(); material.dispose(); }
-  });
-  expect(result.lower).toBeGreaterThan(4); expect(result.upper).toBeGreaterThan(4);
-  expect(Math.abs(result.paired - result.lower - result.upper)).toBeLessThanOrEqual(2);
-});
-
-test('colored attack light follows band loudness on bars, nearby surfaces and fog without changing white edges', async ({ page }, info) => {
+test('colored attack light follows band loudness on bars and nearby surfaces without changing white edges', async ({ page }, info) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
   await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
@@ -56,11 +24,11 @@ test('colored attack light follows band loudness on bars, nearby surfaces and fo
     camera.position.set(x, top * .75, 2); camera.lookAt(x, top * .75, 0); camera.updateMatrixWorld();
     const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4);
     const u = v.lighting.uniforms, scene = new THREE.Scene();
-    const material = new THREE.ShaderMaterial({ uniforms: { ...u, probeFog: { value: 0 } },
+    const material = new THREE.ShaderMaterial({ uniforms: u,
       vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: LIGHT_FIELD + `uniform float probeFog; void main() {
+      fragmentShader: LIGHT_FIELD + `void main() {
         vec3 point = vec3(${x + .08}, ${top}, 0.0);
-        gl_FragColor = vec4(mix(localIllumination(point, vec3(-1.0, 0.0, 0.0)), scatteredIllumination(point), probeFog), 1.0);
+        gl_FragColor = vec4(localIllumination(point, vec3(-1.0, 0.0, 0.0)), 1.0);
       }`, depthTest: false, depthWrite: false });
     const probe = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material); scene.add(probe);
     let at = performance.now();
@@ -75,13 +43,9 @@ test('colored attack light follows band loudness on bars, nearby surfaces and fo
       v.lighting.configure({ ...v.settings, colorAttack: strength, colorSpill: 0, attackLight: 0 });
       v.draw(at += 100);
       const bar = read(v.scene);
-      // Settle the real fog envelope on its normal bounded time steps.
-      for (let i = 0; i < 30; i++) v.lighting.update(v, v.current, v.layout[9], v.renderedPhase, v.layout[3], height, v.config[5], at += 100);
       u.stripColor.value.forEach((c, i) => c.copy(i === 0 ? color : new THREE.Color(0, 0, 0)));
       u.glowBallColor.value.forEach(c => c.setRGB(0, 0, 0));
-      material.uniforms.probeFog.value = 0; const nearby = read(scene);
-      material.uniforms.probeFog.value = 1; const fog = read(scene);
-      return { bar, nearby, fog };
+      return { bar, nearby: read(scene) };
     };
     try {
       const off = sample(.8, .5, 0), low = sample(.2, .5, 1), high = sample(.8, .5, 1), brighter = sample(.8, .5, 3);
@@ -94,14 +58,14 @@ test('colored attack light follows band loudness on bars, nearby surfaces and fo
     } finally { v.renderer.setRenderTarget(null); target.dispose(); probe.geometry.dispose(); material.dispose(); }
   });
   await info.attach('colored-attack-light.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  for (const kind of ['bar', 'nearby', 'fog']) {
+  for (const kind of ['bar', 'nearby']) {
     expect(result.low[kind][0], kind).toBeGreaterThan(result.off[kind][0]);
     expect(result.high[kind][0], kind).toBeGreaterThan(result.low[kind][0] + 3);
     expect(result.brighter[kind][0], kind).toBeGreaterThan(result.high[kind][0]);
     expect(result.high[kind][0] - result.off[kind][0], kind).toBeGreaterThan(2 * (result.high[kind][1] - result.off[kind][1]));
   }
   expect(result.quietOn).toEqual(result.quietOff); expect(result.zeroLevel.bar).toEqual(result.off.bar);
-  expect(result.digital.nearby).toEqual(result.high.nearby); expect(result.digital.fog).toEqual(result.high.fog);
+  expect(result.digital.nearby).toEqual(result.high.nearby);
   expect(result.whiteGlow).toBe(1); expect(result.edges).toEqual(Array(24).fill(.5)); expect(result.sidePulsesMatch).toBe(true);
   await page.reload(); await physicsReady(page); await normalView(page);
   await page.getByText('Lighting & rendering', { exact: true }).click();

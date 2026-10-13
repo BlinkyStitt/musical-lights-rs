@@ -15,6 +15,7 @@ pub const BARK_EDGES: [f32; DISPLAY_BANDS + 1] = [
 pub struct VisualGain {
     log_gain: f64,
     settings: super::settings::AudioSettings,
+    options: super::policy::VisualOptions,
 }
 
 impl Default for VisualGain {
@@ -22,6 +23,7 @@ impl Default for VisualGain {
         Self {
             log_gain: 0.0,
             settings: Default::default(),
+            options: Default::default(),
         }
     }
 }
@@ -31,12 +33,36 @@ impl VisualGain {
         Self {
             log_gain: 0.0,
             settings,
+            options: Default::default(),
         }
     }
 
     /// Current shared display gain; measured sones remain unchanged.
     pub fn factor(&self) -> f64 {
+        if self.options.gain_mode == super::policy::GainMode::Off {
+            return self.options.manual_gain;
+        }
         Float::exp(self.log_gain)
+    }
+
+    pub fn configure(
+        &mut self,
+        settings: super::settings::AudioSettings,
+        options: super::policy::VisualOptions,
+    ) {
+        self.settings = settings;
+        self.options = options;
+    }
+
+    pub fn map_gated(&mut self, frame: &LoudnessFrame, closed: bool) -> [BandLevel; DISPLAY_BANDS] {
+        if closed {
+            frame.bands().map(|sones| BandLevel {
+                activity: 0.0,
+                sones,
+            })
+        } else {
+            self.map(frame)
+        }
     }
 
     /// One gain for the canonical 24-band spectrum, regardless of panel layout.
@@ -52,14 +78,23 @@ impl VisualGain {
         total_sones: f64,
     ) -> [BandLevel; DISPLAY_BANDS] {
         let maximum = bands.iter().copied().fold(0.0_f32, f32::max) as f64;
-        if total_sones >= 0.1 && maximum > 0.0 {
+        if self.options.gain_mode != super::policy::GainMode::Off
+            && total_sones >= 0.1
+            && maximum > 0.0
+        {
             let target = Float::ln((self.settings.gain_target / maximum).clamp(1.0 / 64.0, 64.0));
             let tau = if target < self.log_gain {
                 self.settings.gain_down
             } else {
                 self.settings.gain_up
             };
-            let alpha = -Float::exp_m1(-(FRAME_SAMPLES as f64 / SAMPLE_RATE as f64) / tau);
+            let scale = match self.options.gain_mode {
+                super::policy::GainMode::Vivid => 0.25,
+                super::policy::GainMode::Lazy => 2.0,
+                _ => 1.0,
+            };
+            let alpha =
+                -Float::exp_m1(-(FRAME_SAMPLES as f64 / SAMPLE_RATE as f64) / (tau * scale));
             self.log_gain += alpha * (target - self.log_gain);
         }
         let gain = self.factor() as f32;

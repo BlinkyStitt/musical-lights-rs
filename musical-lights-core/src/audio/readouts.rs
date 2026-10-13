@@ -24,6 +24,10 @@ pub struct Readouts {
     loudness: [f32; BUCKETS],
 }
 impl Readouts {
+    pub fn configure(&mut self, settings: AudioSettings) {
+        self.settings = settings;
+        self.alpha = -Float::exp_m1(-1.0 / (SAMPLE_RATE as f64 * settings.rms_seconds));
+    }
     pub fn new(settings: AudioSettings) -> Self {
         Self {
             settings,

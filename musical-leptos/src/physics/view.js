@@ -5,7 +5,7 @@ import { PhoneReport } from './report.js';
 import { MirrorRoom, barProjection } from './mirrors.js';
 import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
-import { FogVolume } from './fog.js';
+import { Starfield } from './stars.js';
 
 const CAMERA_DISTANCE = 1.8;
 
@@ -88,7 +88,7 @@ export class PhysicsView {
     this.notice = new PhysicsNotice(this.status);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
-    // The volume composition smooths edges without a multisampled depth resolve.
+    // Draw the foreground and stars in one scene pass.
     this.renderer = new THREE.WebGLRenderer({ alpha: true, powerPreference: 'high-performance' });
     // Bound fragment work on large and high-density displays. CSS controls
     // and text keep their native resolution. Physical and reflected edges
@@ -107,17 +107,11 @@ export class PhysicsView {
     });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
     this.lighting = new SceneLighting(palette, this.settings);
-    const fogColor = () => {
-      const color = this.lighting.mistColor.setStyle(getComputedStyle(this.graph).getPropertyValue('--plot').trim());
-      color.multiplyScalar(Math.min(1, .12 / Math.max(color.r, color.g, color.b, .000001)));
-    };
-    fogColor();
     const light = new THREE.DirectionalLight(0xffffff, 1.8); light.position.set(-1, 3, 4); this.scene.add(light);
     const fill = new THREE.DirectionalLight(0xffffff, .9); fill.position.set(2, 1, 1); this.scene.add(fill);
     this.pointerPoint = new THREE.Vector3(); this.pointerRay = new THREE.Raycaster(); this.pointerCoordinates = new THREE.Vector2(); this.pointerPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     this.object = new THREE.Object3D(); this.color = new THREE.Color(); this.quaternion = new THREE.Quaternion();
     this.listeners = [];
-    this.listen(matchMedia('(prefers-color-scheme: dark)'), 'change', fogColor);
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.sceneVisible = true;
@@ -444,11 +438,10 @@ export class PhysicsView {
     this.sideBars = new SideBars(this.scene, this.bars, count);
     this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
     this.enclosure = this.mirrors.walls;
-    this.fogVolume = new FogVolume(this.lighting);
+    this.starfield = new Starfield(this.scene, this.pixelRatio);
     // Compile hidden depth-copy materials before Auto first draws them.
     // Their first shader link must not interrupt live input during a trial.
     this.renderer.compile(this.scene, this.camera);
-    this.renderer.compile(this.fogVolume.scene, this.fogVolume.camera);
     if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(STARTUP_DEPTH_CANDIDATES); }
   }
   draw(now) {
@@ -512,7 +505,7 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
-    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth, now);
+    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.bars.geometry.attributes.pulse.needsUpdate = true;
@@ -520,10 +513,10 @@ export class PhysicsView {
     this.mirrors.update(this.width, height, depth, this.camera);
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
-    this.fogVolume.update(this.width, height, depth, this.mirrors.count, this.camera.far);
+    this.starfield.update(now, this.reduced.matches);
     this.render();
   }
-  render(camera = this.camera) { this.fogVolume.render(this.renderer, this.scene, camera); }
+  render(camera = this.camera) { this.renderer.render(this.scene, camera); }
   pauseDepthTest() {
     if (!this.depthProfile || this.depthProfile.done) return;
     this.depthProfile.cancel();
@@ -616,7 +609,7 @@ export class PhysicsView {
   disposeMeshes() {
     this.sideBars?.dispose(); this.sideBars = null;
     this.mirrors?.dispose(); this.mirrors = null;
-    this.fogVolume?.dispose(); this.fogVolume = null;
+    this.starfield?.dispose(); this.starfield = null;
     for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
     this.closed = true; this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();

@@ -11,6 +11,11 @@ name = "net"
 path = "src/bin/net.rs"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
+[[bin]]
+name = "amulet"
+path = "src/bin/amulet.rs"
+harness = false
+
 [profile.release]
 opt-level = "s"
 
@@ -24,6 +29,10 @@ default = []
 experimental = ["esp-idf-svc/experimental"]
 
 [dependencies]
+base64 = "=0.22.1"
+crc = "=3.4.0"
+palette = { version = "=0.7.7", default-features = false, features = ["std"] }
+serde = { version = "=1.0.229", features = ["derive"] }
 musical-lights-core = { path = "../musical-lights-core", default-features = false, features = [
     "alloc", "std", "log"
 ] }

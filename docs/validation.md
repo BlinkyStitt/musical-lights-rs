@@ -723,42 +723,25 @@ reflection cameras, per-fragment ray portals, shadow maps or bloom. Transparent
 exterior coatings preserve the side view. No picture adds ball physics. The
 browser owns this effect; embedded hardware uses physical mirrors.
 
-Scene fog leaves the physical room clear, then thickens toward an opaque bank
-at a distance that grows with the requested depth. Its distance eases toward
-80% of the camera range, so 2,048 rows show more depth than 50 rows.
-Fog density rises outside the physical room on all three axes. One volume pass
-integrates that density along each camera ray using Beer-Lambert transmission.
-Scene depth stops the integral at visible surfaces, including surfaces whose
-materials do not use Three.js fog. Side and vertical views receive the same
-volume treatment as views down the tunnel. Empty air ends in opaque fog.
-
-A fixed 48 by 24 screen grid uses three spatial samples of the shared source
-light field. This approximates incident light; the density integral stays exact
-per pixel. Colored strips, white attacks and ball pigments illuminate the fog.
-Low-contrast cloud shading stays still. The 350 ms light response and bounded
-color curve prevent attack flashes. Theme color is capped at .12 in linear
-light to retain soft grey fog in the light theme.
-
-The volume replaces the old bank draw with one composition draw and a bounded
-color/depth render target. Its sRGB byte texture preserves dark pigment detail
-while WebGL samples and blends in linear light. The composition smooths high
-contrast edges with the pinned Three.js FXAA edge search, using neighboring
-pixels after applying each ray's fog. A 24-by-12 grid interpolates incident
-light; each fragment still integrates density exactly. It keeps
-flat colors unchanged and avoids multisampled color/depth resolves. Resizes and
-route cleanup release the target with the scene.
-No reflection camera, shadow map or bloom pass is added.
+The scene uses a dark background with 512 fixed stars. One point batch draws
+slow independent twinkling behind the foreground. Reduced Motion holds the
+stars steady. Camera sweeps, source lighting and mirror count leave the sky
+unchanged. The starfield needs no textures, postprocessing or render targets;
+route cleanup releases its geometry and material. The scene retains the
+existing render-resolution budget without multisampling.
+Browser pixel checks verify visible stars, slow twinkling, steady Reduced Motion,
+foreground occlusion, stable count and independence from audio lighting.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
 physical simulation stay unchanged. Background culling includes the full vertical
 and depth extrusion. The browser suite checks visible pixels above and below the
-room, opaque fog in empty air, light scattering, and complete-batch culling.
+room, background stars, surface lighting, and complete-batch culling.
 
 With the microphone off, the rising side of the wave receives sustained light.
 Equal-height frames retain that light, so tall held bars remain bright. The light
 uses a 180 ms release when the bar starts to fall. All paired bars, background
-banks and fog use that light. The shared core owns the calculation. Microphone
+banks use that light. The shared core owns the calculation. Microphone
 input keeps its acoustic attack envelope. Raw
 loudness, filtered targets, accessible audio meters and direction eligibility
 stay separate.
@@ -996,3 +979,31 @@ range. Reset display restores the startup range. Saved Auto counts start within
 1–32 before measurement; saved manual counts keep their full validated range.
 The baseline draws the physical scene with zero depth copies. Bars and balls
 keep moving during measurement, including short captured audio bursts.
+
+## GPS, amulet and live tuning checks
+
+`python3 validation/validate.py core` checks the pinned std/libm/alloc/defmt/Embassy
+matrix. Firmware regressions cover checksum and epoch pairing, PPS wrap,
+clock acquisition/holdover/correction, independent radio authentication fixtures,
+replay/freshness/forwarding limits, UART bounds, interrupted atomic checkpoints,
+durable commands, navigation and the four amulet outputs. The magnetic test uses
+all 100 NOAA WMM2025 reference points. These tests use synthetic clocks and sensors.
+
+`python3 validation/validate.py firmware-tools` uses the locked host environment
+for codec, redaction, ellipsoid coverage/holdout and native-unit calibration checks.
+`stm32` and `esp-idf` build the sensor, net and amulet applications. The sensor
+linker reserves sectors 6 and 7; its application must fit below `0x08040000`.
+The release uses size optimization. Verify device timing separately.
+
+Audio regressions compare the default pipeline exactly, gate transitions and RMS
+updates across callback sizes, digital bypass, gain ratios, settings boundaries,
+revision acknowledgments and calibration rejection. Browser checks exercise live
+tuning, paused playback restart, settings during acquisition, Stop and route cleanup.
+Run `worklet physics leptos` before the full browser suite. Keep one browser worker,
+zero retries and the startup guard. Use the standalone production benchmark on an
+idle host for cost comparisons; contended measurements do not establish that result.
+
+GPS/PPS epoch timing, radio capacity, installed heading error, LED response and
+output timing, electrical load, thermal behavior and runtime need physical acceptance.
+The current GPS board timing profile has unknown uncertainty, so it cannot report
+Locked. No battery measurement profile exists; battery state remains Unknown.

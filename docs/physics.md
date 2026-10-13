@@ -369,17 +369,13 @@ its shared display loudness level. Physical bar travel, including the listening
 floor, does not set audio brightness. Silent preview uses only its rising wave.
 The saved **Colored attack light** control sets pulse strength from 0 to 3,
 independently of the white **Bar attack glow** control. One bounded field of
-24 paired strips and eight balls lights nearby surfaces and fog; the fog pulse
-uses a 350 ms envelope to soften rapid changes. Hemisphere/directional fill
+24 paired strips and eight balls lights nearby surfaces. Hemisphere/directional fill
 lights the enclosure. Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;
 physical-iPhone and human-listening acceptance remain pending.
 
-Volumetric fog keeps at least three rows of gradual transition, including at
-depth 0. Zero still draws no extra ball images. Larger depth settings extend
-the fog transition with the scene. Density grows continuously outside the clear
-room, so successive regions become thicker from all viewing angles.
-Source colors scatter across three times the local surface-light range.
-A shared brightness limit keeps their hues as the glows overlap. The grey base
-and smoothed attack light keep the fog soft. Fog uses the existing bounded
-source field and one composition pass, without bloom or extra light objects.
+A dark starfield sits behind the scene. One batch draws 512 fixed stars, with
+small points and slow independent brightness changes. Reduced Motion holds
+their brightness steady. Camera sweeps, audio attacks and mirror counts do not
+move or recolor the stars. Stars use no textures or render targets. A single
+scene pass draws foreground geometry over them.

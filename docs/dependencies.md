@@ -120,3 +120,25 @@ RoundedBoxGeometry locally. Rapier started at `0.35.3`; its bullet CCD excludes
 other bullets, and the two-fast-sphere regression reproduced tunneling.
 The single active simulation now uses `0.34.0`, which passes that regression.
 See [the physics settings and validation limits](physics.md).
+
+## GPS, authenticated radio and magnetic calculations
+
+Reviewed on 2026-10-12 before resolution. Exact published versions:
+
+| Package | Release | License | Required Rust |
+| --- | --- | --- | --- |
+| lora-phy 3.0.1 | 2024-07-11 | MIT OR Apache-2.0 | Compatible with pinned nightly |
+| nmea 0.8.0 | 2026-08-08 | Apache-2.0 | 1.87 |
+| hmac 0.13.0 | 2026-03-29 | MIT OR Apache-2.0 | 1.85 |
+| sha2 0.11.0 | 2026-03-25 | MIT OR Apache-2.0 | 1.85 |
+| world_magnetic_model 1.2025.0 | 2026-09-12 | MIT OR Apache-2.0 | 1.85 |
+
+The review checked registry publication age, license metadata, upstream source,
+feature compatibility and the current RustSec database. No matching advisory was
+found for these versions. The old sha2 0.9.7 advisory does not affect 0.11.0.
+NMEA enables only RMC and GGA. All five crates pass the shared core and target
+checks appropriate to their use. New resolutions use serde_json 1.0.151 because
+newer releases did not satisfy the seven-day publication-age rule.
+
+The wired tools pin NumPy 2.5.3, SciPy 1.18.1 and pyserial 3.5 in their own uv
+lockfile. The solver runs on the host; firmware receives bounded coefficients.

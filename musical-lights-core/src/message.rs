@@ -1,42 +1,292 @@
-//! Bounded, allocation-free UART frames: Postcard Message, CRC-16/IBM-SDLC
-//! (little endian), COBS, then a zero delimiter. No vector length prefix.
-use postcard::experimental::max_size::MaxSize;
-use serde::{Deserialize, Serialize};
-
-use crate::compass::Coordinate;
-use crate::compass::Magnetometer;
+//! One board schema: Postcard, CRC-16/IBM-SDLC, COBS and a zero delimiter.
 use crate::errors::{MyError, MyResult};
-use crate::gps::GpsTime;
-use crate::orientation::Orientation;
-
-pub const MESSAGE_BAUD_RATE: u32 = 115_200;
-
-/// TODO: peer ids should be a pubkey
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, Hash, MaxSize, PartialEq)]
-pub struct PeerId(u8);
-
-/// TODO: Message type for setting the next pattern?
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, MaxSize)]
-pub enum Message {
-    GpsTime(GpsTime),
-    Orientation(Orientation),
-    Magnetometer(Magnetometer),
-    /// TODO: should these be batched up? should they be signed by the peer? signing can come later
-    PeerCoordinate(PeerId, Coordinate),
-    Ping,
-    Pong,
-    SelfCoordinate(Coordinate),
+use serde::{Deserialize, Serialize};
+pub const MESSAGE_BAUD_RATE: u32 = 115200;
+macro_rules! little {
+    ($name:ident, $type:ty, $size:expr) => {
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+        pub struct $name(pub [u8; $size]);
+        impl $name {
+            pub const fn new(value: $type) -> Self {
+                Self(value.to_le_bytes())
+            }
+            pub const fn get(self) -> $type {
+                <$type>::from_le_bytes(self.0)
+            }
+        }
+    };
 }
-
+little!(L2, u16, 2);
+little!(L4, u32, 4);
+little!(L8, u64, 8);
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Position {
+    pub lat: L4,
+    pub lon: L4,
+    pub age: L4,
+    pub accuracy: L2,
+    pub flags: L2,
+}
+impl Position {
+    pub fn valid(&self) -> bool {
+        let flags = self.flags.get();
+        flags & !7 == 0
+            && (flags & 1 != 0
+                || (flags == 0
+                    && self.lat.get() == 0
+                    && self.lon.get() == 0
+                    && self.age.get() == 0
+                    && self.accuracy.get() == 0))
+            && (flags & 1 == 0
+                || ((-900000000..=900000000).contains(&(self.lat.get() as i32))
+                    && (-1800000000..=1800000000).contains(&(self.lon.get() as i32))))
+            && (flags & 1 == 0
+                || if flags & 4 != 0 {
+                    (1..u16::MAX).contains(&self.accuracy.get())
+                } else {
+                    self.accuracy.get() == u16::MAX
+                })
+    }
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Heading {
+    pub magnetic: L2,
+    pub true_north: L2,
+    pub age: L2,
+    pub quality: u8,
+    pub faults: L2,
+    pub tilt: L2,
+    pub calibration_revision: L4,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Clock {
+    pub state: u8,
+    pub utc_anchor: L8,
+    pub anchor_age: L4,
+    pub uncertainty: L4,
+}
+impl Default for Clock {
+    fn default() -> Self {
+        Self {
+            state: 0,
+            utc_anchor: L8::new(0),
+            anchor_age: L4::new(u32::MAX),
+            uncertainty: L4::new(u32::MAX),
+        }
+    }
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Battery {
+    pub state: u8,
+    pub factor: L2,
+    pub pack_mv: L2,
+    pub soc: L2,
+    pub age: L2,
+    pub profile_revision: L4,
+}
+impl Default for Battery {
+    fn default() -> Self {
+        Self {
+            state: 0,
+            factor: L2::new(1000),
+            pack_mv: L2::new(0),
+            soc: L2::new(u16::MAX),
+            age: L2::new(u16::MAX),
+            profile_revision: L4::new(0),
+        }
+    }
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Peer {
+    pub id: L2,
+    pub origin_boot: L4,
+    pub sequence: L4,
+    pub position: Position,
+    pub health: L2,
+    pub hop: u8,
+    pub rssi: L2,
+    pub snr: u8,
+    pub color: u8,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StateSnapshot {
+    pub boot: L4,
+    pub sequence: L4,
+    pub uptime: L4,
+    pub settings_generation: L4,
+    pub roster_revision: L4,
+    pub local: Position,
+    pub heading: Heading,
+    pub clock: Clock,
+    pub battery: Battery,
+    pub health: L2,
+    pub slot: u8,
+    pub count: u8,
+    pub peers: heapless::Vec<Peer, 7>,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hello {
+    pub role: u8,
+    pub boot: L4,
+    pub firmware: [u8; 8],
+    pub capabilities: L2,
+    pub settings_generation: L4,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Command {
+    pub target_stm_boot: L4,
+    pub client_epoch: L4,
+    pub command_id: L4,
+    pub operation: u8,
+    pub expected_generation: L4,
+    pub data: heapless::Vec<u8, 384>,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandResult {
+    pub stm_boot: L4,
+    pub client_epoch: L4,
+    pub command_id: L4,
+    pub status: u8,
+    pub result_generation: L4,
+    pub data: heapless::Vec<u8, 384>,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Heartbeat {
+    pub role: u8,
+    pub boot: L4,
+    pub uptime: L4,
+    pub health: L2,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RawSample {
+    pub captured_at: L4,
+    pub valid: u8,
+    pub accel: [[u8; 4]; 3],
+    pub gyro: [[u8; 4]; 3],
+    pub mag: [[u8; 4]; 3],
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CalibrationBatch {
+    pub stm_boot: L4,
+    pub run_id: [u8; 8],
+    pub batch_sequence: L4,
+    pub overrun_samples: L4,
+    pub samples: heapless::Vec<RawSample, 8>,
+}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Message {
+    Hello(Hello),
+    StateSnapshot(StateSnapshot),
+    Command(Command),
+    CommandResult(CommandResult),
+    Heartbeat(Heartbeat),
+    CalibrationBatch(CalibrationBatch),
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Envelope {
+    version: u8,
+    message: Message,
+}
+impl Message {
+    pub fn valid(&self) -> bool {
+        match self {
+            Self::Hello(h) => h.role <= 1 && h.boot.get() != 0 && h.capabilities.get() & !0x2b == 0,
+            Self::Heartbeat(h) => {
+                h.role <= 1 && h.boot.get() != 0 && crate::radio::valid_health(h.health.get())
+            }
+            Self::Command(c) => {
+                c.target_stm_boot.get() != 0
+                    && c.client_epoch.get() != 0
+                    && c.command_id.get() != 0
+                    && c.operation <= 10
+            }
+            Self::CommandResult(c) => {
+                c.stm_boot.get() != 0
+                    && c.client_epoch.get() != 0
+                    && c.command_id.get() != 0
+                    && c.status <= 9
+            }
+            Self::StateSnapshot(s) => {
+                s.boot.get() != 0
+                    && s.sequence.get() != 0
+                    && s.local.valid()
+                    && s.local.flags.get() == s.health.get() & 7
+                    && crate::radio::valid_health(s.health.get())
+                    && s.heading.quality <= 7
+                    && s.heading.faults.get() & !127 == 0
+                    && s.heading.tilt.get() <= 9000
+                    && (matches!(s.heading.quality, 3 | 4)
+                        || (s.heading.magnetic.get() == 0 && s.heading.true_north.get() == 0))
+                    && (s.heading.quality != 3 || s.heading.true_north.get() == 0)
+                    && (!matches!(s.heading.quality, 3 | 4)
+                        || s.heading.calibration_revision.get() != 0)
+                    && s.heading.magnetic.get() < 36000
+                    && s.heading.true_north.get() < 36000
+                    && s.clock.state <= 3
+                    && (if matches!(s.clock.state, 2 | 3) {
+                        s.clock.utc_anchor.get() != 0
+                            && s.clock.anchor_age.get() <= 1800000
+                            && s.clock.uncertainty.get() as u64
+                                + (s.clock.anchor_age.get() as u64).div_ceil(10000)
+                                <= 250
+                    } else {
+                        s.clock.utc_anchor.get() == 0 && s.clock.uncertainty.get() == u32::MAX
+                    })
+                    && s.battery.state <= 4
+                    && s.battery.factor.get() <= 1000
+                    && ((s.count == 0 && s.slot == 255)
+                        || ((1..=8).contains(&s.count)
+                            && s.slot < s.count
+                            && s.roster_revision.get() != 0))
+                    && s.peers.windows(2).all(|p| p[0].id.get() < p[1].id.get())
+                    && s.peers.iter().all(|p| {
+                        p.position.valid()
+                            && p.position.flags.get() == p.health.get() & 7
+                            && crate::radio::valid_health(p.health.get())
+                            && p.color < 8
+                            && (1..=2).contains(&p.hop)
+                    })
+            }
+            Self::CalibrationBatch(b) => {
+                b.stm_boot.get() != 0
+                    && b.batch_sequence.get() != 0
+                    && !b.samples.is_empty()
+                    && b.samples.iter().all(|s| {
+                        s.valid != 0
+                            && s.valid & !7 == 0
+                            && [s.accel, s.gyro, s.mag].iter().enumerate().all(|(i, v)| {
+                                if s.valid & (1 << i) == 0 {
+                                    *v == [[0; 4]; 3]
+                                } else {
+                                    v.iter().all(|b| f32::from_le_bytes(*b).is_finite())
+                                }
+                            })
+                    })
+            }
+        }
+    }
+}
 const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_IBM_SDLC);
-const RAW_SIZE: usize = Message::POSTCARD_MAX_SIZE + size_of::<u16>();
+const RAW_SIZE: usize = 508;
 const ENCODED_SIZE: usize = cobs::max_encoding_length(RAW_SIZE);
+const _: () = assert!(ENCODED_SIZE < 512);
 
 /// Owns the scratch and output buffers for one complete UART frame.
 /// Reuse this encoder; the returned frame remains valid until the next encode.
-#[derive(Default)]
 pub struct MessageEncoder {
     scratch: [u8; RAW_SIZE],
     output: [u8; ENCODED_SIZE + 1],
@@ -55,8 +305,15 @@ impl MessageEncoder {
 
     /// Serialize exactly one message with CRC, COBS and a final zero delimiter.
     pub fn encode(&mut self, message: &Message) -> MyResult<&[u8]> {
+        if !message.valid() {
+            return Err(postcard::Error::SerializeBufferFull.into());
+        }
+        let envelope = Envelope {
+            version: 1,
+            message: message.clone(),
+        };
         let raw =
-            postcard::ser_flavors::crc::to_slice_u16(message, &mut self.scratch, CRC.digest())?;
+            postcard::ser_flavors::crc::to_slice_u16(&envelope, &mut self.scratch, CRC.digest())?;
         let size = cobs::try_encode(raw, &mut self.output[..ENCODED_SIZE])?;
         self.output[size] = 0;
         Ok(&self.output[..size + 1])
@@ -66,7 +323,6 @@ impl MessageEncoder {
 /// Owns receive state across arbitrary UART reads. Emits at most one result per
 /// delimiter. Empty delimiters are ignored. Oversized frames discard all bytes
 /// through their delimiter; malformed frames cannot contaminate the next frame.
-#[derive(Default)]
 pub struct MessageDecoder {
     buffer: [u8; ENCODED_SIZE],
     length: usize,
@@ -116,192 +372,28 @@ impl MessageDecoder {
         if CRC.checksum(payload) != expected {
             return Err(postcard::Error::DeserializeBadCrc.into());
         }
-        let (message, remaining) = postcard::take_from_bytes(payload)?;
+        let (envelope, remaining): (Envelope, _) = postcard::take_from_bytes(payload)?;
         if !remaining.is_empty() {
             return Err(postcard::Error::DeserializeBadEncoding.into());
         }
-        Ok(message)
+        if envelope.version != 1 || !envelope.message.valid() {
+            return Err(postcard::Error::DeserializeBadEncoding.into());
+        }
+        let mut canonical = [0; RAW_SIZE];
+        if postcard::to_slice(&envelope, &mut canonical)? != payload {
+            return Err(postcard::Error::DeserializeBadEncoding.into());
+        }
+        Ok(envelope.message)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::vec::Vec;
-
-    // Fixed wire fixtures: Postcard discriminant, little-endian CRC-16/X-25,
-    // one COBS block and delimiter. These contain no serialized vector prefix.
-    const PING: &[u8] = &[4, 4, 0x5c, 0xb6, 0];
-    const PONG: &[u8] = &[4, 5, 0xd5, 0xa7, 0];
-
-    fn feed(decoder: &mut MessageDecoder, bytes: &[u8]) -> Vec<MyResult<Message>> {
-        bytes.iter().filter_map(|&b| decoder.feed(b)).collect()
+impl Default for MessageEncoder {
+    fn default() -> Self {
+        Self::new()
     }
-
-    fn messages() -> [Message; 7] {
-        [
-            Message::GpsTime(u32::MAX),
-            Message::Orientation(Orientation::TopUp),
-            Message::Magnetometer(Magnetometer {
-                x_gauss: 0.0,
-                y_gauss: -1.25,
-                z_gauss: f32::MAX,
-            }),
-            Message::PeerCoordinate(
-                PeerId(255),
-                Coordinate {
-                    lat: f32::MAX,
-                    lon: f32::MIN,
-                },
-            ),
-            Message::Ping,
-            Message::Pong,
-            Message::SelfCoordinate(Coordinate {
-                lat: 37.0001,
-                lon: -122.0,
-            }),
-        ]
-    }
-
-    #[test]
-    fn encoder_matches_fixed_wire_fixtures() {
-        let mut encoder = MessageEncoder::new();
-        assert_eq!(encoder.encode(&Message::Ping).unwrap(), PING);
-        assert_eq!(encoder.encode(&Message::Pong).unwrap(), PONG);
-    }
-
-    #[test]
-    fn decoder_accepts_fixed_wire_fixtures_without_an_encoder() {
-        let mut decoder = MessageDecoder::new();
-        assert_eq!(
-            feed(&mut decoder, PING).pop().unwrap().unwrap(),
-            Message::Ping
-        );
-        assert_eq!(
-            feed(&mut decoder, PONG).pop().unwrap().unwrap(),
-            Message::Pong
-        );
-        assert!(feed(&mut decoder, &[0, 0]).is_empty());
-    }
-
-    #[test]
-    fn all_variants_round_trip_at_every_frame_split() {
-        let mut encoder = MessageEncoder::new();
-        for message in messages() {
-            let frame = encoder.encode(&message).unwrap();
-            assert!(frame.len() <= MessageEncoder::MAX_FRAME_SIZE);
-            assert_eq!(frame.last(), Some(&0));
-            assert!(frame[..frame.len() - 1].iter().all(|&b| b != 0));
-            for split in 0..=frame.len() {
-                let mut decoder = MessageDecoder::new();
-                let mut received = feed(&mut decoder, &frame[..split]);
-                received.extend(feed(&mut decoder, &frame[split..]));
-                assert_eq!(received.len(), 1);
-                assert_eq!(received.pop().unwrap().unwrap(), message);
-                assert!(decoder.feed(0).is_none());
-            }
-        }
-    }
-
-    #[test]
-    fn concatenated_frames_are_ordered_without_duplicates_for_every_read_size() {
-        let mut encoder = MessageEncoder::new();
-        let wire: Vec<u8> = messages()
-            .iter()
-            .flat_map(|message| encoder.encode(message).unwrap().to_vec())
-            .collect();
-        for read_size in 1..=wire.len() {
-            let mut decoder = MessageDecoder::new();
-            let received: Vec<Message> = wire
-                .chunks(read_size)
-                .flat_map(|chunk| feed(&mut decoder, chunk))
-                .map(Result::unwrap)
-                .collect();
-            assert_eq!(received.as_slice(), &messages());
-        }
-    }
-
-    #[test]
-    fn missing_delimiter_does_not_deliver_a_partial_or_combined_frame() {
-        let mut decoder = MessageDecoder::new();
-        assert!(feed(&mut decoder, &PING[..PING.len() - 1]).is_empty());
-        assert!(feed(&mut decoder, PONG).pop().unwrap().is_err());
-        assert_eq!(
-            feed(&mut decoder, PING).pop().unwrap().unwrap(),
-            Message::Ping
-        );
-        // A delayed delimiter completes exactly one pending frame.
-        assert!(feed(&mut decoder, &PONG[..PONG.len() - 1]).is_empty());
-        assert_eq!(decoder.feed(0).unwrap().unwrap(), Message::Pong);
-        assert!(decoder.feed(0).is_none());
-    }
-
-    #[test]
-    fn malformed_cobs_bad_crc_and_truncation_recover_at_the_next_delimiter() {
-        for bad in [&[5, 1, 0][..], &[4, 5, 0x5c, 0xb6, 0], &[1, 0], &[2, 4, 0]] {
-            let mut decoder = MessageDecoder::new();
-            let results = feed(&mut decoder, bad);
-            assert_eq!(results.len(), 1);
-            assert!(results[0].is_err());
-            assert_eq!(
-                feed(&mut decoder, PONG).pop().unwrap().unwrap(),
-                Message::Pong
-            );
-        }
-        let mut decoder = MessageDecoder::new();
-        assert!(matches!(
-            feed(&mut decoder, &[4, 5, 0x5c, 0xb6, 0]).pop().unwrap(),
-            Err(MyError::Postcard(postcard::Error::DeserializeBadCrc))
-        ));
-    }
-
-    #[test]
-    fn valid_crc_cannot_hide_invalid_serialization_or_trailing_payload() {
-        for payload in [&[255][..], &[4, 99]] {
-            let mut raw = payload.to_vec();
-            raw.extend(CRC.checksum(payload).to_le_bytes());
-            let mut wire = [0; MessageEncoder::MAX_FRAME_SIZE];
-            let size = cobs::try_encode(&raw, &mut wire).unwrap();
-            wire[size] = 0;
-            let mut decoder = MessageDecoder::new();
-            assert!(
-                feed(&mut decoder, &wire[..size + 1])
-                    .pop()
-                    .unwrap()
-                    .is_err()
-            );
-            assert_eq!(
-                feed(&mut decoder, PING).pop().unwrap().unwrap(),
-                Message::Ping
-            );
-        }
-    }
-
-    #[test]
-    fn overflow_discards_through_delimiter_including_any_apparent_frame_suffix() {
-        let mut decoder = MessageDecoder::new();
-        for _ in 0..ENCODED_SIZE {
-            assert!(decoder.feed(1).is_none());
-        }
-        // Exactly the capacity reaches raw decoding, rather than overflow.
-        assert!(!matches!(
-            decoder.feed(0).unwrap(),
-            Err(MyError::MessageTooLong)
-        ));
-        for _ in 0..ENCODED_SIZE + 1 {
-            assert!(decoder.feed(1).is_none());
-        }
-        for &byte in &PING[..PING.len() - 1] {
-            assert!(decoder.feed(byte).is_none());
-        }
-        assert!(matches!(
-            decoder.feed(0).unwrap(),
-            Err(MyError::MessageTooLong)
-        ));
-        assert_eq!(
-            feed(&mut decoder, PONG).pop().unwrap().unwrap(),
-            Message::Pong
-        );
-        assert!(decoder.feed(0).is_none());
+}
+impl Default for MessageDecoder {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -17,6 +17,7 @@ on:
       - 'musical-stm32/**'
       - 'musical-adafruit-sparkle-embassy/**'
       - 'musical-adafruit-sparkle-idf/**'
+      - 'tools/firmware/**'
   pull_request:
     paths:
       - 'Cargo.toml'
@@ -33,6 +34,7 @@ on:
       - 'musical-stm32/**'
       - 'musical-adafruit-sparkle-embassy/**'
       - 'musical-adafruit-sparkle-idf/**'
+      - 'tools/firmware/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,6 +42,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  firmware-tools:
+    name: Wired provisioning and calibration tools
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14.7'
+      - run: python3 -m pip install uv==0.10.5
+      - run: python3 validation/validate.py firmware-tools
   changes:
     name: Affected firmware
     runs-on: ubuntu-24.04

@@ -1,5 +1,8 @@
+import { validAudio, validVisual } from './audio_controls.js';
 const profiles = new WeakMap();
+const acceptedCalibrations = new Map();
 const sessions = new WeakMap();
+const contextSessions = new WeakMap();
 let nextSession = 0;
 
 // Safari needs resume inside the gesture, before requestFullscreen consumes
@@ -15,8 +18,11 @@ export function suspendForStartup(context) {
 }
 
 function beginSession(context, card, source) {
+    if (context.audioRetired) throw new Error('Audio session has closed');
     const session = { sessionId: ++nextSession, source, sampleRate: context.sampleRate,
         diagnostics: card.querySelector('.tone-trace')?.checked === true, state: 'starting', repeat: false };
+    contextSessions.set(context, session);
+    session.restart = () => context.inputResume ?? { source };
     card.dataset.audioSession = String(session.sessionId);
     card.dataset.audioSource = source;
     card.dataset.toneDiagnostics = String(session.diagnostics);
@@ -67,7 +73,7 @@ async function requireCurrentRuntime(context) {
         const response = await fetch(check, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
         if (response.ok) ({ version } = await response.json());
     } catch { /* Cached modules may still work when the version check is offline. */ }
-    if (context.state === 'closed' || !card?.isConnected) throw new Error('Audio session has closed');
+    if (context.audioRetired || context.state === 'closed' || !card?.isConnected) throw new Error('Audio session has closed');
     if (!/^[a-f0-9]{24}$/.test(version) || assets.endsWith(`/assets/${version}/`)) return;
     const reload = new URL(location.href);
     reload.searchParams.set('__ml_build', version);
@@ -99,7 +105,7 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
             try { profile = JSON.parse(stored); } catch { /* An invalid saved profile requires calibration again. */ }
         }
     }
-    const pressure = profile?.pascalsPerUnit;
+    const pressure = acceptedCalibrations.get(key) ?? profile?.pascalsPerUnit;
     const pascalsPerUnit = Number.isFinite(pressure) && pressure > 0 ? pressure : undefined;
     Object.assign(session, { channel: session.selectedChannel ?? channel, pascalsPerUnit: pascalsPerUnit ?? 2, calibrated: pascalsPerUnit !== undefined });
     session.publish(session.state, 'processor ready');
@@ -120,10 +126,15 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
         channelCountMode: 'max', channelInterpretation: 'discrete',
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
         processorOptions: { module, pascalsPerUnit, channel: session.source === 'microphone' ? channel : 0, reducedMotion,
-            settings: context.loudnessSettings, diagnostics: session.diagnostics, sessionId: session.sessionId },
+            settings: context.loudnessSettings, visual: context.visualOptions, microphone: session.source === 'microphone', diagnostics: session.diagnostics, sessionId: session.sessionId },
     });
     const card = document.querySelector('.audio-card');
+    session.node = node;
+    session.revision = 1;
     const trace = event => {
+        if (event.data.type === 'settings-ack' && isCurrentProcessorMessage(node, event.data)) {
+            card.dispatchEvent(new CustomEvent('audio-settings-ack', { detail: event.data }));
+        }
         if (!session.closed && event.data.sessionId === session.sessionId && event.data.trace)
             card.dispatchEvent(new CustomEvent('tone-trace', { detail: {
                 ...event.data, receivedAt: performance.timeOrigin + performance.now(), receivedAudioTime: context.currentTime,
@@ -203,6 +214,7 @@ export function saveCalibration(node, pascalsPerUnit) {
         throw new Error('Capture settings changed during calibration. Restart listening.');
     }
     profile.calibrated = true;
+    acceptedCalibrations.set(profile.key, pascalsPerUnit);
     if (profile.settings.deviceId) {
         try { localStorage.setItem(`musical-lights-calibration:${profile.key}`, JSON.stringify({ pascalsPerUnit })); } catch { /* Valid for this session only. */ }
     }
@@ -212,6 +224,7 @@ export function forgetCalibration(node) {
     if (!profile || profile.session.source !== 'microphone') return;
     try { localStorage.removeItem(`musical-lights-calibration:${profile.key}`); } catch { /* Nothing else is removed. */ }
     profile.calibrated = false;
+    acceptedCalibrations.delete(profile.key);
 }
 export function canCalibrate(node) { return profiles.get(node)?.raw ?? false; }
 export function releaseProcessor(node) { profiles.get(node)?.release(); profiles.delete(node); }
@@ -227,14 +240,37 @@ const generatedSources = new WeakMap();
 export class InputControls {
     constructor(card, onChange) {
         this.card = card;
-        this.change = ({ detail }) => onChange(detail.source, detail.play);
+        this.change = ({ detail }) => { delete card.audioRestart; onChange(detail.source, detail.play); };
+        this.settings = ({ detail }) => {
+            const context = card.activeAudioContext;
+            if (!context || context.audioRetired || context.state === 'closed' || !card.isConnected) return;
+            if (!validAudio(detail.audio) || !validVisual(detail.visual)) return;
+            const changed = JSON.stringify([detail.audio, detail.visual]) !== JSON.stringify([context.loudnessSettings, context.visualOptions]);
+            context.loudnessSettings = [...detail.audio]; context.visualOptions = [...detail.visual];
+            const requested = JSON.stringify([detail.quantum, detail.latency]);
+            const session = contextSessions.get(context);
+            if (requested !== context.requestedAudioOptions) {
+                card.audioRestart = session?.restart() ?? context.inputResume ?? { source: card.querySelector('.input-source')?.value ?? 'microphone' };
+                // The Rust owner stops the old generation before creating its replacement.
+                onChange(card.audioRestart.source, true);
+            } else if (changed && session?.node && !session.closed) {
+                session.node.port.postMessage({ type: 'settings', sessionId: session.sessionId,
+                    revision: ++session.revision, settings: context.loudnessSettings, visual: context.visualOptions });
+            }
+        };
         card.addEventListener('review-input', this.change);
+        card.addEventListener('display-settings', this.settings);
     }
-    close() { this.card.removeEventListener('review-input', this.change); }
+    close() {
+        this.card.removeEventListener('review-input', this.change);
+        this.card.removeEventListener('display-settings', this.settings);
+        delete this.card.audioRestart;
+    }
 }
 export async function acquireInput(context, selectedChannel) {
     const card = /** @type {HTMLElement} */ (document.querySelector('.audio-card'));
-    const sourceKind = card.querySelector('.input-source')?.value ?? 'microphone';
+    const resume = context.inputResume;
+    const sourceKind = resume?.source ?? card.querySelector('.input-source')?.value ?? 'microphone';
     const generated = sourceKind === 'generated', digital = sourceKind !== 'microphone';
     const session = beginSession(context, card, sourceKind);
     session.selectedChannel = selectedChannel;
@@ -280,7 +316,8 @@ export async function acquireInput(context, selectedChannel) {
         const frequency = Number(query('.tone-frequency')?.value ?? 1000);
         const db = Number(query('.tone-level')?.value ?? -34);
         let buffer, identity;
-        if (generated) {
+        if (resume?.buffer) { buffer = resume.buffer; identity = resume.identity; }
+        else if (generated) {
             if (!Number.isFinite(db) || db < -90 || db > -12 || !Number.isFinite(frequency) || frequency < 20 || frequency > 15500)
                 throw new Error('Choose a level from −90 to −12 dBFS and a frequency from 20 to 15500 Hz.');
             if (selectedChannel !== 0) throw new Error('Test tones have one channel. Choose input channel 1.');
@@ -293,27 +330,27 @@ export async function acquireInput(context, selectedChannel) {
             buffer = context.createBuffer(1, decoded.buffer.length, decoded.buffer.sampleRate);
             buffer.copyToChannel(decoded.buffer.getChannelData(selectedChannel), 0);
         }
-        if (context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
+        if (context.audioRetired || context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
         const { playbackTiming } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/review.js', document.baseURI));
-        if (context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
+        if (context.audioRetired || context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
         const destination = context.createMediaStreamDestination();
         const playback = context.createGain(); playback.connect(destination);
         const monitor = context.createGain(); monitor.gain.value = query('.tone-audible')?.checked ? 1 : 0;
         monitor.connect(context.destination); playback.connect(monitor);
         Object.assign(session, generated ? { kind, frequency, dbfs: db, peakAmplitude: 10 ** (db / 20) } : { clip: identity });
         Object.assign(session, {
-            audioStart: context.currentTime, repeat: query('.tone-repeat')?.checked ?? true });
+            audioStart: context.currentTime, repeat: resume?.repeat ?? query('.tone-repeat')?.checked ?? true });
         await context.audioWorklet.addModule(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/pcm-playback.js', document.baseURI)).catch(async error => {
             await requireCurrentRuntime(context);
             throw error;
         });
-        if (context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
+        if (context.audioRetired || context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
         const source = new AudioWorkletNode(context, 'pcm-playback', {
             numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
-            processorOptions: { pcm: buffer.getChannelData(0), repeat: session.repeat },
+            processorOptions: { pcm: buffer.getChannelData(0), repeat: session.repeat, positionFrame: resume?.positionFrame ?? 0, paused: resume?.paused ?? false, ended: resume?.ended ?? false },
         });
         source.connect(playback);
-        let paused = false, ended = false, sequence = 0, acknowledged = -1, acknowledgedFrame = -1;
+        let paused = resume?.paused ?? false, ended = resume?.ended ?? false, sequence = 0, acknowledged = -1, acknowledgedFrame = -1;
         // Output may still be in a preceding loop or transport state. Map its
         // context clock through the timeline before wrapping/clamping position.
         const timeline = [];
@@ -368,8 +405,12 @@ export async function acquireInput(context, selectedChannel) {
         listen('.tone-audible', 'change', () => { monitor.gain.value = query('.tone-audible').checked ? 1 : 0; });
         // The constructor starts at sample zero. Do not send an initial restart
         // that could arrive after the first render quantum and duplicate PCM.
-        markPosition(0, context.currentTime, true, session.repeat);
-        session.publish(context.state === 'running' ? 'playing' : 'starting', 'source start');
+        const initialPosition = (resume?.positionFrame ?? 0) / context.sampleRate;
+        markPosition(initialPosition, context.currentTime, !paused && !ended, session.repeat);
+        session.restart = () => ({ source: sourceKind, buffer, identity,
+            positionFrame: Math.min(buffer.length, Math.round(positionAt(context.currentTime) * context.sampleRate)), paused, ended, repeat: session.repeat });
+        session.publish(ended ? 'ended' : paused ? 'paused' : context.state === 'running' ? 'playing' : 'starting', 'source start');
+        query('.tone-pause').textContent = ended ? 'Replay' : paused ? 'Resume playback' : 'Pause playback';
         query('.tone-pause').disabled = false; query('.review-replay').disabled = false;
         const timer = setInterval(() => {
             if (session.closed) return;
@@ -397,4 +438,12 @@ export async function acquireInput(context, selectedChannel) {
 export function releaseInput(stream) {
     sessions.get(stream)?.close(); sessions.delete(stream);
     generatedSources.get(stream)?.release(); generatedSources.delete(stream);
+}
+
+// Close ownership synchronously. AudioContext.close() completes asynchronously.
+export function retireAudioContext(context) {
+    context.audioRetired = true;
+    contextSessions.get(context)?.close();
+    const card = document.querySelector('.audio-card');
+    if (card?.activeAudioContext === context) delete card.activeAudioContext;
 }

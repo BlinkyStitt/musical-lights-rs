@@ -5,7 +5,11 @@ edition = "2024"
 resolver = "2"
 
 [dependencies]
-ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", rev = "0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9", default-features = false }
+hmac = { version = "=0.13.0", default-features = false }
+sha2 = { version = "=0.11.0", default-features = false }
+nmea = { version = "=0.8.0", default-features = false, features = ["RMC", "GGA"] }
+world_magnetic_model = { version = "=1.2025.0", default-features = false }
+ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", rev = "0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9", default-features = false, features = ["field_access"] }
 cobs = { version = "=0.5.1", default-features = false }
 crc = "=3.4.0"
 defmt = { version = "=1.1.1", default-features = false, optional = true }

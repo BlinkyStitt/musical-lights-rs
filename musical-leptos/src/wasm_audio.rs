@@ -10,6 +10,8 @@ use web_sys::{
 
 #[wasm_bindgen(module = "/src/audio_setup.js")]
 extern "C" {
+    #[wasm_bindgen(js_name = retireAudioContext)]
+    fn retire_audio_context(context: &AudioContext);
     type InputControls;
     #[wasm_bindgen(constructor)]
     fn new(card: &web_sys::HtmlElement, on_change: &js_sys::Function) -> InputControls;
@@ -98,6 +100,7 @@ impl AudioSession {
     pub fn new() -> Result<Self, JsValue> {
         let context = create_audio_context()?;
         if context.sample_rate() != 48_000.0 {
+            retire_audio_context(&context);
             let _ = context.close();
             return Err(JsValue::from_str(
                 "The loudness model requires a 48000 Hz audio context",
@@ -109,6 +112,7 @@ impl AudioSession {
         let startup_suspension = match suspend_for_startup(&context) {
             Ok(promise) => promise,
             Err(error) => {
+                retire_audio_context(&context);
                 let _ = context.close();
                 return Err(error);
             }
@@ -230,6 +234,7 @@ impl AudioSession {
                     }
                     let _ = callback_port.post_message(&ack);
                 }
+                Some("settings-ack") => {}
                 Some("error") => {
                     let message = Reflect::get(&data, &"message".into())
                         .ok()
@@ -338,6 +343,7 @@ fn stop_tracks(stream: &MediaStream) {
 }
 impl Drop for AudioResources {
     fn drop(&mut self) {
+        retire_audio_context(&self.context);
         if let Some(worklet) = &self.worklet {
             release_processor(worklet);
             if let Ok(port) = worklet.port() {
