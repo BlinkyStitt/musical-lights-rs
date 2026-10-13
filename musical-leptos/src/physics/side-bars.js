@@ -1,7 +1,7 @@
 import * as THREE from './three.module.js';
 import { barProjection, BOX_OFFSETS } from './mirrors.js';
 
-// Four full-size background boxes beside the physical center box. Copy its
+// Eight full-size background boxes beside the physical center box. Copy its
 // vertical bars, including the scrolling seam, without adding any physics.
 export class SideBars {
   constructor(scene, bars, count) {
@@ -37,10 +37,18 @@ export class SideBars {
       this.frustum.setFromProjectionMatrix(this.projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     }
     const source = this.bars.instanceMatrix.array, target = this.mesh.instanceMatrix.array;
+    const height = source[count * 3 * 16 + 13] + Math.abs(source[count * 3 * 16 + 5]) / 2;
     let n = 0;
     for (const box of BOX_OFFSETS) {
       if (box === 0) continue;
       const offset = box * width;
+      // Reject whole banks before scanning their posts. Include the complete
+      // depth extrusion: a bank outside the front view can enter farther back.
+      if (camera) {
+        this.bounds.min.set(offset, -layout[6], -depth * (copies + .5));
+        this.bounds.max.set(offset + width, height + layout[6] + .00001, depth / 2);
+        if (!this.frustum.intersectsBox(this.bounds)) continue;
+      }
       for (let i = 0; i < this.bars.count; i++) {
         const x = source[i * 16 + 12];
         // Touching an edge contributes no surface inside this box. Compare

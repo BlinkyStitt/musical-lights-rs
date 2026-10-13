@@ -52,7 +52,7 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
   assert.equal(room.walls.geometry.groups.length, 6); assert.equal(room.walls.count, 1);
   assert.equal(room.meshes.length, 1);
   assert.equal(scene.children.some(node => node.isLineSegments), false);
-  assert.equal(room.walls.instanceMatrix.array[0], 6);
+  assert.equal(room.walls.instanceMatrix.array[0], Math.fround(10.8));
   assert.equal(room.walls.instanceMatrix.array[12], Math.fround(.6));
   assert.equal(mirrorCells(3).length, 3);
   assert.equal(mirrorCells(0).length, 0); assert.equal(mirrorCells(17).length, 17);
@@ -90,6 +90,9 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
   const expandedGeometry = meshes[0].geometry, expandedMatrices = meshes[0].instanceMatrix;
   room.setCount(8); assert.equal(meshes[0].geometry, expandedGeometry); assert.equal(meshes[0].instanceMatrix, expandedMatrices);
   assert.equal(room.meshes.filter(s=>s.staged.kind==='balls').reduce((n,s)=>n+s.mesh.count,0), balls.count * 8);
+  room.setCount(44); room.update(1.2, .6, .24, camera);
+  assert.equal(room.walls.instanceMatrix.array[0], room.walls.instanceMatrix.array[10],
+    '44 depth images match the nine-box width at the default physical depth');
   room.dispose(); assert.equal(scene.children.length, 0);
   geometry.dispose(); material.dispose();
 });

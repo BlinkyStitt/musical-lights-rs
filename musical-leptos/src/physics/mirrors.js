@@ -5,7 +5,7 @@ export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transforme
 // This exceeds the camera’s visible depth even at the minimum enclosure depth
 // and maximum yaw. Higher settings add storage and uploads without visible depth.
 export const MAX_DEPTH_IMAGES = 2048;
-export const BOX_OFFSETS = Object.freeze([-2, -1, 0, 1, 2]);
+export const BOX_OFFSETS = Object.freeze([-4, -3, -2, -1, 0, 1, 2, 3, 4]);
 
 // Ball images reuse the physical transforms. Bars use continuous extrusions
 // instead of repeated boxes, so their depth surfaces have no internal seams.

@@ -396,7 +396,7 @@ test('off-screen bar culling preserves visible pixels across angles and depth se
     const target = new THREE.WebGLRenderTarget(320, 240), pixels = new Uint8Array(320 * 240 * 4), evidence = [];
     const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
     try {
-      for (const count of [0, 3, 8, 17]) for (const angle of [-40, -10, 0, 10, 40]) {
+      for (const count of [0, 3, 8, 17, 44, 2048]) for (const angle of [-40, -10, 0, 10, 40]) {
         v.mirrors.setCount(count); v.setCamera(angle); v.draw(performance.now());
         const visible = v.sideBars.mesh.count, actual = render();
         v.sideBars.update(v.layout); const all = v.sideBars.mesh.count, expected = render();
@@ -443,7 +443,7 @@ test('normal scenes fill a larger centered frame before and after fullscreen', a
   }
 });
 
-test('all five bar banks share source lighting without internal wall partitions', async ({ page }) => {
+test('all nine bar banks share source lighting without internal wall partitions', async ({ page }) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
   await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
@@ -456,7 +456,7 @@ test('all five bar banks share source lighting without internal wall partitions'
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
-    const camera = new THREE.OrthographicCamera(-v.width * 2.5, v.width * 2.5, v.height / 2, -v.height / 2, .01, 20);
+    const camera = new THREE.OrthographicCamera(-v.width * 4.5, v.width * 4.5, v.height / 2, -v.height / 2, .01, 20);
     camera.position.set(v.width / 2, v.height / 2, 2); camera.lookAt(v.width / 2, v.height / 2, 0); camera.updateMatrixWorld();
     v.sideBars.update(v.layout, camera, v.mirrors.count, v.config[5]);
     const target = new THREE.WebGLRenderTarget(1440, 360), pixels = new Uint8Array(1440 * 360 * 4);
@@ -466,7 +466,7 @@ test('all five bar banks share source lighting without internal wall partitions'
       const colors = [];
       for (let band = 0; band < 24; band++) {
         const source = v.bars.instanceMatrix.array;
-        const rgb = [-2, -1, 0, 1, 2].map(box => {
+        const rgb = [-4, -3, -2, -1, 0, 1, 2, 3, 4].map(box => {
           const point = new THREE.Vector3(source[band * 16 + 12] + box * v.width, v.renderedHeight(band) * .3, v.config[5] / 2).project(camera);
           const offset = (Math.floor((point.y + 1) * 180) * 1440 + Math.floor((point.x + 1) * 720)) * 4;
           return Array.from(pixels.slice(offset, offset + 3));
@@ -480,10 +480,10 @@ test('all five bar banks share source lighting without internal wall partitions'
     } finally { v.renderer.setRenderTarget(null); target.dispose(); }
   });
   for (const banks of result.colors) {
-    expect(Math.max(...banks[2])).toBeGreaterThan(150);
-    for (const rgb of banks) expect(Math.max(...rgb.map((value, i) => Math.abs(value - banks[2][i])))).toBeLessThanOrEqual(3);
+    expect(Math.max(...banks[4])).toBeGreaterThan(150);
+    for (const rgb of banks) expect(Math.max(...rgb.map((value, i) => Math.abs(value - banks[4][i])))).toBeLessThanOrEqual(3);
   }
-  expect(result.walls).toBe(1); expect(result.wallWidth).toBeCloseTo(result.width * 5, 5);
+  expect(result.walls).toBe(1); expect(result.wallWidth).toBeCloseTo(result.width * 9, 5);
   expect(result.wallCenter).toBeCloseTo(result.width / 2, 5);
   expect(result.outlines).toBe(false); expect(result.lights).toBe(0);
   expect(result.copyMaterials).toEqual(['MeshLambertMaterial']);
@@ -607,7 +607,7 @@ test('mirror count saves, rejects fractions and resets without changing physics'
       const v = document.querySelector('#dancinglights').physics;
       return [v.settings.mirrorCount, v.mirrors.count, v.balls.count, v.layout[21], v.sideBars.capacity,
         v.mirrors.meshes.every(({mesh},i)=>mesh===window.mirrorMeshes[i])];
-    })).toEqual([count, count, 8, 8, 200, true]);
+    })).toEqual([count, count, 8, 8, 400, true]);
   }
   await expect.poll(()=>page.evaluate(()=>window.mirrorAudioFrames)).toBeGreaterThan(5);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
@@ -658,8 +658,15 @@ test('full-size background boxes repeat all source bands beside the physical cen
     const results = [];
     try {
       for (const angle of [-40, 40]) {
-        v.setCamera(angle); v.draw(performance.now());
-        const copy = render(); v.sideBars.mesh.visible = false;
+        v.mirrors.setCount(44); v.setCamera(angle); v.draw(performance.now());
+        const copy = render();
+        // Hide only the new outer banks. Keep fog and lighting identical.
+        for (let i = 0; i < v.sideBars.mesh.count; i++)
+          if (Math.abs(v.sideBars.offsets[i]) > 2 * v.width + .00001) v.sideBars.mesh.instanceMatrix.array[i * 16 + 12] += 1000;
+        v.sideBars.mesh.instanceMatrix.needsUpdate = true;
+        const withoutOuter = render();
+        v.sideBars.update(v.layout, v.camera, v.mirrors.count, v.config[5]);
+        v.sideBars.mesh.visible = false;
         const without = render(); v.sideBars.mesh.visible = true;
         // Inspect the complete source bank contract independently of the
         // camera's submitted subset. Pixel equivalence covers culling above.
@@ -667,8 +674,8 @@ test('full-size background boxes repeat all source bands beside the physical cen
         const offsets = [...v.sideBars.offsets.slice(0,v.sideBars.mesh.count)];
         const bands = [...v.sideBars.sourceBands.slice(0,v.sideBars.mesh.count)];
         const tips = bands.map((band,i)=>Math.abs(v.sideBars.mesh.instanceMatrix.array[i*16+5])-v.renderedHeight(band));
-        results.push({ angle, changed: copy.reduce((n,x,i)=>n+Number(Math.abs(x-without[i])>8),0),
-          banks:[-2,-1,1,2].map(box=>new Set(bands.filter((_,i)=>Math.abs(offsets[i]-box*v.width)<1e-6)).size),
+        results.push({ angle, outerChanged: copy.reduce((n,x,i)=>n+Number(Math.abs(x-withoutOuter[i])>8),0), changed: copy.reduce((n,x,i)=>n+Number(Math.abs(x-without[i])>8),0),
+          banks:[-4,-3,-2,-1,1,2,3,4].map(box=>new Set(bands.filter((_,i)=>Math.abs(offsets[i]-box*v.width)<1e-6)).size),
           tipError:Math.max(...tips.map(Math.abs)),balls:v.balls.count,
           depth:v.bars.geometry.parameters.depth,physicalDepth:v.config[5],
           width:v.sideBars.geometry.parameters.width,sourceWidth:v.bars.geometry.parameters.width,
@@ -678,9 +685,10 @@ test('full-size background boxes repeat all source bands beside the physical cen
     return results;
   });
   for (const result of results) {
-    expect(result.banks).toEqual([24,24,24,24]); expect(result.balls).toBe(8);
+    expect(result.banks).toEqual([24,24,24,24,24,24,24,24]); expect(result.balls).toBe(8);
     expect(result.boxes).toBe(1); expect(result.depth).toBeCloseTo(result.physicalDepth,6);
     expect(result.width).toBe(result.sourceWidth);
+    expect(result.outerChanged,JSON.stringify(result)).toBeGreaterThan(16);
     expect(result.tipError).toBeLessThan(.00001); expect(result.changed,JSON.stringify(result)).toBeGreaterThan(100);
   }
 });
@@ -703,13 +711,13 @@ test('center supports and neighboring bars fill the same physical depth', async 
   expect(result.depth).toBeCloseTo(result.physicalDepth,6); expect(result.sideDepth).toBe(result.depth);
   expect(result.centers.every(z=>z===0)).toBe(true); expect(result.widths[0]).toBe(result.widths[1]);
   expect(result.heightError).toBeLessThan(.000001);
-  expect(result.shifts).toHaveLength(4);
-  for (const [i, offset] of [-2,-1,1,2].entries()) expect(result.shifts[i]).toBeCloseTo(offset*result.width,6);
+  expect(result.shifts).toHaveLength(8);
+  for (const [i, offset] of [-4,-3,-2,-1,1,2,3,4].entries()) expect(result.shifts[i]).toBeCloseTo(offset*result.width,6);
   expect(result.coatings).toBe(1);
-  expect(result.outerWidth).toBeCloseTo(5*result.width,6);
+  expect(result.outerWidth).toBeCloseTo(9*result.width,6);
   expect(result.outerCenter).toBeCloseTo(result.width/2,6);
   expect(result.bodyCount).toBe(8); expect(result.physicalBalls).toBe(8);
-  expect(result.sideCount).toBe(24 * 2 * 4); // zero-area columns at the box edges do not draw
+  expect(result.sideCount).toBe(24 * 2 * 8); // zero-area columns at the box edges do not draw
 });
 
 test('offscreen rendering stops while audio and physics keep running', async ({ page }) => {
@@ -880,10 +888,10 @@ test('full-size background bands show lit faces and depth copies separate at obl
       for (const angle of [-40, 40]) {
         v.setCamera(angle); v.draw(performance.now());
         const camera = v.camera.clone();
-        // Fit all five boxes for the all-band pixel check. The normal camera
+        // Fit all nine boxes for the all-band pixel check. The normal camera
         // deliberately frames the physical center; neighbors enter on rotation.
         const center = new THREE.Vector3(v.width / 2, v.visibleHeight / 2, 0);
-        camera.position.sub(center).multiplyScalar(5).add(center);
+        camera.position.sub(center).multiplyScalar(9).add(center);
         camera.lookAt(center); camera.updateMatrixWorld();
         v.sideBars.update(v.layout, camera, v.mirrors.count, v.config[5]);
         v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);

@@ -72,7 +72,7 @@
 - Mirror count controls drawing only. New users start in Auto mode, which selects
   1–32 depth images from measured startup frame cadence. Selecting Auto explicitly
   tests the full 0–2048 range. Saved manual choices remain unchanged. Advanced allows 0–2048 images; validate the
-  upper bound and saved settings without changing physical ball counts. Four
+  upper bound and saved settings without changing physical ball counts. Eight
   full-size background boxes flank the
   physical center box and reuse all source bands in matching vertical banks.
   Center posts span the collider depth.
@@ -94,7 +94,7 @@
   slider in normal Home and expanded mode. Camera motion uses a smooth horizontal
   sweep without attack shake or vertical wobble. Do not draw box-frame outlines
   or black bar borders. Retain white attack edges. Repeat source lighting across
-  the five banks and depth copies, with one outer coating and no internal walls.
+  the nine banks and depth copies, with one outer coating and no internal walls.
   Normal-page scenes use equal gutters and a responsive 320–560 pixel height.
   The default sweep spans −10° to +10° over a 48-second cycle.
 - Listening adds a core-owned travelling floor of at most one sixth of bar
