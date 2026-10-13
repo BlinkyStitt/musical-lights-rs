@@ -351,3 +351,16 @@ test('live RMS tuning uses the same analysis boundary for every callback size', 
     assert.equal(w.processor_revision(h), 2);
   }
 });
+
+test('initial microphone gate survives saved-settings configuration while digital playback bypasses it', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  for (const microphone of [true, false]) {
+    const p = processor(0, false, { sessionId: 117, microphone, settings: [...DEFAULT_AUDIO], visual: [1, -20, 1, 1] });
+    const samples = tone(24000, 1000, .005);
+    for (let at = 0; at < samples.length; at += 128) assert(p.push(samples.subarray(at, at + 128)));
+    assert(p.value.wasm.processor_sones(p.value.processor) > 0);
+    const targets = Array.from({length:24},(_,band)=>p.snapshot()[3 + band*4]);
+    if (microphone) assert(targets.every(value=>value===0), 'saved settings must retain microphone gating');
+    else assert(targets.some(value=>value>0), 'digital input must bypass the gate');
+  }
+});

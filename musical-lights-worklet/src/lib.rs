@@ -102,6 +102,7 @@ impl AudioProcessor {
         };
         self.settings = settings;
         self.core = LoudnessProcessor::new(self.calibration, SoundField::Free, settings);
+        self.core.set_microphone(self.microphone);
         self.readouts = Readouts::new(settings);
         self.update(1)
     }
