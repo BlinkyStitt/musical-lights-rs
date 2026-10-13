@@ -455,8 +455,11 @@ export class PhysicsView {
     const [count, , , pitch, , , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
-    const span = Math.max(1000 / 120, (current[0] - previous[0]) * 1000);
-    const alpha = Math.min(1, Math.max(0, (now - this.received) / span));
+    const step = 1000 / this.layout[1];
+    const span = Math.max(step, (current[0] - previous[0]) * 1000);
+    // Keep one physics step of interpolation, even when receipts span several
+    // steps. A slow renderer must not add its entire snapshot gap to attacks.
+    const alpha = Math.min(1, Math.max(0, 1 - (step - (now - this.received)) / span));
     const geometry = this.layout[17];
     const height = previous[geometry] + (current[geometry] - previous[geometry]) * alpha, depth = this.config[5];
     this.barRoof.value = height; this.barDepth.value = 1 + this.mirrors.count;

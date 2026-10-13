@@ -772,8 +772,9 @@ separate contracts.
 
 The worker publishes each 120 Hz physics tick with one in-flight snapshot
 buffer. Balls, bars, roof geometry and horizontal motion share the same interpolated
-snapshot time. This interpolation adds at most one published snapshot interval
-to bar presentation; physical rise durations and audio inputs stay unchanged.
+snapshot time. Interpolation stays one 120 Hz physics step (about 8.3 ms) behind the latest
+snapshot at receipt, even when snapshots arrive less often. Physical rise
+durations and audio inputs stay unchanged.
 `mirrors.spec.mjs` checks all 24 rendered heights against that shared time during
 a rise. Background checks verify all 24 source bands in all eight neighbor boxes,
 their physical depth and actual lit pixels at steep angles.
