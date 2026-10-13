@@ -23,10 +23,12 @@ export const LIGHT_FIELD = `
       dx -= floor(dx / lightExtent.x + .5) * lightExtent.x;
       float lower = stripState[i].y - point.y;
       float upper = lightExtent.y - stripState[i].y - point.y;
-      vec3 delta = vec3(dx, abs(lower) < abs(upper) ? lower : upper, 0.0);
       vec3 color = stripColor[i] * (lightStrength.x + colorAttack * mix(stripPulse[i].x, stripPulse[i].y, isotropic));
       color += vec3(mix(stripState[i].z, fogAttack[i] * .18, isotropic) * lightStrength.y);
-      illumination += sourceIllumination(delta, normal, color, isotropic);
+      // Both ends illuminate the same air. Selecting only the nearer end
+      // produces a crease where the top and bottom light fields meet.
+      illumination += sourceIllumination(vec3(dx, lower, 0.0), normal, color, isotropic);
+      illumination += sourceIllumination(vec3(dx, upper, 0.0), normal, color, isotropic);
     }
     for (int i = 0; i < 8; i++) {
       vec3 delta = glowBallPosition[i] - point;
