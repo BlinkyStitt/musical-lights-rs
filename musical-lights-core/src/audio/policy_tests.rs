@@ -219,3 +219,56 @@ fn gate_opening_and_closing_keep_identical_frame_targets_across_callbacks() {
         }
     }
 }
+
+#[test]
+fn enabling_a_closed_gate_discards_an_already_pending_direction_draw() {
+    let samples: std::vec::Vec<f32> = (0..48000)
+        .map(|i| {
+            if i < 24000 {
+                0.0
+            } else {
+                (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin() as f32 * 0.005
+            }
+        })
+        .collect();
+    let mut processor = LoudnessProcessor::default();
+    processor.set_microphone(true);
+    assert!(processor.queue_settings(
+        1,
+        AudioSettings::default(),
+        VisualOptions {
+            gate_dbfs: -20.0,
+            ..Default::default()
+        }
+    ));
+    let mut enabled = false;
+    let mut previous = 0;
+    for (index, chunk) in samples.chunks(96).enumerate() {
+        let mut attack = false;
+        processor
+            .push_pcm(chunk, (index * 96) as u64, false, |frame| {
+                attack |= frame.acoustic_events.iter().any(Option::is_some);
+            })
+            .unwrap();
+        if attack && !enabled {
+            previous = processor.accent_sequence();
+            assert!(processor.queue_settings(
+                2,
+                AudioSettings::default(),
+                VisualOptions {
+                    gate_enabled: true,
+                    gate_dbfs: -20.0,
+                    ..Default::default()
+                }
+            ));
+            enabled = true;
+        } else if enabled {
+            assert_eq!(
+                processor.accent_sequence(),
+                previous,
+                "closed gate emitted a direction event"
+            );
+        }
+    }
+    assert!(enabled, "fixture must first confirm an acoustic attack");
+}

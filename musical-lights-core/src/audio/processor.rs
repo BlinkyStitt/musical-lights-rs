@@ -174,7 +174,9 @@ impl LoudnessProcessor {
                     loud as f64,
                     attack,
                     !closed && !changed && presentation.acoustic.candidate_started,
-                ) {
+                ) && !closed
+                    && !changed
+                {
                     *accent_sequence = accent_sequence.wrapping_add(1);
                 }
                 emit(ProcessedFrame {
