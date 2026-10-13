@@ -84,7 +84,7 @@ export function mountAudioControls(presentation) {
     const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
     const input = document.createElement('input'); Object.assign(input, { type: 'number', min, max, step, value: settings[key] }); input.dataset.renderSetting = key; row.append(input); renderHost.append(row);
     if (key === 'attackGlow') input.title = 'White emission along attack edges. Raise this value for a brighter flash. Audio response settings control attack detection.';
-    if (key === 'colorAttack') input.title = 'Bar-colored attack light on the bars, nearby surfaces and fog. Louder bands produce brighter pulses. The white outline has its own Bar attack glow control.';
+    if (key === 'colorAttack') input.title = 'Bar-colored attack light on the bars and nearby surfaces. Louder bands produce brighter pulses. The white outline has its own Bar attack glow control.';
     presentation.listen(input, 'change', () => { if (input.value === '' || !input.validity.valid) return; settings[key] = Number(input.value); presentation.save(); });
   }
 }
