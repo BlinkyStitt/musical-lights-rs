@@ -45,6 +45,9 @@ impl Default for TempoEstimator {
     }
 }
 impl TempoEstimator {
+    pub fn configure(&mut self, settings: super::settings::AudioSettings) {
+        self.settings = settings;
+    }
     pub fn new(settings: super::settings::AudioSettings) -> Self {
         Self {
             settings,

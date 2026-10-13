@@ -1,17 +1,18 @@
-import { DEFAULT_AUDIO, validAudio, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
+import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, depthMode: 'auto', audio: DEFAULT_AUDIO, quantum: 'default', latency: 'interactive',
+  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, depthMode: 'auto', audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
   ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
-  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO] };
+  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL] };
   try {
     const saved = JSON.parse(storage.getItem(SETTINGS_KEY));
     if (saved?.version !== 1) return defaults;
     for (const [key, min, max] of [['flight', 0, 50], ['cameraAngle', -40, 40]]) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
+    if (validVisual(saved.visual)) defaults.visual = [...saved.visual];
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;

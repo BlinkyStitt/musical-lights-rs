@@ -6,6 +6,12 @@ export function validAudio(values) {
     && values.every((v, i) => Number.isFinite(v) && v >= AUDIO_CONTROLS[i][2] && v <= AUDIO_CONTROLS[i][3])
     && values[18] < values[19] && values[8] <= values[7];
 }
+export const DEFAULT_VISUAL = Object.freeze([0, -60, 1, 1]);
+export function validVisual(values) {
+  return Array.isArray(values) && values.length === 4 && values.every(Number.isFinite)
+    && [0, 1].includes(values[0]) && values[1] >= -90 && values[1] <= -20
+    && [0, 1, 2, 3].includes(values[2]) && values[3] >= 1 / 64 && values[3] <= 64;
+}
 export const RENDER_CONTROLS = Object.freeze([
   ['resolution', 'Scene resolution scale', 1, .25, 1.5, .05],
   ['depthFade', 'Depth brightness retention', .72, .1, .99, .01],
@@ -23,8 +29,28 @@ export const RENDER_CONTROLS = Object.freeze([
 export function mountAudioControls(presentation) {
   const { card, settings } = presentation;
   const host = card.querySelector('.audio-tuning');
-  const help = document.createElement('p'); help.textContent = 'These controls change scheduling, readouts, and presentation. The ISO loudness model stays fixed. Audio changes apply when you next start audio.'; host.append(help);
-  const status = document.createElement('p'); status.setAttribute('role', 'status');
+  const help = document.createElement('p'); help.textContent = 'These controls change scheduling, readouts, and presentation. The ISO loudness model stays fixed. Audio settings apply live. Block and latency changes restart active audio.'; host.append(help);
+  const status = document.createElement('p'); status.className = 'audio-settings-status'; status.setAttribute('role', 'status');
+  presentation.listen(card, 'audio-settings-ack', ({ detail }) => {
+    status.textContent = detail.accepted ? 'Audio settings applied.' : 'Audio settings rejected.';
+  });
+  const visualHost = document.createElement('div'); visualHost.className = 'visual-audio-controls'; host.append(visualHost);
+  const gateRow = document.createElement('label'); gateRow.className = 'control-row'; gateRow.textContent = 'Microphone noise gate';
+  const gate = document.createElement('input'); gate.type = 'checkbox'; gate.className = 'microphone-gate'; gate.checked = Boolean(settings.visual[0]); gateRow.append(gate); visualHost.append(gateRow);
+  const floorRow = document.createElement('label'); floorRow.className = 'control-row'; floorRow.textContent = 'Noise floor (dBFS)';
+  const floor = document.createElement('input'); Object.assign(floor, { type: 'number', min: -90, max: -20, step: 1, value: settings.visual[1], className: 'microphone-floor' }); floorRow.append(floor); visualHost.append(floorRow);
+  const gainRow = document.createElement('label'); gainRow.className = 'control-row'; gainRow.textContent = 'Visual gain mode';
+  const gain = document.createElement('select'); gain.className = 'visual-gain-mode';
+  ['Off', 'Normal', 'Vivid', 'Lazy'].forEach((name, i) => { const option = document.createElement('option'); option.value = i; option.textContent = name; gain.append(option); }); gain.value = settings.visual[2]; gainRow.append(gain); visualHost.append(gainRow);
+  const manualRow = document.createElement('label'); manualRow.className = 'control-row'; manualRow.textContent = 'Manual visual gain (×)';
+  const manual = document.createElement('input'); Object.assign(manual, { type: 'number', min: 1 / 64, max: 64, step: 'any', value: settings.visual[3], className: 'manual-visual-gain' }); manualRow.append(manual); visualHost.append(manualRow);
+  const syncVisual = () => { gate.checked = Boolean(settings.visual[0]); floor.value = settings.visual[1]; gain.value = settings.visual[2]; manual.value = settings.visual[3]; manual.disabled = settings.visual[2] !== 0; };
+  syncVisual();
+  for (const input of [gate, floor, gain, manual]) presentation.listen(input, 'change', () => {
+    const values = [Number(gate.checked), Number(floor.value), Number(gain.value), Number(manual.value)];
+    if (floor.value === '' || manual.value === '' || !floor.validity.valid || !manual.validity.valid || !validVisual(values)) { status.textContent = 'Use the displayed noise and gain limits.'; return; }
+    settings.visual = values; syncVisual(); presentation.save();
+  });
   const inputs = AUDIO_CONTROLS.map(([label, , min, max, step], i) => {
     const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
     const input = document.createElement('input'); Object.assign(input, { type: 'number', min, max, step, value: settings.audio[i] });
@@ -32,7 +58,7 @@ export function mountAudioControls(presentation) {
     presentation.listen(input, 'change', () => {
       const values = inputs.map(input => Number(input.value));
       if (!inputs.every(input => input.value !== '' && input.validity.valid) || !validAudio(values)) { status.textContent = 'Use values in the displayed ranges, increasing tempo limits, and peak history no longer than baseline history.'; return; }
-      status.textContent = 'Saved. Start audio again to apply.'; settings.audio = values; presentation.save();
+      status.textContent = 'Saved. Applying to active audio…'; settings.audio = values; presentation.save();
     }); return input;
   });
   const row = document.createElement('label'); row.className = 'control-row'; row.textContent = 'Audio block request';
@@ -52,7 +78,7 @@ export function mountAudioControls(presentation) {
   presentation.listen(latency, 'change', () => { settings.latency = Number.isFinite(Number(latency.value)) ? Number(latency.value) : latency.value; presentation.save(); });
   const note = document.createElement('p'); note.textContent = 'Block and latency requests depend on browser support. They do not specify total microphone-to-screen delay. RMS uses exponential integration. Background is a readout only.'; host.append(note, status);
   const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset audio controls'; host.append(reset);
-  presentation.listen(reset, 'click', () => { settings.audio = [...DEFAULT_AUDIO]; settings.quantum = 'default'; settings.latency = 'interactive'; inputs.forEach((input, i) => { input.value = settings.audio[i]; }); quantum.value = 'default'; latency.value = 'interactive'; presentation.save(); });
+  presentation.listen(reset, 'click', () => { settings.audio = [...DEFAULT_AUDIO]; settings.visual = [...DEFAULT_VISUAL]; syncVisual(); settings.quantum = 'default'; settings.latency = 'interactive'; inputs.forEach((input, i) => { input.value = settings.audio[i]; }); quantum.value = 'default'; latency.value = 'interactive'; presentation.save(); });
   const renderHost = card.querySelector('.render-tuning');
   for (const [key, label, , min, max, step] of RENDER_CONTROLS) {
     const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
@@ -68,6 +94,11 @@ export function createAudioContext() {
     const options = { sampleRate: 48000, latencyHint: saved?.latency ?? 'interactive' };
     if ('renderQuantumSize' in AudioContext.prototype) options.renderSizeHint = saved?.quantum ?? 'default';
     const context = new AudioContext(options);
+    const card = document.querySelector('.audio-card');
+    context.requestedAudioOptions = JSON.stringify([saved?.quantum ?? 'default', saved?.latency ?? 'interactive']);
+    context.inputResume = card?.audioRestart;
+    if (card) { delete card.audioRestart; card.activeAudioContext = context; }
+    context.visualOptions = validVisual(saved?.visual) ? [...saved.visual] : [...DEFAULT_VISUAL];
     context.loudnessSettings = validAudio(saved?.audio) ? [...saved.audio] : [...DEFAULT_AUDIO];
     return context;
 }

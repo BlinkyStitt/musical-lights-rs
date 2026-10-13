@@ -243,6 +243,10 @@ impl AcousticAttacks {
     }
 }
 impl LoudnessPresentation {
+    pub fn configure(&mut self, settings: AudioSettings) {
+        self.settings = settings;
+    }
+
     pub fn new(at: f64, settings: AudioSettings) -> Self {
         Self {
             snapshot: LoudnessSnapshot::new(at),
@@ -260,6 +264,16 @@ impl LoudnessPresentation {
         levels: [BandLevel; DISPLAY_BANDS],
         gain: f64,
         reduced: bool,
+    ) {
+        self.push_policy(frame, levels, gain, reduced, true);
+    }
+    pub fn push_policy(
+        &mut self,
+        frame: &LoudnessFrame,
+        levels: [BandLevel; DISPLAY_BANDS],
+        gain: f64,
+        reduced: bool,
+        attacks_enabled: bool,
     ) {
         let at = frame.sample_index as f64 / SAMPLE_RATE as f64;
         let mut speed = 0.0_f64;
@@ -281,7 +295,13 @@ impl LoudnessPresentation {
         self.snapshot.total_sones = frame.sones;
         self.snapshot.gain = gain;
         self.snapshot.flash_seconds = self.settings.flash_seconds;
-        let events = self.acoustic.push(frame, self.settings);
+        let mut events = self.acoustic.push(frame, self.settings);
+        if !attacks_enabled {
+            events.fill(false);
+            self.acoustic.events.fill(None);
+            self.acoustic.candidate.fill(None);
+            self.acoustic.candidate_started = false;
+        }
         for (i, event) in events.into_iter().enumerate() {
             if self.acoustic.quiet[i] >= frames(self.settings.visual_quiet) {
                 self.visual_armed[i] = true;

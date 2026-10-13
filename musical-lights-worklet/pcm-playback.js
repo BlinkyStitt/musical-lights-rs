@@ -1,14 +1,15 @@
 // Browser transport only. Copy decoded 48 kHz PCM on integer sample boundaries;
 // native buffer-source start times can introduce fractional-sample interpolation.
 class PCMPlaybackProcessor extends AudioWorkletProcessor {
-    constructor({ processorOptions: { pcm, repeat } }) {
+    constructor({ processorOptions: { pcm, repeat, positionFrame = 0, paused = false, ended = false } }) {
         super();
         if (!(pcm instanceof Float32Array) || !pcm.length || sampleRate !== 48000) throw Error('Invalid playback PCM');
         this.pcm = pcm;
-        this.cursor = 0;
+        if (!Number.isInteger(positionFrame) || positionFrame < 0 || positionFrame > pcm.length) throw Error('Invalid playback position');
+        this.cursor = positionFrame === pcm.length && repeat && !ended ? 0 : positionFrame;
         this.repeat = Boolean(repeat);
-        this.paused = false;
-        this.ended = false;
+        this.paused = Boolean(paused);
+        this.ended = Boolean(ended) || this.cursor === pcm.length;
         this.sequence = 0;
         this.pending = true;
         this.port.onmessage = ({ data }) => {

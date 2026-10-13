@@ -3,6 +3,7 @@
 //! No browser API imports.
 use musical_lights_core::audio::{
     loudness::{Calibration, LoudnessError, SAMPLE_RATE, SoundField},
+    policy::VisualOptions,
     presentation::LoudnessSnapshot,
     processor::LoudnessProcessor,
     readouts::Readouts,
@@ -38,10 +39,16 @@ struct AudioProcessor {
     calibration: Calibration,
     settings: AudioSettings,
     settings_input: [f64; AudioSettings::LEN],
+    visual_input: [f64; 4],
+    revision: u32,
+    microphone: bool,
+    options: VisualOptions,
+    queued: Option<(u32, AudioSettings, VisualOptions)>,
     readout_values: [f64; 4],
     input: [f32; INPUT_CAPACITY],
     snapshot: [f64; SNAPSHOT_SIZE],
     started: bool,
+    chunk_phase: usize,
     reduced: bool,
     error_code: u32,
     error_detail: u32,
@@ -63,10 +70,16 @@ impl AudioProcessor {
             calibration,
             settings,
             settings_input: settings.values(),
+            visual_input: VisualOptions::default().values(),
+            revision: 0,
+            microphone: false,
+            options: VisualOptions::default(),
+            queued: None,
             readout_values: [0.0; 4],
             input: [0.0; INPUT_CAPACITY],
             snapshot: [0.0; SNAPSHOT_SIZE],
             started: false,
+            chunk_phase: 0,
             reduced,
             error_code: 0,
             error_detail: 0,
@@ -90,6 +103,19 @@ impl AudioProcessor {
         self.settings = settings;
         self.core = LoudnessProcessor::new(self.calibration, SoundField::Free, settings);
         self.readouts = Readouts::new(settings);
+        self.update(1)
+    }
+    fn update(&mut self, revision: u32) -> bool {
+        let Some(settings) = AudioSettings::from_values(&self.settings_input) else {
+            return false;
+        };
+        let Some(options) = VisualOptions::from_values(&self.visual_input) else {
+            return false;
+        };
+        if !self.core.queue_settings(revision, settings, options) {
+            return false;
+        }
+        self.queued = Some((revision, settings, options));
         true
     }
     fn process(&mut self, len: usize, first_sample: u64) -> bool {
@@ -117,16 +143,35 @@ impl AudioProcessor {
                 .map_or(len - offset, |_| {
                     (SAMPLE_RATE * 3 - self.rms_count) as usize
                 })
-                .min(len - offset);
+                .min(len - offset)
+                .min(if self.chunk_phase == 0 {
+                    1
+                } else {
+                    25 - self.chunk_phase
+                });
             let pcm = &self.input[offset..offset + count];
+            self.chunk_phase = (self.chunk_phase + count) % 24;
             let readouts = &mut self.readouts;
             readouts.push_pcm(pcm);
+            let settings = &mut self.settings;
+            let revision = &mut self.revision;
+            let options = &mut self.options;
+            let queued = &mut self.queued;
             let trace = &mut self.trace;
             let trace_count = &mut self.trace_count;
             let trace_dropped = &mut self.trace_dropped;
             if let Err(error) =
                 self.core
                     .push_pcm(pcm, first_sample + offset as u64, self.reduced, |result| {
+                        if result.revision != *revision {
+                            *revision = result.revision;
+                            *settings = result.settings;
+                            *options = result.options;
+                            if queued.as_ref().is_some_and(|p| p.0 == result.revision) {
+                                *queued = None;
+                            }
+                            readouts.configure(result.settings);
+                        }
                         let frame = result.loudness;
                         readouts.push_sones(frame.sones);
                         if let Some(trace) = trace.as_mut() {
@@ -192,7 +237,14 @@ impl AudioProcessor {
                     self.reference_level = None;
                     self.core =
                         LoudnessProcessor::new(calibration, SoundField::Free, self.settings);
+                    self.core.set_microphone(self.microphone);
+                    self.core
+                        .queue_settings(self.revision.max(1), self.settings, self.options);
+                    if let Some((revision, settings, options)) = self.queued {
+                        self.core.queue_settings(revision, settings, options);
+                    }
                     self.core.reset(first_sample + (offset + count) as u64);
+                    self.chunk_phase = 0;
                     self.readouts = Readouts::new(self.settings);
                 }
             }
@@ -281,3 +333,8 @@ export!(processor_readouts(handle) -> *const f64, p => {
     p.readout_values = [value.rms_dbfs, value.background_dbfs, value.background_sones, f64::from(value.learning)];
     p.readout_values.as_ptr()
 });
+
+export!(processor_visual_ptr(handle) -> *mut f64, p => p.visual_input.as_mut_ptr());
+export!(processor_source(handle, microphone: u32) -> (), p => { p.microphone = microphone != 0; p.core.set_microphone(p.microphone); });
+export!(processor_update(handle, revision: u32) -> u32, p => u32::from(p.update(revision)));
+export!(processor_revision(handle) -> u32, p => p.revision);

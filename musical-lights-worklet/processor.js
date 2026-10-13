@@ -1,11 +1,13 @@
 class LoudnessProcessor extends AudioWorkletProcessor {
     constructor({ processorOptions }) {
         super();
-        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics, sessionId, settings } = processorOptions;
+        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics, sessionId, settings, visual, microphone } = processorOptions;
         this.sessionId = sessionId;
         this.wasm = new WebAssembly.Instance(module).exports;
         this.processor = this.wasm.processor_create(pascalsPerUnit === undefined ? 0 : 1, pascalsPerUnit ?? 2, Number(reducedMotion));
         if (!this.processor) throw new Error('Invalid microphone calibration');
+        this.wasm.processor_source(this.processor, Number(Boolean(microphone)));
+        if (visual) new Float64Array(this.wasm.memory.buffer, this.wasm.processor_visual_ptr(this.processor), 4).set(visual);
         if (settings) {
             const values = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_settings_ptr(this.processor), this.wasm.processor_settings_length(this.processor));
             if (settings.length !== values.length) throw new Error('Invalid audio settings');
@@ -13,6 +15,9 @@ class LoudnessProcessor extends AudioWorkletProcessor {
             if (!this.wasm.processor_configure(this.processor)) throw new Error('Invalid audio settings');
         }
         this.messageHz = settings?.[27] ?? 240;
+        this.revision = 0;
+        this.requestedRevision = 1;
+        this.settingsUpdate = { revision: 1, settings };
         this.diagnostics = Boolean(diagnostics);
         this.wasm.processor_trace_enable(this.processor, Number(this.diagnostics));
         this.channel = channel;
@@ -23,6 +28,22 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         this.failed = false;
         this.lastSent = -Infinity;
         this.port.onmessage = ({ data }) => {
+            if (data.type === 'settings') {
+                if (data.sessionId !== this.sessionId || !Number.isInteger(data.revision)
+                    || data.revision <= this.requestedRevision || data.revision > 0xffffffff) return;
+                let accepted = false;
+                if (Array.isArray(data.settings) && data.settings.length === this.wasm.processor_settings_length(this.processor)
+                    && Array.isArray(data.visual) && data.visual.length === 4) {
+                    new Float64Array(this.wasm.memory.buffer, this.wasm.processor_settings_ptr(this.processor), data.settings.length).set(data.settings);
+                    new Float64Array(this.wasm.memory.buffer, this.wasm.processor_visual_ptr(this.processor), 4).set(data.visual);
+                    accepted = Boolean(this.wasm.processor_update(this.processor, data.revision));
+                }
+                if (accepted) {
+                    this.requestedRevision = data.revision;
+                    this.settingsUpdate = { revision: data.revision, settings: data.settings };
+                } else this.port.postMessage({ type: 'settings-ack', sessionId: this.sessionId, revision: data.revision, accepted: false });
+                return;
+            }
             if (data.type === 'ack') this.pending = false;
             if (data.type === 'motion') this.wasm.processor_motion(this.processor, Number(Boolean(data.reduced)));
             if (data.type === 'calibrate' && !this.wasm.processor_calibrate(this.processor, data.dbSpl)) this.fail('Invalid calibration request.');
@@ -50,6 +71,12 @@ class LoudnessProcessor extends AudioWorkletProcessor {
                 return false;
             }
             offset += length;
+        }
+        const revision = this.wasm.processor_revision(this.processor);
+        if (revision !== this.revision) {
+            this.revision = revision;
+            if (this.settingsUpdate?.revision === revision) this.messageHz = this.settingsUpdate.settings?.[27] ?? 240;
+            this.port.postMessage({ type: 'settings-ack', sessionId: this.sessionId, revision, accepted: true });
         }
         // At most one snapshot waits on the UI. The processor still consumes
         // every sample and every loudness frame while drawing is delayed.

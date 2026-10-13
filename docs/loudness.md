@@ -85,3 +85,30 @@ Standard loudness equations, adapted detector/filter methods, and artistic light
 ## Historical evidence
 
 The checked-in partial-loudness, fixed-window, spectrum, and audio-audit reports describe earlier implementations. Their images and results remain unchanged. They do not describe the current filter-only production path. Run current validation commands from [validation guidance](validation.md); do not use an old report's transport layout as the active contract.
+
+## Manual gate, gain modes and live tuning
+
+The microphone noise gate is disabled by default. Its default floor is −60 dBFS,
+with a permitted range of −90 through −20 dBFS. A fixed 10 ms RMS detector opens
+at 3 dB above the floor and closes after 100 ms below the floor. Digital playback
+bypasses it. A closed gate eases sound targets toward zero, freezes automatic
+gain, suppresses new attack and direction events, and feeds silence to tempo.
+Raw loudness, calibration and the separate decorative listening wave continue.
+The gate changes display policy; it does not subtract noise from measurements.
+
+Normal gain retains the production behavior. Vivid uses one quarter of the
+configured gain time constants; Lazy uses twice those constants. Off permits
+manual visual gain from 1/64× through 64×, default 1×. One shared multiplier
+preserves band ratios and calibrated loudness. The 28 audio tuning values retain
+their saved format; the four validated visual options have a separate record.
+
+Processing changes carry a session ID and revision. The worklet applies a complete
+validated update at the next fixed analysis boundary and acknowledges that revision.
+It keeps filters, history, calibration and sample continuity. The changed frame
+cannot create an attack event. Obsolete sessions and revisions are rejected.
+
+Block-size and latency changes recreate an active AudioContext. Digital source,
+sample position, pause/repeat and monitor state survive. Stop, route cleanup and
+newer settings cancel obsolete acquisition and restart work. Changing saved settings
+while stopped does not start audio. Restart cancels incomplete calibration and
+retains the last accepted profile for matching input settings.
