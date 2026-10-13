@@ -188,6 +188,8 @@ for (const width of [375, 1440]) {
 
 test('resize preserves size, one worker and canvas; route close frees audio, GPU, observer and loop', async ({ page }) => {
   await page.addInitScript(() => {
+    // Keep all six scene geometries present; Auto starts with no depth images.
+    localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 }));
     window.workers = new Set(); window.observers = new Set(); window.frames = new Set();
     const Worker = window.Worker; window.Worker = class extends Worker {
       constructor(...args) { super(...args); window.workers.add(this); }
@@ -207,7 +209,7 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     return v.renderer.info.memory.geometries;
-  })).toBeGreaterThan(0);
+  })).toBe(6);
   await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     window.originalView = v; window.originalCanvas = v.canvas; window.gl = v.renderer.getContext();
