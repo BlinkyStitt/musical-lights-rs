@@ -77,8 +77,14 @@ def pack(package, destination):
         )
         tool = sysroot / "lib/rustlib" / host / "bin/rust-objcopy"
         environment = os.environ.copy()
-        if host.endswith("apple-darwin"):
-            environment["DYLD_LIBRARY_PATH"] = str(sysroot / "lib")
+        variable = (
+            "DYLD_LIBRARY_PATH" if host.endswith("apple-darwin") else "LD_LIBRARY_PATH"
+        )
+        environment[variable] = os.pathsep.join(
+            value
+            for value in (str(sysroot / "lib"), environment.get(variable))
+            if value
+        )
         binary = destination / "sensors_for_sparkle.bin"
         subprocess.run(
             [str(tool), "-O", "binary", str(elf), str(binary)],
