@@ -710,9 +710,11 @@ fixture with the real processor and its real completion acknowledgement.
 
 The renderer uses finite unit-height boxes, scaled to each published physical
 bar height. Their full depth matches the physical support. Matching vertical
-banks fill four adjacent background boxes; all five boxes reuse the same source
+banks fill eight adjacent background boxes; all nine boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
-pointer meters remain attached to the center source bands.
+pointer meters remain attached to the center source bands. Balls, paired bar tips,
+the roof and light positions use the same interpolated snapshot time. This keeps
+a rising post from appearing ahead of the ball it supports.
 
 The mirror-count setting starts in Auto over one through 32 images and controls a finite stack
 of fading scene copies behind the boxes. These are translated pictures, not optical reflections. Three pooled
@@ -769,11 +771,13 @@ the artistic bar release, measured loudness and filtered targets retain their
 separate contracts.
 
 The worker publishes each 120 Hz physics tick with one in-flight snapshot
-buffer. Bars render the newest physical snapshot. They do not wait for interpolation
-from the previous snapshot. Balls and horizontal motion still interpolate.
-`mirrors.spec.mjs` compares all 24 rendered bar heights with the current physical
-snapshot during a rise. Background checks verify all 24 source bands in all four
-neighbor boxes, their physical depth and actual lit pixels at steep angles.
+buffer. Balls, bars, roof geometry and horizontal motion share the same interpolated
+snapshot time. Interpolation stays one 120 Hz physics step (about 8.3 ms) behind the latest
+snapshot at receipt, even when snapshots arrive less often. Physical rise
+durations and audio inputs stay unchanged.
+`mirrors.spec.mjs` checks all 24 rendered heights against that shared time during
+a rise. Background checks verify all 24 source bands in all eight neighbor boxes,
+their physical depth and actual lit pixels at steep angles.
 An instance count alone cannot establish visibility.
 The angle slider remains in expanded mode, including short landscape with video,
 recognition and recovery notices. Pointer interaction or keyboard focus pauses

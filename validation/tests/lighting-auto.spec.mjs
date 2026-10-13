@@ -2,6 +2,38 @@ import { test, expect } from '@playwright/test';
 import { physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
+test('paired lights add their fog illumination across the middle of the tunnel', async ({ page }) => {
+  await page.goto(origin); await physicsReady(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const { LIGHT_FIELD } = await import(new URL(`${base}physics/lighting.js`, document.baseURI));
+    const u = v.lighting.uniforms, scene = new THREE.Scene();
+    u.stripColor.value.forEach(color => color.setRGB(0, 0, 0));
+    u.stripColor.value[0].setRGB(.5, 0, 0);
+    u.glowBallColor.value.forEach(color => color.setRGB(0, 0, 0));
+    u.stripState.value.forEach(state => state.set(.6, .15, 0));
+    u.fogAttack.value.fill(0); u.colorAttack.value = 0; u.lightStrength.value.set(1, 0, .22, 0);
+    const material = new THREE.ShaderMaterial({ uniforms: u, toneMapped: false,
+      vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: LIGHT_FIELD + 'void main() { gl_FragColor = vec4(scatteredIllumination(vec3(.6, .6, 0.0)), 1.0); }' });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material); scene.add(plane);
+    const target = new THREE.WebGLRenderTarget(2, 2), pixels = new Uint8Array(16);
+    const read = (height, tip) => {
+      u.lightExtent.value.set(1.2, height, .24); u.stripState.value[0].y = tip;
+      v.renderer.setRenderTarget(target); v.renderer.render(scene, new THREE.Camera());
+      v.renderer.readRenderTargetPixels(target, 0, 0, 2, 2, pixels);
+      return pixels[0];
+    };
+    try {
+      return { lower: read(10, .15), upper: read(10, 1.05), paired: read(1.2, .15) };
+    } finally { v.renderer.setRenderTarget(null); target.dispose(); plane.geometry.dispose(); material.dispose(); }
+  });
+  expect(result.lower).toBeGreaterThan(4); expect(result.upper).toBeGreaterThan(4);
+  expect(Math.abs(result.paired - result.lower - result.upper)).toBeLessThanOrEqual(2);
+});
+
 test('colored attack light follows band loudness on bars, nearby surfaces and fog without changing white edges', async ({ page }, info) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);

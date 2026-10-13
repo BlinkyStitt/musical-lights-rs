@@ -122,6 +122,68 @@ fn smallest_ball_clears_seams_after_spikes_and_motion_restarts() {
         }
     }
 }
+
+#[test]
+fn smallest_ball_does_not_pass_through_moving_staggered_posts() {
+    for height in [0.6, 2.596923] {
+        for ceiling in [false, true] {
+            let mut sim = world(SimulationConfig {
+                height,
+                ..SimulationConfig::default()
+            });
+            isolate(&mut sim, &[0]);
+            let inward = if ceiling { -1.0 } else { 1.0 };
+            let mut worst = 0.0_f32;
+            place(
+                &mut sim,
+                0,
+                Vector::new(
+                    PITCH * 12.0,
+                    if ceiling { height - 0.03 } else { 0.03 },
+                    0.0,
+                ),
+                Vector::ZERO,
+            );
+            for tick in 0..HZ * 20 {
+                let levels = std::array::from_fn(|i| {
+                    if (i + tick as usize / 5).is_multiple_of(3) {
+                        0.95
+                    } else {
+                        0.1
+                    }
+                });
+                sim.apply(SimulationInput {
+                    tick: sim.tick,
+                    height,
+                    levels,
+                    gravity: Some([0.0, -inward * sim.config.gravity, 0.0]),
+                    scrolling: true,
+                    ..SimulationInput::default()
+                })
+                .unwrap();
+                sim.step();
+                let p = position(&sim, 0);
+                for (post, _) in &sim.bars {
+                    let body = &sim.world.bodies[*post];
+                    if !body.is_enabled() {
+                        continue;
+                    }
+                    let center = body.translation();
+                    let delta = (p - center).abs()
+                        - Vector::new(PITCH / 2.0, POST_HEIGHT / 2.0, sim.config.depth / 2.0);
+                    let clearance = delta.max(Vector::ZERO).length() - radius(0);
+                    worst = worst.min(clearance);
+                }
+            }
+            // Allow brief contact-solver overlap, but keep the center outside
+            // every post with at least three quarters of the radius clear.
+            assert!(
+                worst >= -radius(0) * 0.25,
+                "height={height}, ceiling={ceiling}: {worst}"
+            );
+        }
+    }
+}
 fn input(sim: &mut Simulation, levels: [f32; COUNT]) {
     sim.apply(SimulationInput {
         tick: sim.tick,
