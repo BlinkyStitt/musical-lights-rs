@@ -88,8 +88,8 @@ export class PhysicsView {
     this.notice = new PhysicsNotice(this.status);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
-    // Smooth foreground edges in the single scene pass.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // Draw the foreground and stars in one scene pass.
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, powerPreference: 'high-performance' });
     // Bound fragment work on large and high-density displays. CSS controls
     // and text keep their native resolution. Physical and reflected edges
     // share the actual render scale, including after fullscreen resizes.

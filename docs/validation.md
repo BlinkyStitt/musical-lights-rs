@@ -727,8 +727,8 @@ The scene uses a dark background with 512 fixed stars. One point batch draws
 slow independent twinkling behind the foreground. Reduced Motion holds the
 stars steady. Camera sweeps, source lighting and mirror count leave the sky
 unchanged. The starfield needs no textures, postprocessing or render targets;
-route cleanup releases its geometry and material. Native WebGL antialiasing
-smooths foreground geometry within the existing render-resolution budget.
+route cleanup releases its geometry and material. The scene retains the
+existing render-resolution budget without multisampling.
 Browser pixel checks verify visible stars, slow twinkling, steady Reduced Motion,
 foreground occlusion, stable count and independence from audio lighting.
 

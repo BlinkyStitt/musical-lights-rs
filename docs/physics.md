@@ -378,4 +378,4 @@ A dark starfield sits behind the scene. One batch draws 512 fixed stars, with
 small points and slow independent brightness changes. Reduced Motion holds
 their brightness steady. Camera sweeps, audio attacks and mirror counts do not
 move or recolor the stars. Stars use no textures or render targets. A single
-antialiased scene pass draws foreground geometry over them.
+scene pass draws foreground geometry over them.
