@@ -29,3 +29,5 @@ pub mod dance;
 pub mod musical_motion;
 
 pub mod bar_motion;
+
+pub mod fibonacci_layout;

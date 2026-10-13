@@ -10,4 +10,4 @@ The panel has twenty rows of twenty pixels. Five low Bark bands form one bass ro
 
 `light_profile.rs` is the single deployment calibration profile. Generate it from measurements with `validation/lights/profile.py`. `light-check` is a separate bench program for channel order, ramps and timed pulses. Neither program claims measured color until a profile has been measured and validated.
 
-Each LED thread creates and owns its RMT driver. Sensor UART and orientation patterns remain inactive. The software checks compile both firmware binaries; they do not flash a board or validate its processing headroom.
+Each output owner creates its RMT driver. The separate `amulet` application owns four outputs and the board UART. It uses the shared navigation, clock, rendering and current-limit policies. It starts microphone capture only for the audio preset. See [firmware](../docs/firmware.md) for provisioning and calibration. Software checks compile all binaries; they do not flash a board or validate physical processing headroom.

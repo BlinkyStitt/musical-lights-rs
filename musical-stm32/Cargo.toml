@@ -10,6 +10,7 @@ resolver = "2"
 default-run = "sensors_for_sparkle"
 
 [dependencies]
+lora-phy = "=3.0.1"
 ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", rev = "0b04dfe5e23fd0af9dbea1d24116e4c5b69d3ed9", default-features = false }
 circular-buffer = { version = "=2.0.1", default-features = false }
 cortex-m = { version = "=0.7.9", features = [
@@ -31,15 +32,14 @@ embassy-stm32 = { version = "=0.6.0", features = [
     "defmt",
     "stm32f411ce",
     "unstable-pac",
-    "memory-x",
-    "time-driver-any",
+    "time-driver-tim5",
     "exti",
 ] }
 embassy-sync = { version = "=0.8.0", features = ["defmt"] }
 embassy-time = { version = "=0.5.1", features = [
     "defmt",
     "defmt-timestamp-uptime",
-    "tick-hz-32_768",
+    "tick-hz-1_000_000",
 ] }
 embedded-alloc = { version = "=0.7.0", default-features = false, features = [
     "llff",
@@ -93,5 +93,5 @@ opt-level = 3
 [profile.release]
 debug = true
 lto = true
-
-opt-level = 3
+# Acquisition, authentication and WMM must fit below the two journal sectors.
+opt-level = "s"

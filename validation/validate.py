@@ -38,6 +38,26 @@ def cli_version(binary, version):
 
 
 def validate(name):
+    if name == "firmware-tools":
+        run(["uv", "sync", "--project", "tools/firmware", "--locked"], ROOT)
+        run(
+            [
+                "uv",
+                "run",
+                "--project",
+                "tools/firmware",
+                "--locked",
+                "python",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "tools/firmware",
+                "-v",
+            ],
+            ROOT,
+        )
+        return
     if name == "browser":
         run(["npm", "ci", "--ignore-scripts"], ROOT / "validation")
         run(["npx", "playwright", "install", "chromium", "webkit"], ROOT / "validation")
@@ -278,12 +298,16 @@ def validate(name):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "packages", nargs="+", choices=[*PACKAGES, "reference", "browser", "all"]
+        "packages",
+        nargs="+",
+        choices=[*PACKAGES, "firmware-tools", "reference", "browser", "all"],
     )
     args = parser.parse_args()
     os.environ["PATH"] = str(ROOT / ".tools/bin") + os.pathsep + os.environ["PATH"]
     for name in (
-        [*PACKAGES, "reference", "browser"] if "all" in args.packages else args.packages
+        [*PACKAGES, "firmware-tools", "reference", "browser"]
+        if "all" in args.packages
+        else args.packages
     ):
         validate(name)
 

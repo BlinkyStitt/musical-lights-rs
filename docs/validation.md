@@ -996,3 +996,31 @@ range. Reset display restores the startup range. Saved Auto counts start within
 1–32 before measurement; saved manual counts keep their full validated range.
 The baseline draws the physical scene with zero depth copies. Bars and balls
 keep moving during measurement, including short captured audio bursts.
+
+## GPS, amulet and live tuning checks
+
+`python3 validation/validate.py core` checks the pinned std/libm/alloc/defmt/Embassy
+matrix. Firmware regressions cover checksum and epoch pairing, PPS wrap,
+clock acquisition/holdover/correction, independent radio authentication fixtures,
+replay/freshness/forwarding limits, UART bounds, interrupted atomic checkpoints,
+durable commands, navigation and the four amulet outputs. The magnetic test uses
+all 100 NOAA WMM2025 reference points. These tests use synthetic clocks and sensors.
+
+`python3 validation/validate.py firmware-tools` uses the locked host environment
+for codec, redaction, ellipsoid coverage/holdout and native-unit calibration checks.
+`stm32` and `esp-idf` build the sensor, net and amulet applications. The sensor
+linker reserves sectors 6 and 7; its application must fit below `0x08040000`.
+The release uses size optimization. Verify device timing separately.
+
+Audio regressions compare the default pipeline exactly, gate transitions and RMS
+updates across callback sizes, digital bypass, gain ratios, settings boundaries,
+revision acknowledgments and calibration rejection. Browser checks exercise live
+tuning, paused playback restart, settings during acquisition, Stop and route cleanup.
+Run `worklet physics leptos` before the full browser suite. Keep one browser worker,
+zero retries and the startup guard. Use the standalone production benchmark on an
+idle host for cost comparisons; contended measurements do not establish that result.
+
+GPS/PPS epoch timing, radio capacity, installed heading error, LED response and
+output timing, electrical load, thermal behavior and runtime need physical acceptance.
+The current GPS board timing profile has unknown uncertainty, so it cannot report
+Locked. No battery measurement profile exists; battery state remains Unknown.

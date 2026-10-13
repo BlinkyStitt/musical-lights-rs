@@ -107,5 +107,7 @@ applications themselves; build the three web packages first.
 
 [Validation evidence and limits](docs/validation.md) records tests, compiler
 identities, processor cost, and pending physical hardware checks. No validation
-command flashes firmware. The Feather application and several radio/sensor
-paths remain unfinished; successful links do not establish hardware operation.
+command flashes firmware. The Feather application remains unfinished. The net, amulet and STM32 sensor
+applications have separate entry points. See [firmware setup](docs/firmware.md)
+for wired provisioning, calibration and artifacts. Successful links do not
+establish hardware operation.

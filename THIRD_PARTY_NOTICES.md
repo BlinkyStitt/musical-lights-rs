@@ -56,3 +56,18 @@ Trumpet uses the available first 5.333 seconds; Vibe Ace uses seconds 8–14.
 The versioned assets reuse those exact audit PCM bytes. Source and PCM hashes
 are in `musical-leptos/public/review/clips.json`. License:
 [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
+
+# Navigation and radio
+
+The firmware uses lora-phy 3.0.1 (MIT OR Apache-2.0), nmea 0.8.0 (Apache-2.0),
+hmac 0.13.0 and sha2 0.11.0 (MIT OR Apache-2.0), and world_magnetic_model
+1.2025.0 (MIT OR Apache-2.0). Their published crates retain their upstream notices.
+See [dependency review](docs/dependencies.md).
+
+The WMM2025 regression fixture comes from NOAA/NCEI's official
+[WMM2025 coefficient and test archive](https://www.ncei.noaa.gov/sites/default/files/2024-12/WMM2025COF.zip).
+It contains U.S. Government reference data. The test compares all 100 supplied
+reference points. This verifies calculations, not the installed compass accuracy.
+
+The Fibonacci256 coordinate table retains its original Jason Coon LED Mapper
+source link in `musical-lights-core/src/lights/fibonacci_layout.rs`.
