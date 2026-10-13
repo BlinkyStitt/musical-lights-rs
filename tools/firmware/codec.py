@@ -32,7 +32,7 @@ def decode_frame(wire):
             data.append(0)
     if len(data) < 4 or crc16(data[:-2]) != int.from_bytes(data[-2:], "little"):
         raise ValueError("Invalid board CRC")
-    if data[0] != 1 or data[1] > 5:
+    if data[0] != 2 or data[1] > 5:
         raise ValueError("Unsupported board schema")
     return bytes(data[:-2])
 

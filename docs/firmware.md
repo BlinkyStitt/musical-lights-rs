@@ -42,10 +42,16 @@ the same successful run; verify their source tree and checksums before flashing.
 
 The F411CE linker reserves sectors 6 and 7 for storage. Firmware must fit below
 `0x08040000`. Do not flash this layout to a smaller part. UART uses Postcard in an
-`Envelope { version: 1, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.
+`Envelope { version: 2, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.
 Variant numbers are Hello=0, StateSnapshot=1, Command=2, CommandResult=3,
 Heartbeat=4 and CalibrationBatch=5. Frames cannot exceed 512 bytes. Old sensor
 payloads are rejected. Snapshots publish at 20 Hz, or 5 Hz during calibration.
+Each UART peer also carries `freshness_verified` after its color byte. This is
+the receiver's UTC freshness check, separate from the source's UTC-valid flag.
+Unverified positions and stale local or peer positions use dim, interrupted
+markers and cannot produce a solid selected-target arrow. A later clock lock
+does not promote old unverified reports. The seven-peer frame remains below
+331 bytes. Version-1 envelopes are rejected; use matching boards and host tools.
 
 ## Wiring and timing
 
@@ -99,7 +105,7 @@ whole-second epochs inside the installed delay limits. `config set gps.timing
 unknown` removes the profile. `config get stm` reports the public profile, and
 `gps diagnostics` reports its installed uncertainty without coordinates. The STM
 settings record uses schema 2; schema 1 records are rejected. The board UART
-envelope and six message variants remain version 1. Use matching STM32, amulet
+envelope uses version 2 with the same six message variants. Use matching STM32, amulet
 and provisioning tools. No physical synchronization is claimed by the synthetic
 Locked, Holdover, expiry and correction tests.
 

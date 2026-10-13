@@ -412,7 +412,7 @@ fn revised_uart_fixture_and_stream_recovery_do_not_accept_old_payloads() {
         uptime: L4::new(2),
         health: L2::new(0x1800),
     });
-    let fixture = unhex("0301040201010102020101010418887700");
+    let fixture = unhex("03020402010101020201010104187f7900");
     let mut encoder = MessageEncoder::new();
     assert_eq!(encoder.encode(&heartbeat).unwrap(), fixture);
     for split in 0..fixture.len() {
@@ -447,6 +447,11 @@ fn revised_uart_fixture_and_stream_recovery_do_not_accept_old_payloads() {
             assert!(r.is_err());
         }
     } // Old Ping frame.
+    for b in unhex("0301040201010102020101010418887700") {
+        if let Some(r) = decoder.feed(b) {
+            assert!(r.is_err());
+        }
+    } // Superseded version-1 heartbeat with a valid CRC.
 }
 #[test]
 fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
@@ -471,12 +476,20 @@ fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
                 rssi: L2::new(i16::MIN as u16),
                 snr: i8::MIN as u8,
                 color: (id - 1) as u8,
+                freshness_verified: false,
             })
             .unwrap();
     }
     let mut encoder = MessageEncoder::new();
     let frame = encoder.encode(&Message::StateSnapshot(snapshot)).unwrap();
-    assert!(frame.len() <= 324);
+    assert!(frame.len() <= 331);
+    // Independent Python fixed-width serialization, CRC-16 and COBS fixture.
+    assert_eq!(
+        frame,
+        unhex(
+            "040201010101020101010101010101010101020101010101010101010101010101010101010101010101010101010101010101010101010101010101010109ffffffffffffffff03e8030105ffffffff01010101010104080702020101010201010101010101010101010101010101010101010102010480800102030201010102010101010101010101010101010101010101010101020104808002020402010101020101010101010101010101010101010101010101010201048080030205020101010201010101010101010101010101010101010101010102010480800402060201010102010101010101010101010101010101010101010101020104808005020702010101020101010101010101010101010101010101010101010201048080060208020101010201010101010101010101010101010101010101010102010480800703e34c00"
+        )
+    );
     let command = Message::Command(Command {
         target_stm_boot: L4::new(1),
         client_epoch: L4::new(1),
@@ -486,6 +499,123 @@ fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
         data: heapless::Vec::from_slice(&[1; 384]).unwrap(),
     });
     assert!(encoder.encode(&command).unwrap().len() <= 410);
+}
+#[test]
+fn receiver_freshness_survives_uart_without_relabeling_origin_health() {
+    for trusted in [false, true] {
+        for hop in [1, 2] {
+            let mut network = Network::new(8, origin().group, roster(), false).unwrap();
+            let mut report = origin();
+            report.hop = hop;
+            if hop == 2 {
+                report.relay = 2;
+            }
+            network
+                .receive(report, 0, trusted.then_some((report.utc_ms + 1000, 10)), 0)
+                .unwrap();
+            let peer = network.peers[0].unwrap().snapshot(100);
+            assert_eq!(peer.freshness_verified, trusted);
+            assert_eq!(peer.health.get(), report.flags);
+            assert_eq!(peer.position.flags.get(), report.flags & 7);
+            let mut snapshot = StateSnapshot {
+                boot: L4::new(1),
+                sequence: L4::new(1),
+                slot: 7,
+                count: 8,
+                roster_revision: L4::new(1),
+                ..Default::default()
+            };
+            snapshot.peers.push(peer).unwrap();
+            let message = Message::StateSnapshot(snapshot);
+            let mut encoder = MessageEncoder::new();
+            let mut decoder = MessageDecoder::new();
+            let decoded = encoder
+                .encode(&message)
+                .unwrap()
+                .iter()
+                .filter_map(|&b| decoder.feed(b))
+                .next()
+                .unwrap()
+                .unwrap();
+            assert_eq!(decoded, message);
+            // Later clock availability does not change a report accepted without UTC.
+            assert_eq!(
+                network.receive(report, 200, Some((report.utc_ms + 1200, 10)), 0),
+                Err(RadioError::Replay)
+            );
+            assert_eq!(
+                network.peers[0].unwrap().snapshot(200).freshness_verified,
+                trusted
+            );
+        }
+    }
+}
+#[test]
+fn amulet_unverified_or_stale_navigation_has_no_solid_target_arrow() {
+    use palette::LinSrgb;
+    let mut settings = sparkle();
+    settings.mode = 1;
+    settings.selected = Some(L2::new(2));
+    let mut state = StateSnapshot {
+        boot: L4::new(1),
+        sequence: L4::new(1),
+        ..Default::default()
+    };
+    state.heading.quality = 4;
+    state.local.flags = L2::new(5);
+    state.local.accuracy = L2::new(10);
+    let mut peer = PeerState {
+        report: origin(),
+        received_ms: 0,
+        age_at_receive: 0,
+        verified: true,
+    }
+    .snapshot(0);
+    peer.id = L2::new(2);
+    peer.position.lat = L4::new(0);
+    peer.position.lon = L4::new(10000);
+    peer.position.accuracy = L2::new(10);
+    peer.color = 1;
+    state.peers.push(peer).unwrap();
+    let mut frame = [LinSrgb::new(0.0, 0.0, 0.0); 494];
+    for (verified, peer_age, local_age, arrow) in [
+        (true, 15000, 15000, true),
+        (false, 0, 0, false),
+        (true, 15001, 0, false),
+        (true, 0, 15001, false),
+    ] {
+        state.peers[0].freshness_verified = verified;
+        state.peers[0].position.age = L4::new(peer_age);
+        state.local.age = L4::new(local_age);
+        let mut renderer = crate::amulet::Renderer::default();
+        renderer.render(
+            &settings,
+            Some((&state, 2000)),
+            2000,
+            0.0,
+            false,
+            &mut frame,
+        );
+        assert_eq!(frame[..256].iter().any(|p| p.blue > 0.0), arrow);
+    }
+    settings.mode = 0;
+    for (verified, now, peak) in [
+        (true, 2000, 0.125),
+        (false, 2000, 0.0375),
+        (false, 2200, 0.0),
+    ] {
+        state.peers[0].freshness_verified = verified;
+        state.peers[0].position.age = L4::new(0);
+        state.local.age = L4::new(0);
+        let mut renderer = crate::amulet::Renderer::default();
+        renderer.render(&settings, Some((&state, now)), now, 0.0, false, &mut frame);
+        let actual = frame[..256].iter().map(|p| p.blue).fold(0.0f32, f32::max);
+        if peak == 0.0 {
+            assert_eq!(actual, 0.0);
+        } else {
+            assert!(actual > 0.0 && actual <= peak + 1e-6);
+        }
+    }
 }
 #[derive(Clone)]
 struct MemoryFlash {
@@ -1005,15 +1135,16 @@ fn amulet_magnetic_north_survives_gps_loss_and_ring_overlap_keeps_identity() {
             sequence: L4::new(1),
             position: Position {
                 lat: L4::new(10000),
-                flags: L2::new(5),
+                flags: L2::new(7),
                 accuracy: L2::new(10),
                 ..Default::default()
             },
-            health: L2::new(5),
+            health: L2::new(7),
             hop: 1,
             rssi: L2::new(0),
             snr: 0,
             color: 1,
+            freshness_verified: true,
         })
         .unwrap();
     renderer.render(&settings, Some((&state, 0)), 0, 0.0, false, &mut frame);

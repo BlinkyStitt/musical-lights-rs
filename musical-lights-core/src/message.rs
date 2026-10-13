@@ -2,6 +2,7 @@
 use crate::errors::{MyError, MyResult};
 use serde::{Deserialize, Serialize};
 pub const MESSAGE_BAUD_RATE: u32 = 115200;
+pub const BOARD_SCHEMA_VERSION: u8 = 2;
 macro_rules! little {
     ($name:ident, $type:ty, $size:expr) => {
         #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -113,6 +114,7 @@ pub struct Peer {
     pub rssi: L2,
     pub snr: u8,
     pub color: u8,
+    pub freshness_verified: bool,
 }
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -257,6 +259,8 @@ impl Message {
                         p.position.valid()
                             && p.position.flags.get() == p.health.get() & 7
                             && crate::radio::valid_health(p.health.get())
+                            && (!p.freshness_verified
+                                || p.health.get() & crate::radio::SAMPLE_UTC_VALID != 0)
                             && p.color < 8
                             && (1..=2).contains(&p.hop)
                     })
@@ -309,7 +313,7 @@ impl MessageEncoder {
             return Err(postcard::Error::SerializeBufferFull.into());
         }
         let envelope = Envelope {
-            version: 1,
+            version: BOARD_SCHEMA_VERSION,
             message: message.clone(),
         };
         let raw =
@@ -376,7 +380,7 @@ impl MessageDecoder {
         if !remaining.is_empty() {
             return Err(postcard::Error::DeserializeBadEncoding.into());
         }
-        if envelope.version != 1 || !envelope.message.valid() {
+        if envelope.version != BOARD_SCHEMA_VERSION || !envelope.message.valid() {
             return Err(postcard::Error::DeserializeBadEncoding.into());
         }
         let mut canonical = [0; RAW_SIZE];

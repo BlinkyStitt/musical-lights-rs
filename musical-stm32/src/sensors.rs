@@ -634,23 +634,7 @@ pub async fn snapshots(state: Shared, out: Out) {
                         if r.flags & wire::POSITION_VALID == 0 || peer.age(at) > 60000 {
                             continue;
                         }
-                        let _ = snapshot.peers.push(Peer {
-                            id: L2::new(r.origin),
-                            origin_boot: L4::new(r.boot),
-                            sequence: L4::new(r.sequence),
-                            position: Position {
-                                lat: L4::new(r.latitude_e7 as u32),
-                                lon: L4::new(r.longitude_e7 as u32),
-                                age: L4::new(peer.age(at)),
-                                accuracy: L2::new(r.accuracy_dm),
-                                flags: L2::new(r.flags & 7),
-                            },
-                            health: L2::new(r.flags),
-                            hop: r.hop,
-                            rssi: L2::new(i16::MIN as u16),
-                            snr: i8::MIN as u8,
-                            color: r.color,
-                        });
+                        let _ = snapshot.peers.push(peer.snapshot(at));
                     }
                 }
                 let _ = out.try_send(Message::StateSnapshot(snapshot));
