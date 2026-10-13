@@ -761,6 +761,8 @@ pub async fn radio(
             };
             receiving = false;
             let at = now(); // Include CAD time in freshness and relay residence.
+            // CAD can cross the next source deadline. Recheck before relaying.
+            let source_due = settings.is_some() && boot != 0 && at >= own_due;
             if source_due && busy && at <= own_deadline {
                 Timer::after_millis(20 + roll() as u64 % 81).await;
                 continue;
