@@ -33,6 +33,13 @@ Hello carries the first eight bytes of the source commit ID. Keep the full commi
 artifact SHA-256, compiler and SDK versions with a firmware delivery. Compilation
 and artifact creation do not flash a board.
 
+Successful Firmware validation jobs publish `firmware-stm32` and
+`firmware-esp-idf` artifacts for 30 days. Each contains release ELFs, application
+BIN images, a source/build manifest and SHA-256 checksums. The ESP artifact also
+contains the matching bootloader and partition table. Packaging checks flash
+boundaries and the ESP development image profile. Download both artifacts from
+the same successful run; verify their source tree and checksums before flashing.
+
 The F411CE linker reserves sectors 6 and 7 for storage. Firmware must fit below
 `0x08040000`. Do not flash this layout to a smaller part. UART uses Postcard in an
 `Envelope { version: 1, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.

@@ -70,6 +70,7 @@ def validate(name):
             "validation/validate.py",
             "validation/install_tools.py",
             "validation/ci.py",
+            "validation/firmware_artifacts.py",
             "validation/tooling",
             "validation/loudness/validate.py",
             "validation/loudness/tones.py",

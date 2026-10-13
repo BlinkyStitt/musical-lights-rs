@@ -278,6 +278,8 @@ def affected(paths, package, workflow):
         ".cargo/",
     )
     own = (package + "/", f".github/workflows/{workflow}.yml")
+    if workflow == "firmware":
+        own += ("validation/firmware_artifacts.py",)
     if workflow == "other-apps" and package != "musical-terminal":
         own += (
             "validation/demos.config.mjs",
