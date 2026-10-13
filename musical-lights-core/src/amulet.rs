@@ -418,7 +418,9 @@ impl Renderer {
                     if peer.position.flags.get() & 1 == 0 || peer_age > 60000 {
                         continue;
                     }
-                    let stale = peer_age > 15000;
+                    let stale = peer_age > 15000
+                        || age(s.local, elapsed) > 15000
+                        || !peer.freshness_verified;
                     if stale && now % 1000 >= 200 {
                         continue;
                     }
@@ -496,7 +498,8 @@ impl Renderer {
                         intensity = 0.5 * arrow(x, y, bearing, approximate);
                     }
                     if intensity > 0.0 {
-                        color = rgb(PEER_COLORS[peer.color as usize]) * intensity;
+                        color = rgb(PEER_COLORS[peer.color as usize])
+                            * (intensity * if stale { 0.3 } else { 1.0 });
                     }
                 }
             }

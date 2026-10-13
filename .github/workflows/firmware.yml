@@ -8,6 +8,7 @@ on:
       - 'musical-lights-core/**'
       - 'validation/ci.py'
       - 'validation/validate.py'
+      - 'validation/firmware_artifacts.py'
       - 'validation/install_tools.py'
       - 'validation/tooling/**'
       - '.github/workflows/firmware.yml'
@@ -25,6 +26,7 @@ on:
       - 'musical-lights-core/**'
       - 'validation/ci.py'
       - 'validation/validate.py'
+      - 'validation/firmware_artifacts.py'
       - 'validation/install_tools.py'
       - 'validation/tooling/**'
       - '.github/workflows/firmware.yml'
@@ -87,6 +89,16 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target thumbv6m-none-eabi,thumbv7em-none-eabihf
       - run: python3 validation/validate.py ${{ matrix.package }}
+      - name: Package STM32 firmware
+        if: matrix.package == 'stm32'
+        run: python3 validation/firmware_artifacts.py stm32 "$RUNNER_TEMP/firmware-stm32"
+      - uses: actions/upload-artifact@v7.0.1
+        if: matrix.package == 'stm32'
+        with:
+          name: firmware-stm32
+          path: ${{ runner.temp }}/firmware-stm32/
+          if-no-files-found: error
+          retention-days: 30
   esp:
     name: esp (${{ matrix.package }})
     needs: changes
@@ -131,3 +143,13 @@ jobs:
         run: |
           . "$RUNNER_TEMP/export-esp.sh"
           python3 validation/validate.py ${{ matrix.package }}
+      - name: Package net and amulet firmware
+        if: matrix.package == 'esp-idf'
+        run: python3 validation/firmware_artifacts.py esp-idf "$RUNNER_TEMP/firmware-esp-idf"
+      - uses: actions/upload-artifact@v7.0.1
+        if: matrix.package == 'esp-idf'
+        with:
+          name: firmware-esp-idf
+          path: ${{ runner.temp }}/firmware-esp-idf/
+          if-no-files-found: error
+          retention-days: 30

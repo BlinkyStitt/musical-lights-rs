@@ -87,11 +87,14 @@ test('off-screen bar culling preserves visible pixels across angles and depth se
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     const target = new THREE.WebGLRenderTarget(320, 240), pixels = new Uint8Array(320 * 240 * 4), evidence = [];
-    const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
+    const read = () => { v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
+    const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); return read(); };
     try {
       for (const count of [0, 3, 8, 17, 44, 2048]) for (const angle of [-40, -10, 0, 10, 40]) {
-        v.mirrors.setCount(count); v.setCamera(angle); v.draw(performance.now());
-        const visible = v.sideBars.mesh.count, actual = render();
+        v.mirrors.setCount(count); v.setCamera(angle); v.renderer.setRenderTarget(target);
+        // Compare the production draw itself; an extra draw has no assertion.
+        v.draw(performance.now());
+        const visible = v.sideBars.mesh.count, actual = read();
         v.sideBars.update(v.layout); const all = v.sideBars.mesh.count, expected = render();
         let changed = 0;
         for (let i = 0; i < actual.length; i += 4) if (Math.abs(actual[i] - expected[i]) + Math.abs(actual[i + 1] - expected[i + 1]) + Math.abs(actual[i + 2] - expected[i + 2]) > 3) changed++;

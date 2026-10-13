@@ -33,12 +33,25 @@ Hello carries the first eight bytes of the source commit ID. Keep the full commi
 artifact SHA-256, compiler and SDK versions with a firmware delivery. Compilation
 and artifact creation do not flash a board.
 
+Successful Firmware validation jobs publish `firmware-stm32` and
+`firmware-esp-idf` artifacts for 30 days. Each contains release ELFs, application
+BIN images, a source/build manifest and SHA-256 checksums. The ESP artifact also
+contains the matching bootloader and partition table. Packaging checks flash
+boundaries and the ESP development image profile. Download both artifacts from
+the same successful run; verify their source tree and checksums before flashing.
+
 The F411CE linker reserves sectors 6 and 7 for storage. Firmware must fit below
 `0x08040000`. Do not flash this layout to a smaller part. UART uses Postcard in an
-`Envelope { version: 1, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.
+`Envelope { version: 2, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.
 Variant numbers are Hello=0, StateSnapshot=1, Command=2, CommandResult=3,
 Heartbeat=4 and CalibrationBatch=5. Frames cannot exceed 512 bytes. Old sensor
 payloads are rejected. Snapshots publish at 20 Hz, or 5 Hz during calibration.
+Each UART peer also carries `freshness_verified` after its color byte. This is
+the receiver's UTC freshness check, separate from the source's UTC-valid flag.
+Unverified positions and stale local or peer positions use dim, interrupted
+markers and cannot produce a solid selected-target arrow. A later clock lock
+does not promote old unverified reports. The seven-peer frame remains below
+331 bytes. Version-1 envelopes are rejected; use matching boards and host tools.
 
 ## Wiring and timing
 
@@ -65,11 +78,38 @@ anchors acquire the clock; ordinary corrections slew by at most 5 ms/s. Holdover
 expires at 250 ms uncertainty or 30 minutes. Large corrections fade the shared
 pattern out and back in. Roster slot, not reachable-peer count, selects its section.
 
-**The product-746 PPS/epoch timing bound has not been measured. The current board
-adapter supplies unknown uncertainty and therefore stays Acquiring.** Measure
-receiver labeling, UART delay and clock drift, then install the measured bound in
-the board profile before claiming synchronization. The core tests exercise Locked,
-Holdover, expiry and correction with explicit synthetic bounds.
+**The product-746 PPS/epoch timing bound has not been measured. Devices default to
+unknown timing and therefore stay Acquiring.** Install a measured profile through
+the existing atomic STM configuration transaction:
+
+```text
+config begin stm
+config set gps.timing OFFSET,MIN_DELAY,MAX_DELAY,UNCERTAINTY,DRIFT
+config validate
+config commit
+```
+
+Replace the five fields with measurements; the command does not accept their
+names. `OFFSET` is PPS UTC minus the matching NMEA epoch in milliseconds
+(-1000, 0 or 1000). The delay limits bound completion of the first matching
+RMC/GGA sentence relative to that PPS (0–999 ms, inclusive). Include UART transfer,
+DMA batching, task scheduling and timestamp quantization in the timing measurements.
+`UNCERTAINTY` bounds PPS UTC error in milliseconds (1–50). `DRIFT` is the measured
+worst-case local clock drift in ppm (1–100). Holdover conservatively uses 100 ppm,
+even when the measured bound is lower. Reject a hardware profile outside these
+limits; do not reduce measured values to make it pass.
+
+The STM32 validates the profile again, stores it with command completion, and
+starts fresh clock acquisition after a committed timing change. It accepts only
+whole-second epochs inside the installed delay limits. Each position sets
+SAMPLE_UTC_VALID only after its own epoch passes the clock check; an older Locked
+anchor does not certify a rejected new epoch. `config set gps.timing
+unknown` removes the profile. `config get stm` reports the public profile, and
+`gps diagnostics` reports its installed uncertainty without coordinates. The STM
+settings record uses schema 2; schema 1 records are rejected. The board UART
+envelope uses version 2 with the same six message variants. Use matching STM32, amulet
+and provisioning tools. No physical synchronization is claimed by the synthetic
+Locked, Holdover, expiry and correction tests.
 
 ## USB configuration
 

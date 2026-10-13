@@ -10,7 +10,9 @@ The default `sensors_for_sparkle` binary runs GPS, PPS, IMU, authenticated LoRa,
 and the revised board UART as independent Embassy tasks. See [firmware setup](../docs/firmware.md)
 for pins, wired provisioning, calibration, storage boundaries and physical checks.
 The release profile uses size optimization to fit below its two storage sectors.
-The GPS timing profile remains unmeasured; the adapter reports Acquiring.
+The GPS timing profile remains unmeasured. Install measured limits through the
+[wired configuration transaction](../docs/firmware.md#wiring-and-timing) to enable
+clock acquisition. Unknown timing reports Acquiring.
 
 The `merbots_jacket` binary uses ADC1 on PA0, DMA2 stream 0, and TIM2 TRGO.
 HSI and the PLL supply nominal 96 MHz. TIM2 divides that clock by 2000 for

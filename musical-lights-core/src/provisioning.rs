@@ -85,6 +85,38 @@ pub struct RosterEntry {
     pub id: L2,
     pub color: u8,
 }
+/// Measured product-746 timing limits. None means the clock cannot be trusted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GpsTiming {
+    /// UTC of PPS minus the matching NMEA epoch, in signed milliseconds.
+    pub epoch_offset_ms: L4,
+    pub min_delay_ms: L2,
+    pub max_delay_ms: L2,
+    pub uncertainty_ms: L2,
+    pub drift_ppm: L2,
+}
+impl GpsTiming {
+    pub fn valid(&self) -> bool {
+        matches!(self.epoch_offset_ms.get() as i32, -1000 | 0 | 1000)
+            && self.min_delay_ms.get() <= self.max_delay_ms.get()
+            && self.max_delay_ms.get() < 1000
+            && (1..=50).contains(&self.uncertainty_ms.get())
+            && (1..=crate::clock::HOLDOVER_DRIFT_PPM).contains(&self.drift_ppm.get())
+    }
+    /// One complete profile per edit; do not publish partially edited bounds.
+    pub fn parse(value: &str) -> Option<Self> {
+        let mut fields = value.split(',');
+        let offset = fields.next()?.parse::<i32>().ok()?;
+        let timing = Self {
+            epoch_offset_ms: L4::new(offset as u32),
+            min_delay_ms: L2::new(fields.next()?.parse().ok()?),
+            max_delay_ms: L2::new(fields.next()?.parse().ok()?),
+            uncertainty_ms: L2::new(fields.next()?.parse().ok()?),
+            drift_ppm: L2::new(fields.next()?.parse().ok()?),
+        };
+        (fields.next().is_none() && timing.valid()).then_some(timing)
+    }
+}
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StmRecord<K> {
     pub schema: L2,
@@ -101,6 +133,7 @@ pub struct StmRecord<K> {
     pub sensor_profile: L2,
     pub mount_revision: L4,
     pub gps_profile: L2,
+    pub gps_timing: Option<GpsTiming>,
     pub battery_profile: L2,
     pub calibration: Option<Coefficients>,
 }
@@ -121,6 +154,7 @@ impl<K> StmRecord<K> {
             sensor_profile: self.sensor_profile,
             mount_revision: self.mount_revision,
             gps_profile: self.gps_profile,
+            gps_timing: self.gps_timing,
             battery_profile: self.battery_profile,
             calibration: self.calibration,
         }
@@ -141,7 +175,7 @@ impl<K> StmRecord<K> {
 }
 impl<K> StmRecord<K> {
     pub fn valid_common(&self) -> bool {
-        self.schema.get() == 1
+        self.schema.get() == 2
             && self.generation.get() != 0
             && self.group_id.get() != 0
             && self.key_id.get() != 0
@@ -151,6 +185,7 @@ impl<K> StmRecord<K> {
             && self.sensor_profile.get() == 1
             && self.mount_revision.get() != 0
             && self.gps_profile.get() == 1
+            && self.gps_timing.is_none_or(|timing| timing.valid())
             && self.battery_profile.get() == 0
             && self
                 .calibration

@@ -179,6 +179,29 @@ pub struct PeerState {
     pub verified: bool,
 }
 impl PeerState {
+    /// Receiver freshness is distinct from the origin's UTC-valid flag.
+    pub fn snapshot(&self, now: u64) -> crate::message::Peer {
+        use crate::message::{L2, L4, Peer, Position};
+        let r = self.report;
+        Peer {
+            id: L2::new(r.origin),
+            origin_boot: L4::new(r.boot),
+            sequence: L4::new(r.sequence),
+            position: Position {
+                lat: L4::new(r.latitude_e7 as u32),
+                lon: L4::new(r.longitude_e7 as u32),
+                age: L4::new(self.age(now)),
+                accuracy: L2::new(r.accuracy_dm),
+                flags: L2::new(r.flags & 7),
+            },
+            health: L2::new(r.flags),
+            hop: r.hop,
+            rssi: L2::new(i16::MIN as u16),
+            snr: i8::MIN as u8,
+            color: r.color,
+            freshness_verified: self.verified,
+        }
+    }
     pub fn age(&self, now: u64) -> u32 {
         self.age_at_receive
             .saturating_add(now.saturating_sub(self.received_ms).min(u32::MAX as u64) as u32)

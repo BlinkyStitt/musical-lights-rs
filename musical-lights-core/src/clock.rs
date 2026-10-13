@@ -1,4 +1,6 @@
 //! Validated UTC for packet age, and a separate continuous presentation clock.
+/// Conservative holdover bound; provisioned oscillator measurements must fit it.
+pub const HOLDOVER_DRIFT_PPM: u16 = 100;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ClockState {
     #[default]

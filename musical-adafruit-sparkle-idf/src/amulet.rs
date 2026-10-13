@@ -242,7 +242,7 @@ fn hex(bytes: &[u8]) -> String {
 
 fn default_stm() -> StmRecord<Option<[u8; 32]>> {
     StmRecord {
-        schema: L2::new(1),
+        schema: L2::new(2),
         generation: L4::new(1),
         device_id: L2::new(0),
         group_id: L4::new(0),
@@ -256,6 +256,7 @@ fn default_stm() -> StmRecord<Option<[u8; 32]>> {
         sensor_profile: L2::new(1),
         mount_revision: L4::new(1),
         gps_profile: L2::new(1),
+        gps_timing: None,
         battery_profile: L2::new(0),
         calibration: None,
     }
@@ -333,6 +334,15 @@ fn set_stm(s: &mut StmRecord<Option<[u8; 32]>>, key: &str, value: &str) -> bool 
             } else {
                 return false;
             }
+        }
+        "gps.timing" => {
+            s.gps_timing = if value == "unknown" {
+                None
+            } else if let Some(timing) = provisioning::GpsTiming::parse(value) {
+                Some(timing)
+            } else {
+                return false;
+            };
         }
         _ => return false,
     }

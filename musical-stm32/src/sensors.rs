@@ -18,7 +18,7 @@ use embassy_sync::{
 use embassy_time::{Delay, Duration, Instant, Timer, with_timeout};
 use lsm9ds1::{self, accel, gyro, interface::SpiInterface, mag};
 use musical_lights_core::{
-    clock::{Anchor, UtcClock},
+    clock::UtcClock,
     controller::Controller,
     gps::{Fix, GpsParser, PpsCounter},
     message::*,
@@ -45,6 +45,7 @@ pub struct State {
     pub boot: u32,
     pub settings: Option<StmRecord<[u8; 32]>>,
     pub fix: Option<Fix>,
+    pub fix_utc_verified: bool,
     pub heading: Heading,
     pub clock: UtcClock,
     pub network: Option<Network>,
@@ -161,6 +162,7 @@ pub async fn controller(
             ) {
                 let mut s = state.lock().await;
                 s.fix = None;
+                s.fix_utc_verified = false;
                 s.heading = Heading::default();
                 s.clock = UtcClock::default();
                 s.sensor_fault = true;
@@ -191,7 +193,13 @@ pub async fn controller(
                         result.data.extend_from_slice(&hdop.to_le_bytes()).unwrap();
                         result
                             .data
-                            .extend_from_slice(&u32::MAX.to_le_bytes())
+                            .extend_from_slice(
+                                &s.settings
+                                    .as_ref()
+                                    .and_then(|s| s.gps_timing)
+                                    .map_or(u32::MAX, |t| t.uncertainty_ms.get() as u32)
+                                    .to_le_bytes(),
+                            )
                             .unwrap();
                         result
                             .data
@@ -218,6 +226,12 @@ pub async fn controller(
         }
         let mut s = state.lock().await;
         s.boot = controller.boot_id();
+        if s.settings.as_ref().and_then(|s| s.gps_timing)
+            != controller.settings.as_ref().and_then(|s| s.gps_timing)
+        {
+            // An old profile must not certify anchors after a committed edit.
+            s.clock = UtcClock::default();
+        }
         s.settings = controller.settings.clone();
         s.run = controller.run.clone();
         s.storage_fault = controller.storage_fault;
@@ -264,19 +278,14 @@ pub async fn gps(mut uart: Uart<'static, Async>, _enable: Output<'static>, state
                         if !discarding && let Ok(text) = core::str::from_utf8(&line) {
                             if let Some(fix) = parser.push(text, now()) {
                                 let mut s = state.lock().await;
-                                if let Some((_, pps_at)) = s.pps.filter(|(_, at)| {
-                                    fix.time_valid
-                                        && fix.captured_ms >= *at
-                                        && fix.captured_ms - *at < 1000
-                                }) {
-                                    // Timing bound is deliberately unknown until the product-746
-                                    // PPS/epoch association is physically characterized.
-                                    s.clock.accept(Anchor {
-                                        utc_ms: fix.utc_ms,
-                                        monotonic_ms: pps_at,
-                                        uncertainty_ms: u32::MAX,
-                                    });
-                                }
+                                let pps = s.pps.map(|(_, at)| at);
+                                let timing = s.settings.as_ref().and_then(|s| s.gps_timing);
+                                s.fix_utc_verified = musical_lights_core::gps::verify_epoch(
+                                    &mut s.clock,
+                                    fix,
+                                    pps,
+                                    timing,
+                                );
                                 s.fix = Some(fix);
                             } else if text.contains('*') && nmea_checksum_bad(text) {
                                 let mut s = state.lock().await;
@@ -524,7 +533,7 @@ fn health(s: &State, at: u64) -> u16 {
     }
     if !s.gps_fault && s.fix.is_some_and(|f| f.valid && f.age_ms(at) <= 60000) {
         flags |= wire::POSITION_VALID;
-        if s.clock.utc(at).is_some() {
+        if s.fix_utc_verified && s.clock.utc(at).is_some() {
             flags |= wire::SAMPLE_UTC_VALID;
         }
     }
@@ -626,23 +635,7 @@ pub async fn snapshots(state: Shared, out: Out) {
                         if r.flags & wire::POSITION_VALID == 0 || peer.age(at) > 60000 {
                             continue;
                         }
-                        let _ = snapshot.peers.push(Peer {
-                            id: L2::new(r.origin),
-                            origin_boot: L4::new(r.boot),
-                            sequence: L4::new(r.sequence),
-                            position: Position {
-                                lat: L4::new(r.latitude_e7 as u32),
-                                lon: L4::new(r.longitude_e7 as u32),
-                                age: L4::new(peer.age(at)),
-                                accuracy: L2::new(r.accuracy_dm),
-                                flags: L2::new(r.flags & 7),
-                            },
-                            health: L2::new(r.flags),
-                            hop: r.hop,
-                            rssi: L2::new(i16::MIN as u16),
-                            snr: i8::MIN as u8,
-                            color: r.color,
-                        });
+                        let _ = snapshot.peers.push(peer.snapshot(at));
                     }
                 }
                 let _ = out.try_send(Message::StateSnapshot(snapshot));
@@ -768,6 +761,8 @@ pub async fn radio(
             };
             receiving = false;
             let at = now(); // Include CAD time in freshness and relay residence.
+            // CAD can cross the next source deadline. Recheck before relaying.
+            let source_due = settings.is_some() && boot != 0 && at >= own_due;
             if source_due && busy && at <= own_deadline {
                 Timer::after_millis(20 + roll() as u64 % 81).await;
                 continue;

@@ -89,6 +89,154 @@ fn pps_wrap_extends_one_mhz_capture() {
 }
 const EPOCH: u64 = 1791806400000;
 #[test]
+fn provisioned_gps_timing_acquires_from_parsed_epochs_and_bounds_pps_association() {
+    let timing = GpsTiming::parse("0,100,400,10,80").unwrap();
+    let mut parser = GpsParser::default();
+    let mut clock = UtcClock::default();
+    let mut unknown = UtcClock::default();
+    for second in 0..5 {
+        let pps = second * 1000;
+        assert!(
+            parser
+                .push(
+                    &nmea(&std::format!(
+                        "GPRMC,1200{second:02}.000,A,3746.4940,N,12225.1640,W,0,0,121026,,,A"
+                    )),
+                    pps + 100
+                )
+                .is_none()
+        );
+        let fix = parser
+            .push(
+                &nmea(&std::format!(
+                    "GPGGA,1200{second:02}.000,3746.4940,N,12225.1640,W,1,08,0.9,10,M,30,M,,"
+                )),
+                pps + 300,
+            )
+            .unwrap();
+        assert_eq!(
+            clock.accept(crate::gps::pps_anchor(fix, pps, Some(timing)).unwrap()),
+            second == 4
+        );
+        assert!(!unknown.accept(crate::gps::pps_anchor(fix, pps, None).unwrap()));
+        for (delay, accepted) in [
+            (99, false),
+            (100, true),
+            (400, true),
+            (401, false),
+            (1000, false),
+        ] {
+            let mut delayed = fix;
+            delayed.captured_ms = pps + delay;
+            assert_eq!(
+                crate::gps::pps_anchor(delayed, pps, Some(timing)).is_some(),
+                accepted
+            );
+        }
+        for offset in [-1000i32, 0, 1000] {
+            let mut shifted = timing;
+            shifted.epoch_offset_ms = L4::new(offset as u32);
+            assert_eq!(
+                crate::gps::pps_anchor(fix, pps, Some(shifted))
+                    .unwrap()
+                    .utc_ms,
+                fix.utc_ms.checked_add_signed(offset as i64).unwrap()
+            );
+        }
+        let mut invalid = fix;
+        invalid.time_valid = false;
+        assert!(crate::gps::pps_anchor(invalid, pps, Some(timing)).is_none());
+        invalid = fix;
+        invalid.utc_ms += 1;
+        assert!(crate::gps::pps_anchor(invalid, pps, Some(timing)).is_none());
+        assert!(crate::gps::pps_anchor(fix, fix.captured_ms + 1, Some(timing)).is_none());
+    }
+    assert_eq!(clock.state(), ClockState::Locked);
+    assert_eq!(unknown.state(), ClockState::Acquiring);
+    assert_eq!(clock.utc(4000), Some((EPOCH + 4000, 10)));
+    clock.update(8000);
+    assert_eq!(clock.state(), ClockState::Holdover);
+    assert_eq!(clock.utc(14000), Some((EPOCH + 14000, 11)));
+}
+#[test]
+fn gps_timing_rejects_incomplete_unbounded_and_unsupported_profiles() {
+    for invalid in [
+        "",
+        "0,100,400,10",
+        "0,100,400,10,80,1",
+        "1,100,400,10,80",
+        "0,401,400,10,80",
+        "0,0,1000,10,80",
+        "0,0,999,0,80",
+        "0,0,999,51,80",
+        "0,0,999,10,0",
+        "0,0,999,10,101",
+        "0,-1,400,10,80",
+    ] {
+        assert!(GpsTiming::parse(invalid).is_none(), "{invalid}");
+    }
+    assert!(GpsTiming::parse("-1000,0,999,1,100").is_some());
+    assert!(GpsTiming::parse("1000,999,999,50,1").is_some());
+    let mut settings = stm();
+    settings.schema = L2::new(1);
+    assert!(!settings.valid());
+    settings.schema = L2::new(2);
+    let mut timing = GpsTiming::parse("0,100,400,10,80").unwrap();
+    timing.drift_ppm = L2::new(101);
+    settings.gps_timing = Some(timing);
+    assert!(!settings.valid());
+}
+#[test]
+fn locked_clock_does_not_certify_a_rejected_new_measurement_epoch() {
+    use crate::gps::{Fix, verify_epoch};
+    let timing = GpsTiming::parse("0,100,400,10,80").unwrap();
+    let mut clock = UtcClock::default();
+    let mut fix = Fix {
+        latitude_e7: 0,
+        longitude_e7: 0,
+        utc_ms: EPOCH,
+        captured_ms: 100,
+        valid: true,
+        time_valid: true,
+        altitude_m: None,
+        hdop: None,
+    };
+    for second in 0..5 {
+        fix.utc_ms = EPOCH + second * 1000;
+        fix.captured_ms = second * 1000 + 100;
+        assert_eq!(
+            verify_epoch(&mut clock, fix, Some(second * 1000), Some(timing)),
+            second == 4
+        );
+    }
+    fix.utc_ms += 60_000;
+    fix.captured_ms = 5500; // Outside the installed delay bound.
+    assert!(!verify_epoch(&mut clock, fix, Some(5000), Some(timing)));
+    assert_eq!(clock.state(), ClockState::Locked);
+    assert!(clock.utc(5500).is_some()); // The old anchor still supports holdover.
+    assert!(!verify_epoch(&mut clock, fix, None, Some(timing)));
+    fix.captured_ms = 6100; // A discontinuity inside the window forces acquisition.
+    assert!(!verify_epoch(&mut clock, fix, Some(6000), Some(timing)));
+    assert_eq!(clock.state(), ClockState::Acquiring);
+}
+#[test]
+fn gps_timing_public_record_matches_independent_python_fixture() {
+    let mut settings = stm();
+    settings.roster.truncate(1);
+    settings.gps_timing = GpsTiming::parse("-1000,100,400,10,80");
+    let public = settings.public_bytes().unwrap();
+    // Python struct.pack + binascii.crc32, also decoded by the host-tool tests.
+    assert_eq!(
+        public.as_slice(),
+        unhex(
+            "020001000000010004030201010000000101000000010100000100881300000001000100000001000118fcffff640090010a005000000000c4908d66"
+        )
+    );
+    let restored: StmRecord<u8> = decode_record(&public).unwrap();
+    assert_eq!(restored.gps_timing, settings.gps_timing);
+    assert!(restored.valid_common());
+}
+#[test]
 fn clock_requires_five_measured_anchors_and_expires_holdover() {
     let mut clock = UtcClock::default();
     for i in 0..5 {
@@ -297,7 +445,7 @@ fn revised_uart_fixture_and_stream_recovery_do_not_accept_old_payloads() {
         uptime: L4::new(2),
         health: L2::new(0x1800),
     });
-    let fixture = unhex("0301040201010102020101010418887700");
+    let fixture = unhex("03020402010101020201010104187f7900");
     let mut encoder = MessageEncoder::new();
     assert_eq!(encoder.encode(&heartbeat).unwrap(), fixture);
     for split in 0..fixture.len() {
@@ -332,6 +480,11 @@ fn revised_uart_fixture_and_stream_recovery_do_not_accept_old_payloads() {
             assert!(r.is_err());
         }
     } // Old Ping frame.
+    for b in unhex("0301040201010102020101010418887700") {
+        if let Some(r) = decoder.feed(b) {
+            assert!(r.is_err());
+        }
+    } // Superseded version-1 heartbeat with a valid CRC.
 }
 #[test]
 fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
@@ -356,12 +509,20 @@ fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
                 rssi: L2::new(i16::MIN as u16),
                 snr: i8::MIN as u8,
                 color: (id - 1) as u8,
+                freshness_verified: false,
             })
             .unwrap();
     }
     let mut encoder = MessageEncoder::new();
     let frame = encoder.encode(&Message::StateSnapshot(snapshot)).unwrap();
-    assert!(frame.len() <= 324);
+    assert!(frame.len() <= 331);
+    // Independent Python fixed-width serialization, CRC-16 and COBS fixture.
+    assert_eq!(
+        frame,
+        unhex(
+            "040201010101020101010101010101010101020101010101010101010101010101010101010101010101010101010101010101010101010101010101010109ffffffffffffffff03e8030105ffffffff01010101010104080702020101010201010101010101010101010101010101010101010102010480800102030201010102010101010101010101010101010101010101010101020104808002020402010101020101010101010101010101010101010101010101010201048080030205020101010201010101010101010101010101010101010101010102010480800402060201010102010101010101010101010101010101010101010101020104808005020702010101020101010101010101010101010101010101010101010201048080060208020101010201010101010101010101010101010101010101010102010480800703e34c00"
+        )
+    );
     let command = Message::Command(Command {
         target_stm_boot: L4::new(1),
         client_epoch: L4::new(1),
@@ -371,6 +532,123 @@ fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
         data: heapless::Vec::from_slice(&[1; 384]).unwrap(),
     });
     assert!(encoder.encode(&command).unwrap().len() <= 410);
+}
+#[test]
+fn receiver_freshness_survives_uart_without_relabeling_origin_health() {
+    for trusted in [false, true] {
+        for hop in [1, 2] {
+            let mut network = Network::new(8, origin().group, roster(), false).unwrap();
+            let mut report = origin();
+            report.hop = hop;
+            if hop == 2 {
+                report.relay = 2;
+            }
+            network
+                .receive(report, 0, trusted.then_some((report.utc_ms + 1000, 10)), 0)
+                .unwrap();
+            let peer = network.peers[0].unwrap().snapshot(100);
+            assert_eq!(peer.freshness_verified, trusted);
+            assert_eq!(peer.health.get(), report.flags);
+            assert_eq!(peer.position.flags.get(), report.flags & 7);
+            let mut snapshot = StateSnapshot {
+                boot: L4::new(1),
+                sequence: L4::new(1),
+                slot: 7,
+                count: 8,
+                roster_revision: L4::new(1),
+                ..Default::default()
+            };
+            snapshot.peers.push(peer).unwrap();
+            let message = Message::StateSnapshot(snapshot);
+            let mut encoder = MessageEncoder::new();
+            let mut decoder = MessageDecoder::new();
+            let decoded = encoder
+                .encode(&message)
+                .unwrap()
+                .iter()
+                .filter_map(|&b| decoder.feed(b))
+                .next()
+                .unwrap()
+                .unwrap();
+            assert_eq!(decoded, message);
+            // Later clock availability does not change a report accepted without UTC.
+            assert_eq!(
+                network.receive(report, 200, Some((report.utc_ms + 1200, 10)), 0),
+                Err(RadioError::Replay)
+            );
+            assert_eq!(
+                network.peers[0].unwrap().snapshot(200).freshness_verified,
+                trusted
+            );
+        }
+    }
+}
+#[test]
+fn amulet_unverified_or_stale_navigation_has_no_solid_target_arrow() {
+    use palette::LinSrgb;
+    let mut settings = sparkle();
+    settings.mode = 1;
+    settings.selected = Some(L2::new(2));
+    let mut state = StateSnapshot {
+        boot: L4::new(1),
+        sequence: L4::new(1),
+        ..Default::default()
+    };
+    state.heading.quality = 4;
+    state.local.flags = L2::new(5);
+    state.local.accuracy = L2::new(10);
+    let mut peer = PeerState {
+        report: origin(),
+        received_ms: 0,
+        age_at_receive: 0,
+        verified: true,
+    }
+    .snapshot(0);
+    peer.id = L2::new(2);
+    peer.position.lat = L4::new(0);
+    peer.position.lon = L4::new(10000);
+    peer.position.accuracy = L2::new(10);
+    peer.color = 1;
+    state.peers.push(peer).unwrap();
+    let mut frame = [LinSrgb::new(0.0, 0.0, 0.0); 494];
+    for (verified, peer_age, local_age, arrow) in [
+        (true, 15000, 15000, true),
+        (false, 0, 0, false),
+        (true, 15001, 0, false),
+        (true, 0, 15001, false),
+    ] {
+        state.peers[0].freshness_verified = verified;
+        state.peers[0].position.age = L4::new(peer_age);
+        state.local.age = L4::new(local_age);
+        let mut renderer = crate::amulet::Renderer::default();
+        renderer.render(
+            &settings,
+            Some((&state, 2000)),
+            2000,
+            0.0,
+            false,
+            &mut frame,
+        );
+        assert_eq!(frame[..256].iter().any(|p| p.blue > 0.0), arrow);
+    }
+    settings.mode = 0;
+    for (verified, now, peak) in [
+        (true, 2000, 0.125),
+        (false, 2000, 0.0375),
+        (false, 2200, 0.0),
+    ] {
+        state.peers[0].freshness_verified = verified;
+        state.peers[0].position.age = L4::new(0);
+        state.local.age = L4::new(0);
+        let mut renderer = crate::amulet::Renderer::default();
+        renderer.render(&settings, Some((&state, now)), now, 0.0, false, &mut frame);
+        let actual = frame[..256].iter().map(|p| p.blue).fold(0.0f32, f32::max);
+        if peak == 0.0 {
+            assert_eq!(actual, 0.0);
+        } else {
+            assert!(actual > 0.0 && actual <= peak + 1e-6);
+        }
+    }
 }
 #[derive(Clone)]
 struct MemoryFlash {
@@ -448,7 +726,7 @@ fn committed_corruption_does_not_roll_back_to_an_older_sector() {
 }
 fn stm() -> StmRecord<[u8; 32]> {
     StmRecord {
-        schema: L2::new(1),
+        schema: L2::new(2),
         generation: L4::new(1),
         device_id: L2::new(1),
         group_id: L4::new(0x01020304),
@@ -467,6 +745,7 @@ fn stm() -> StmRecord<[u8; 32]> {
         sensor_profile: L2::new(1),
         mount_revision: L4::new(1),
         gps_profile: L2::new(1),
+        gps_timing: None,
         battery_profile: L2::new(0),
         calibration: None,
     }
@@ -509,6 +788,48 @@ fn command_completion_and_settings_share_one_commit_point_and_recover_after_rest
     let mut broken = public.clone();
     broken[3] ^= 1;
     assert!(decode_record::<StmRecord<u8>>(&broken).is_err());
+}
+#[test]
+fn gps_timing_and_command_outcome_recover_together_after_interrupted_writes() {
+    let mut controller = Controller::boot(MemoryFlash::new()).unwrap();
+    let initial = stm();
+    let command = replace(
+        controller.boot_id(),
+        1,
+        initial.clone().map_key(Some(key())),
+        0,
+    );
+    assert_eq!(controller.command(&command, 0).status, 0);
+    let mut measured = initial.clone();
+    measured.generation = L4::new(2);
+    measured.gps_timing = GpsTiming::parse("-1000,100,400,10,80");
+    let command = replace(controller.boot_id(), 2, measured.clone().map_key(None), 1);
+    let original = controller.journal.into_flash();
+    for boundary in (0..=PAGE + 4).step_by(4) {
+        let mut flash = original.clone();
+        flash.remaining = Some(boundary);
+        let mut controller = Controller {
+            journal: Journal::open(flash).unwrap(),
+            settings: Some(initial.clone()),
+            run: None,
+            storage_fault: false,
+        };
+        let applied = controller.command(&command, 1).status == 0;
+        let mut flash = controller.journal.into_flash();
+        flash.remaining = None;
+        let mut recovered = Controller::boot(flash).unwrap();
+        assert!(
+            recovered.settings.as_ref() == Some(if applied { &measured } else { &initial }),
+            "boundary {boundary}"
+        );
+        let mut retry = command.clone();
+        retry.target_stm_boot = L4::new(recovered.boot_id());
+        assert_eq!(
+            recovered.command(&retry, 2).status,
+            if applied { 1 } else { 0 }
+        );
+        assert!(recovered.settings.as_ref() == Some(&measured));
+    }
 }
 #[test]
 fn stable_shared_pattern_sections_do_not_depend_on_reachable_peers() {
@@ -847,15 +1168,16 @@ fn amulet_magnetic_north_survives_gps_loss_and_ring_overlap_keeps_identity() {
             sequence: L4::new(1),
             position: Position {
                 lat: L4::new(10000),
-                flags: L2::new(5),
+                flags: L2::new(7),
                 accuracy: L2::new(10),
                 ..Default::default()
             },
-            health: L2::new(5),
+            health: L2::new(7),
             hop: 1,
             rssi: L2::new(0),
             snr: 0,
             color: 1,
+            freshness_verified: true,
         })
         .unwrap();
     renderer.render(&settings, Some((&state, 0)), 0, 0.0, false, &mut frame);
