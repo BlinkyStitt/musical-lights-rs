@@ -187,6 +187,39 @@ fn gps_timing_rejects_incomplete_unbounded_and_unsupported_profiles() {
     assert!(!settings.valid());
 }
 #[test]
+fn locked_clock_does_not_certify_a_rejected_new_measurement_epoch() {
+    use crate::gps::{Fix, verify_epoch};
+    let timing = GpsTiming::parse("0,100,400,10,80").unwrap();
+    let mut clock = UtcClock::default();
+    let mut fix = Fix {
+        latitude_e7: 0,
+        longitude_e7: 0,
+        utc_ms: EPOCH,
+        captured_ms: 100,
+        valid: true,
+        time_valid: true,
+        altitude_m: None,
+        hdop: None,
+    };
+    for second in 0..5 {
+        fix.utc_ms = EPOCH + second * 1000;
+        fix.captured_ms = second * 1000 + 100;
+        assert_eq!(
+            verify_epoch(&mut clock, fix, Some(second * 1000), Some(timing)),
+            second == 4
+        );
+    }
+    fix.utc_ms += 60_000;
+    fix.captured_ms = 5500; // Outside the installed delay bound.
+    assert!(!verify_epoch(&mut clock, fix, Some(5000), Some(timing)));
+    assert_eq!(clock.state(), ClockState::Locked);
+    assert!(clock.utc(5500).is_some()); // The old anchor still supports holdover.
+    assert!(!verify_epoch(&mut clock, fix, None, Some(timing)));
+    fix.captured_ms = 6100; // A discontinuity inside the window forces acquisition.
+    assert!(!verify_epoch(&mut clock, fix, Some(6000), Some(timing)));
+    assert_eq!(clock.state(), ClockState::Acquiring);
+}
+#[test]
 fn gps_timing_public_record_matches_independent_python_fixture() {
     let mut settings = stm();
     settings.roster.truncate(1);

@@ -45,6 +45,7 @@ pub struct State {
     pub boot: u32,
     pub settings: Option<StmRecord<[u8; 32]>>,
     pub fix: Option<Fix>,
+    pub fix_utc_verified: bool,
     pub heading: Heading,
     pub clock: UtcClock,
     pub network: Option<Network>,
@@ -161,6 +162,7 @@ pub async fn controller(
             ) {
                 let mut s = state.lock().await;
                 s.fix = None;
+                s.fix_utc_verified = false;
                 s.heading = Heading::default();
                 s.clock = UtcClock::default();
                 s.sensor_fault = true;
@@ -276,15 +278,14 @@ pub async fn gps(mut uart: Uart<'static, Async>, _enable: Output<'static>, state
                         if !discarding && let Ok(text) = core::str::from_utf8(&line) {
                             if let Some(fix) = parser.push(text, now()) {
                                 let mut s = state.lock().await;
-                                if let Some(anchor) = s.pps.and_then(|(_, at)| {
-                                    musical_lights_core::gps::pps_anchor(
-                                        fix,
-                                        at,
-                                        s.settings.as_ref().and_then(|s| s.gps_timing),
-                                    )
-                                }) {
-                                    s.clock.accept(anchor);
-                                }
+                                let pps = s.pps.map(|(_, at)| at);
+                                let timing = s.settings.as_ref().and_then(|s| s.gps_timing);
+                                s.fix_utc_verified = musical_lights_core::gps::verify_epoch(
+                                    &mut s.clock,
+                                    fix,
+                                    pps,
+                                    timing,
+                                );
                                 s.fix = Some(fix);
                             } else if text.contains('*') && nmea_checksum_bad(text) {
                                 let mut s = state.lock().await;
@@ -532,7 +533,7 @@ fn health(s: &State, at: u64) -> u16 {
     }
     if !s.gps_fault && s.fix.is_some_and(|f| f.valid && f.age_ms(at) <= 60000) {
         flags |= wire::POSITION_VALID;
-        if s.clock.utc(at).is_some() {
+        if s.fix_utc_verified && s.clock.utc(at).is_some() {
             flags |= wire::SAMPLE_UTC_VALID;
         }
     }

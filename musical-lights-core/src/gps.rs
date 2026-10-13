@@ -1,5 +1,8 @@
 //! GPS product 746, 9600 baud, 1 Hz. Coordinates stay in volatile memory.
-use crate::{clock::Anchor, provisioning::GpsTiming};
+use crate::{
+    clock::{Anchor, UtcClock},
+    provisioning::GpsTiming,
+};
 use nmea::{
     ParseResult,
     sentences::{FixType, GgaData, RmcData, rmc::RmcStatusOfFix},
@@ -49,6 +52,18 @@ pub fn pps_anchor(fix: Fix, pps_ms: u64, timing: Option<GpsTiming>) -> Option<An
         monotonic_ms: pps_ms,
         uncertainty_ms,
     })
+}
+
+/// Verification belongs to this measurement, not to an older locked anchor.
+pub fn verify_epoch(
+    clock: &mut UtcClock,
+    fix: Fix,
+    pps_ms: Option<u64>,
+    timing: Option<GpsTiming>,
+) -> bool {
+    pps_ms
+        .and_then(|pps| pps_anchor(fix, pps, timing))
+        .is_some_and(|anchor| clock.accept(anchor))
 }
 
 #[derive(Default)]

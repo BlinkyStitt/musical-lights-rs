@@ -101,7 +101,9 @@ limits; do not reduce measured values to make it pass.
 
 The STM32 validates the profile again, stores it with command completion, and
 starts fresh clock acquisition after a committed timing change. It accepts only
-whole-second epochs inside the installed delay limits. `config set gps.timing
+whole-second epochs inside the installed delay limits. Each position sets
+SAMPLE_UTC_VALID only after its own epoch passes the clock check; an older Locked
+anchor does not certify a rejected new epoch. `config set gps.timing
 unknown` removes the profile. `config get stm` reports the public profile, and
 `gps diagnostics` reports its installed uncertainty without coordinates. The STM
 settings record uses schema 2; schema 1 records are rejected. The board UART
