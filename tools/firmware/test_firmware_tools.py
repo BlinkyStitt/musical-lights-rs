@@ -41,18 +41,67 @@ class FirmwareToolsTests(unittest.TestCase):
 
     def test_public_one_device_record_has_no_secret_or_trailing_bytes(self):
         body = (
-            struct.pack("<HIHIIBI", 1, 1, 1, 0x01020304, 1, 1, 1)
+            struct.pack("<HIHIIBI", 2, 1, 1, 0x01020304, 1, 1, 1)
             + bytes([1])
             + struct.pack("<HB", 1, 0)
         )
-        body += struct.pack("<HIBHIHH", 1, 5000, 0, 1, 1, 1, 0) + bytes([0])
+        body += struct.pack("<HIBHIH", 1, 5000, 0, 1, 1, 1) + bytes([0])
+        body += struct.pack("<H", 0) + bytes([0])
         record = body + struct.pack("<I", binascii.crc32(body))
-        self.assertEqual(len(record), 47)
+        self.assertEqual(len(record), 48)
         settings = public_stm(record)
         self.assertTrue(settings["key_present"])
         self.assertNotIn("key", settings)
+        self.assertIsNone(settings["gps_timing"])
         with self.assertRaises(ValueError):
             public_stm(record + b"\0")
+
+    def test_measured_gps_timing_record_and_invalid_limits(self):
+        prefix = (
+            struct.pack("<HIHIIBI", 2, 1, 1, 0x01020304, 1, 1, 1)
+            + bytes([1])
+            + struct.pack("<HB", 1, 0)
+            + struct.pack("<HIBHIH", 1, 5000, 0, 1, 1, 1)
+            + bytes([1])
+        )
+
+        def record(offset, minimum, maximum, uncertainty, drift):
+            body = prefix + struct.pack(
+                "<iHHHH", offset, minimum, maximum, uncertainty, drift
+            )
+            body += struct.pack("<H", 0) + bytes([0])
+            return body + struct.pack("<I", binascii.crc32(body))
+
+        measured = record(-1000, 100, 400, 10, 80)
+        self.assertEqual(len(measured), 60)
+        self.assertEqual(
+            measured.hex(),
+            "020001000000010004030201010000000101000000010100000100881300000001000100000001000118fcffff640090010a005000000000c4908d66",
+        )
+        self.assertEqual(
+            public_stm(measured)["gps_timing"],
+            {
+                "epoch_offset_ms": -1000,
+                "min_delay_ms": 100,
+                "max_delay_ms": 400,
+                "uncertainty_ms": 10,
+                "drift_ppm": 80,
+            },
+        )
+        for values in [
+            (1, 100, 400, 10, 80),
+            (0, 401, 400, 10, 80),
+            (0, 0, 1000, 10, 80),
+            (0, 0, 999, 0, 80),
+            (0, 0, 999, 51, 80),
+            (0, 0, 999, 10, 101),
+        ]:
+            with self.assertRaises(ValueError):
+                public_stm(record(*values))
+        for end in range(len(measured) - 4):
+            body = measured[:end]
+            with self.assertRaises(ValueError):
+                public_stm(body + struct.pack("<I", binascii.crc32(body)))
 
     def test_ellipsoid_fit_uses_held_out_samples_and_rejects_poor_coverage(self):
         rng = np.random.default_rng(731)

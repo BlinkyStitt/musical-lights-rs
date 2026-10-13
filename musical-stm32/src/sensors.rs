@@ -18,7 +18,7 @@ use embassy_sync::{
 use embassy_time::{Delay, Duration, Instant, Timer, with_timeout};
 use lsm9ds1::{self, accel, gyro, interface::SpiInterface, mag};
 use musical_lights_core::{
-    clock::{Anchor, UtcClock},
+    clock::UtcClock,
     controller::Controller,
     gps::{Fix, GpsParser, PpsCounter},
     message::*,
@@ -191,7 +191,13 @@ pub async fn controller(
                         result.data.extend_from_slice(&hdop.to_le_bytes()).unwrap();
                         result
                             .data
-                            .extend_from_slice(&u32::MAX.to_le_bytes())
+                            .extend_from_slice(
+                                &s.settings
+                                    .as_ref()
+                                    .and_then(|s| s.gps_timing)
+                                    .map_or(u32::MAX, |t| t.uncertainty_ms.get() as u32)
+                                    .to_le_bytes(),
+                            )
                             .unwrap();
                         result
                             .data
@@ -218,6 +224,12 @@ pub async fn controller(
         }
         let mut s = state.lock().await;
         s.boot = controller.boot_id();
+        if s.settings.as_ref().and_then(|s| s.gps_timing)
+            != controller.settings.as_ref().and_then(|s| s.gps_timing)
+        {
+            // An old profile must not certify anchors after a committed edit.
+            s.clock = UtcClock::default();
+        }
         s.settings = controller.settings.clone();
         s.run = controller.run.clone();
         s.storage_fault = controller.storage_fault;
@@ -264,18 +276,14 @@ pub async fn gps(mut uart: Uart<'static, Async>, _enable: Output<'static>, state
                         if !discarding && let Ok(text) = core::str::from_utf8(&line) {
                             if let Some(fix) = parser.push(text, now()) {
                                 let mut s = state.lock().await;
-                                if let Some((_, pps_at)) = s.pps.filter(|(_, at)| {
-                                    fix.time_valid
-                                        && fix.captured_ms >= *at
-                                        && fix.captured_ms - *at < 1000
+                                if let Some(anchor) = s.pps.and_then(|(_, at)| {
+                                    musical_lights_core::gps::pps_anchor(
+                                        fix,
+                                        at,
+                                        s.settings.as_ref().and_then(|s| s.gps_timing),
+                                    )
                                 }) {
-                                    // Timing bound is deliberately unknown until the product-746
-                                    // PPS/epoch association is physically characterized.
-                                    s.clock.accept(Anchor {
-                                        utc_ms: fix.utc_ms,
-                                        monotonic_ms: pps_at,
-                                        uncertainty_ms: u32::MAX,
-                                    });
+                                    s.clock.accept(anchor);
                                 }
                                 s.fix = Some(fix);
                             } else if text.contains('*') && nmea_checksum_bad(text) {

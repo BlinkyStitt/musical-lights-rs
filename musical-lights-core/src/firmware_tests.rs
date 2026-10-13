@@ -89,6 +89,121 @@ fn pps_wrap_extends_one_mhz_capture() {
 }
 const EPOCH: u64 = 1791806400000;
 #[test]
+fn provisioned_gps_timing_acquires_from_parsed_epochs_and_bounds_pps_association() {
+    let timing = GpsTiming::parse("0,100,400,10,80").unwrap();
+    let mut parser = GpsParser::default();
+    let mut clock = UtcClock::default();
+    let mut unknown = UtcClock::default();
+    for second in 0..5 {
+        let pps = second * 1000;
+        assert!(
+            parser
+                .push(
+                    &nmea(&std::format!(
+                        "GPRMC,1200{second:02}.000,A,3746.4940,N,12225.1640,W,0,0,121026,,,A"
+                    )),
+                    pps + 100
+                )
+                .is_none()
+        );
+        let fix = parser
+            .push(
+                &nmea(&std::format!(
+                    "GPGGA,1200{second:02}.000,3746.4940,N,12225.1640,W,1,08,0.9,10,M,30,M,,"
+                )),
+                pps + 300,
+            )
+            .unwrap();
+        assert_eq!(
+            clock.accept(crate::gps::pps_anchor(fix, pps, Some(timing)).unwrap()),
+            second == 4
+        );
+        assert!(!unknown.accept(crate::gps::pps_anchor(fix, pps, None).unwrap()));
+        for (delay, accepted) in [
+            (99, false),
+            (100, true),
+            (400, true),
+            (401, false),
+            (1000, false),
+        ] {
+            let mut delayed = fix;
+            delayed.captured_ms = pps + delay;
+            assert_eq!(
+                crate::gps::pps_anchor(delayed, pps, Some(timing)).is_some(),
+                accepted
+            );
+        }
+        for offset in [-1000i32, 0, 1000] {
+            let mut shifted = timing;
+            shifted.epoch_offset_ms = L4::new(offset as u32);
+            assert_eq!(
+                crate::gps::pps_anchor(fix, pps, Some(shifted))
+                    .unwrap()
+                    .utc_ms,
+                fix.utc_ms.checked_add_signed(offset as i64).unwrap()
+            );
+        }
+        let mut invalid = fix;
+        invalid.time_valid = false;
+        assert!(crate::gps::pps_anchor(invalid, pps, Some(timing)).is_none());
+        invalid = fix;
+        invalid.utc_ms += 1;
+        assert!(crate::gps::pps_anchor(invalid, pps, Some(timing)).is_none());
+        assert!(crate::gps::pps_anchor(fix, fix.captured_ms + 1, Some(timing)).is_none());
+    }
+    assert_eq!(clock.state(), ClockState::Locked);
+    assert_eq!(unknown.state(), ClockState::Acquiring);
+    assert_eq!(clock.utc(4000), Some((EPOCH + 4000, 10)));
+    clock.update(8000);
+    assert_eq!(clock.state(), ClockState::Holdover);
+    assert_eq!(clock.utc(14000), Some((EPOCH + 14000, 11)));
+}
+#[test]
+fn gps_timing_rejects_incomplete_unbounded_and_unsupported_profiles() {
+    for invalid in [
+        "",
+        "0,100,400,10",
+        "0,100,400,10,80,1",
+        "1,100,400,10,80",
+        "0,401,400,10,80",
+        "0,0,1000,10,80",
+        "0,0,999,0,80",
+        "0,0,999,51,80",
+        "0,0,999,10,0",
+        "0,0,999,10,101",
+        "0,-1,400,10,80",
+    ] {
+        assert!(GpsTiming::parse(invalid).is_none(), "{invalid}");
+    }
+    assert!(GpsTiming::parse("-1000,0,999,1,100").is_some());
+    assert!(GpsTiming::parse("1000,999,999,50,1").is_some());
+    let mut settings = stm();
+    settings.schema = L2::new(1);
+    assert!(!settings.valid());
+    settings.schema = L2::new(2);
+    let mut timing = GpsTiming::parse("0,100,400,10,80").unwrap();
+    timing.drift_ppm = L2::new(101);
+    settings.gps_timing = Some(timing);
+    assert!(!settings.valid());
+}
+#[test]
+fn gps_timing_public_record_matches_independent_python_fixture() {
+    let mut settings = stm();
+    settings.roster.truncate(1);
+    settings.gps_timing = GpsTiming::parse("-1000,100,400,10,80");
+    let public = settings.public_bytes().unwrap();
+    // Python struct.pack + binascii.crc32, also decoded by the host-tool tests.
+    assert_eq!(
+        public.as_slice(),
+        unhex(
+            "020001000000010004030201010000000101000000010100000100881300000001000100000001000118fcffff640090010a005000000000c4908d66"
+        )
+    );
+    let restored: StmRecord<u8> = decode_record(&public).unwrap();
+    assert_eq!(restored.gps_timing, settings.gps_timing);
+    assert!(restored.valid_common());
+}
+#[test]
 fn clock_requires_five_measured_anchors_and_expires_holdover() {
     let mut clock = UtcClock::default();
     for i in 0..5 {
@@ -448,7 +563,7 @@ fn committed_corruption_does_not_roll_back_to_an_older_sector() {
 }
 fn stm() -> StmRecord<[u8; 32]> {
     StmRecord {
-        schema: L2::new(1),
+        schema: L2::new(2),
         generation: L4::new(1),
         device_id: L2::new(1),
         group_id: L4::new(0x01020304),
@@ -467,6 +582,7 @@ fn stm() -> StmRecord<[u8; 32]> {
         sensor_profile: L2::new(1),
         mount_revision: L4::new(1),
         gps_profile: L2::new(1),
+        gps_timing: None,
         battery_profile: L2::new(0),
         calibration: None,
     }
@@ -509,6 +625,48 @@ fn command_completion_and_settings_share_one_commit_point_and_recover_after_rest
     let mut broken = public.clone();
     broken[3] ^= 1;
     assert!(decode_record::<StmRecord<u8>>(&broken).is_err());
+}
+#[test]
+fn gps_timing_and_command_outcome_recover_together_after_interrupted_writes() {
+    let mut controller = Controller::boot(MemoryFlash::new()).unwrap();
+    let initial = stm();
+    let command = replace(
+        controller.boot_id(),
+        1,
+        initial.clone().map_key(Some(key())),
+        0,
+    );
+    assert_eq!(controller.command(&command, 0).status, 0);
+    let mut measured = initial.clone();
+    measured.generation = L4::new(2);
+    measured.gps_timing = GpsTiming::parse("-1000,100,400,10,80");
+    let command = replace(controller.boot_id(), 2, measured.clone().map_key(None), 1);
+    let original = controller.journal.into_flash();
+    for boundary in (0..=PAGE + 4).step_by(4) {
+        let mut flash = original.clone();
+        flash.remaining = Some(boundary);
+        let mut controller = Controller {
+            journal: Journal::open(flash).unwrap(),
+            settings: Some(initial.clone()),
+            run: None,
+            storage_fault: false,
+        };
+        let applied = controller.command(&command, 1).status == 0;
+        let mut flash = controller.journal.into_flash();
+        flash.remaining = None;
+        let mut recovered = Controller::boot(flash).unwrap();
+        assert!(
+            recovered.settings.as_ref() == Some(if applied { &measured } else { &initial }),
+            "boundary {boundary}"
+        );
+        let mut retry = command.clone();
+        retry.target_stm_boot = L4::new(recovered.boot_id());
+        assert_eq!(
+            recovered.command(&retry, 2).status,
+            if applied { 1 } else { 0 }
+        );
+        assert!(recovered.settings.as_ref() == Some(&measured));
+    }
 }
 #[test]
 fn stable_shared_pattern_sections_do_not_depend_on_reachable_peers() {

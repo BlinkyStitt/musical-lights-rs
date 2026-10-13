@@ -1,4 +1,5 @@
 //! GPS product 746, 9600 baud, 1 Hz. Coordinates stay in volatile memory.
+use crate::{clock::Anchor, provisioning::GpsTiming};
 use nmea::{
     ParseResult,
     sentences::{FixType, GgaData, RmcData, rmc::RmcStatusOfFix},
@@ -19,6 +20,35 @@ impl Fix {
     pub fn age_ms(self, now: u64) -> u32 {
         now.saturating_sub(self.captured_ms).min(u32::MAX as u64) as u32
     }
+}
+
+/// Join a complete measurement epoch to its captured PPS using installed limits.
+/// Unknown timing still reports acquisition, but can never lock the UTC clock.
+pub fn pps_anchor(fix: Fix, pps_ms: u64, timing: Option<GpsTiming>) -> Option<Anchor> {
+    let delay = fix.captured_ms.checked_sub(pps_ms)?;
+    if !fix.time_valid || !fix.utc_ms.is_multiple_of(1000) || delay >= 1000 {
+        return None;
+    }
+    let (utc_ms, uncertainty_ms) = if let Some(timing) = timing {
+        if !timing.valid()
+            || !(timing.min_delay_ms.get() as u64..=timing.max_delay_ms.get() as u64)
+                .contains(&delay)
+        {
+            return None;
+        }
+        (
+            fix.utc_ms
+                .checked_add_signed(timing.epoch_offset_ms.get() as i32 as i64)?,
+            timing.uncertainty_ms.get() as u32,
+        )
+    } else {
+        (fix.utc_ms, u32::MAX)
+    };
+    Some(Anchor {
+        utc_ms,
+        monotonic_ms: pps_ms,
+        uncertainty_ms,
+    })
 }
 
 #[derive(Default)]

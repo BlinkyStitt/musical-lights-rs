@@ -76,29 +76,59 @@ def calibration_event(event):
 
 
 def public_stm(record):
-    if len(record) < 47 or binascii.crc32(record[:-4]) != int.from_bytes(
+    if len(record) < 48 or binascii.crc32(record[:-4]) != int.from_bytes(
         record[-4:], "little"
     ):
         raise ValueError("Invalid public settings CRC")
     schema, generation, device, group, key_id, present, revision = struct.unpack_from(
         "<HIHIIBI", record
     )
-    if schema != 1 or present not in (0, 1):
+    if schema != 2 or present not in (0, 1):
         raise ValueError("Invalid settings schema")
     cursor = 21
     count = record[cursor]
     cursor += 1
     if not 1 <= count <= 8:
         raise ValueError("Invalid roster count")
+    if len(record) < cursor + count * 3 + 23:
+        raise ValueError("Truncated public settings")
     roster = []
     for _ in range(count):
         peer, color = struct.unpack_from("<HB", record, cursor)
         roster.append({"id": peer, "color": color})
         cursor += 3
-    radio, interval, relay, sensor, mount, gps, battery = struct.unpack_from(
-        "<HIBHIHH", record, cursor
+    radio, interval, relay, sensor, mount, gps = struct.unpack_from(
+        "<HIBHIH", record, cursor
     )
-    cursor += 17
+    cursor += 15
+    timing_tag = record[cursor]
+    cursor += 1
+    if timing_tag not in (0, 1):
+        raise ValueError("Invalid GPS timing tag")
+    timing = None
+    if timing_tag:
+        if len(record) < cursor + 19:
+            raise ValueError("Truncated GPS timing limits")
+        offset, minimum, maximum, uncertainty, drift = struct.unpack_from(
+            "<iHHHH", record, cursor
+        )
+        cursor += 12
+        if (
+            offset not in (-1000, 0, 1000)
+            or not 0 <= minimum <= maximum < 1000
+            or not 1 <= uncertainty <= 50
+            or not 1 <= drift <= 100
+        ):
+            raise ValueError("Invalid GPS timing limits")
+        timing = {
+            "epoch_offset_ms": offset,
+            "min_delay_ms": minimum,
+            "max_delay_ms": maximum,
+            "uncertainty_ms": uncertainty,
+            "drift_ppm": drift,
+        }
+    battery = struct.unpack_from("<H", record, cursor)[0]
+    cursor += 2
     tag = record[cursor]
     cursor += 1
     if tag not in (0, 1):
@@ -121,6 +151,7 @@ def public_stm(record):
         "sensor_profile": sensor,
         "mount_revision": mount,
         "gps_profile": gps,
+        "gps_timing": timing,
         "battery_profile": battery,
         "calibration_revision": int.from_bytes(calibration[10:14], "little")
         if calibration
