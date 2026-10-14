@@ -89,6 +89,66 @@ fn pps_wrap_extends_one_mhz_capture() {
 }
 const EPOCH: u64 = 1791806400000;
 #[test]
+fn paired_gps_sentences_crossing_pps_keep_the_first_sentences_edge() {
+    use crate::gps::{PpsHistory, verify_epoch};
+    let timing = GpsTiming::parse("0,900,999,10,80").unwrap();
+    for gga_first in [false, true] {
+        let mut parser = GpsParser::default();
+        let mut clock = UtcClock::default();
+        let mut pps = PpsHistory::default();
+        pps.record(Some(0));
+        for second in 0..5 {
+            let rmc = nmea(&std::format!(
+                "GPRMC,1200{second:02}.000,A,3746.4940,N,12225.1640,W,0,0,121026,,,A"
+            ));
+            let gga = nmea(&std::format!(
+                "GPGGA,1200{second:02}.000,3746.4940,N,12225.1640,W,1,08,0.9,10,M,30,M,,"
+            ));
+            let (first, last) = if gga_first {
+                (&gga, &rmc)
+            } else {
+                (&rmc, &gga)
+            };
+            assert!(parser.push(first, second * 1000 + 950).is_none());
+            pps.record(Some((second + 1) * 1000));
+            let fix = parser.push(last, second * 1000 + 1050).unwrap();
+            assert_eq!(fix.captured_ms, second * 1000 + 950);
+            assert!(crate::gps::pps_anchor(fix, pps.latest().unwrap(), Some(timing)).is_none());
+            assert_eq!(pps.for_capture(fix.captured_ms), Some(second * 1000));
+            assert_eq!(
+                verify_epoch(
+                    &mut clock,
+                    fix,
+                    pps.for_capture(fix.captured_ms),
+                    Some(timing)
+                ),
+                second == 4
+            );
+        }
+        assert_eq!(clock.state(), ClockState::Locked);
+    }
+}
+
+#[test]
+fn pps_history_rejects_future_stale_missing_and_reset_edges() {
+    use crate::gps::PpsHistory;
+    let mut pps = PpsHistory::default();
+    assert_eq!(pps.for_capture(950), None);
+    pps.record(Some(1000));
+    assert_eq!(pps.for_capture(950), None);
+    assert_eq!(pps.for_capture(1000), Some(1000));
+    assert_eq!(pps.for_capture(1999), Some(1000));
+    assert_eq!(pps.for_capture(2000), None);
+    pps.record(Some(3000));
+    assert_eq!(pps.for_capture(2950), None);
+    pps.record(Some(2000)); // A late task wake-up must not reorder captures.
+    assert_eq!(pps.latest(), Some(3000));
+    pps.record(None);
+    assert_eq!(pps.latest(), None);
+    assert_eq!(pps.for_capture(3050), None);
+}
+
+#[test]
 fn provisioned_gps_timing_acquires_from_parsed_epochs_and_bounds_pps_association() {
     let timing = GpsTiming::parse("0,100,400,10,80").unwrap();
     let mut parser = GpsParser::default();
