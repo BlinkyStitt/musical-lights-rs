@@ -344,7 +344,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 12 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 13 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20]) || !Number.isInteger(data.layout[23]) || data.layout[24] < 2) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.makeMeshes(); this.ready = true;
@@ -405,7 +405,12 @@ export class PhysicsView {
     this.renderedTops = new Float32Array(count);
     // The visible post spans the same depth as its physical support surface.
     // Extend the outer ends in the vertex shader, using the physical support span.
-    const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
+    const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5], this.layout[24]);
+    // Joined bands have a single outer coating. Omit their internal side caps.
+    geometry.setIndex(Array.from(geometry.index.array).slice(geometry.groups[2].start));
+    geometry.clearGroups();
+    for (const name of ['curveLeft', 'curveRight']) geometry.setAttribute(name,
+      new THREE.InstancedBufferAttribute(new Float32Array(count * 6 * 4), 4));
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.meshPulses, 1));
     this.barRoof = { value: this.height };
@@ -414,8 +419,23 @@ export class PhysicsView {
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
       Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      shader.vertexShader = `attribute vec4 curveLeft; attribute vec4 curveRight;
+        uniform float halfWidth;
+        float curveHeight(vec4 c, float t) { return c.x + t * (c.y + t * (c.z + t * c.w)); }
+        float curveSlope(vec4 c, float t) { return (c.y + t * (2.0 * c.z + t * 3.0 * c.w)) / (2.0 * halfWidth); }
+        void curveAt(float x, out float height, out float slope) {
+          float u = x / (2.0 * halfWidth);
+          vec4 c = u < 0.0 ? curveLeft : curveRight;
+          float t = u < 0.0 ? u + 1.0 : u;
+          height = curveHeight(c, t); slope = curveSlope(c, t);
+        }
+        uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n` + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        float normalHeight, normalSlope; curveAt(position.x, normalHeight, normalSlope);
+        if (normal.y > 0.5) objectNormal = vec3(-normalSlope, curveRight.x, 0.0);`);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; coloredPulse = pulse; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      shader.vertexShader = shader.vertexShader.replace('local = position;', 'float surfaceHeight, surfaceSlope; curveAt(position.x, surfaceHeight, surfaceSlope); transformed.y = (position.y + 0.5) * surfaceHeight / curveRight.x - 0.5; local = position;');
+      shader.vertexShader = shader.vertexShader.replace('localIllumination((instanceMatrix * vec4(position, 1.0)).xyz', 'localIllumination((instanceMatrix * vec4(transformed, 1.0)).xyz');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
@@ -494,6 +514,15 @@ export class PhysicsView {
         this.meshPulses[i + copy * count] = pulse;
       }
       const column = (i + phase) % count;
+      const curveOffset = this.layout[23];
+      for (const [name, band] of [['curveLeft', (i + count - 1) % count], ['curveRight', i]]) {
+        const attribute = this.bars.geometry.attributes[name];
+        for (let coefficient = 0; coefficient < 4; coefficient++) {
+          const index = curveOffset + band * 4 + coefficient;
+          const value = previous[index] + (current[index] - previous[index]) * alpha;
+          for (let copy = 0; copy < 6; copy++) attribute.array[(i + copy * count) * 4 + coefficient] = value;
+        }
+      }
       this.object.scale.set(1, top, 1);
       for (let end = 0; end < 2; end++) {
         this.object.quaternion.set(end, 0, 0, 1 - end);
@@ -509,6 +538,8 @@ export class PhysicsView {
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.bars.geometry.attributes.pulse.needsUpdate = true;
+    this.bars.geometry.attributes.curveLeft.needsUpdate = true;
+    this.bars.geometry.attributes.curveRight.needsUpdate = true;
     this.renderedEnclosureHeight = height;
     this.mirrors.update(this.width, height, depth, this.camera);
     this.renderedAt = performance.timeOrigin + now;
@@ -534,7 +565,7 @@ export class PhysicsView {
   }
   renderedHeight(band, end = 0) {
     const offset = (band + end * this.layout[0] * 3) * 16;
-    // The single rendering contract uses unit-height boxes scaled to travel.
+    // The matrix scale reports the source knot height, before spline joining.
     return Math.abs(this.bars.instanceMatrix.array[offset + 5]);
   }
 

@@ -1,7 +1,7 @@
 import * as THREE from './three.module.js';
 import { sphereGeometry } from './spheres.js';
 
-export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - transformed.y); mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - position.y); mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
 // This exceeds the camera’s visible depth even at the minimum enclosure depth
 // and maximum yaw. Higher settings add storage and uploads without visible depth.
 export const MAX_DEPTH_IMAGES = 2048;

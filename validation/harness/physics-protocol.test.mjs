@@ -5,12 +5,14 @@ import init, { PhysicsSimulation } from '../../musical-lights-physics/pkg/physic
 import { replayReport } from '../replay-physics.mjs';
 const wasm = await init({ module_or_path: await readFile(new URL('../../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
 
-test('the built WASM accepts protocol 12 scrolling and stops at its published phase', () => {
+test('the built WASM accepts protocol 13 scrolling and stops at its published phase', () => {
   const layout = PhysicsSimulation.layout();
-  assert.equal(layout[18], 12, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
+  assert.equal(layout[18], 13, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
   assert.equal(layout[0], 24);
   assert.equal(layout[4], 0, 'Adjacent bar colliders have no gap');
-  assert.equal(layout[5], 0, 'Flat tips have no seam trough');
+  assert.equal(layout[5], 0, 'Joined tips have no seam trough');
+  assert.equal(layout[23], layout[20] + 1, 'Snapshots publish the authoritative spline coefficients');
+  assert.equal(layout[24], 8, 'Rendering uses the same chord count as collision');
   assert.equal(layout[21], 8);
   assert.equal(layout[22], 62, 'Current audio attack edges are part of the recorded input');
   assert.equal(layout[9], 3 + 8 * layout[8]);

@@ -5,6 +5,59 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
+test('joined spline tops draw the published collision chords without vertical steps', async ({ page }, info) => {
+  await page.goto(url); await physicsReady(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const hidden = v.scene.children.filter(object => object !== v.bars && object.visible);
+    hidden.forEach(object => { object.visible = false; });
+    const width = 1200, height = 800, room = v.renderedEnclosureHeight;
+    const target = new THREE.WebGLRenderTarget(width, height), pixels = new Uint8Array(width * height * 4);
+    const camera = new THREE.OrthographicCamera(0, v.width, room, 0, .01, 10);
+    camera.position.set(0, 0, 2); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+    const clearAlpha = v.renderer.getClearAlpha(), background = v.scene.background;
+    let checked = 0, mismatches = 0, largestStep = 0;
+    const curve = (band, u) => {
+      const attr = v.bars.geometry.attributes[u < 0 ? 'curveLeft' : 'curveRight'].array;
+      const c = attr.subarray(band * 4, band * 4 + 4), t = u < 0 ? u + 1 : u;
+      return c[0] + t * (c[1] + t * (c[2] + t * c[3]));
+    };
+    try {
+      v.scene.background = null; v.renderer.setClearAlpha(0); v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
+      const pitch = v.layout[3], steps = v.layout[24];
+      for (let band = 0; band < 24; band++) largestStep = Math.max(largestStep,
+        Math.abs(curve(band, .5) - curve((band + 1) % 24, -.5)));
+      for (let x = 1; x < width - 1; x++) {
+        const column = ((x + .5) / width * v.width / pitch - v.renderedPhase + 24) % 24;
+        const band = Math.floor(column), u = column - band - .5;
+        const index = Math.floor((u + .5) * steps), start = index / steps - .5;
+        const fraction = (u - start) * steps;
+        const top = curve(band, start) * (1 - fraction) + curve(band, start + 1 / steps) * fraction;
+        for (const end of [0, 1]) for (const inside of [false, true]) {
+          const y = Math.floor((end ? room - top : top) / room * height) + (end ? -1 : 1) * (inside ? -3 : 3);
+          if (y < 0 || y >= height) continue;
+          const alpha = pixels[(y * width + x) * 4 + 3];
+          checked++; if (alpha !== (inside ? 255 : 0)) mismatches++;
+        }
+      }
+    } finally {
+      v.scene.background = background; v.renderer.setClearAlpha(clearAlpha); v.renderer.setRenderTarget(null); target.dispose();
+      hidden.forEach(object => { object.visible = true; }); v.draw(performance.now());
+    }
+    return { checked, mismatches, largestStep };
+  });
+  expect(result.checked).toBeGreaterThan(4000);
+  expect(result.largestStep).toBeLessThan(.000001);
+  expect(result.mismatches).toBe(0);
+  const image = info.outputPath('joined-spline-tops.png');
+  await page.locator('#dancinglights').screenshot({ path: image });
+  await info.attach('joined-spline-tops', { path: image, contentType: 'image/png' });
+});
+
 test('idle waves preserve ball pigments despite real bar contacts', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
@@ -564,6 +617,7 @@ test('small balls, paired bar tips and light sources share the same interpolated
         for (const [snapshot, top, height] of [[v.previous, rising ? .02 : .10, .6], [v.current, rising ? .10 : .02, .7]]) {
           snapshot[v.layout[17]] = height;
           snapshot.fill(top, v.layout[9], v.layout[10]);
+          for (let band = 0; band < 24; band++) snapshot.set([top, 0, 0, 0], v.layout[23] + band * 4);
           snapshot[4] = ceiling ? height - top - radius : top + radius;
         }
         v.received = performance.now();
@@ -573,6 +627,7 @@ test('small balls, paired bar tips and light sources share the same interpolated
           lagMs: (1 - v.renderAlpha) * (v.current[0] - v.previous[0]) * 1000,
           clearance: ceiling ? v.renderedEnclosureHeight - top - y - radius : y - radius - top,
           lightTip: v.lighting.uniforms.stripState.value[0].y, top,
+          surface: v.bars.geometry.attributes.curveRight.array[0],
           roof: v.barRoof.value, height: v.renderedEnclosureHeight });
       }
       return samples;
@@ -582,6 +637,7 @@ test('small balls, paired bar tips and light sources share the same interpolated
     expect(Math.abs(sample.clearance), JSON.stringify(sample)).toBeLessThan(.00001);
     expect(sample.lagMs, JSON.stringify(sample)).toBeLessThanOrEqual(sample.step + .0001);
     expect(sample.lightTip).toBeCloseTo(sample.top, 6);
+    expect(sample.surface).toBeCloseTo(sample.top, 6);
     expect(sample.roof).toBeCloseTo(sample.height, 6);
   }
 });

@@ -50,16 +50,16 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
-    // Isolate one production bar to inspect its actual lit side surface.
+    // Isolate a production spline patch to inspect its actual lit top.
     const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
     const visibility = hidden.map(mesh => mesh.visible), count = v.bars.count;
     hidden.forEach(mesh => mesh.visible = false); v.bars.count = 1;
     const matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array);
-    const x = matrix.elements[12] - v.bars.geometry.boundingBox.max.x;
-    const y = v.renderedHeight(0) * .3, depth = v.config[5], mid = -depth * v.mirrors.count / 2;
+    const x = matrix.elements[12];
+    const y = v.renderedHeight(0), depth = v.config[5], mid = -depth * v.mirrors.count / 2;
     const halfSpan = depth * (v.mirrors.count + 1) * .55;
     const camera = new THREE.OrthographicCamera(-halfSpan, halfSpan, .15, -.15, .01, 10);
-    camera.position.set(x - 2, y, mid); camera.lookAt(x, y, mid); camera.updateMatrixWorld();
+    camera.up.set(1, 0, 0); camera.position.set(x, y + 2, mid); camera.lookAt(x, y, mid); camera.updateMatrixWorld();
     const target = new THREE.WebGLRenderTarget(1000, 100), pixels = new Uint8Array(1000 * 100 * 4);
     try {
       v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera); v.renderer.readRenderTargetPixels(target, 0, 0, 1000, 100, pixels);
@@ -607,7 +607,7 @@ test('full-size background bands show lit faces and depth copies separate at obl
         }
         const source = new THREE.Vector3(v.width / 2, v.renderedHeight(12), v.config[5] / 2);
         const depths = [0, -1, -2].map(z => source.clone().add(new THREE.Vector3(0, 0, z * v.config[5])).project(v.camera).toArray());
-        results.push({ angle, fills, depths, physicalBalls: v.balls.count, triangles: v.bars.geometry.index.count / 3 });
+        results.push({ angle, fills, depths, physicalBalls: v.balls.count, triangles: v.bars.geometry.index.count / 3, chords: v.layout[24] });
       }
     } finally { v.balls.visible = true; v.renderer.setRenderTarget(null); target.dispose(); }
     return results;
@@ -615,7 +615,7 @@ test('full-size background bands show lit faces and depth copies separate at obl
   for (const result of results) {
     expect(result.fills.length).toBeGreaterThanOrEqual(192);
     for (const brightness of result.fills) expect(brightness, JSON.stringify(result)).toBeGreaterThan(70);
-    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(12);
+    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(8 * result.chords);
     expect(Math.abs(result.depths[0][0] - result.depths[1][0])).toBeGreaterThan(.01);
     expect(Math.abs(result.depths[1][0] - result.depths[2][0])).toBeGreaterThan(.01);
   }

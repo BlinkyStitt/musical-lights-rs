@@ -4,6 +4,19 @@ import * as THREE from '../../musical-lights-physics/pkg/three.module.js';
 import { SceneLighting } from '../../musical-lights-physics/pkg/lighting.js';
 import { MirrorRoom, mirrorCells, MAX_DEPTH_IMAGES } from '../../musical-lights-physics/pkg/mirrors.js';
 import { sphereGeometry } from '../../musical-lights-physics/pkg/spheres.js';
+import { curveMaximum } from '../../musical-lights-physics/pkg/side-bars.js';
+
+test('culling bounds include the interior peak of time-interpolated spline tips', () => {
+  // Both blended endpoints are .5, but reversing tangents leave a .505 peak.
+  const coefficients = [.5, .02, -.02, 0];
+  const bound = curveMaximum(coefficients);
+  assert(bound > .505);
+  for (let i = 0; i <= 1000; i++) {
+    const t = i / 1000, [a, b, c, d] = coefficients;
+    assert(a + t * (b + t * (c + t * d)) <= bound);
+  }
+  assert.equal(curveMaximum([.1, 0, 0, 0]), .1);
+});
 
 test('sphere meshes have a closed outward surface, unit normals and shared vertices', () => {
   for (const detail of [2, 7]) {

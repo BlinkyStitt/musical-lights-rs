@@ -708,8 +708,19 @@ fixture with the real processor and its real completion acknowledgement.
 
 ### Full-depth supports, background boxes and all-band response
 
-The renderer uses finite unit-height boxes, scaled to each published physical
-bar height. Their full depth matches the physical support. Matching vertical
+The paired bar tops form a periodic, shape-preserving cubic spline through the
+24 band centres. Each band keeps its published height. Harmonic-mean tangents
+join the intervals without overshoot, including the scrolling seam. Physics
+and drawing use eight straight chords per pitch. Protocol 13 publishes the cubic
+coefficients in each snapshot; older recordings require their matching engine.
+The collider adapter joins vertical prisms below those chords, removes buried
+end-face contacts, and assigns each shared convex vertex one contact owner.
+Concave joins keep their two distinct contacts. Exactly collinear chords share
+one collider, with a stable endpoint frame during merge, split and scrolling.
+Prescribed frames use fixed zero mass properties at that endpoint. Release-hop
+eligibility follows the physical contact velocity, including neighbouring-band
+rises and horizontal scrolling.
+The visible mesh omits internal side caps. Its full depth matches the physical support. Matching vertical
 banks fill eight adjacent background boxes; all nine boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands. Balls, paired bar tips,
@@ -734,7 +745,7 @@ foreground occlusion, stable count and independence from audio lighting.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
-physical simulation stay unchanged. Background culling includes the full vertical
+source height measurements keep their existing meaning. Background culling includes the full vertical
 and depth extrusion. The browser suite checks visible pixels above and below the
 room, background stars, surface lighting, and complete-batch culling.
 
