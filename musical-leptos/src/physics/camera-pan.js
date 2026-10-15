@@ -19,8 +19,9 @@ export class CameraPan {
     const dy = Number(this.keys.has('w')) - Number(this.keys.has('s'));
     const length = Math.hypot(dx, dy);
     if (!length) return false;
-    // Do not jump after a stalled frame. Diagonal movement has the same speed.
-    const distance = Math.min(.1, seconds) * .35 / length;
+    // Use elapsed time at every frame rate. Blur, visibility and pause clear
+    // held keys; bounds contain long frames. Diagonals keep the same speed.
+    const distance = seconds * .35 / length;
     const x = Math.max(0, Math.min(1, this.x + dx * distance));
     const y = Math.max(0, Math.min(1, this.y + dy * distance));
     const changed = x !== this.x || y !== this.y;
