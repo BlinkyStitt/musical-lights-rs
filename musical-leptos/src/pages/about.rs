@@ -27,6 +27,14 @@ pub fn About() -> impl IntoView {
         <p><a href="https://github.com/BlinkyStitt/musical-lights-rs/blob/main/docs/loudness.md#scientific-sources-and-implementation-roles">"Method, controls, research, and implementation limits"</a></p>
         </section>
 
+        <section aria-labelledby="stars-heading">
+        <h2 id="stars-heading">"Stars behind the lights"</h2>
+        <p>"The background shows real catalog stars around Orion. Their positions, relative brightness and color indices come from "
+        <a href="https://github.com/astronexus/HYG-Database/tree/c7f7f883fe678cc7680169a50ccd7dcc49b060ce/hyg">"David Nash’s HYG Database 4.1"</a>
+        ". Music adds a tempo shimmer and attack twinkles. This is a fixed view of the sky, not the current local horizon."</p>
+        <p>"The selected catalog data is adapted under "<a href="https://creativecommons.org/licenses/by-sa/4.0/">"CC BY-SA 4.0"</a>"."</p>
+        </section>
+
         <h2>Old Arduino Code</h2>
 
         <ol>

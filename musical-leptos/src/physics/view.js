@@ -544,7 +544,8 @@ export class PhysicsView {
     this.mirrors.update(this.width, height, depth, this.camera);
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
-    this.starfield.update(now, this.reduced.matches);
+    this.starfield.update(now, this.reduced.matches, this.camera.aspect, this.tempo,
+      this.tempoConfidence, this.card.dataset.audioState === 'playing', this.edges);
     this.render();
   }
   render(camera = this.camera) { this.renderer.render(this.scene, camera); }

@@ -285,7 +285,7 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
     await expect.poll(() => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      return [v.starfield.points.geometry.attributes.position.count === 512,
+      return [v.starfield.points.geometry.attributes.position.count === 8920,
         v.renderer.info.memory.textures === 0, v.renderer.info.memory.geometries === window.sceneGeometries];
     })).toEqual([true, true, true]);
     await page.keyboard.press('Escape');
