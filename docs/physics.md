@@ -262,7 +262,9 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 12 requires attack edges and rejects replays from previous engines.
+Physics protocol 13 seeds three surface colors per ball, requires attack edges,
+and rejects replays from previous engines. Rotation reveals the colored surface
+before the first music contact; Reduced Motion disables additional pigment drift.
 Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
 white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
 intensity. Only distinct impacts with a source that has an active audio attack

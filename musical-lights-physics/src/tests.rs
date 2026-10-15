@@ -1823,3 +1823,21 @@ fn default_full_attacks_stay_within_the_work_cap_in_tall_phone_rooms() {
         }
     }
 }
+
+#[test]
+fn initial_ball_surface_has_three_distinct_source_pigments_without_fake_contacts() {
+    let mut sim = world(SimulationConfig::default());
+    let initial = sim.pigments;
+    for history in initial.as_chunks::<9>().0 {
+        assert_ne!(history[..3], history[3..6]);
+        assert_ne!(history[3..6], history[6..9]);
+        assert_ne!(history[..3], history[6..9]);
+        for color in history.as_chunks::<3>().0 {
+            assert!(sim.palette.iter().any(|source| source.as_slice() == color));
+        }
+    }
+    for _ in 0..HZ {
+        sim.step();
+    }
+    assert_eq!(sim.pigments, initial);
+}

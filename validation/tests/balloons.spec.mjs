@@ -5,6 +5,50 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
+test('rolling reveals initial ball colors without audio or pigment drift', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(url); await physicsReady(page);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const hidden = [v.starfield.points, v.bars, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({mesh}) => mesh)];
+    const visibility = hidden.map(mesh => mesh.visible), count = v.balls.count;
+    const original = new THREE.Matrix4().fromArray(v.balls.instanceMatrix.array), phase = v.patternTime.value;
+    const pigments = Array.from(v.pigments.slice(0, 9));
+    const radius = v.current[10], x = v.width / 2, y = v.visibleHeight / 2;
+    const camera = new THREE.OrthographicCamera(-radius * 1.1, radius * 1.1, radius * 1.1, -radius * 1.1, .01, 10);
+    camera.position.set(x, y, 2); camera.lookAt(x, y, 0); camera.updateMatrixWorld();
+    const target = new THREE.WebGLRenderTarget(96, 96), pixels = new Uint8Array(96 * 96 * 4), images = [];
+    try {
+      hidden.forEach(mesh => mesh.visible = false); v.balls.count = 1; v.patternTime.value = 0;
+      for (const angle of [0, Math.PI / 2, Math.PI, 0]) {
+        const object = new THREE.Object3D(); object.position.set(x, y, 0); object.scale.setScalar(radius); object.rotation.z = angle; object.updateMatrix();
+        v.balls.setMatrixAt(0, object.matrix); v.balls.instanceMatrix.needsUpdate = true;
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera); v.renderer.readRenderTargetPixels(target, 0, 0, 96, 96, pixels);
+        images.push(pixels.slice());
+      }
+      const differences = images.slice(1).map(image => {
+        let changed = 0;
+        for (let i = 0; i < image.length; i += 4) if ([0, 1, 2].reduce((sum, channel) => sum + Math.abs(image[i + channel] - images[0][i + channel]), 0) > 30) changed++;
+        return changed;
+      });
+      return {differences, pigments, after: Array.from(v.pigments.slice(0, 9)), audio: !!document.querySelector('.audio-card').activeAudioContext};
+    } finally {
+      v.balls.setMatrixAt(0, original); v.balls.instanceMatrix.needsUpdate = true; v.balls.count = count; v.patternTime.value = phase;
+      hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.renderer.setRenderTarget(null); target.dispose();
+    }
+  });
+  expect(evidence.pigments.slice(0, 3)).not.toEqual(evidence.pigments.slice(3, 6));
+  expect(evidence.pigments.slice(3, 6)).not.toEqual(evidence.pigments.slice(6, 9));
+  expect(evidence.differences[0]).toBeGreaterThan(96 * 96 * .1);
+  expect(evidence.differences[1]).toBeGreaterThan(96 * 96 * .1);
+  expect(evidence.differences[2]).toBe(0);
+  expect(evidence.after).toEqual(evidence.pigments); expect(evidence.audio).toBe(false);
+  await info.attach('rolling-colors.json', {body: JSON.stringify(evidence), contentType: 'application/json'});
+});
+
 test('idle waves preserve ball pigments despite real bar contacts', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');

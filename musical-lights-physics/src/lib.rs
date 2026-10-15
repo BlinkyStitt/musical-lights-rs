@@ -338,7 +338,11 @@ impl Simulation {
             bars,
             palette,
             colors: std::array::from_fn(|i| palette[i * COUNT / BALL_COUNT]),
-            pigments: std::array::from_fn(|i| palette[(i / 9) * COUNT / BALL_COUNT][i % 3]),
+            // Seed three source colors so physical rotation reveals the surface
+            // before the first audio-qualified contact paints a new color.
+            pigments: std::array::from_fn(|i| {
+                palette[((i / 9) * COUNT / BALL_COUNT + (i % 9) / 3 * (COUNT / 3)) % COUNT][i % 3]
+            }),
             bar_positions: [f64::from(BASELINE); COUNT],
             bar_velocities: [0.0; COUNT],
             motions: [Motion::default(); COUNT],
@@ -880,7 +884,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            12.0, // attack-qualified pigment transfer; replay requires this engine
+            13.0, // seeded surface pigments; replay requires this engine
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
