@@ -866,3 +866,67 @@ test('depth-copy uploads follow the active count and keep pooled geometry', asyn
     }
   }
 });
+
+test('WASD pans the website camera within the main box and preserves its audio world', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({
+    version: 1, cameraMotion: false, cameraAngle: 0, mirrorCount: 6, depthMode: 'manual',
+  })));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    document.activeElement?.blur();
+    const v = document.querySelector('#dancinglights').physics;
+    window.cameraWorld = { view: v, worker: v.worker, renderer: v.renderer };
+  });
+  for (const [key, axis, bound] of [['d', 'x', 1], ['a', 'x', 0], ['w', 'y', 1], ['s', 'y', 0]]) {
+    await page.keyboard.down(key);
+    await expect.poll(() => page.evaluate(axis => document.querySelector('#dancinglights').physics.cameraPan[axis], axis), { timeout: 7000 }).toBe(bound);
+    await page.keyboard.up(key);
+  }
+  const state = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { x: v.camera.position.x, y: v.camera.position.y, width: v.width,
+      height: v.visibleHeight, world: v.worker === cameraWorld.worker && v.renderer === cameraWorld.renderer,
+      balls: v.balls.count, meters: document.querySelectorAll('#dancinglights [role="meter"]').length,
+      audioSession: !!v.card.dataset.audioSession, keys: v.cameraPan.keys.size, reduced: v.reduced.matches };
+  });
+  expect(state.x).toBe(0); expect(state.y).toBe(0); expect(state.world).toBe(true);
+  expect(state.balls).toBe(8); expect(state.meters).toBe(24); expect(state.keys).toBe(0);
+  expect(state.audioSession).toBe(false); expect(state.reduced).toBe(true);
+  await page.locator('.display-controls > summary').click();
+  await page.getByRole('button', { name: 'Reset display', exact: true }).click();
+  expect(await page.evaluate(() => { const p = document.querySelector('#dancinglights').physics.cameraPan; return [p.x, p.y]; })).toEqual([.5, .5]);
+});
+
+test('WASD leaves typing and shortcuts intact and clears on blur, hiding and route cleanup', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  const input = page.getByRole('textbox', { name: 'YouTube link' });
+  await input.fill(''); await input.pressSequentially('wasd'); await expect(input).toHaveValue('wasd');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+a');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.down('d');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(1);
+  await input.focus();
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('d'); await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down('w');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('w'); await page.keyboard.down('a');
+  await page.locator('footer').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sceneVisible)).toBe(false);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('a'); await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.keyboard.down('s');
+  await page.evaluate(() => { window.previousCameraView = document.querySelector('#dancinglights').physics; });
+  await page.getByRole('link', { name: 'About', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.previousCameraView.closed)).toBe(true);
+  expect(await page.evaluate(() => window.previousCameraView.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('s'); await page.keyboard.press('d');
+  expect(await page.evaluate(() => window.previousCameraView.cameraPan.keys.size)).toBe(0);
+});

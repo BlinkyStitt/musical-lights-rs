@@ -13,7 +13,7 @@ Listening controls microphone capture. Digital playback and phone motion have in
 
 Current and background readouts show sones and RMS dBFS. Uncalibrated sones are estimates. Background tracking does not subtract noise or change calibration. Advanced settings change presentation and scheduling; ISO coefficients stay fixed. Audio settings apply at the next explicit audio start. The actual audio block size appears below the scene.
 
-New preferences use startup Auto depth selection. Saved manual counts remain unchanged. The depth slider permits 0–2048 images; select Auto again to repeat the measurement. Bar and ball colors emit faint light, and white attacks illuminate nearby surfaces along the depth. Copies reuse eight physical balls and a bounded lighting field. Distant surfaces fade gradually in opacity so the catalog stars remain visible behind them.
+New preferences use startup Auto depth selection. Saved manual counts remain unchanged. The depth slider permits 0–2048 images; select Auto again to repeat the measurement. Bar and ball colors emit faint light, and white attacks illuminate nearby surfaces along the depth. Copies reuse eight physical balls and a bounded lighting field. Distant surfaces fade gradually in opacity so the catalog stars remain visible behind them. W/A/S/D pans the view within the main box; the angle control still sets the horizontal sweep. Typing in fields does not move the camera. Reset display centers the view.
 
 Browser evidence does not establish physical-phone frame rate or hardware acceptance. Keep diagnostic recording off during frame-rate acceptance workloads.
 
