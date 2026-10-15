@@ -69,6 +69,7 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
         return Array.from(pixels.slice(offset, offset + 3));
       };
       return { seams: [1, 2, 3].map(n => [sample(depth / 2 - n * depth + .002), sample(depth / 2 - n * depth - .002)]),
+        depth, brightness: [0, 1, 2, 3, 5].map(n => sample(depth / 2 - n * depth)),
         triangles: v.balls.geometry.index.count / 3, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
     } finally { hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.bars.count = count; v.renderer.setRenderTarget(null); target.dispose(); }
   });
@@ -76,6 +77,11 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
     expect(Math.max(...before)).toBeGreaterThan(30); expect(Math.max(...after)).toBeGreaterThan(30);
     expect(Math.max(...before.map((value, i) => Math.abs(value - after[i])))).toBeLessThanOrEqual(4);
   }
+  expect(evidence.depth).toBeCloseTo(.48, 5);
+  const brightness = evidence.brightness.map(pixel => Math.max(...pixel));
+  expect(brightness[0]).toBeGreaterThan(80);
+  expect(brightness[3]).toBeLessThan(brightness[1] * .8);
+  expect(brightness[4]).toBeLessThan(brightness[1] * .2);
   expect(evidence.triangles).toBe(1280); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
   await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
@@ -461,9 +467,12 @@ test('instanced depth copies match literal translated geometry from both camera 
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;',`vViewPosition = -(modelViewMatrix * vec4(world + vec3(0.0, 0.0, ${shift}), 1.0)).xyz;`);
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;',`vViewPosition = -(mvPosition.xyz + (modelViewMatrix * vec4(0.0, 0.0, ${shift}, 0.0)).xyz);`);
               shader.vertexShader=shader.vertexShader.replace('nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));', `nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz + vec3(0.0, 0.0, ${shift}), normalize(transformedNormal));`);
-              // The display contract retains emitted/spilled light through depth.
-              const fade = v.settings.depthFade ** (layer + 1);
-              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight = outgoingLight * ${fade} + (totalEmissiveRadiance + nearbyLight) * ${1 - fade};\n#include <opaque_fragment>`);
+              // Independently evaluate continuous distance from the translated
+              // geometry. Every light contribution fades, including emission.
+              shader.vertexShader='varying float literalDepth;\n'+shader.vertexShader;
+              shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\nliteralDepth = max(0.0, -(instanceMatrix * vec4(transformed, 1.0)).z / ${v.config[5]} - .5);`);
+              shader.fragmentShader='varying float literalDepth;\n'+shader.fragmentShader;
+              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight *= pow(${v.settings.depthFade}, literalDepth * literalDepth);\n#include <opaque_fragment>`);
             };
             material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
             const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;

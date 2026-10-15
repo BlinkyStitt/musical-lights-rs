@@ -379,3 +379,11 @@ small points and slow independent brightness changes. Reduced Motion holds
 their brightness steady. Camera sweeps, audio attacks and mirror counts do not
 move or recolor the stars. Stars use no textures or render targets. A single
 scene pass draws foreground geometry over them.
+
+The default enclosure is 0.48 m deep. The eight background banks use that same
+depth and continue to reuse the eight physical ball transforms. Distance drawing
+keeps the first box bright. Beyond it, brightness follows `retention^(d*d)`, where
+`d` is continuous distance in box depths beyond the back of the first box. The
+curve starts with zero slope and dims all lighting, including emitted and spilled
+light. Bars, ball images and the outer coating use the same distance rule. Long
+depth settings stay available; no per-copy faces or fade steps are added.

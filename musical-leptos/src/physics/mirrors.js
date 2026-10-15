@@ -53,16 +53,16 @@ export class MirrorRoom {
       material.onBeforeCompile = shader => {
         source.material.onBeforeCompile(shader);
         shader.uniforms.mirrorDepth = this.depth;
-        shader.vertexShader = 'attribute float copyDepth; uniform float mirrorDepth; varying float copyDepthForLight;\n' + shader.vertexShader;
+        shader.vertexShader = 'attribute float copyDepth; uniform float mirrorDepth; varying float depthDistance;\n' + shader.vertexShader;
         shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `
           vec4 sourcePoint = instanceMatrix * vec4(transformed, 1.0);
           vec4 mvPosition = modelViewMatrix * vec4(sourcePoint.xyz + vec3(0.0, 0.0, copyDepth * mirrorDepth), 1.0);
-          copyDepthForLight = copyDepth;
+          depthDistance = .5 - sourcePoint.z / mirrorDepth - copyDepth;
           gl_Position = projectionMatrix * mvPosition;`);
         // Keep the source ball lighting while translating its depth image.
         shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * sourcePoint).xyz;');
-        shader.fragmentShader = 'varying float copyDepthForLight;\n' + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fade = pow(reflectionFade, max(0.0, -copyDepthForLight)); outgoingLight = outgoingLight * fade + (totalEmissiveRadiance + nearbyLight) * (1.0 - fade);\n#include <opaque_fragment>');
+        shader.fragmentShader = 'varying float depthDistance;\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
       };
       const mesh = new THREE.InstancedMesh(geometry, material, capacity * this.poolCount);
       mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -74,7 +74,14 @@ export class MirrorRoom {
     // Only the center box participates in physics.
     this.walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1, 120, 16, 1),
       new THREE.MeshLambertMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false }), 1);
-    this.walls.material.onBeforeCompile = shader => lighting.apply(shader);
+    this.walls.material.onBeforeCompile = shader => {
+      lighting.apply(shader);
+      shader.uniforms.mirrorDepth = this.depth;
+      shader.vertexShader = 'uniform float mirrorDepth; varying float depthDistance;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\ndepthDistance = .5 - (instanceMatrix * vec4(transformed, 1.0)).z / mirrorDepth;');
+      shader.fragmentShader = 'varying float depthDistance;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
+    };
     this.walls.frustumCulled = false; this.wallMatrix = new THREE.Matrix4();
     scene.add(this.walls);
     this.setCount(count);

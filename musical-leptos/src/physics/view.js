@@ -295,7 +295,7 @@ export class PhysicsView {
   }
   fitCamera() {
     this.camera.updateMatrixWorld();
-    const depth = this.config?.[5] ?? .24;
+    const depth = this.config?.[5] ?? .48;
     let tangent = 0;
     // Keep a small gutter around the physical room for focus outlines.
     const horizontal = Math.max(.5, 1 - 24 / this.canvasWidth);
@@ -429,7 +429,7 @@ export class PhysicsView {
           float inner = (1.0 - smoothstep(1.25 * pixel, 2.5 * pixel, distance)) * front;
           vec3 barColor = diffuseColor.rgb;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fade = pow(reflectionFade, max(0.0, depthDistance)); outgoingLight = outgoingLight * fade + (totalEmissiveRadiance + nearbyLight) * (1.0 - fade);\n#include <opaque_fragment>');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + barColor * coloredPulse * colorAttack + vec3(glow * inner * attackGlow);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
@@ -541,7 +541,7 @@ export class PhysicsView {
 
   positionMeters(phase) {
     const count = this.meters.length;
-    const frontDepth = (this.config?.[5] ?? .24) / 2;
+    const frontDepth = (this.config?.[5] ?? .48) / 2;
     const pitch = this.layout?.[3] ?? this.width / count;
     this.graph.classList.add('paired-bars');
     this.camera.updateMatrixWorld();
