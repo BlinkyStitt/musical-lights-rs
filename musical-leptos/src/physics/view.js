@@ -6,6 +6,7 @@ import { MirrorRoom, barProjection } from './mirrors.js';
 import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
 import { Starfield } from './stars.js';
+import { CameraPan, cameraEditing } from './camera-pan.js';
 
 const CAMERA_DISTANCE = 1.8;
 
@@ -62,6 +63,7 @@ export class PhysicsView {
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
     this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0 };
+    this.cameraPan = new CameraPan();
     this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
@@ -115,11 +117,11 @@ export class PhysicsView {
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.sceneVisible = true;
-    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; if (!this.sceneVisible) this.pauseDepthTest(); });
+    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; if (!this.sceneVisible) { this.pauseDepthTest(); this.cameraPan.clear(); } });
     this.visibilityObserver.observe(layer);
     this.controls = this.card.querySelector('.audio-controls'); this.observer.observe(this.controls);
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
-    this.listen(document, 'visibilitychange', () => { if (document.hidden) { this.pauseDepthTest(); this.report?.invalidate('Page hidden during test'); } this.pause(); });
+    this.listen(document, 'visibilitychange', () => { if (document.hidden) { this.cameraPan.clear(); this.pauseDepthTest(); this.report?.invalidate('Page hidden during test'); } this.pause(); });
     this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'rigid-body-physics' });
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
@@ -181,8 +183,15 @@ export class PhysicsView {
     this.cameraControl = camera;
     this.listen(window, 'pointerup', () => { this.cameraDrag = false; });
     this.listen(window, 'pointercancel', () => { this.cameraDrag = false; });
+    this.listen(window, 'keydown', event => {
+      if (!this.sceneVisible || document.hidden || this.closed || this.lost) return;
+      if (this.cameraPan.press(event)) event.preventDefault();
+    });
+    this.listen(window, 'keyup', event => this.cameraPan.release(event));
+    this.listen(window, 'blur', () => this.cameraPan.clear());
+    this.listen(document, 'focusin', event => { if (cameraEditing(event.target)) this.cameraPan.clear(); });
     this.listen(camera, 'input', () => { this.cameraBase = Number(camera.value); this.settings.cameraAngle = this.cameraBase; this.setCamera(this.cameraBase); this.card.presentation?.save(); });
-    this.listen(this.card, 'camera-reset', () => { this.cameraBase = 0; this.setCamera(0); });
+    this.listen(this.card, 'camera-reset', () => { this.cameraPan.reset(); this.cameraBase = 0; this.setCamera(0); });
     this.listen(this.card, 'display-settings', ({ detail }) => {
       this.settings = detail;
       this.lighting.configure(detail); this.resizePending = true;
@@ -315,8 +324,9 @@ export class PhysicsView {
     this.rotation = degrees;
     const angle = degrees * Math.PI / 180;
     if (!Number.isFinite(this.visibleHeight)) return;
-    this.camera.position.set(this.width / 2 + Math.sin(angle) * CAMERA_DISTANCE, this.visibleHeight / 2 + verticalOffset, Math.cos(angle) * CAMERA_DISTANCE);
-    this.camera.lookAt(this.width / 2, this.visibleHeight / 2, 0);
+    const x = this.width * this.cameraPan.x, y = this.visibleHeight * this.cameraPan.y;
+    this.camera.position.set(x + Math.sin(angle) * CAMERA_DISTANCE, y + verticalOffset, Math.cos(angle) * CAMERA_DISTANCE);
+    this.camera.lookAt(x, y, 0);
     this.fitCamera();
   }
   danceOptions() { return { scrollSpeed: this.settings.scrollSpeed ?? 2, odds: this.settings.directionOdds, flight: this.settings.flight / 100, seed: this.seed }; }
@@ -324,6 +334,9 @@ export class PhysicsView {
     const moving = this.settings.cameraMotion && !this.reduced.matches && !this.cameraDrag && document.activeElement !== this.cameraControl;
     const elapsed = this.cameraAt == null ? 0 : Math.max(0, now - this.cameraAt);
     this.cameraAt = now;
+    if (this.cameraPan.step(elapsed / 1000)) {
+      this.pauseDepthTest(); this.report?.invalidate('Camera moved during test');
+    }
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Move the sweep center inward at the limits. Start at the selected angle
     // and ease through both turns without clipping or losing the sweep width.
@@ -410,7 +423,7 @@ export class PhysicsView {
     geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.meshPulses, 1));
     this.barRoof = { value: this.height };
     this.barDepth = { value: 1 + this.settings.mirrorCount };
-    const material = new THREE.MeshLambertMaterial({ toneMapped: false });
+    const material = new THREE.MeshLambertMaterial({ toneMapped: false, transparent: true });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
       Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
@@ -429,7 +442,7 @@ export class PhysicsView {
           float inner = (1.0 - smoothstep(1.25 * pixel, 2.5 * pixel, distance)) * front;
           vec3 barColor = diffuseColor.rgb;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + barColor * coloredPulse * colorAttack + vec3(glow * inner * attackGlow);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
@@ -531,7 +544,7 @@ export class PhysicsView {
     this.card.querySelector('.depth-status').textContent = 'Measuring…';
     this.depthProfile = new AutoDepth(count => { this.mirrors.setCount(count); this.settings.mirrorCount = count; },
       result => this.card.dispatchEvent(new CustomEvent('depth-selected', { detail: result })), performance.now(), candidates);
-    if (!this.sceneVisible) this.pauseDepthTest();
+    if (!this.sceneVisible) { this.pauseDepthTest(); this.cameraPan.clear(); }
   }
   renderedHeight(band, end = 0) {
     const offset = (band + end * this.layout[0] * 3) * 16;
@@ -598,6 +611,7 @@ export class PhysicsView {
     if (this.request != null) cancelAnimationFrame(this.request);
     this.request = null;
     const paused = document.hidden || this.lost;
+    if (paused) this.cameraPan.clear();
     this.cameraAt = null;
     this.fpsAt = performance.now(); this.fpsFrames = this.metrics.frames; this.frameRate = '— FPS';
     const readout = this.card.querySelector('.frame-rate');
@@ -613,7 +627,7 @@ export class PhysicsView {
     this.starfield?.dispose(); this.starfield = null;
     for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
-    this.closed = true; this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
+    this.closed = true; this.cameraPan.clear(); this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
     this.observer.disconnect(); this.visibilityObserver.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();

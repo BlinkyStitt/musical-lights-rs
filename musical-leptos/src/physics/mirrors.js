@@ -24,7 +24,7 @@ function imageGeometry(staged, count) {
   for (let c = 0; c < count; c++) {
     offsets.fill(cells[c][2], c * capacity, (c + 1) * capacity);
   }
-  geometry.setAttribute('copyDepth', new THREE.InstancedBufferAttribute(offsets, 1));
+  geometry.setAttribute('copyDepth', new THREE.InstancedBufferAttribute(offsets, 1).setUsage(THREE.DynamicDrawUsage));
   return geometry;
 }
 
@@ -48,6 +48,7 @@ export class MirrorRoom {
       this.sources.push(staged);
       const geometry = imageGeometry(staged, this.poolCount);
       const material = source.material.clone();
+      material.transparent = true;
       material.defines = { ...source.material.defines };
       material.customProgramCacheKey = () => `depth-copy-${kind}`;
       material.onBeforeCompile = shader => {
@@ -62,9 +63,12 @@ export class MirrorRoom {
         // Keep the source ball lighting while translating its depth image.
         shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * sourcePoint).xyz;');
         shader.fragmentShader = 'varying float depthDistance;\n' + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
+        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
       };
       const mesh = new THREE.InstancedMesh(geometry, material, capacity * this.poolCount);
+      // Composite depth images behind the continuous bars. Draw their cells
+      // from far to near so translucent images do not erase nearer images.
+      mesh.renderOrder = -1;
       mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * this.poolCount * 3), 3);
       this.meshes.push({ mesh, staged }); scene.add(mesh);
@@ -151,6 +155,12 @@ export class MirrorRoom {
       const count = this.visibleCount(staged, depth);
       mesh.count = count * capacity; mesh.visible = count > 0;
       if (count === 0) continue;
+      if (mesh.geometry.userData.drawnCells !== count) {
+        const offsets = mesh.geometry.attributes.copyDepth;
+        for (let c = 0; c < count; c++) offsets.array.fill(c - count, c * capacity, (c + 1) * capacity);
+        offsets.clearUpdateRanges(); offsets.addUpdateRange(0, count * capacity); offsets.needsUpdate = true;
+        mesh.geometry.userData.drawnCells = count;
+      }
       for (let c = 0; c < count; c++) {
         mesh.instanceMatrix.array.set(matrices, c * capacity * 16);
         mesh.instanceColor.array.set(colors, c * capacity * 3);

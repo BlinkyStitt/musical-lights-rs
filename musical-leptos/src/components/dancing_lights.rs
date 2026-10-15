@@ -512,7 +512,7 @@ pub fn DancingLights(
             </div>
             <div class="scene-controls">
             <div class="camera-controls">
-                <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" type="range" tabindex="0" min="-40" max="40" value="0"/></label>
+                <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" title="W/S moves the view up/down. A/D moves it left/right within the main box." type="range" tabindex="0" min="-40" max="40" value="0"/></label>
                 <output class="camera-angle">"0°"</output>
                 <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>

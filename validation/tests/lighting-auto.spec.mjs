@@ -274,7 +274,7 @@ test('shared light reaches all depth cells while the default fade dims far surfa
         return regions;
       };
       // Check light propagation with the public high-retention setting, then
-      // check that the default deliberately removes far visual clutter.
+      // check that the default dims distant light gradually.
       const regions = measure(.99), defaultRegions = measure(.72);
       return { regions, defaultRegions, sourceEdges: Array.from(v.edges), stripEdges: u.stripState.value.map(s => s.z),
         clock: { audio: window.audioNow, context: window.testContext.currentTime, analysis: window.lastAnalysisTime }, strips: u.stripState.value.length, balls: u.glowBallPosition.value.length,
@@ -291,8 +291,10 @@ test('shared light reaches all depth cells while the default fade dims far surfa
     expect(region.colored).toBeGreaterThan(10); expect(region.white).toBeGreaterThan(10);
     expect(region.coloredDelta).toBeGreaterThan(0); expect(region.whiteDelta).toBeGreaterThan(0);
   }
-  expect(result.defaultRegions[0].coloredDelta).toBeLessThan(result.regions[0].coloredDelta * .05);
-  expect(result.defaultRegions[0].whiteDelta).toBeLessThan(result.regions[0].whiteDelta * .05);
+  expect(result.defaultRegions[0].coloredDelta).toBeGreaterThan(result.regions[0].coloredDelta * .05);
+  expect(result.defaultRegions[0].coloredDelta).toBeLessThan(result.regions[0].coloredDelta);
+  expect(result.defaultRegions[0].whiteDelta).toBeGreaterThan(result.regions[0].whiteDelta * .05);
+  expect(result.defaultRegions[0].whiteDelta).toBeLessThan(result.regions[0].whiteDelta);
   expect(result.defaultRegions[2].colored).toBeGreaterThan(10);
   expect(result.defaultRegions[2].white).toBeGreaterThan(10);
   expect(result.sourceEdges).toEqual(Array(24).fill(.5)); expect(result.stripEdges).toEqual(result.sourceEdges);
