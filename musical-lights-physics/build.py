@@ -71,6 +71,7 @@ def main() -> None:
         "view.js",
         "lighting.js",
         "stars.js",
+        "stars-catalog.js",
         "depth-auto.js",
         "mirrors.js",
         "side-bars.js",
@@ -80,6 +81,7 @@ def main() -> None:
         "review.js",
     ):
         shutil.copyfile(web / "src/physics" / name, output / name)
+    shutil.copyfile(repo / "licenses/CC-BY-SA-4.0-HYG.txt", output / "HYG-LICENSE.txt")
     shutil.copyfile(web / "src/tones.js", output / "tones.js")
     shutil.copyfile(web / "src/controls.js", output / "controls.js")
     commit = subprocess.check_output(
