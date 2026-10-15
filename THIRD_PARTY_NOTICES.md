@@ -23,6 +23,20 @@ upstream notice and license at `physics/THREE-LICENSE.txt`.
 The build resolves the official RoundedBoxGeometry module's import to the
 bundled Three.js copy. See <https://github.com/mrdoob/three.js>.
 
+# Catalog starfield
+
+The starfield uses a subset of David Nash / Astronexus's HYG Database 4.1,
+revision `c7f7f883fe678cc7680169a50ccd7dcc49b060ce`, under CC BY-SA 4.0:
+https://github.com/astronexus/HYG-Database/tree/c7f7f883fe678cc7680169a50ccd7dcc49b060ce/hyg.
+The derived data in `musical-leptos/src/physics/stars-catalog.js` has the same
+license. It excludes the Sun, selects stars with apparent V magnitude <= 6.5,
+and retains IDs, J2000 coordinates, magnitudes and B-V indices.
+`validation/generate-stars.py` reproduces it from the hash-checked source CSV.
+The full license is in `licenses/CC-BY-SA-4.0-HYG.txt` and the browser bundle's
+`physics/HYG-LICENSE.txt`. Projection, display brightness compression, color
+tints and musical twinkle are application rendering choices. The sky is a
+fixed celestial view around Orion, not a live local-horizon calculation.
+
 # Historical partial-loudness validation
 
 Earlier browser builds used Dominic Ward's loudness under GPL-3.0-or-later.
