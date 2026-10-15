@@ -58,7 +58,7 @@ impl Default for SimulationConfig {
             density: 8.0,
             restitution: 0.72,
             friction: 0.12,
-            depth: 0.24,
+            depth: 0.48,
             stroke_seconds: DEFAULT_ATTACK_SECONDS as f32,
             reduced_stroke_seconds: 0.320,
         }

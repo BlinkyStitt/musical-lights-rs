@@ -14,7 +14,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 
 | Setting | Default |
 | --- | --- |
-| Width / depth | 1.2 m / 0.24 m |
+| Width / depth | 1.2 m / 0.48 m |
 | Bar pitch / gap / top corner radius | 50 mm / 0 mm / 0 mm |
 | Sphere diameter | 8 size ratios × 48 mm |
 | Density | 8 kg/m³ |
@@ -379,3 +379,11 @@ small points and slow independent brightness changes. Reduced Motion holds
 their brightness steady. Camera sweeps, audio attacks and mirror counts do not
 move or recolor the stars. Stars use no textures or render targets. A single
 scene pass draws foreground geometry over them.
+
+The default enclosure is 0.48 m deep. The eight background banks use that same
+depth and continue to reuse the eight physical ball transforms. Distance drawing
+keeps the first box bright. Beyond it, brightness follows `retention^(d*d)`, where
+`d` is continuous distance in box depths beyond the back of the first box. The
+curve starts with zero slope and dims all lighting, including emitted and spilled
+light. Bars, ball images and the outer coating use the same distance rule. Long
+depth settings stay available; no per-copy faces or fade steps are added.

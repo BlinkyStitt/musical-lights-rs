@@ -42,16 +42,41 @@ the same successful run; verify their source tree and checksums before flashing.
 
 The F411CE linker reserves sectors 6 and 7 for storage. Firmware must fit below
 `0x08040000`. Do not flash this layout to a smaller part. UART uses Postcard in an
-`Envelope { version: 2, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.
+`Envelope { version: 3, message }`, CRC-16/IBM-SDLC, COBS, and a zero delimiter.
 Variant numbers are Hello=0, StateSnapshot=1, Command=2, CommandResult=3,
 Heartbeat=4 and CalibrationBatch=5. Frames cannot exceed 512 bytes. Old sensor
 payloads are rejected. Snapshots publish at 20 Hz, or 5 Hz during calibration.
+
+Each snapshot includes 25 bytes of body-frame motion: acceleration and filtered
+support-acceleration vectors (signed i16 milligravity), a shake envelope
+(unsigned milligravity), capture time (wrapping STM32 milliseconds), sample age,
+quality, and calibration revision. Quality 0 means unavailable, 1 uses the sensor's
+nominal scale, and 2 applies the accepted accelerometer calibration and mounting
+rotation. Motion does not need a magnetic heading or GPS fix. Samples older than
+100 ms, saturated readings, and active calibration disable pattern motion.
+A 350 ms low-pass estimate supplies tilt; the residual supplies a 250 ms shake
+envelope. Startup, acquisition gaps and calibration revision changes establish a
+new baseline without a false shake. All filters live in the shared no-std core.
+
+At 20 Hz the added payload is 500 bytes/s, or 4.34% of a 115200-baud 8N1 link.
+The independent seven-peer frame fixture occupies 355 bytes including framing,
+or 61.63% of the link at 20 Hz. The 512-byte frame limit and calibration's reduced
+snapshot rate stay unchanged. Motion stays on the wired link; radio reports do
+not change.
+
+In amulet Patterns mode, tilt steers local color waves toward the low edge.
+Shake briefly dims the pattern, then restores its brightness, on all four outputs. Map and Compass do not use
+these controls. Shared patterns retain their UTC phase and roster sections;
+shake changes their intensity only. The standalone `net` binary has no STM32
+UART acquisition path and does not yet consume this input.
+
 Each UART peer also carries `freshness_verified` after its color byte. This is
 the receiver's UTC freshness check, separate from the source's UTC-valid flag.
 Unverified positions and stale local or peer positions use dim, interrupted
 markers and cannot produce a solid selected-target arrow. A later clock lock
 does not promote old unverified reports. The seven-peer frame remains below
-331 bytes. Version-1 envelopes are rejected; use matching boards and host tools.
+356 bytes. Version-1 and version-2 envelopes are rejected; use matching boards
+and host tools.
 
 ## Wiring and timing
 
@@ -107,7 +132,7 @@ anchor does not certify a rejected new epoch. `config set gps.timing
 unknown` removes the profile. `config get stm` reports the public profile, and
 `gps diagnostics` reports its installed uncertainty without coordinates. The STM
 settings record uses schema 2; schema 1 records are rejected. The board UART
-envelope uses version 2 with the same six message variants. Use matching STM32, amulet
+envelope uses version 3 with the same six message variants. Use matching STM32, amulet
 and provisioning tools. No physical synchronization is claimed by the synthetic
 Locked, Holdover, expiry and correction tests.
 

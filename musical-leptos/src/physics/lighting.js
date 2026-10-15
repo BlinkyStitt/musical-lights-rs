@@ -39,6 +39,15 @@ export const LIGHT_FIELD = `
     return lightField(point, normal * lightView);
   }
 `;
+// Bright through the first box, with a zero-slope join into a continuous
+// distance fade. No copy index, rounded distance, or retained emission floor.
+export const DEPTH_BRIGHTNESS = `
+  float depthBrightness(float distance) {
+    float beyond = max(0.0, distance - 1.0);
+    return pow(reflectionFade, beyond * beyond);
+  }
+`;
+
 // One bounded field: 24 paired full-depth strips and the eight physical balls.
 // Translation copies reuse it; no light objects, shadow maps, or bloom passes.
 export class SceneLighting {
@@ -70,7 +79,7 @@ export class SceneLighting {
     Object.assign(shader.uniforms, this.uniforms);
     shader.vertexShader = LIGHT_FIELD + 'varying vec3 nearbyIrradiance;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nnearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));');
-    shader.fragmentShader = 'varying vec3 nearbyIrradiance; uniform vec2 colorEmission; uniform float reflectionFade;\n' + shader.fragmentShader;
+    shader.fragmentShader = 'varying vec3 nearbyIrradiance; uniform vec2 colorEmission; uniform float reflectionFade;\n' + DEPTH_BRIGHTNESS + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nvec3 nearbyLight = diffuseColor.rgb * nearbyIrradiance;\nreflectedLight.indirectDiffuse += nearbyLight;');
   }
   update(view, heights, offset, phase, pitch, height, depth) {
