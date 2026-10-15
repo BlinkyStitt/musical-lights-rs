@@ -36,6 +36,16 @@ for (const theme of ['light', 'dark']) {
       await expect(exit).toBeInViewport({ ratio: 1 });
       expect(await exit.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const overlaps = await page.locator('.scene-controls').evaluate(node => {
+        const controls = [...node.querySelectorAll('button,input,output')].filter(n => !n.hidden && n.getBoundingClientRect().width > 0);
+        return controls.flatMap((a, i) => controls.slice(i + 1).flatMap(b => {
+          const x = a.getBoundingClientRect(), y = b.getBoundingClientRect();
+          const area = Math.max(0, Math.min(x.right, y.right) - Math.max(x.left, y.left))
+            * Math.max(0, Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top));
+          return area > .5 ? [[a.className, b.className]] : [];
+        }));
+      });
+      expect(overlaps).toEqual([]);
     }
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await page.locator('.scroll-lights').focus(); await page.keyboard.press('Space');
@@ -188,6 +198,13 @@ test('slider buttons step once and value editors validate, cancel and save', asy
     ['.flight-height', 'Flight height (% of available space)', '35', '36'],
   ]) {
     const range = page.locator(selector), edit = page.getByRole('button', {name: `Edit ${name}`, exact: true});
+    const positions = await range.locator('..').evaluate(group => {
+      const [minus, slider, plus, value] = [...group.children].slice(0, 4).map(node => node.getBoundingClientRect());
+      return { centers: [minus, slider, plus, value].map(box => box.y + box.height / 2),
+        leftToRight: minus.right <= slider.left && slider.right <= plus.left && plus.right <= value.left };
+    });
+    expect(Math.max(...positions.centers) - Math.min(...positions.centers)).toBeLessThan(2);
+    expect(positions.leftToRight).toBe(true);
     await edit.click();
     const input = page.getByRole('spinbutton', {name: `${name} value`, exact: true});
     await input.fill(value); await input.press('Enter'); await expect(range).toHaveValue(value);

@@ -366,7 +366,7 @@ nav { flex-wrap: wrap; }
 .scene-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
 .depth-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .25rem .5rem; }
 .depth-controls .control-row { grid-column: 1; }
-.depth-controls .control-row > span { display: flex; flex-direction: column; white-space: nowrap; }
+.depth-controls .control-row > label { white-space: nowrap; }
 .depth-status { min-width: 0; font-size: .7rem; }
 @media (max-width: 700px) { .scene-controls { grid-template-columns: minmax(0, 1fr); } }
 @container visualizer (orientation: landscape) and (min-width: 500px) {
@@ -392,3 +392,9 @@ nav { flex-wrap: wrap; }
 .slider-control .slider-editor { flex: 0 0 7ch; }
 .slider-control [hidden] { display: none; }
 .scene-controls .control-row > label { font-size: .8rem; }
+
+@container visualizer (orientation: landscape) and (min-width: 500px) and (max-width: 700px) {
+  .audio-card[data-expanded] .scene-controls .control-row { flex-direction: column; align-items: stretch; gap: 0; }
+  .audio-card[data-expanded] .scene-controls .depth-auto { align-self: end; }
+  .audio-card[data-expanded] .scene-controls .frame-rate { align-self: end; margin-bottom: .75rem; }
+}
