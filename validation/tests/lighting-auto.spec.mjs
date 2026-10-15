@@ -230,7 +230,7 @@ test('Auto stops when its scene leaves the viewport and waits for an explicit re
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done)).toBe(true);
 });
 
-test('bar and ball light changes visible surfaces throughout the enclosure depth', async ({ page }, info) => {
+test('shared light reaches all depth cells while the default fade dims far surfaces', async ({ page }, info) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
   await page.locator('.depth-slider').fill('8');
@@ -254,22 +254,29 @@ test('bar and ball light changes visible surfaces throughout the enclosure depth
       // Keep the coating and balls visible, so differences measure emitted light
       // on nearby surfaces rather than only the source bar's own emission.
       v.bars.visible = false; v.sideBars.mesh.visible = false;
-      u.colorEmission.value.set(0, 0); u.lightStrength.value.set(0, 0, settings.lightRange, 0);
-      const dark = draw();
-      v.lighting.configure({ ...settings, barGlow: .08, ballGlow: .12, colorSpill: .18, attackLight: 0 });
-      const color = draw();
-      v.lighting.configure({ ...settings, barGlow: .08, ballGlow: .12, colorSpill: .18, attackLight: .8 });
-      const white = draw();
-      const regions = Array.from({ length: 3 }, () => ({ colored: 0, white: 0, coloredDelta: 0, whiteDelta: 0 }));
-      for (let y = 0; y < 240; y++) for (let x = 50; x < 550; x++) {
-        const i = (y * 600 + x) * 4, region = regions[Math.min(2, Math.floor((x - 50) * 3 / 500))];
-        const c = [0, 1, 2].map(k => color[i + k] - dark[i + k]);
-        const w = [0, 1, 2].map(k => white[i + k] - color[i + k]);
-        if (Math.max(...c) > 0) region.colored++;
-        if (Math.max(...w) > 0) region.white++;
-        region.coloredDelta += c.reduce((a, b) => a + b, 0); region.whiteDelta += w.reduce((a, b) => a + b, 0);
-      }
-      return { regions, sourceEdges: Array.from(v.edges), stripEdges: u.stripState.value.map(s => s.z),
+      const measure = retention => {
+        v.lighting.configure({ ...settings, depthFade: retention });
+        u.colorEmission.value.set(0, 0); u.lightStrength.value.set(0, 0, settings.lightRange, 0);
+        const dark = draw();
+        v.lighting.configure({ ...settings, depthFade: retention, barGlow: .08, ballGlow: .12, colorSpill: .18, attackLight: 0 });
+        const color = draw();
+        v.lighting.configure({ ...settings, depthFade: retention, barGlow: .08, ballGlow: .12, colorSpill: .18, attackLight: .8 });
+        const white = draw();
+        const regions = Array.from({ length: 3 }, () => ({ colored: 0, white: 0, coloredDelta: 0, whiteDelta: 0 }));
+        for (let y = 0; y < 240; y++) for (let x = 50; x < 550; x++) {
+          const i = (y * 600 + x) * 4, region = regions[Math.min(2, Math.floor((x - 50) * 3 / 500))];
+          const c = [0, 1, 2].map(k => color[i + k] - dark[i + k]);
+          const w = [0, 1, 2].map(k => white[i + k] - color[i + k]);
+          if (Math.max(...c) > 0) region.colored++;
+          if (Math.max(...w) > 0) region.white++;
+          region.coloredDelta += c.reduce((a, b) => a + b, 0); region.whiteDelta += w.reduce((a, b) => a + b, 0);
+        }
+        return regions;
+      };
+      // Check light propagation with the public high-retention setting, then
+      // check that the default deliberately removes far visual clutter.
+      const regions = measure(.99), defaultRegions = measure(.72);
+      return { regions, defaultRegions, sourceEdges: Array.from(v.edges), stripEdges: u.stripState.value.map(s => s.z),
         clock: { audio: window.audioNow, context: window.testContext.currentTime, analysis: window.lastAnalysisTime }, strips: u.stripState.value.length, balls: u.glowBallPosition.value.length,
         pointLights: v.scene.children.filter(n => n.isPointLight).length,
         physicalBalls: v.balls.count, copies: v.mirrors.count };
@@ -284,6 +291,10 @@ test('bar and ball light changes visible surfaces throughout the enclosure depth
     expect(region.colored).toBeGreaterThan(10); expect(region.white).toBeGreaterThan(10);
     expect(region.coloredDelta).toBeGreaterThan(0); expect(region.whiteDelta).toBeGreaterThan(0);
   }
+  expect(result.defaultRegions[0].coloredDelta).toBeLessThan(result.regions[0].coloredDelta * .05);
+  expect(result.defaultRegions[0].whiteDelta).toBeLessThan(result.regions[0].whiteDelta * .05);
+  expect(result.defaultRegions[2].colored).toBeGreaterThan(10);
+  expect(result.defaultRegions[2].white).toBeGreaterThan(10);
   expect(result.sourceEdges).toEqual(Array(24).fill(.5)); expect(result.stripEdges).toEqual(result.sourceEdges);
   expect(result.strips).toBe(24); expect(result.balls).toBe(8); expect(result.physicalBalls).toBe(8); expect(result.copies).toBe(8); expect(result.pointLights).toBe(0);
 });
