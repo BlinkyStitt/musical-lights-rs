@@ -106,12 +106,68 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
   expect(evidence.depth).toBeCloseTo(.48, 5);
   const brightness = evidence.brightness.map(pixel => Math.max(...pixel));
   expect(brightness[0]).toBeGreaterThan(80);
-  expect(brightness[3]).toBeGreaterThan(brightness[1] * .75);
-  expect(brightness[3]).toBeLessThan(brightness[1] * .95);
-  expect(brightness[4]).toBeGreaterThan(brightness[1] * .35);
-  expect(brightness[4]).toBeLessThan(brightness[1] * .8);
+  // Alpha blending follows the fraction of the selected six-image span.
+  for (const [index, distance] of [[3, 3], [4, 5]]) {
+    const expected = brightness[1] * Math.pow(.72, 12 * ((distance - 1) / 6) ** 2);
+    expect(Math.abs(brightness[index] - expected)).toBeLessThanOrEqual(3);
+  }
   expect(evidence.triangles).toBe(1280); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
   await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+});
+
+test('depth fade spans the selected extrusion at 2 and 2048 images', async ({ page }, info) => {
+  await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
+  await page.evaluate(() => window.sendBars(Array(24).fill(.8)));
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedHeight(0))).toBeGreaterThan(.1);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    v.draw(performance.now());
+    const hidden = [v.starfield.points, v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({mesh}) => mesh)];
+    const visibility = hidden.map(mesh => mesh.visible), count = v.bars.count;
+    const target = new THREE.WebGLRenderTarget(1024, 8), pixels = new Uint8Array(1024 * 8 * 4), samples = [];
+    try {
+      for (const images of [2, 6, 2048, 2]) {
+        v.mirrors.setCount(images); v.draw(performance.now()); v.setCamera(0);
+        hidden.forEach(mesh => mesh.visible = false); v.bars.count = 1;
+        const matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array);
+        const x = matrix.elements[12] - v.bars.geometry.boundingBox.max.x;
+        const y = v.renderedHeight(0) * .5, depth = v.config[5], mid = -depth * images / 2;
+        const span = depth * (images + 1) * .51;
+        const camera = new THREE.OrthographicCamera(-span, span, .001, -.001, .01, 10);
+        camera.position.set(x - 2, y, mid); camera.lookAt(x, y, mid); camera.updateMatrixWorld();
+        v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
+        v.renderer.readRenderTargetPixels(target, 0, 0, 1024, 8, pixels);
+        const sample = fraction => {
+          const point = new THREE.Vector3(x, y, depth / 2 - depth * (1 + images * fraction)).project(camera);
+          const offset = (4 * 1024 + Math.floor((point.x + 1) * 512)) * 4;
+          return Math.max(...pixels.slice(offset, offset + 3));
+        };
+        samples.push({images, pixels: [0, .25, .5, .75, .95].map(sample),
+          far: v.camera.far, extent: depth * (images + 1), uniform: v.lighting.uniforms.depthImages.value,
+          physical: v.balls.count, pool: v.mirrors.poolCount});
+      }
+    } finally {
+      v.mirrors.setCount(v.settings.mirrorCount); v.bars.count = count;
+      hidden.forEach((mesh, i) => mesh.visible = visibility[i]);
+      v.renderer.setRenderTarget(null); target.dispose();
+    }
+    return samples;
+  });
+  for (const sample of evidence) {
+    expect(sample.uniform).toBe(sample.images); expect(sample.physical).toBe(8);
+    expect(sample.far).toBe(200); expect(sample.pool).toBeLessThanOrEqual(2048);
+    const near = sample.pixels[0];
+    expect(near).toBeGreaterThan(80);
+    [0, .25, .5, .75, .95].forEach((fraction, i) => {
+      const expected = near * Math.pow(.72, 12 * fraction ** 2);
+      expect(Math.abs(sample.pixels[i] - expected)).toBeLessThanOrEqual(3);
+    });
+    sample.pixels.forEach((pixel, i) => expect(Math.abs(pixel - evidence[0].pixels[i])).toBeLessThanOrEqual(4));
+  }
+  await info.attach('selected-depth-fade.json', {body: JSON.stringify(evidence), contentType: 'application/json'});
 });
 
 test('off-screen bar culling preserves visible pixels across angles and depth settings', async ({ page }, info) => {
@@ -501,7 +557,7 @@ test('instanced depth copies match literal translated geometry from both camera 
               shader.vertexShader='varying float literalDepth;\n'+shader.vertexShader;
               shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\nliteralDepth = max(0.0, -(instanceMatrix * vec4(transformed, 1.0)).z / ${v.config[5]} - .5);`);
               shader.fragmentShader='varying float literalDepth;\n'+shader.fragmentShader;
-              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`diffuseColor.a *= pow(${v.settings.depthFade}, literalDepth * literalDepth / (literalDepth + 4.0));\n#include <opaque_fragment>`);
+              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`diffuseColor.a *= pow(${v.settings.depthFade}, 12.0 * pow(clamp(literalDepth / ${v.mirrors.count}.0, 0.0, 1.0), 2.0));\n#include <opaque_fragment>`);
             };
             material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
             const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;mesh.renderOrder=-1;

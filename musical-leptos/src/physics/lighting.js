@@ -40,12 +40,13 @@ export const LIGHT_FIELD = `
   }
 `;
 // Bright through the first box, with a zero-slope join into a continuous
-// opacity fade. Spread the transition over several boxes, without copy-index
+// opacity fade. Spread the transition across the selected depth, without copy-index
 // steps or dark opaque silhouettes against the sky.
 export const DEPTH_BRIGHTNESS = `
+  uniform float depthImages;
   float depthBrightness(float distance) {
-    float beyond = max(0.0, distance - 1.0);
-    return pow(reflectionFade, beyond * beyond / (beyond + 4.0));
+    float fraction = clamp((distance - 1.0) / max(1.0, depthImages), 0.0, 1.0);
+    return pow(reflectionFade, 12.0 * fraction * fraction);
   }
 `;
 
@@ -66,6 +67,7 @@ export class SceneLighting {
       colorEmission: { value: new THREE.Vector2() },
       attackGlow: { value: 1 },
       reflectionFade: { value: settings.depthFade ?? .72 },
+      depthImages: { value: settings.mirrorCount ?? 6 },
     };
     this.configure(settings);
   }

@@ -33,6 +33,7 @@ export class MirrorRoom {
     mirrorCells(count);
     this.poolCount = Math.min(MAX_DEPTH_IMAGES, 2 ** Math.ceil(Math.log2(Math.max(1, count))));
     this.scene = scene;
+    this.depthImages = lighting.uniforms.depthImages;
     this.depth = { value: 1 };
     this.frustum = new THREE.Frustum(); this.clipMatrix = new THREE.Matrix4();
     this.sourceMatrix = new THREE.Matrix4(); this.sourceSphere = new THREE.Sphere();
@@ -105,6 +106,7 @@ export class MirrorRoom {
       this.poolCount = poolCount;
     }
     this.count = count;
+    this.depthImages.value = count;
     for (const { mesh, staged } of this.meshes) { mesh.count = count * staged.capacity; mesh.visible = count > 0; }
   }
   visibleCount(staged, depth) {
