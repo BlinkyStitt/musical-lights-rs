@@ -175,3 +175,34 @@ test('source selection waits for its handlers and digital transport to initializ
   await expect(page.locator('.listening-toggle')).not.toBeChecked();
   expect(await page.evaluate(() => microphoneRequests)).toBe(0);
 });
+
+test('slider buttons step once and value editors validate, cancel and save', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page);
+  const exit = page.getByRole('button', {name: 'Exit fullscreen', exact: true});
+  if (await exit.isVisible()) await exit.click();
+  await page.locator('.display-controls').evaluate(node => { node.open = true; });
+  for (const [selector, name, value, next] of [
+    ['.camera-rotation', 'Camera angle (degrees)', '12', '13'],
+    ['.depth-slider', 'Depth images', '2047', '2048'],
+    ['.flight-height', 'Flight height (% of available space)', '35', '36'],
+  ]) {
+    const range = page.locator(selector), edit = page.getByRole('button', {name: `Edit ${name}`, exact: true});
+    await edit.click();
+    const input = page.getByRole('spinbutton', {name: `${name} value`, exact: true});
+    await input.fill(value); await input.press('Enter'); await expect(range).toHaveValue(value);
+    await page.getByRole('button', {name: `Increase ${name}`, exact: true}).click(); await expect(range).toHaveValue(next);
+    await page.getByRole('button', {name: `Decrease ${name}`, exact: true}).click(); await expect(range).toHaveValue(value);
+    await edit.click(); await input.fill('99999'); await input.press('Enter');
+    await expect(input).toBeVisible(); await expect(range).toHaveValue(value);
+    await input.press('Escape'); await expect(input).toBeHidden(); await expect(range).toHaveValue(value);
+  }
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('musical-lights-display-v1')));
+  expect(saved.cameraAngle).toBe(12); expect(saved.mirrorCount).toBe(2047); expect(saved.flight).toBe(35);
+  expect(saved.depthMode).toBe('manual');
+  expect(await page.evaluate(() => !!document.querySelector('.audio-card').activeAudioContext)).toBe(false);
+  await page.reload(); await physicsReady(page);
+  await expect(page.locator('.depth-slider')).toHaveValue('2047');
+  await expect(page.locator('.flight-height')).toHaveValue('35');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

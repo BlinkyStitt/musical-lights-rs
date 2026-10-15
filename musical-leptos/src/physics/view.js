@@ -331,7 +331,7 @@ export class PhysicsView {
   }
   danceOptions() { return { scrollSpeed: this.settings.scrollSpeed ?? 2, odds: this.settings.directionOdds, flight: this.settings.flight / 100, seed: this.seed }; }
   updateCamera(now) {
-    const moving = this.settings.cameraMotion && !this.reduced.matches && !this.cameraDrag && document.activeElement !== this.cameraControl;
+    const moving = this.settings.cameraMotion && !this.reduced.matches && !this.cameraDrag && !this.cameraControl.closest('.slider-control')?.contains(document.activeElement);
     const elapsed = this.cameraAt == null ? 0 : Math.max(0, now - this.cameraAt);
     this.cameraAt = now;
     if (this.cameraPan.step(elapsed / 1000)) {
@@ -349,7 +349,7 @@ export class PhysicsView {
     this.automaticCamera = false;
     if (now - (this.sliderAt ?? -Infinity) >= 50) {
       this.sliderAt = now;
-      if (!this.cameraDrag && document.activeElement !== this.cameraControl) this.cameraControl.value = yaw;
+      if (!this.cameraDrag && !this.cameraControl.closest('.slider-control')?.contains(document.activeElement)) this.cameraControl.value = yaw;
       this.card.querySelector('.camera-angle').textContent = yaw.toFixed(1) + '°';
     }
   }

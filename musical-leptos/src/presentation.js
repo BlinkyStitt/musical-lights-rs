@@ -134,6 +134,7 @@ export class Presentation {
     });
     card.querySelector('.camera-rotation').value = this.settings.cameraAngle;
     this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, mirrorCount: DEFAULT_SETTINGS.mirrorCount, depthMode: 'auto', scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle'], ['.mirror-count', 'mirrorCount']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; syncDepth(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    mountSliderControls(this);
     this.save(false);
     card.presentation = this;
   }
@@ -233,4 +234,51 @@ export class Presentation {
     } catch (error) { if (!this.closed && generation === this.generation) status.textContent = error.message; }
   }
   close() { this.closed = true; this.generation++; this.endVideoEdit(); this.observer.disconnect(); this.screenObserver.disconnect(); for (const remove of this.removers) remove(); this.player?.destroy(); this.hideHelp(); this.microphoneActive = this.videoPlaying = false; this.updateAudioType(); this.popup.remove(); delete this.card.presentation; }
+}
+
+// Keep the native range as the single value and event source.
+function mountSliderControls(presentation) {
+  const { card } = presentation;
+  for (const range of card.querySelectorAll('input[type="range"]')) {
+    const name = range.getAttribute('aria-label');
+    const group = document.createElement('span'); group.className = 'slider-control';
+    range.before(group);
+    const minus = document.createElement('button'), plus = document.createElement('button');
+    for (const [button, text, action] of [[minus, '−', 'Decrease'], [plus, '+', 'Increase']]) {
+      button.type = 'button'; button.textContent = text;
+      button.className = 'slider-step'; button.setAttribute('aria-label', `${action} ${name}`);
+    }
+    const existing = range.matches('.camera-rotation') ? card.querySelector('.camera-angle')
+      : range.matches('.depth-slider') ? card.querySelector('.depth-status') : null;
+    const value = existing ?? document.createElement('button');
+    value.type = 'button'; value.classList.add('slider-value'); value.setAttribute('aria-label', `Edit ${name}`);
+    const editor = document.createElement('input');
+    Object.assign(editor, { type: 'number', min: range.min, max: range.max, step: range.step || '1', className: 'slider-editor', hidden: true });
+    editor.setAttribute('aria-label', `${name} value`);
+    group.append(minus, range, plus, value, editor);
+    const sync = () => { if (!existing) value.textContent = `${range.value}%`; };
+    const apply = () => {
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      range.dispatchEvent(new Event('change', { bubbles: true }));
+      sync();
+    };
+    const close = () => { editor.hidden = true; value.hidden = false; };
+    const commit = () => {
+      if (editor.value === '' || !editor.validity.valid) { editor.reportValidity(); return false; }
+      range.value = editor.value; apply(); close(); return true;
+    };
+    presentation.listen(minus, 'click', () => { range.stepDown(); apply(); });
+    presentation.listen(plus, 'click', () => { range.stepUp(); apply(); });
+    presentation.listen(value, 'click', () => {
+      editor.value = range.value; value.hidden = true; editor.hidden = false; editor.focus(); editor.select();
+    });
+    presentation.listen(editor, 'keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); if (commit()) value.focus(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); value.focus(); }
+    });
+    presentation.listen(editor, 'blur', () => { if (!editor.hidden) { if (editor.value !== '' && editor.validity.valid) commit(); else close(); } });
+    presentation.listen(range, 'input', sync);
+    presentation.listen(card, 'display-settings', sync);
+    sync();
+  }
 }

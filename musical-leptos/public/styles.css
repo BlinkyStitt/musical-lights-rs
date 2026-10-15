@@ -381,3 +381,14 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] > .scene-controls { position: relative; inset: auto; width: 100%; grid-row: 4; grid-column: 1; }
 .audio-card[data-expanded] .scene-controls .camera-controls { grid-row: auto; grid-column: auto; }
 @container visualizer (max-height: 500px) { .audio-card[data-expanded] .loudness-readouts { display: none; } }
+
+/* Native sliders retain keyboard operation; their values also support direct entry. */
+.control-row > label { margin: 0; min-height: 0; }
+.slider-control { display: flex; align-items: center; gap: .25rem; min-width: 0; flex: 1; }
+.slider-control input[type="range"] { width: 0; flex: 1; min-width: 36px; }
+.slider-control .slider-step { width: 44px; min-width: 44px; height: 44px; padding: 0; font-size: 1.25rem; }
+.slider-control .slider-value, .slider-control .slider-editor { min-width: 44px; min-height: 44px; width: 7ch; padding: .25rem; font-variant-numeric: tabular-nums; }
+.slider-control .depth-status { width: 9ch; }
+.slider-control .slider-editor { flex: 0 0 7ch; }
+.slider-control [hidden] { display: none; }
+.scene-controls .control-row > label { font-size: .8rem; }
