@@ -14,7 +14,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 
 | Setting | Default |
 | --- | --- |
-| Width / depth | 1.2 m / 0.24 m |
+| Width / depth | 1.2 m / 0.48 m |
 | Bar pitch / gap / top corner radius | 50 mm / 0 mm / 0 mm |
 | Sphere diameter | 8 size ratios × 48 mm |
 | Density | 8 kg/m³ |
