@@ -70,6 +70,7 @@ def main() -> None:
     for name in (
         "view.js",
         "camera-pan.js",
+        "gpu-frames.js",
         "lighting.js",
         "stars.js",
         "stars-catalog.js",

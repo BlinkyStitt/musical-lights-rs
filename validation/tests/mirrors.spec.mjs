@@ -199,6 +199,68 @@ test('off-screen bar culling preserves visible pixels across angles and depth se
   await info.attach('bar-culling.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
 
+test('whole-bar clipping matches fragment-only clipping across depth, scroll and camera views', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const { barProjection } = await import(new URL(`${base}physics/mirrors.js`, document.baseURI));
+    const target = new THREE.WebGLRenderTarget(320, 240), pixels = new Uint8Array(320 * 240 * 4), result = [];
+    const meshes = [v.bars, v.sideBars.mesh], materials = meshes.map(mesh => mesh.material);
+    const current = v.current, previous = v.previous; v.current = current.slice(); v.previous = (previous ?? current).slice();
+    const references = materials.map(material => {
+      const reference = material.clone();
+      reference.onBeforeCompile = shader => {
+        material.onBeforeCompile(shader);
+        // Independent reference: rasterize every bar and let the established
+        // fragment bounds discard it, including the background bank offset.
+        shader.vertexShader = shader.vertexShader.replace(barProjection, barProjection.slice(0, barProjection.indexOf('float padding')));
+      };
+      reference.customProgramCacheKey = () => 'fragment-only-' + material.customProgramCacheKey();
+      return reference;
+    });
+    const read = () => { v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
+    try {
+      for (const count of [0, 2, 6, 44, 2048]) for (const [angle, pan, phase] of [[-40, 0, 0], [-10, .5, .03], [0, .5, .6], [12, .5, 1.19], [40, 1, 23.999]]) {
+        v.current[v.layout[20]] = phase; v.previous[v.layout[20]] = phase;
+        v.mirrors.setCount(count); v.cameraPan.x = pan; v.setCamera(angle); v.renderer.setRenderTarget(target); v.draw(performance.now()); const actual = read();
+        meshes.forEach((mesh, i) => { mesh.material = references[i]; }); v.render(v.camera); const expected = read();
+        meshes.forEach((mesh, i) => { mesh.material = materials[i]; });
+        let changed = 0;
+        for (let i = 0; i < actual.length; i += 4) if (Math.abs(actual[i] - expected[i]) + Math.abs(actual[i + 1] - expected[i + 1]) + Math.abs(actual[i + 2] - expected[i + 2]) > 3) changed++;
+        result.push({ count, angle, pan, phase, changed });
+      }
+    } finally {
+      meshes.forEach((mesh, i) => { mesh.material = materials[i]; }); references.forEach(material => material.dispose());
+      v.current = current; v.previous = previous; v.mirrors.setCount(v.settings.mirrorCount); v.cameraPan.reset(); v.setCamera(v.cameraBase); v.renderer.setRenderTarget(null); target.dispose();
+    }
+    return result;
+  });
+  for (const row of evidence) expect(row.changed, JSON.stringify(row)).toBe(0);
+  await info.attach('whole-bar-clipping.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+});
+
+test('GPU backpressure keeps simulation and camera input active and resumes drawing', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics, gl = v.renderer.getContext();
+    const original = gl.clientWaitSync;
+    const frames = async count => { for (let i = 0; i < count; i++) await new Promise(resolve => requestAnimationFrame(resolve)); };
+    gl.clientWaitSync = () => gl.TIMEOUT_EXPIRED;
+    try {
+      await frames(5); const start = { rendered: v.metrics.frames, tick: v.current[2], received: v.received, x: v.cameraPan.x };
+      v.cameraPan.press({ key: 'd' }); await frames(15); v.cameraPan.clear();
+      const blocked = { rendered: v.metrics.frames, tick: v.current[2], received: v.received, x: v.cameraPan.x, queued: v.gpuFrames.queued };
+      gl.clientWaitSync = original; await frames(10);
+      return { start, blocked, resumed: v.metrics.frames, stopped: !!v.notice.persistent };
+    } finally { gl.clientWaitSync = original; v.cameraPan.clear(); }
+  });
+  expect(result.blocked.queued).toBe(2); expect(result.blocked.rendered).toBe(result.start.rendered);
+  expect(result.blocked.tick).toBeGreaterThan(result.start.tick); expect(result.blocked.received).toBeGreaterThan(result.start.received);
+  expect(result.blocked.x).toBeGreaterThan(result.start.x); expect(result.resumed).toBeGreaterThan(result.blocked.rendered); expect(result.stopped).toBe(false);
+});
+
 test('normal scenes fill a larger centered frame before and after fullscreen', async ({ page }) => {
   await syntheticAudio(page);
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {

@@ -7,6 +7,7 @@ import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
 import { Starfield } from './stars.js';
 import { CameraPan, cameraEditing } from './camera-pan.js';
+import { GpuFrames } from './gpu-frames.js';
 
 const CAMERA_DISTANCE = 1.8;
 
@@ -97,15 +98,16 @@ export class PhysicsView {
     // share the actual render scale, including after fullscreen resizes.
     this.pixelRatio = { value: 1 };
     this.renderer.localClippingEnabled = true;
+    this.gpuFrames = new GpuFrames(this.renderer.getContext());
     this.layer.append(this.renderer.domElement);
     this.renderer.domElement.setAttribute('aria-label', '8 rigid balls, matching top and bottom audio bars, and an infinity mirror box');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
-      event.preventDefault(); this.pauseDepthTest(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
+      event.preventDefault(); this.gpuFrames.clear(); this.pauseDepthTest(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
       this.report?.invalidate('WebGL context lost');
     });
     this.canvas.addEventListener('webglcontextrestored', this.contextRestored = () => {
-      this.lost = false; this.notice.clear(); this.pause();
+      this.gpuFrames.clear(); this.lost = false; this.notice.clear(); this.pause();
     });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
     this.lighting = new SceneLighting(palette, this.settings);
@@ -153,10 +155,14 @@ export class PhysicsView {
       }
       this.updateCamera(now);
       let rendered = false;
-      if (this.current && this.sceneVisible) {
-        if (this.depthProfile && !this.depthProfile.done) this.depthProfile.sample(frameTime);
-        this.draw(now); rendered = true;
-      }
+      // Keep input and simulation active while the GPU completes earlier frames.
+      // Sampling only submitted frames preserves Auto and diagnostic cadence.
+      try {
+        if (this.current && this.sceneVisible && this.gpuFrames.ready()) {
+          if (this.depthProfile && !this.depthProfile.done) this.depthProfile.sample(frameTime);
+          this.draw(now); this.gpuFrames.submitted(); rendered = true;
+        }
+      } catch (error) { this.fail(error.message); return; }
       this.metrics.snapshotAgeMs = this.received == null ? 0 : now - this.received;
       const cost = performance.now() - start;
       if (rendered) { this.metrics.frames++; this.metrics.renderMs += cost; }
@@ -166,7 +172,7 @@ export class PhysicsView {
         const readout = this.card.querySelector('.frame-rate');
         if (readout) readout.textContent = this.frameRate;
       }
-      this.report?.frame(frameTime, cost);
+      if (rendered) this.report?.frame(frameTime, cost);
       this.notice.sample(this.metrics, now, 1000 / (this.layout?.[1] ?? 120));
       if (!this.lastStatus || now - this.lastStatus > 1000) {
         this.notice.report = this.report?.active ? this.report.query('.phone-progress').textContent
@@ -419,6 +425,7 @@ export class PhysicsView {
     // The visible post spans the same depth as its physical support surface.
     // Extend the outer ends in the vertex shader, using the physical support span.
     const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
+    geometry.setAttribute('backgroundOffset', new THREE.InstancedBufferAttribute(new Float32Array(count * 6), 1));
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.meshPulses, 1));
     this.barRoof = { value: this.height };
@@ -427,7 +434,7 @@ export class PhysicsView {
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
       Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      shader.vertexShader = 'attribute float backgroundOffset; uniform float halfWidth; uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; coloredPulse = pulse; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
@@ -634,7 +641,7 @@ export class PhysicsView {
     for (const copy of this.copies) copy.remove();
     this.canvas.removeEventListener('webglcontextlost', this.contextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.contextRestored);
-    this.disposeMeshes(); this.renderer.dispose(); this.renderer.forceContextLoss(); this.canvas.remove();
+    this.gpuFrames.clear(); this.disposeMeshes(); this.renderer.dispose(); this.renderer.forceContextLoss(); this.canvas.remove();
     delete this.graph.physics; this.current = this.previous = null; this.buffers = [];
   }
 }

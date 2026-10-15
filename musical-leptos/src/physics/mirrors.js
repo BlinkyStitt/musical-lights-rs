@@ -1,7 +1,9 @@
 import * as THREE from './three.module.js';
 import { sphereGeometry } from './spheres.js';
 
-export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - transformed.y); mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition;';
+// Move wholly discarded bars outside clip space before rasterization. Keep
+// conservative float padding so bars that touch the visible window remain.
+export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - transformed.y); mvPosition.z = barFront + (mvPosition.z - barFront) * barDepth; depthDistance = (barFront - mvPosition.z) / physicalDepth; mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition; world.x -= backgroundOffset; float padding = .000001 * (1.0 + abs(instanceMatrix[3].x) + abs(backgroundOffset)); if (instanceMatrix[3].x + halfWidth - backgroundOffset < -padding || instanceMatrix[3].x - halfWidth - backgroundOffset > 1.2 + padding) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);';
 // This exceeds the camera’s visible depth even at the minimum enclosure depth
 // and maximum yaw. Higher settings add storage and uploads without visible depth.
 export const MAX_DEPTH_IMAGES = 2048;

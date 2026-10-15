@@ -980,6 +980,14 @@ range. Reset display restores the startup range. Saved Auto counts start within
 The baseline draws the physical scene with zero depth copies. Bars and balls
 keep moving during measurement, including short captured audio bursts.
 
+The animation scheduler permits at most two GPU frames in flight. It polls a
+WebGL completion fence with zero timeout and keeps input, audio and physics
+updates active while drawing waits. FPS, Auto depth and phone reports count
+submitted frames only. Context loss and route cleanup release fence state.
+Whole bars outside their source window move outside clip space before
+rasterization; partial bars retain fragment clipping. Pixel tests compare this
+path with fragment-only clipping across scroll phases, camera views and depths.
+
 ## GPS, amulet and live tuning checks
 
 `python3 validation/validate.py core` checks the pinned std/libm/alloc/defmt/Embassy
