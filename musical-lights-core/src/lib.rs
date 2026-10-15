@@ -24,6 +24,7 @@ pub mod logging;
 pub mod message;
 pub mod navigation;
 pub mod orientation;
+pub mod pattern_motion;
 pub mod provisioning;
 pub mod radio;
 pub mod sd;

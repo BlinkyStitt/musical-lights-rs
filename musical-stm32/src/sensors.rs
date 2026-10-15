@@ -23,6 +23,7 @@ use musical_lights_core::{
     gps::{Fix, GpsParser, PpsCounter},
     message::*,
     navigation::{HeadingEstimator, ImuSample, declination},
+    pattern_motion::{MOTION_FRESH_MS, MotionEstimator},
     provisioning::{F4, StmRecord},
     radio::{self as wire, Network, Report},
     sensor_mount::ImuMounts,
@@ -47,6 +48,8 @@ pub struct State {
     pub fix: Option<Fix>,
     pub fix_utc_verified: bool,
     pub heading: Heading,
+    pub motion: Motion,
+    pub motion_at: u64,
     pub clock: UtcClock,
     pub network: Option<Network>,
     pub pps: Option<(u64, u64)>,
@@ -366,6 +369,7 @@ pub async fn imu(accel_device: SensorDevice, mag_device: SensorDevice, state: Sh
     }
     let mut heading = HeadingEstimator::default();
     let mut preview = HeadingEstimator::default();
+    let mut motion = MotionEstimator::default();
     let mut sample = ImuSample {
         accel: [0.0; 3],
         gyro: [0.0; 3],
@@ -385,11 +389,13 @@ pub async fn imu(accel_device: SensorDevice, mag_device: SensorDevice, state: Sh
     loop {
         let at = now();
         let mut new_gyro = false;
+        let mut new_accel = false;
         let acquire = async {
             if imu.accel_data_available().await? {
                 let (x, y, z) = imu.read_accel_raw().await?;
                 sample.accel = [x, y, z].map(|v| v as f64 * 0.000122 * 9.80665);
                 sample.accel_at = at;
+                new_accel = true;
                 valid |= 1;
                 sample.saturated = [x, y, z].iter().any(|v| v.unsigned_abs() >= 32760);
             }
@@ -426,6 +432,22 @@ pub async fn imu(accel_device: SensorDevice, mag_device: SensorDevice, state: Sh
                 s.boot,
             )
         };
+        if new_accel {
+            let value = motion.update(
+                sample.accel,
+                sample.saturated,
+                calibration.as_ref(),
+                ImuMounts::default(),
+                at,
+            );
+            let mut s = state.lock().await;
+            s.motion = if run.is_some() {
+                Motion::default()
+            } else {
+                value
+            };
+            s.motion_at = at;
+        }
         if new_gyro {
             let declination = fix.filter(|f| f.age_ms(at) <= 60000).and_then(declination);
             let mut value = heading.update(
@@ -587,9 +609,16 @@ pub async fn snapshots(state: Shared, out: Out) {
                     local: position(&s, at),
                     health: L2::new(health(&s, at)),
                     heading: s.heading,
+                    motion: s.motion,
                     slot: 255,
                     ..Default::default()
                 };
+                let motion_age = at.saturating_sub(s.motion_at);
+                if s.sensor_fault || s.run.is_some() || motion_age > MOTION_FRESH_MS {
+                    snapshot.motion = Motion::default();
+                } else if snapshot.motion.quality != 0 {
+                    snapshot.motion.age = L2::new(motion_age as u16);
+                }
                 snapshot.heading.age = L2::new(
                     (snapshot.heading.age.get() as u64 + at.saturating_sub(s.heading_at))
                         .min(u16::MAX as u64) as u16,
