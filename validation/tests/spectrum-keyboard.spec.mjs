@@ -42,7 +42,8 @@ async function expectSample(page, index) {
 
 test('spectrum has one Tab stop, direct exits, and remembers the last focused sample', async ({ page }) => {
   const fullscreen = page.getByRole('button', { name: 'Fullscreen', exact: true });
-  const camera = page.locator('.camera-rotation');
+  // The step button is the first camera control in native Tab order.
+  const camera = page.getByRole('button', { name: 'Decrease Camera angle (degrees)', exact: true });
   await expect(page.getByRole('meter')).toHaveCount(24);
   await expect(page.locator('.bark-group[role="group"]')).toHaveCount(24);
   await expect(page.locator('.meter[tabindex="0"]')).toHaveCount(1);

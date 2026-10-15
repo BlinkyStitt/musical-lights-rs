@@ -192,6 +192,12 @@ test('slider buttons step once and value editors validate, cancel and save', asy
   const exit = page.getByRole('button', {name: 'Exit fullscreen', exact: true});
   if (await exit.isVisible()) await exit.click();
   await page.locator('.display-controls').evaluate(node => { node.open = true; });
+  await page.getByRole('button', {name: 'Decrease Camera angle (degrees)', exact: true}).focus();
+  await page.keyboard.press('Tab'); await expect(page.locator('.camera-rotation')).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(page.getByRole('button', {name: 'Increase Camera angle (degrees)', exact: true})).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
+  await page.keyboard.press('Enter'); await expect(page.getByRole('spinbutton', {name: 'Camera angle (degrees) value', exact: true})).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
   for (const [selector, name, value, next] of [
     ['.camera-rotation', 'Camera angle (degrees)', '12', '13'],
     ['.depth-slider', 'Depth images', '2047', '2048'],

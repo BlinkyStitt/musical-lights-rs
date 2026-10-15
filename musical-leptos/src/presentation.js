@@ -245,13 +245,13 @@ function mountSliderControls(presentation) {
     range.before(group);
     const minus = document.createElement('button'), plus = document.createElement('button');
     for (const [button, text, action] of [[minus, '−', 'Decrease'], [plus, '+', 'Increase']]) {
-      button.type = 'button'; button.textContent = text;
+      button.type = 'button'; button.tabIndex = 0; button.textContent = text;
       button.className = 'slider-step'; button.setAttribute('aria-label', `${action} ${name}`);
     }
     const existing = range.matches('.camera-rotation') ? card.querySelector('.camera-angle')
       : range.matches('.depth-slider') ? card.querySelector('.depth-status') : null;
     const value = existing ?? document.createElement('button');
-    value.type = 'button'; value.classList.add('slider-value'); value.setAttribute('aria-label', `Edit ${name}`);
+    value.type = 'button'; value.tabIndex = 0; value.classList.add('slider-value'); value.setAttribute('aria-label', `Edit ${name}`);
     const editor = document.createElement('input');
     Object.assign(editor, { type: 'number', min: range.min, max: range.max, step: range.step || '1', className: 'slider-editor', hidden: true });
     editor.setAttribute('aria-label', `${name} value`);

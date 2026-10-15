@@ -30,8 +30,9 @@ test('phone opens expanded without capture and allows scrolling to notices, song
           const camera = document.querySelector('.camera-controls').getBoundingClientRect();
           const controls = document.querySelector('.audio-controls').getBoundingClientRect();
           const slider = document.querySelector('.camera-rotation'), box = slider.getBoundingClientRect();
+          const row = slider.closest('.slider-control').getBoundingClientRect();
           return { separate: camera.bottom <= controls.top, touchSize: box.height >= 44,
-            aligned: Math.abs(box.y + box.height / 2 - camera.y - camera.height / 2) < 1,
+            aligned: Math.abs(box.y + box.height / 2 - row.y - row.height / 2) < 1,
             touchable: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === slider };
         })).toEqual({ separate: true, touchSize: true, aligned: true, touchable: true });
         await page.locator('.camera-rotation').fill('30');
