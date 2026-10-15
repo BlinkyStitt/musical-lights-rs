@@ -711,10 +711,12 @@ fixture with the real processor and its real completion acknowledgement.
 The paired bar tops form a periodic, shape-preserving cubic spline through the
 24 band centres. Each band keeps its published height. Harmonic-mean tangents
 join the intervals without overshoot, including the scrolling seam. Physics
-and drawing use eight straight chords per pitch. Protocol 13 publishes the cubic
+and drawing use eight straight chords per pitch. Protocol 14 publishes the cubic
 coefficients in each snapshot; older recordings require their matching engine.
 The collider adapter joins vertical prisms below those chords, removes buried
 end-face contacts, and assigns each shared convex vertex one contact owner.
+Each prism uses fixed topology and exact point projection onto its extruded
+quadrilateral. Support-map and CCD queries use the same closed geometry.
 Concave joins keep their two distinct contacts. Exactly collinear chords share
 one collider, with a stable endpoint frame during merge, split and scrolling.
 Prescribed frames use fixed zero mass properties at that endpoint. Release-hop

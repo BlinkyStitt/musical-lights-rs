@@ -8,6 +8,9 @@ use musical_lights_core::lights::musical_motion::{
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
 
+mod prism;
+use prism::ChordPrism;
+
 pub const COUNT: usize = 24;
 /// Chords per band pitch, shared by collision and rendering.
 pub const SURFACE_STEPS: usize = 8;
@@ -62,7 +65,7 @@ struct JoinedSurface<'a> {
 fn chord_points(collider: &Collider) -> (Vector, Vector) {
     let points = collider
         .shape()
-        .as_convex_polyhedron()
+        .as_shape::<ChordPrism>()
         .expect("spline prism")
         .points();
     let pose = collider.position();
@@ -174,38 +177,17 @@ impl SurfaceSegment {
             sign,
             ..
         } = self;
-        let points = [-depth / 2.0, depth / 2.0]
-            .into_iter()
-            .flat_map(|z| {
-                [
-                    Vector::new(0.0, 0.0, z),
-                    Vector::new(width, delta, z),
-                    Vector::new(width, -sign * height, z),
-                    Vector::new(0.0, -sign * height, z),
-                ]
-                .map(|p| inverse * p)
-            })
-            .collect();
-        let mut faces = [
-            [0, 1, 2],
-            [0, 2, 3],
-            [4, 6, 5],
-            [4, 7, 6],
-            [0, 4, 5],
-            [0, 5, 1],
-            [3, 2, 6],
-            [3, 6, 7],
-            [0, 3, 7],
-            [0, 7, 4],
-            [1, 5, 6],
-            [1, 6, 2],
-        ];
-        if sign < 0.0 {
-            for face in &mut faces {
-                face.swap(1, 2);
-            }
-        }
-        SharedShape::convex_mesh(points, &faces).expect("convex spline chord prism")
+        let points = std::array::from_fn(|i| {
+            let z = if i < 4 { -depth / 2.0 } else { depth / 2.0 };
+            inverse
+                * match i % 4 {
+                    0 => Vector::new(0.0, 0.0, z),
+                    1 => Vector::new(width, delta, z),
+                    2 => Vector::new(width, -sign * height, z),
+                    _ => Vector::new(0.0, -sign * height, z),
+                }
+        });
+        SharedShape::new(ChordPrism::new(points, sign))
     }
 }
 
@@ -1161,7 +1143,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            13.0, // joined spline surfaces; replay requires this engine
+            14.0, // analytic chord-prism queries; replay requires this engine
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,

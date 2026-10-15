@@ -4,7 +4,7 @@ fn surface_clearance(sim: &Simulation, collider: ColliderHandle, point: Vector) 
     // Exact distance to the extruded quadrilateral. Convex support-map point
     // projection can choose an adjacent face at a thin prism's boundary.
     let collider = &sim.world.colliders[collider];
-    let points = collider.shape().as_convex_polyhedron().unwrap().points();
+    let points = collider.shape().as_shape::<ChordPrism>().unwrap().points();
     let vertices: [Vector; 4] = std::array::from_fn(|i| collider.position() * points[i]);
     let mut low = vertices
         .into_iter()
@@ -204,7 +204,7 @@ fn spline_colliders_meet_at_the_published_render_vertices_on_both_ends() {
                 0.0,
             );
             let shape = &sim.world.colliders[collider];
-            let vertices = shape.shape().as_convex_polyhedron().unwrap().points();
+            let vertices = shape.shape().as_shape::<ChordPrism>().unwrap().points();
             let actual = (shape.position() * vertices[vertex]
                 + shape.position() * vertices[vertex + 4])
                 / 2.0;
