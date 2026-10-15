@@ -40,11 +40,12 @@ export const LIGHT_FIELD = `
   }
 `;
 // Bright through the first box, with a zero-slope join into a continuous
-// distance fade. No copy index, rounded distance, or retained emission floor.
+// opacity fade. Spread the transition over several boxes, without copy-index
+// steps or dark opaque silhouettes against the sky.
 export const DEPTH_BRIGHTNESS = `
   float depthBrightness(float distance) {
     float beyond = max(0.0, distance - 1.0);
-    return pow(reflectionFade, beyond * beyond);
+    return pow(reflectionFade, beyond * beyond / (beyond + 4.0));
   }
 `;
 

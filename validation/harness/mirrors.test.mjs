@@ -71,7 +71,7 @@ test('ball depth images keep bounded pools, source transforms and non-indexed ge
     assert.equal(mesh.material.isMeshLambertMaterial, true);
     assert(mesh.instanceMatrix.array.every(Number.isFinite));
     assert.deepEqual(Array.from(mesh.geometry.attributes.copyDepth.array.slice(0, mesh.count)),
-      Array.from({ length: 3 }, (_, c) => Array(staged.capacity).fill(-c - 1)).flat());
+      Array.from({ length: 3 }, (_, c) => Array(staged.capacity).fill(c - 3)).flat());
   }
   const meshes = room.meshes.map(({mesh}) => mesh);
   room.setCount(0); assert(room.meshes.every(({mesh}) => mesh.count === 0 && !mesh.visible));

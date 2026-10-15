@@ -56,32 +56,60 @@ test('continuous depth surfaces have no color steps at old copy boundaries', asy
     hidden.forEach(mesh => mesh.visible = false); v.bars.count = 1;
     const matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array);
     const x = matrix.elements[12] - v.bars.geometry.boundingBox.max.x;
-    const y = v.renderedHeight(0) * .3, depth = v.config[5], mid = -depth * v.mirrors.count / 2;
+    const y = v.renderedHeight(0) * .5, depth = v.config[5], mid = -depth * v.mirrors.count / 2;
     const halfSpan = depth * (v.mirrors.count + 1) * .55;
-    const camera = new THREE.OrthographicCamera(-halfSpan, halfSpan, .15, -.15, .01, 10);
+    const camera = new THREE.OrthographicCamera(-halfSpan, halfSpan, v.renderedHeight(0) * .2, -v.renderedHeight(0) * .2, .01, 10);
     camera.position.set(x - 2, y, mid); camera.lookAt(x, y, mid); camera.updateMatrixWorld();
     const target = new THREE.WebGLRenderTarget(1000, 100), pixels = new Uint8Array(1000 * 100 * 4);
     try {
       v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera); v.renderer.readRenderTargetPixels(target, 0, 0, 1000, 100, pixels);
+      const lit = pixels.slice();
+      v.starfield.points.visible = false;
+      v.renderer.render(v.scene, camera); v.renderer.readRenderTargetPixels(target, 0, 0, 1000, 100, pixels);
+      const withoutStars = pixels.slice();
+      v.starfield.points.visible = true;
+      v.bars.visible = false;
+      v.renderer.render(v.scene, camera); v.renderer.readRenderTargetPixels(target, 0, 0, 1000, 100, pixels);
+      const sky = pixels.slice();
+      v.bars.visible = true;
+      const stars = { near: 0, far: 0, nearSky: 0, farSky: 0 };
+      const screenX = n => Math.floor((new THREE.Vector3(x, y, depth / 2 - n * depth).project(camera).x + 1) * 500);
+      const nearBounds = [screenX(.1), screenX(.9)].sort((a, b) => a - b);
+      const farBounds = [screenX(4), screenX(6)].sort((a, b) => a - b);
+      for (let row = 0; row < 100; row++) for (let column = 0; column < 1000; column++) {
+        const region = column >= nearBounds[0] && column <= nearBounds[1] ? 'near'
+          : column >= farBounds[0] && column <= farBounds[1] ? 'far' : null;
+        if (!region) continue;
+        const i = (row * 1000 + column) * 4;
+        if (Math.max(sky[i], sky[i + 1], sky[i + 2]) > 25) stars[region + 'Sky']++;
+        if (Math.max(...[0, 1, 2].map(c => lit[i + c] - withoutStars[i + c])) > 2) stars[region]++;
+      }
+      pixels.set(withoutStars);
       const sample = z => {
         const point = new THREE.Vector3(x, y, z).project(camera);
         const offset = (50 * 1000 + Math.floor((point.x + 1) * 500)) * 4;
         return Array.from(pixels.slice(offset, offset + 3));
       };
-      return { seams: [1, 2, 3].map(n => [sample(depth / 2 - n * depth + .002), sample(depth / 2 - n * depth - .002)]),
+      return { stars, seams: [1, 2, 3].map(n => [sample(depth / 2 - n * depth + .002), sample(depth / 2 - n * depth - .002)]),
         depth, brightness: [0, 1, 2, 3, 5].map(n => sample(depth / 2 - n * depth)),
         triangles: v.balls.geometry.index.count / 3, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
-    } finally { hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.bars.count = count; v.renderer.setRenderTarget(null); target.dispose(); }
+    } finally { hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.bars.count = count; v.starfield.points.visible = true; v.renderer.setRenderTarget(null); target.dispose(); }
   });
   for (const [before, after] of evidence.seams) {
     expect(Math.max(...before)).toBeGreaterThan(30); expect(Math.max(...after)).toBeGreaterThan(30);
     expect(Math.max(...before.map((value, i) => Math.abs(value - after[i])))).toBeLessThanOrEqual(4);
   }
+  expect(evidence.stars.nearSky).toBeGreaterThan(0);
+  expect(evidence.stars.farSky).toBeGreaterThan(0);
+  expect(evidence.stars.near).toBe(0);
+  expect(evidence.stars.far).toBeGreaterThan(0);
   expect(evidence.depth).toBeCloseTo(.48, 5);
   const brightness = evidence.brightness.map(pixel => Math.max(...pixel));
   expect(brightness[0]).toBeGreaterThan(80);
-  expect(brightness[3]).toBeLessThan(brightness[1] * .8);
-  expect(brightness[4]).toBeLessThan(brightness[1] * .2);
+  expect(brightness[3]).toBeGreaterThan(brightness[1] * .75);
+  expect(brightness[3]).toBeLessThan(brightness[1] * .95);
+  expect(brightness[4]).toBeGreaterThan(brightness[1] * .35);
+  expect(brightness[4]).toBeLessThan(brightness[1] * .8);
   expect(evidence.triangles).toBe(1280); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
   await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
 });
@@ -458,6 +486,7 @@ test('instanced depth copies match literal translated geometry from both camera 
             const geometry=entry.mesh.geometry.clone();
             for(const {name,attr,values} of attributes) geometry.setAttribute(name,new THREE.InstancedBufferAttribute(values.slice(),attr.itemSize));
             const material=source.material.clone();
+            material.transparent=true;
             material.defines={...source.material.defines};
             material.onBeforeCompile=shader=>{
               source.material.onBeforeCompile(shader);
@@ -468,14 +497,14 @@ test('instanced depth copies match literal translated geometry from both camera 
               shader.vertexShader=shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;',`vViewPosition = -(mvPosition.xyz + (modelViewMatrix * vec4(0.0, 0.0, ${shift}, 0.0)).xyz);`);
               shader.vertexShader=shader.vertexShader.replace('nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));', `nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz + vec3(0.0, 0.0, ${shift}), normalize(transformedNormal));`);
               // Independently evaluate continuous distance from the translated
-              // geometry. Every light contribution fades, including emission.
+              // geometry. Opacity fades while the lit surface keeps its color.
               shader.vertexShader='varying float literalDepth;\n'+shader.vertexShader;
               shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\nliteralDepth = max(0.0, -(instanceMatrix * vec4(transformed, 1.0)).z / ${v.config[5]} - .5);`);
               shader.fragmentShader='varying float literalDepth;\n'+shader.fragmentShader;
-              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight *= pow(${v.settings.depthFade}, literalDepth * literalDepth);\n#include <opaque_fragment>`);
+              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`diffuseColor.a *= pow(${v.settings.depthFade}, literalDepth * literalDepth / (literalDepth + 4.0));\n#include <opaque_fragment>`);
             };
             material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
-            const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;
+            const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;mesh.renderOrder=-1;
             mesh.instanceMatrix.array.set(matrices);mesh.instanceColor=new THREE.InstancedBufferAttribute(colors.slice(),3);
             // Translate the copied transforms independently of the production
             // shader. Both paths use instance coordinates, so touching surfaces
@@ -519,12 +548,13 @@ test('camera depth culling preserves pixels from the complete copied-ball batch'
         for (const { mesh, staged } of v.mirrors.meshes) {
           mesh.count = 64 * staged.capacity; mesh.visible = true;
           for (let layer = 0; layer < 64; layer++) {
+            mesh.geometry.attributes.copyDepth.array.fill(layer - 64, layer * staged.capacity, (layer + 1) * staged.capacity);
             mesh.instanceMatrix.array.set(staged.matrices, layer * staged.matrices.length);
             mesh.instanceColor.array.set(staged.colors, layer * staged.colors.length);
             for (const { name, values } of staged.attributes)
               mesh.geometry.attributes[name].array.set(values, layer * values.length);
           }
-          for (const attr of [mesh.instanceMatrix, mesh.instanceColor, ...staged.attributes.map(({ name }) => mesh.geometry.attributes[name])]) {
+          for (const attr of [mesh.geometry.attributes.copyDepth, mesh.instanceMatrix, mesh.instanceColor, ...staged.attributes.map(({ name }) => mesh.geometry.attributes[name])]) {
             attr.clearUpdateRanges(); attr.addUpdateRange(0, mesh.count * attr.itemSize); attr.needsUpdate = true;
           }
         }
