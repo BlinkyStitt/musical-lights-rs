@@ -224,8 +224,20 @@ test('keyboard can exit fullscreen from the last sample and route re-entry start
   await page.keyboard.press('Enter');
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   await expect(exit).toBeFocused();
+  const toolbar = [page.getByRole('checkbox', { name: 'Listening', exact: true }),
+    page.getByRole('button', { name: 'Listening', exact: true }),
+    page.getByRole('button', { name: 'Settings', exact: true })];
+  await expect(toolbar[0]).toBeEnabled();
+  for (const control of toolbar) {
+    await page.keyboard.press('Tab');
+    await expect(control).toBeFocused();
+  }
   await page.keyboard.press('Tab');
   await expectSample(page, 23);
+  for (const control of [...toolbar].reverse()) {
+    await page.keyboard.press('Shift+Tab');
+    await expect(control).toBeFocused();
+  }
   await page.keyboard.press('Shift+Tab');
   await expect(exit).toBeFocused();
   await page.keyboard.press('Enter');

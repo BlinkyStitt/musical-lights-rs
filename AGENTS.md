@@ -54,7 +54,9 @@
   half of the scene. Keep the lower half visible through a clear backdrop.
   Keep the main view fixed. Scroll settings inside the modal body; keep its
   Close button fixed and trap focus.
-  Escape closes Settings before it exits fullscreen.
+  Escape closes Settings before it exits fullscreen. Keep Listening to the left
+  of the gear button in the top toolbar when Settings is closed. Reuse the
+  same Listening control inside the modal when Settings is open.
 - Mobile opens in the expanded video/visualizer layout with Settings and Exit
   controls, without starting audio or requesting native fullscreen. Normal pages use the same
   video/scene/bottom-controls order, with extra settings and learning below.

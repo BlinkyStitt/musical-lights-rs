@@ -251,12 +251,16 @@ class FullscreenSettings {
     this.card = presentation.card;
     this.moves = [];
     this.exit = this.card.querySelector('.fullscreen-button');
+    this.listening = this.card.querySelector('.listening-toggle').closest('label');
     this.toolbar = document.createElement('div');
     this.toolbar.className = 'fullscreen-toolbar';
     this.button = document.createElement('button');
     this.button.type = 'button';
+    this.button.tabIndex = 0;
     this.button.className = 'fullscreen-settings-button';
-    this.button.textContent = 'Settings';
+    this.button.setAttribute('aria-label', 'Settings');
+    this.button.title = 'Settings';
+    this.button.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 3-.5 2-2 1L4.5 5.5 2 9l1.5 1.5v3L2 15l2.5 3.5 2-1 2 1L9 21h6l.5-2.5 2-1 2 1L22 15l-1.5-1.5v-3L22 9l-2.5-3.5-2 1-2-1L15 3Z"/><circle cx="12" cy="12" r="3"/></svg>`;
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-controls', 'fullscreen-settings');
     this.button.setAttribute('aria-expanded', 'false');
@@ -289,12 +293,16 @@ class FullscreenSettings {
     node.before(marker);
     this.moves.push({ node, marker });
     destination.append(node);
+    return marker;
   }
   sync() {
     if (this.card.hasAttribute('data-expanded')) {
       if (this.moves.length) return;
       const active = document.activeElement;
       this.move(this.exit, this.toolbar);
+      this.toolbar.prepend(this.exit);
+      this.listeningMarker = this.move(this.listening, this.toolbar);
+      this.toolbar.insertBefore(this.listening, this.button);
       const controls = '.audio-controls, .scene-controls, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
       for (const node of [...this.card.children]) if (node.matches(controls)) this.move(node, this.body);
       this.move(this.card.querySelector('.video-entry'), this.body);
@@ -307,6 +315,7 @@ class FullscreenSettings {
     if (!this.card.hasAttribute('data-expanded') || this.dialog.open) return;
     this.presentation.hideHelp();
     this.dialog.append(this.presentation.popup);
+    this.listeningMarker.before(this.listening);
     this.dialog.showModal();
     this.body.scrollTop = 0;
     this.button.setAttribute('aria-expanded', 'true');
@@ -314,6 +323,7 @@ class FullscreenSettings {
   }
   hide() {
     if (this.dialog.open) this.dialog.close();
+    if (this.listeningMarker) this.toolbar.insertBefore(this.listening, this.button);
     this.presentation.hideHelp();
     this.card.append(this.presentation.popup);
     this.button.setAttribute('aria-expanded', 'false');
@@ -325,6 +335,7 @@ class FullscreenSettings {
     this.hide();
     for (const { node, marker } of this.moves) { marker.replaceWith(node); }
     this.moves.length = 0;
+    this.listeningMarker = null;
     if (!this.presentation.closed && active === this.exit) this.exit.focus({ preventScroll: true });
     this.presentation.hideHelp();
   }
