@@ -1,8 +1,7 @@
-import { AutoDepth, DEPTH_CANDIDATES, STARTUP_DEPTH_CANDIDATES } from './depth-auto.js';
 import { SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
-import { MirrorRoom, barProjection } from './mirrors.js';
+import { Enclosure, barProjection } from './enclosure.js';
 import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
 import { Starfield } from './stars.js';
@@ -58,7 +57,7 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(62);
+    this.input = new Float32Array(63);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
@@ -100,10 +99,10 @@ export class PhysicsView {
     this.renderer.localClippingEnabled = true;
     this.gpuFrames = new GpuFrames(this.renderer.getContext());
     this.layer.append(this.renderer.domElement);
-    this.renderer.domElement.setAttribute('aria-label', '8 rigid balls, matching top and bottom audio bars, and an infinity mirror box');
+    this.renderer.domElement.setAttribute('aria-label', '8 rigid balls, matching top and bottom audio bars, inside a box with eight side banks');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
-      event.preventDefault(); this.gpuFrames.clear(); this.pauseDepthTest(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
+      event.preventDefault(); this.gpuFrames.clear(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
       this.report?.invalidate('WebGL context lost');
     });
     this.canvas.addEventListener('webglcontextrestored', this.contextRestored = () => {
@@ -119,11 +118,11 @@ export class PhysicsView {
     this.motion = motion;
     this.observer = new ResizeObserver(() => { this.resizePending = true; }); this.observer.observe(layer);
     this.sceneVisible = true;
-    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; if (!this.sceneVisible) { this.pauseDepthTest(); this.cameraPan.clear(); } });
+    this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; if (!this.sceneVisible) { this.cameraPan.clear(); } });
     this.visibilityObserver.observe(layer);
     this.controls = this.card.querySelector('.audio-controls'); this.observer.observe(this.controls);
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
-    this.listen(document, 'visibilitychange', () => { if (document.hidden) { this.cameraPan.clear(); this.pauseDepthTest(); this.report?.invalidate('Page hidden during test'); } this.pause(); });
+    this.listen(document, 'visibilitychange', () => { if (document.hidden) { this.cameraPan.clear(); this.report?.invalidate('Page hidden during test'); } this.pause(); });
     this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'rigid-body-physics' });
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
@@ -156,10 +155,9 @@ export class PhysicsView {
       this.updateCamera(now);
       let rendered = false;
       // Keep input and simulation active while the GPU completes earlier frames.
-      // Sampling only submitted frames preserves Auto and diagnostic cadence.
+      // Only submitted frames contribute to FPS and diagnostic cadence.
       try {
         if (this.current && this.sceneVisible && this.gpuFrames.ready()) {
-          if (this.depthProfile && !this.depthProfile.done) this.depthProfile.sample(frameTime);
           this.draw(now); this.gpuFrames.submitted(); rendered = true;
         }
       } catch (error) { this.fail(error.message); return; }
@@ -201,15 +199,9 @@ export class PhysicsView {
     this.listen(this.card, 'display-settings', ({ detail }) => {
       this.settings = detail;
       this.lighting.configure(detail); this.resizePending = true;
-      if (detail.depthMode !== 'auto') this.depthProfile?.cancel();
-      if (this.mirrors && this.mirrors.count !== detail.mirrorCount) {
-        this.mirrors.setCount(detail.mirrorCount);
-      }
-      if (detail.cameraAngle !== this.cameraBase) this.cameraBase = detail.cameraAngle;
+      if (detail.physics) this.input[62] = detail.physics[5];
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
-    this.listen(this.card, 'depth-retest', () => this.startDepthTest());
-    this.listen(this.card.querySelector('.display-reset'), 'click', () => this.startDepthTest(STARTUP_DEPTH_CANDIDATES));
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
       if (Number.isFinite(detail.bpm)) { this.tempo = detail.bpm; this.tempoConfidence = detail.confidence; }
       const difference = (detail.accentSequence ?? 0) - this.audioAccent;
@@ -300,7 +292,7 @@ export class PhysicsView {
     const barMax = this.current?.[geometry + 1] ?? Math.max(.003, this.height - .246);
     const visibleHeight = Math.max(this.height, ceiling);
     const visibleWidth = visibleHeight * this.aspect;
-    const key = `${visibleHeight}/${visibleWidth}/${barMax}`;
+    const key = `${visibleHeight}/${visibleWidth}/${barMax}/${this.config?.[5]}`;
     if (key === this.geometryKey) return;
     this.geometryKey = key; this.visibleHeight = visibleHeight;
     this.camera.aspect = this.aspect;
@@ -341,7 +333,7 @@ export class PhysicsView {
     const elapsed = this.cameraAt == null ? 0 : Math.max(0, now - this.cameraAt);
     this.cameraAt = now;
     if (this.cameraPan.step(elapsed / 1000)) {
-      this.pauseDepthTest(); this.report?.invalidate('Camera moved during test');
+      this.report?.invalidate('Camera moved during test');
     }
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Move the sweep center inward at the limits. Start at the selected angle
@@ -363,10 +355,12 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 13 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout[18] !== 17 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
+      this.input[62] = this.settings.physics?.[5] ?? this.config[5];
       this.makeMeshes(); this.ready = true;
+      this.settings.physics ??= Array.from(this.config); this.card.presentation?.save(false);
       this.measure();
       if (this.card.dataset.mode === 'advanced') this.report = new PhoneReport(this);
       this.requestSnapshot();
@@ -377,6 +371,7 @@ export class PhysicsView {
       this.previous = this.current;
       this.current = new Float32Array(data.buffer);
       this.received = performance.now(); this.inflight = false;
+      this.config[5] = this.current[this.layout[17] + 4];
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
       this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
@@ -387,7 +382,7 @@ export class PhysicsView {
       if ((this.report?.active || this.card.dataset.toneDiagnostics === 'true' || this.recordTiming) && this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
       this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
-      this.config = data.config;
+      this.config = data.config; this.input[62] = this.config[5];
       if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config); this.card.presentation.save(); }
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
       this.previous = this.current = null; this.makeMeshes();
@@ -406,17 +401,17 @@ export class PhysicsView {
     const [count, , , pitch, gap] = this.layout;
     const ballGeometry = sphereGeometry(7);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
-    const ballMaterial = new THREE.MeshLambertMaterial();
-    this.patternTime = { value: 0 };
+    const ballMaterial = new THREE.MeshLambertMaterial({ transparent: false, opacity: 1, depthWrite: true });
     ballMaterial.onBeforeCompile = shader => {
       this.lighting.apply(shader);
-      shader.uniforms.patternTime = this.patternTime;
       shader.vertexShader = 'attribute vec3 pigmentA; attribute vec3 pigmentB; attribute vec3 pigmentC; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nobjectPoint = position; paintA = pigmentA; paintB = pigmentB; paintC = pigmentC;');
-      shader.fragmentShader = 'uniform float patternTime; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        float wave = sin(7.0 * objectPoint.y + 3.0 * sin(3.0 * objectPoint.x + patternTime) + 4.0 * objectPoint.z);
-        vec3 pigment = mix(mix(paintA, paintB, smoothstep(-0.85, 0.15, wave)), paintC, smoothstep(0.15, 0.9, wave));
+        // A soft connected field follows the rolling surface. Fixed-tick
+        // pigment diffusion supplies the fill; contacts never swap stripes.
+        float height = clamp(.5 + .5 * objectPoint.y + .08 * sin(3.0 * objectPoint.x + 2.0 * objectPoint.z), 0.0, 1.0);
+        vec3 pigment = mix(mix(paintA, paintB, smoothstep(0.0, .5, height)), paintC, smoothstep(.5, 1.0, height));
         diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };
@@ -424,23 +419,22 @@ export class PhysicsView {
     this.renderedTops = new Float32Array(count);
     // The visible post spans the same depth as its physical support surface.
     // Extend the outer ends in the vertex shader, using the physical support span.
-    const geometry = new THREE.BoxGeometry(pitch - gap, 1, this.config[5]);
+    const geometry = new THREE.BoxGeometry(pitch - gap, 1, 1);
     geometry.setAttribute('backgroundOffset', new THREE.InstancedBufferAttribute(new Float32Array(count * 6), 1));
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.meshPulses, 1));
     this.barRoof = { value: this.height };
-    this.barDepth = { value: 1 + this.settings.mirrorCount };
-    const material = new THREE.MeshLambertMaterial({ toneMapped: false, transparent: true });
+    const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
-      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barDepth: this.barDepth, barExtension: { value: this.layout[6] }, barFront: { value: this.config[5] / 2 }, physicalDepth: { value: this.config[5] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'attribute float backgroundOffset; uniform float halfWidth; uniform float enclosureHeight; uniform float barDepth; uniform float barExtension; uniform float barFront; uniform float physicalDepth; varying float depthDistance; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barExtension: { value: this.layout[6] }, halfWidth: { value: (pitch - gap) / 2 } });
+      shader.vertexShader = 'attribute float backgroundOffset; uniform float halfWidth; uniform float enclosureHeight; uniform float barExtension; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; coloredPulse = pulse; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
       shader.vertexShader = shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;', 'vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;');
-      shader.fragmentShader = 'varying float depthDistance; uniform float attackGlow; uniform float colorAttack; varying float coloredPulse; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'uniform float attackGlow; uniform float colorAttack; varying float coloredPulse; uniform float pixelRatio; uniform float enclosureHeight; uniform float halfWidth; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
           if (world.y < 0.0 || world.y > enclosureHeight || world.x < 0.0 || world.x > 1.2) discard;
           float distance = min(halfWidth - abs(local.x), barHeight * (.5 - abs(local.y)));
@@ -449,20 +443,15 @@ export class PhysicsView {
           float inner = (1.0 - smoothstep(1.25 * pixel, 2.5 * pixel, distance)) * front;
           vec3 barColor = diffuseColor.rgb;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), inner * glow);`);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a *= depthBrightness(depthDistance);\n#include <opaque_fragment>');
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * colorEmission.x + barColor * coloredPulse * colorAttack + vec3(glow * inner * attackGlow);');
     };
     this.bars = new THREE.InstancedMesh(geometry, material, count * 6);
     for (let i = 0; i < count * 6; i++) { this.color.fromArray(this.palette, (i % count) * 3); this.bars.setColorAt(i, this.color); }
     for (const mesh of [this.bars, this.balls]) { mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.scene.add(mesh); }
     this.sideBars = new SideBars(this.scene, this.bars, count);
-    this.mirrors = new MirrorRoom(this.scene, this.balls, this.settings.mirrorCount, this.lighting);
-    this.enclosure = this.mirrors.walls;
+    this.coating = new Enclosure(this.scene, this.lighting); this.enclosure = this.coating.mesh;
     this.starfield = new Starfield(this.scene, this.pixelRatio);
-    // Compile hidden depth-copy materials before Auto first draws them.
-    // Their first shader link must not interrupt live input during a trial.
     this.renderer.compile(this.scene, this.camera);
-    if (!this.depthStarted && this.settings.depthMode === 'auto') { this.depthStarted = true; this.startDepthTest(STARTUP_DEPTH_CANDIDATES); }
   }
   draw(now) {
     const [count, , , pitch, , , , , stride, barOffset] = this.layout;
@@ -474,9 +463,8 @@ export class PhysicsView {
     // steps. A slow renderer must not add its entire snapshot gap to attacks.
     const alpha = Math.min(1, Math.max(0, 1 - (step - (now - this.received)) / span));
     const geometry = this.layout[17];
-    const height = previous[geometry] + (current[geometry] - previous[geometry]) * alpha, depth = this.config[5];
-    this.barRoof.value = height; this.barDepth.value = 1 + this.mirrors.count;
-    if (!this.reduced.matches) this.patternTime.value = now / 10000;
+    const height = previous[geometry] + (current[geometry] - previous[geometry]) * alpha, depth = previous[geometry + 4] + (current[geometry + 4] - previous[geometry + 4]) * alpha;
+    this.renderedDepth = depth; this.barRoof.value = height;
     for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
       const attr = this.balls.geometry.attributes[name];
       for (let i = 0; i < this.layout[21]; i++) {
@@ -514,23 +502,23 @@ export class PhysicsView {
         this.meshPulses[i + copy * count] = pulse;
       }
       const column = (i + phase) % count;
-      this.object.scale.set(1, top, 1);
+      this.object.scale.set(1, top, depth);
       for (let end = 0; end < 2; end++) {
         this.object.quaternion.set(end, 0, 0, 1 - end);
         for (let copy = 0; copy < 3; copy++) {
           this.object.position.set((column + .5 + (copy === 1 ? -count : copy === 2 ? count : 0)) * pitch,
-            end ? height - top / 2 : top / 2, depth / 2 - this.bars.geometry.boundingBox.max.z);
+            end ? height - top / 2 : top / 2, 0);
           this.object.updateMatrix(); this.bars.setMatrixAt(i + copy * count + end * count * 3, this.object.matrix);
         }
       }
     }
-    this.sideBars.update(this.layout, this.camera, this.mirrors.count, depth);
+    this.sideBars.update(this.layout, this.camera, depth);
     this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.bars.geometry.attributes.pulse.needsUpdate = true;
     this.renderedEnclosureHeight = height;
-    this.mirrors.update(this.width, height, depth, this.camera);
+    this.coating.update(this.width, height, depth);
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.starfield.update(now, this.reduced.matches, this.camera.aspect, this.tempo,
@@ -538,21 +526,6 @@ export class PhysicsView {
     this.render();
   }
   render(camera = this.camera) { this.renderer.render(this.scene, camera); }
-  pauseDepthTest() {
-    if (!this.depthProfile || this.depthProfile.done) return;
-    this.depthProfile.cancel();
-    this.settings.mirrorCount = this.depthProfile.best;
-    this.mirrors.setCount(this.settings.mirrorCount);
-    this.card.dispatchEvent(new CustomEvent('depth-paused', { detail: this.settings.mirrorCount }));
-  }
-  startDepthTest(candidates = DEPTH_CANDIDATES) {
-    this.depthProfile?.cancel();
-    if (!this.mirrors || this.closed || this.lost || document.hidden || this.settings.depthMode !== 'auto') return;
-    this.card.querySelector('.depth-status').textContent = 'Measuring…';
-    this.depthProfile = new AutoDepth(count => { this.mirrors.setCount(count); this.settings.mirrorCount = count; },
-      result => this.card.dispatchEvent(new CustomEvent('depth-selected', { detail: result })), performance.now(), candidates);
-    if (!this.sceneVisible) { this.pauseDepthTest(); this.cameraPan.clear(); }
-  }
   renderedHeight(band, end = 0) {
     const offset = (band + end * this.layout[0] * 3) * 16;
     // The single rendering contract uses unit-height boxes scaled to travel.
@@ -608,7 +581,7 @@ export class PhysicsView {
       }
     }
     this.input.set(levels, 0); this.edges.set(edges);
-    // Audio edges qualify pigment transfer. The rising-wave display glow does not.
+    // Record real audio edges separately from decorative bar glow.
     this.input.set(edges, 38);
     this.input[33] = scrolling ? 1 : 0;
   }
@@ -630,11 +603,11 @@ export class PhysicsView {
   fail(message) { this.notice.show(`Physics stopped: ${message}`, 'Motion stopped. Reload to restart.'); this.report?.invalidate(message); this.lost = true; this.pause(); }
   disposeMeshes() {
     this.sideBars?.dispose(); this.sideBars = null;
-    this.mirrors?.dispose(); this.mirrors = null;
+    this.coating?.dispose(); this.coating = null;
     this.starfield?.dispose(); this.starfield = null;
     for (const mesh of [this.balls, this.bars]) if (mesh) { this.scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose?.(); mesh.dispose?.(); } }
   close() {
-    this.closed = true; this.cameraPan.clear(); this.depthProfile?.cancel(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
+    this.closed = true; this.cameraPan.clear(); this.stopPreview(); cancelAnimationFrame(this.request); this.notice.close();
     this.worker.terminate(); this.worker.onmessage = null; this.worker.onerror = null;
     this.observer.disconnect(); this.visibilityObserver.disconnect(); this.motion.close(); this.report?.close();
     for (const remove of this.listeners) remove();

@@ -21,7 +21,7 @@ export class PhoneReport {
     const fields = [
       ['Gravity (m/s²)', 1, 0, 30, .01], ['Density (kg/m³)', 2, 1, 20000, 1],
       ['Bounce (ratio)', 3, 0, 1, .01], ['Friction (ratio)', 4, 0, 2, .01],
-      ['Enclosure depth (m)', 5, .2, 2, .01], ['Bar rise duration (ms)', 6, 20, 2000, 10],
+      ['Bar rise duration (ms)', 6, 20, 2000, 10],
       ['Reduced Motion attack duration (ms)', 7, 320, 4000, 10],
     ];
     this.physicsHost.innerHTML = `<summary>Physics</summary>
@@ -58,7 +58,7 @@ export class PhoneReport {
       <button type="button" class="phone-export" disabled>Export test report</button>`;
     this.listen('.physics-defaults', 'click', () => {
       if (this.active) return;
-      const config = [...this.defaults]; config[0] = view.height;
+      const config = [...this.defaults]; config[0] = view.height; config[5] = view.config[5];
       for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
         const index = Number(node.dataset.config); node.value = Number((config[index] * (index >= 6 ? 1000 : 1)).toPrecision(6));
       }

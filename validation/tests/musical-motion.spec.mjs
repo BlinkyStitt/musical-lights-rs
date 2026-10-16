@@ -55,7 +55,7 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
-test('lit geometry, contact pigments and Reduced Motion drift use the physical scene', async ({ page }) => {
+test('lit geometry and gradual contact pigments use the physical scene with Reduced Motion', async ({ page }) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
@@ -85,7 +85,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     // Isolate one prescribed bar and sample its physical side face. The old
     // XY-only outline painted this entire face black, even under fill light.
     const count = v.bars.count, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, 0);
-    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)]; hidden.forEach(n => { n.visible = false; });
+    const hidden = [v.balls, v.sideBars.mesh, v.enclosure]; hidden.forEach(n => { n.visible = false; });
     const object = new THREE.Object3D(); object.position.set(.6, .15, 0); object.scale.set(1, .3, 1); object.updateMatrix();
     v.bars.count = 1; v.bars.setMatrixAt(0, object.matrix); v.bars.instanceMatrix.needsUpdate = true;
     const point = new THREE.Vector3(.6 + (v.layout[3] - v.layout[4]) / 2, .12, 0).project(v.camera);
@@ -105,9 +105,7 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
   expect(state.sideBrightness).toBeGreaterThan(30);
   expect(state.pattern).toEqual(state.pigments.slice(0, 3));
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const phase = await page.evaluate(() => document.querySelector('#dancinglights').physics.patternTime.value);
-  await page.waitForTimeout(150);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.patternTime.value)).toBe(phase);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.balls.material.transparent)).toBe(false);
   expect(errors).toEqual([]);
 });
 
@@ -200,7 +198,7 @@ test('slider buttons step once and value editors validate, cancel and save', asy
   await page.keyboard.press('Escape'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
   for (const [selector, name, value, next] of [
     ['.camera-rotation', 'Camera angle (degrees)', '12', '13'],
-    ['.depth-slider', 'Depth images', '2047', '2048'],
+    ['.depth-slider', 'Box depth (cm)', '199', '200'],
     ['.flight-height', 'Flight height (% of available space)', '35', '36'],
   ]) {
     const range = page.locator(selector), edit = page.getByRole('button', {name: `Edit ${name}`, exact: true});
@@ -221,11 +219,10 @@ test('slider buttons step once and value editors validate, cancel and save', asy
     await input.press('Escape'); await expect(input).toBeHidden(); await expect(range).toHaveValue(value);
   }
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('musical-lights-display-v1')));
-  expect(saved.cameraAngle).toBe(12); expect(saved.mirrorCount).toBe(2047); expect(saved.flight).toBe(35);
-  expect(saved.depthMode).toBe('manual');
+  expect(saved.cameraAngle).toBe(12); expect(saved.physics[5]).toBeCloseTo(1.99,5); expect(saved.flight).toBe(35);
   expect(await page.evaluate(() => !!document.querySelector('.audio-card').activeAudioContext)).toBe(false);
   await page.reload(); await physicsReady(page);
-  await expect(page.locator('.depth-slider')).toHaveValue('2047');
+  await expect(page.locator('.depth-slider')).toHaveValue('199');
   await expect(page.locator('.flight-height')).toHaveValue('35');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

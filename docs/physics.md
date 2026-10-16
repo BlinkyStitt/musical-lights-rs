@@ -244,7 +244,7 @@ each input and its cue together before stepping, including inputs at the same
 tick. Older report formats and physics protocols require their historical replay tool.
 
 The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
-contact-pigment history, and quintic bar motion are hardware-neutral
+continuous contact-color fill, and quintic bar motion are hardware-neutral
 `musical-lights-core` modules, checked with `no_std` and no allocator. Rapier,
 Web APIs, recording ownership and Three.js shading remain application adapters.
 See [implementation and evidence](musical-motion-results/README.md).
@@ -262,13 +262,13 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 13 seeds three surface colors per ball, requires attack edges,
-and rejects replays from previous engines. Rotation reveals the colored surface
-before the first music contact; Reduced Motion disables additional pigment drift.
+Physics protocol 17 starts each ball uniformly in the source color at its actual
+spawn X coordinate. It rejects replays from previous engines. Physical rolling
+reveals a soft surface field that fills gradually with contacted colors.
 Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
 white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
-intensity. Only distinct impacts with a source that has an active audio attack
-blend sphere colors. Quiet bars, idle waves and the listening floor cannot transfer color.
+intensity. Distinct physical bar contacts blend sphere colors with or without
+audio. Persistent resting pressure cannot keep repainting the ball.
 
 Hidden pages and lost WebGL contexts pause both clocks. Return resets the
 frame clock. Route cleanup closes audio, terminates the worker, removes sensor
@@ -359,11 +359,13 @@ color. LED palettes and acoustic analysis are unchanged.
 
 ## Contact pigments and lighting
 
-Three recent contact pigments per ball drive a smooth procedural pattern in
-object coordinates. Its appearance rotates with the physical quaternion;
-Reduced Motion stops additional pattern drift. Existing average-color snapshot
-diagnostics stay intact. A new contact adds pigment only while the contacted
-source has an active audio attack. Resting contacts and decorative waves do not add pigments.
+Three connected color regions per ball form a soft continuous field in object
+coordinates. The field rotates with the physical quaternion. A new physical
+bar contact blends its source color into the target, even without music.
+Visible regions fill gradually at fixed ticks instead of swapping bands.
+Decorative motion alone does not paint; an actual contact must occur.
+Persistent resting contacts do not change the target. Snapshots report the
+visible surface mean, so lighting follows the fill instead of jumping ahead.
 
 Bars use diffuse Lambert lighting with contiguous colored boundaries and white emissive attack
 highlights. A separate colored pulse multiplies the source attack envelope by
@@ -376,16 +378,34 @@ lights the enclosure. Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;
 physical-iPhone and human-listening acceptance remain pending.
 
-A dark starfield sits behind the scene. One batch draws 512 fixed stars, with
-small points and slow independent brightness changes. Reduced Motion holds
-their brightness steady. Camera sweeps, audio attacks and mirror counts do not
-move or recolor the stars. Stars use no textures or render targets. A single
-scene pass draws foreground geometry over them.
+A dark starfield sits behind the scene. One batch draws stars from the HYG 4.1
+catalog at their J2000 sky positions, centered on Orion. Catalog magnitudes
+control prominence; measured B-V values supply display tints. Music adds BPM
+and attack shimmer without moving or recoloring stars. Reduced Motion holds
+brightness steady. Stars use no textures or render targets. A single scene
+pass draws foreground geometry over them.
 
-The default enclosure is 0.48 m deep. The eight background banks use that same
-depth and continue to reuse the eight physical ball transforms. Distance drawing
-keeps the first box bright. Beyond it, brightness follows `retention^(d*d)`, where
-`d` is continuous distance in box depths beyond the back of the first box. The
-curve starts with zero slope and dims all lighting, including emitted and spilled
-light. Bars, ball images and the outer coating use the same distance rule. Long
-depth settings stay available; no per-copy faces or fade steps are added.
+The default enclosure is 0.48 m deep. The common **Depth** control sets 20–200 cm,
+with 1 cm steps and direct numeric entry. It changes the actual front/back walls
+and post depth at the next fixed physics tick. Shrinking moves balls inside the
+new boundaries and removes outward velocity there. It preserves their other
+motion, pigments and simulation clock. The eight side banks use the same depth.
+
+All eight physical balls are opaque and write depth. The renderer draws no
+mirrored geometry or translated ball images. One faint outer coating covers
+all nine banks without internal walls. Bars have their actual physical depth.
+The image-count setting, Auto image trials and depth-image opacity fade are removed.
+
+Protocol 17 appends requested depth at input[62] and applied depth at
+snapshot[layout[17]+4]. The recorded input has 63 values. Replay uses the exact
+engine layout and retains depth changes through deterministic playback. Saved
+settings keep depth in physics[5] in meters; the common control displays cm.
+
+A physical bar contact changes the ball's color target, with the existing
+impulse/mass blend strength. Three connected surface regions fill toward that
+target at fixed physics ticks, with a 0.18 s time constant per region (about
+1.13 s for the last region to reach 95%). The renderer joins them with a soft
+continuous gradient attached to the rolling ball. Contact does not replace
+visible color bands. Repeated resting pressure does not change the target.
+The visible surface mean also drives ball lighting, so it does not jump ahead
+of the fill. Spawn colors still match each ball's actual X coordinate.

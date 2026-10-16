@@ -22,7 +22,7 @@ for (const width of [320, 375, 1440]) {
       const meters = [...document.querySelectorAll('.meter')];
       const track = document.querySelector('.meter-track').getBoundingClientRect();
       const graph = document.querySelector('#dancinglights').getBoundingClientRect();
-      const front = view.bars.instanceMatrix.array[14] + view.bars.geometry.boundingBox.max.z;
+      const front = view.bars.instanceMatrix.array[14] + Math.abs(view.bars.instanceMatrix.array[10]) * view.bars.geometry.boundingBox.max.z;
       return {
         headroom: (track.top - graph.top) / graph.height,
         expectedHeadroom: (1 - new THREE.Vector3(0, view.current[view.layout[17]+1], front).project(view.camera).y) / 2,

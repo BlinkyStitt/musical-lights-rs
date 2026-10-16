@@ -24,6 +24,26 @@ fn radius(i: usize) -> f32 {
     SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
 }
 
+// Ball 0 starts at source 6. Contact blends the target, then fills the surface
+// in order; it must not replace a visible pigment slot.
+fn assert_first_ball_fills_toward_source(sim: &Simulation, source: usize) {
+    let initial = sim.palette[6];
+    let target = sim.colors[0];
+    assert!(target[0] > initial[0] && target[0] < sim.palette[source][0]);
+    for (c, &start) in initial.iter().enumerate() {
+        for region in 0..3 {
+            let value = sim.pigments[region * 3 + c];
+            assert!(value >= start.min(target[c]) - 1e-6);
+            assert!(value <= start.max(target[c]) + 1e-6);
+        }
+    }
+    assert!(sim.pigments[0] >= sim.pigments[3] && sim.pigments[3] >= sim.pigments[6]);
+    assert_eq!(
+        &sim.snapshot.values[18..21],
+        &pigment_color(sim.pigments[..9].try_into().unwrap())
+    );
+}
+
 #[test]
 fn smallest_ball_rests_on_bar_seams_without_sinking_between_tips() {
     for ceiling in [false, true] {
@@ -1051,7 +1071,11 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
         sim.step();
     }
     let resting = sim.colors[0];
-    assert_eq!(initial, resting);
+    assert_ne!(
+        initial, resting,
+        "The initial impact must pick up the contacted bar's color"
+    );
+    assert_first_ball_fills_toward_source(&sim, 12);
     for _ in 0..HZ * 2 {
         sim.step();
     }
@@ -1536,14 +1560,14 @@ fn air_drag_dissipates_fast_free_motion_without_changing_gravity() {
 }
 
 #[test]
-fn quiet_bar_contacts_do_not_transfer_color() {
+fn quiet_bar_contacts_pick_up_the_contacted_color() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
-    attack(&mut sim, 7); // An attack in another source cannot qualify source 6.
+    attack(&mut sim, 7); // An unrelated attack must not choose the painted source.
     place(
         &mut sim,
         0,
-        Vector::new(PITCH * 6.5, radius(0) + 0.025, 0.0),
+        Vector::new(PITCH * 12.5, radius(0) + 0.025, 0.0),
         Vector::ZERO,
     );
     let colors = sim.colors;
@@ -1551,15 +1575,16 @@ fn quiet_bar_contacts_do_not_transfer_color() {
     let mut impulse = 0.0;
     for _ in 0..HZ * 2 {
         sim.step();
-        impulse += sim.snapshot.values[IMPULSE_OFFSET + 6];
+        impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
     }
     assert!(impulse > 0.0, "The quiet bar must make physical contact");
-    assert_eq!(sim.colors, colors);
-    assert_eq!(sim.pigments, pigments);
+    assert_ne!(sim.colors, colors);
+    assert_ne!(sim.pigments, pigments);
+    assert_first_ball_fills_toward_source(&sim, 12);
 }
 
 #[test]
-fn idle_and_listening_waves_move_bars_without_transferring_color() {
+fn idle_and_listening_contacts_pick_up_colors_without_audio_attacks() {
     use musical_lights_core::lights::musical_motion::{idle_wave, listening_level};
     for listening in [false, true] {
         let mut sim = world(SimulationConfig::default());
@@ -1567,7 +1592,7 @@ fn idle_and_listening_waves_move_bars_without_transferring_color() {
         place(
             &mut sim,
             0,
-            Vector::new(PITCH * 6.5, 0.3, 0.0),
+            Vector::new(PITCH * 12.5, 0.3, 0.0),
             Vector::ZERO,
         );
         let colors = sim.colors;
@@ -1596,13 +1621,14 @@ fn idle_and_listening_waves_move_bars_without_transferring_color() {
         }
         assert!(impulse > 0.0, "The wave must make physical contact");
         assert!(maximum - minimum > 0.01, "The bars must move");
-        assert_eq!(sim.colors, colors);
-        assert_eq!(sim.pigments, pigments);
+        assert_ne!(sim.colors, colors);
+        assert_ne!(sim.pigments, pigments);
+        assert!(sim.input.attacks.iter().all(|value| *value == 0.0));
     }
 }
 
 #[test]
-fn both_bar_ends_require_the_contacted_sources_current_attack() {
+fn both_bar_ends_pick_up_the_contacted_color_at_every_audio_attack_strength() {
     for roof in [false, true] {
         for strength in [0.0, 0.001, 1.0] {
             let mut sim = world(SimulationConfig {
@@ -1643,37 +1669,39 @@ fn both_bar_ends_require_the_contacted_sources_current_attack() {
                 impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
             }
             assert!(impulse > 0.0);
-            if strength > 0.0 {
-                assert_ne!(sim.colors, colors);
-                assert_eq!(&sim.pigments[..3], &sim.palette[12]);
-            } else {
-                assert_eq!(sim.colors, colors);
-                assert_eq!(sim.pigments, pigments);
-            }
+            assert_ne!(sim.colors, colors);
+            assert_ne!(sim.pigments, pigments);
+            assert_first_ball_fills_toward_source(&sim, 12);
         }
     }
 }
 
 #[test]
-fn contact_pigments_remember_source_and_resting_load_does_not_change_history() {
+fn contact_fill_continues_while_resting_without_repainting_the_target() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
-    attack(&mut sim, 6);
+
     place(
         &mut sim,
         0,
-        Vector::new(PITCH * 6.5, radius(0) + 0.025, 0.0),
+        Vector::new(PITCH * 12.5, radius(0) + 0.025, 0.0),
         Vector::ZERO,
     );
     for _ in 0..180 {
         sim.step();
     }
-    assert_eq!(&sim.pigments[..3], &sim.palette[6]);
-    let history = sim.pigments;
+    assert_first_ball_fills_toward_source(&sim, 12);
+    let target = sim.colors;
+    let previous_error = (sim.pigments[6] - target[0][0]).abs();
     for _ in 0..120 {
         sim.step();
     }
-    assert_eq!(sim.pigments, history);
+    assert_eq!(
+        sim.colors, target,
+        "Resting pressure must not add new color"
+    );
+    assert!((sim.pigments[6] - target[0][0]).abs() < previous_error);
+    assert!((sim.pigments[6] - target[0][0]).abs() < 0.001);
 }
 
 #[test]
@@ -1801,7 +1829,7 @@ fn roof_bar_deflects_inward_and_reports_its_source_pigment() {
         inward |= velocity(&sim, 0).y < -0.1;
     }
     assert!(impulse > 0.0 && inward);
-    assert_eq!(&sim.pigments[..3], &sim.palette[12]);
+    assert_first_ball_fills_toward_source(&sim, 12);
 }
 
 #[test]
@@ -1825,19 +1853,126 @@ fn default_full_attacks_stay_within_the_work_cap_in_tall_phone_rooms() {
 }
 
 #[test]
-fn initial_ball_surface_has_three_distinct_source_pigments_without_fake_contacts() {
-    let mut sim = world(SimulationConfig::default());
+fn initial_ball_colors_match_spawn_x_and_stay_uniform_without_contacts() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        ..SimulationConfig::default()
+    });
+    // Expected source columns for the existing size-sorted spawn rows.
+    let sources = [6, 18, 10, 2, 6, 22, 2, 14];
     let initial = sim.pigments;
-    for history in initial.as_chunks::<9>().0 {
-        assert_ne!(history[..3], history[3..6]);
-        assert_ne!(history[3..6], history[6..9]);
-        assert_ne!(history[..3], history[6..9]);
-        for color in history.as_chunks::<3>().0 {
-            assert!(sim.palette.iter().any(|source| source.as_slice() == color));
+    for (i, band) in sources.into_iter().enumerate() {
+        let x = position(&sim, i).x;
+        assert!(x >= band as f32 * PITCH && x < (band + 1) as f32 * PITCH);
+        assert_eq!(sim.colors[i], sim.palette[band]);
+        for color in sim.pigments[i * 9..i * 9 + 9].as_chunks::<3>().0 {
+            assert_eq!(color, &sim.palette[band]);
         }
     }
+    // Moving through X in free space must not invent new contact pigments.
+    sim.world.bodies[sim.balls[0].0].set_linvel(Vector::new(0.1, 0.0, 0.0), true);
     for _ in 0..HZ {
         sim.step();
     }
     assert_eq!(sim.pigments, initial);
+}
+
+#[test]
+fn live_depth_resizes_walls_and_posts_without_resetting_state() {
+    let mut sim = world(SimulationConfig::default());
+    let tick = sim.tick;
+    let pigments = sim.pigments;
+    let ball = sim.balls[0].0;
+    sim.world.bodies[ball].set_translation(Vector::new(0.6, 0.4, 0.15), true);
+    sim.world.bodies[ball].set_linvel(Vector::new(0.2, 0.3, 0.4), true);
+    sim.apply(SimulationInput {
+        tick,
+        depth: 2.0,
+        ..sim.input
+    })
+    .unwrap();
+    sim.resize_depth();
+    assert_eq!(sim.tick, tick);
+    assert_eq!(sim.pigments, pigments);
+    assert_eq!(sim.world.bodies[ball].linvel(), Vector::new(0.2, 0.3, 0.4));
+    assert_eq!(sim.world.bodies[sim.depth_walls[0]].translation().z, -1.0);
+    assert_eq!(sim.world.bodies[sim.depth_walls[1]].translation().z, 1.0);
+    for &(_, handle) in &sim.bars {
+        assert_eq!(
+            sim.world.colliders[handle]
+                .shape()
+                .as_cuboid()
+                .unwrap()
+                .half_extents
+                .z,
+            1.0
+        );
+    }
+    sim.apply(SimulationInput {
+        tick,
+        depth: 0.2,
+        ..sim.input
+    })
+    .unwrap();
+    sim.resize_depth();
+    assert!(sim.world.bodies[ball].translation().z <= 0.1 - radius(0));
+    assert_eq!(sim.world.bodies[ball].linvel(), Vector::new(0.2, 0.3, 0.0));
+    assert_eq!(sim.pigments, pigments);
+    sim.step();
+    assert_eq!(sim.tick, tick + 1);
+    assert_eq!(sim.snapshot.values[GEOMETRY_OFFSET + 4], 0.2);
+}
+
+#[test]
+fn invalid_live_depth_keeps_the_current_room_and_input() {
+    let mut sim = world(SimulationConfig::default());
+    for depth in [f32::NAN, 0.0, 0.199, 2.001, f32::INFINITY] {
+        assert!(
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                depth,
+                ..sim.input
+            })
+            .is_err()
+        );
+        assert_eq!(sim.input.depth, 0.48);
+        assert_eq!(sim.config.depth, 0.48);
+    }
+}
+
+#[test]
+fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
+    let mut sim = world(SimulationConfig::default());
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(PITCH * 12.5, radius(0) + 0.025, 0.0),
+        Vector::ZERO,
+    );
+    let initial = sim.colors[0];
+    let mut contacted = false;
+    for tick in 0..HZ * 2 {
+        let before = sim.pigments;
+        sim.step();
+        for (old, new) in before.into_iter().zip(sim.pigments) {
+            assert!((old - new).abs() < 0.038, "tick {tick}: surface jumped");
+        }
+        if !contacted && sim.colors[0] != initial {
+            contacted = true;
+            let delta = |region: usize| sim.pigments[region * 3] - before[region * 3];
+            assert!(delta(0) > delta(1) && delta(1) > delta(2));
+            assert!(delta(0) > 0.0 && delta(2) >= 0.0);
+            assert!((sim.snapshot.values[18] - initial[0]).abs() < 0.01);
+        }
+    }
+    assert!(contacted);
+    assert_first_ball_fills_toward_source(&sim, 12);
+    // A new target during filling must also remain continuous.
+    sim.colors[0] = [0.0, 1.0, 0.0];
+    let before = sim.pigments;
+    sim.step();
+    for (old, new) in before.into_iter().zip(sim.pigments) {
+        assert!((old - new).abs() < 0.038);
+    }
 }

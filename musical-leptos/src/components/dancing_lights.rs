@@ -518,9 +518,8 @@ pub fn DancingLights(
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
             </div>
             <div class="camera-controls depth-controls">
-                <div class="control-row"><label for="depth-images-slider">"Depth"</label><input id="depth-images-slider" class="depth-slider" aria-label="Depth images" type="range" min="0" max="2048" step="1" value="6"/></div>
-                <button class="depth-status slider-value" type="button" aria-label="Edit depth images">"Auto"</button>
-                <button class="depth-auto" type="button">"Auto"</button>
+                <div class="control-row"><label for="box-depth-slider">"Depth"</label><input id="box-depth-slider" class="depth-slider" aria-label="Box depth (cm)" type="range" min="20" max="200" step="1" value="48" disabled/></div>
+                <button class="depth-status slider-value" type="button" aria-label="Edit box depth">"48 cm"</button>
             </div>
             </div>
             <div class="display-note">
@@ -545,9 +544,6 @@ pub fn DancingLights(
                         <p class="direction-error" role="status"></p>
                     </fieldset>
                     <div class="control-row"><label for="flight-height-slider">"Flight height (% of available space)"</label><input id="flight-height-slider" aria-label="Flight height (% of available space)" class="flight-height" type="range" min="0" max="50" step="1" value="30"/></div>
-                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="2048" step="1" value="6"/></label>
-                    <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. At the default box depth, 44 images match the nine-box width. Copies use the same bars and balls."</p>
-                    <p>"Startup chooses 1–32 images. Select Auto to test the full range for your device."</p>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <p>"Smooth left-to-right rotation from the selected angle. The sweep stays within ±40°. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>

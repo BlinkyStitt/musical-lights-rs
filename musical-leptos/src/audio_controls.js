@@ -14,7 +14,6 @@ export function validVisual(values) {
 }
 export const RENDER_CONTROLS = Object.freeze([
   ['resolution', 'Scene resolution scale', 1, .25, 1.5, .05],
-  ['depthFade', 'Depth brightness retention', .72, .1, .99, .01],
   ['barGlow', 'Bar color emission', .08, 0, 1, .01],
   ['attackGlow', 'Bar attack glow', 1, 0, 3, .05],
   ['colorAttack', 'Colored attack light', 1, 0, 3, .05],

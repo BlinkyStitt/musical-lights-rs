@@ -17,7 +17,7 @@ test('phone progress and sensor ages use the worker clock while FPS keeps frame 
     audioState: { source: 'generated', kind: 'exercise', state: 'playing', repeat: true, diagnostics: false, sessionId: 1 },
     invalidate: reason => { throw Error(reason); },
     view: { sceneVisible: true, metrics: { frames: 1, snapshotAgeMs: 2, physicsSteps: 1800, debt: 0 },
-      card: { querySelector: query, hasAttribute: () => false }, input: new Float32Array(62),
+      card: { querySelector: query, hasAttribute: () => false }, input: new Float32Array(63),
       motion: { state: 'active', readings: { at: 15100, motionEvents: 1, orientationEvents: 0 } } },
   });
   report.frame(15050, .2);

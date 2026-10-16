@@ -14,8 +14,10 @@ test('stored display settings restore valid preferences without restoring live p
   assert.equal(read({ version: 1, youtubeLink: '' }).youtubeLink, '');
   assert.deepEqual(read({ version: 1, directionOdds: [80, 180, .1, .6, 2], cameraAngle: -20, cameraMotion: false }).directionOdds, [80, 180, .1, .6, 2]);
   assert.equal(read({ version: 1, cameraMotion: false }).cameraMotion, false);
-  for (const mirrorCount of [0, 1, 3, 8, 17, 32, 128, 256, 2048]) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, mirrorCount);
-  for (const mirrorCount of [-1, 2049, 1.5, '8']) assert.equal(read({ version: 1, mirrorCount }).mirrorCount, 6);
+  const removed = read({version:1, mirrorCount:2048, depthMode:'auto', depthFade:.9});
+  for (const key of ['mirrorCount','depthMode','depthFade']) assert.equal(removed[key], undefined);
+  for (const depth of [.2,.48,2]) assert.equal(read({version:1,physics:[.6,12,16,.6,.4,depth,.02,.7]}).physics[5],depth);
+  for (const depth of [.199,2.001,'1',null]) assert.equal(read({version:1,physics:[.6,12,16,.6,.4,depth,.02,.7]}).physics,undefined);
   assert.deepEqual(read({ version: 1, directionOdds: [200, 60, .5, .05, 1], flight: 99, cameraAngle: '20' }).directionOdds, [60, 200, .05, .5, 1]);
   assert.equal(read({ version: 1, physics: [0.6, -1, 8, .72, .12, .24, .04, .32] }).physics, undefined);
   assert.deepEqual(read({ version: 2, directionOdds: [80, 180, .1, .6, 2] }).directionOdds, [60, 200, .05, .5, 1]);

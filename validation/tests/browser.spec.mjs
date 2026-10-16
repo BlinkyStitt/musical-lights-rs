@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { meterPoint, meterPoints } from '../meter-input.mjs';
+import { physicsReady } from '../physics-state.mjs';
 const leptos = 'http://127.0.0.1:8101';
 
 async function trackContexts(page) {
@@ -188,9 +189,9 @@ async function prepareSpectrum(page, width, colorScheme) {
     await cpu.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   }
   await page.emulateMedia({ colorScheme });
-  await page.goto(leptos);
-  // Use fixed depth for these geometry fixtures; Auto has its own checks.
-  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  await page.goto(leptos); await physicsReady(page);
+  // Use the default physical depth for geometry fixtures.
+  await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
   // Geometry and contrast fixtures use stationary source columns. The idle
   // sine now scrolls them too; freeze scrolling for stationary hover targets.
   await page.locator('.scroll-lights').uncheck();

@@ -1,5 +1,5 @@
 import * as THREE from './three.module.js';
-import { BOX_OFFSETS } from './mirrors.js';
+import { BOX_OFFSETS } from './enclosure.js';
 
 // Eight full-size background boxes beside the physical center box. Copy its
 // vertical bars, including the scrolling seam, without adding any physics.
@@ -28,7 +28,7 @@ export class SideBars {
     this.mesh.frustumCulled = false; this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
   }
-  update(layout, camera, copies, depth) {
+  update(layout, camera, depth) {
     const [count, , width] = layout;
     if (camera) {
       camera.updateMatrixWorld();
@@ -43,7 +43,7 @@ export class SideBars {
       // Reject whole banks before scanning their posts. Include the complete
       // depth extrusion: a bank outside the front view can enter farther back.
       if (camera) {
-        this.bounds.min.set(offset, -layout[6], -depth * (copies + .5));
+        this.bounds.min.set(offset, -layout[6], -depth / 2);
         this.bounds.max.set(offset + width, height + layout[6] + .00001, depth / 2);
         if (!this.frustum.intersectsBox(this.bounds)) continue;
       }
@@ -54,7 +54,7 @@ export class SideBars {
         if (Math.fround(x + this.halfWidth) <= 0 || Math.fround(x - this.halfWidth) >= width) continue;
         if (camera) {
           const y = source[i * 16 + 13], halfHeight = Math.abs(source[i * 16 + 5]) / 2;
-          this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight - (source[i * 16 + 5] > 0 ? layout[6] : 0), -depth * (copies + .5));
+          this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight - (source[i * 16 + 5] > 0 ? layout[6] : 0), -depth / 2);
           this.bounds.max.set(x + offset + this.halfWidth, y + halfHeight + (source[i * 16 + 5] < 0 ? layout[6] : 0), depth / 2);
           if (!this.frustum.intersectsBox(this.bounds)) continue;
         }
