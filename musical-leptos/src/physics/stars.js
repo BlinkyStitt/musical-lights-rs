@@ -52,12 +52,17 @@ export class Starfield {
         uniform float beat; uniform float musical; uniform float attacks[24];
         varying float brightness; varying vec3 starTint;
         void main() {
-          float atmosphere = .9 + .1 * sin(time * (.45 + .2 * fract(star.y)) + star.y);
-          float pulse = pow(.5 + .5 * cos(6.28318530718 * beat + star.y), 8.0);
-          brightness = min(1.0, star.w * (atmosphere + .22 * musical * pulse + .65 * attacks[int(star.z)]));
+          // Independent glints continue with all audio stopped. Different
+          // phases and rates keep the catalog sky from pulsing as one sheet.
+          float cycle = .5 + .5 * sin(time * (1.2 + .6 * fract(star.y)) + star.y);
+          float glint = pow(cycle, 10.0);
+          float pulse = musical * pow(.5 + .5 * cos(6.28318530718 * beat + star.y), 8.0);
+          float attack = attacks[int(star.z)];
+          brightness = min(1.0, star.w * (.35 + .65 * cycle)
+            + (.2 + .35 * star.w) * glint + .55 * pulse + .8 * attack);
           starTint = tint;
           // Keep bright catalog stars visible when the room lowers its render resolution.
-          gl_PointSize = star.x * max(1.0, pixelRatio);
+          gl_PointSize = (star.x + .8 * glint + .6 * pulse + 1.2 * attack) * max(1.0, pixelRatio);
           // Gnomonic projection, 70-degree vertical field. Reject the rear hemisphere.
           if (position.z <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
           else gl_Position = vec4(position.x / (.7002075382 * aspect), position.y / .7002075382, position.z, position.z);

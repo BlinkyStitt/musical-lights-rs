@@ -1032,3 +1032,12 @@ identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v8`
 and include continuity counters in their chunks and session metadata. Diagnostic
 plots break at segment boundaries. A sample gap invalidates an active phone FPS
 record even when playback recovers; recovery is not continuity acceptance.
+
+## Starfield twinkle
+
+Catalog positions and display tints remain fixed. Independent brightness cycles
+and brief glints continue with audio stopped. Reliable BPM sets an additional
+pulse rate; qualified source-band attacks brighten and slightly enlarge their
+stars. Digital playback can drive both effects with Listening off. Reduced
+Motion holds the sky steady. The renderer still uses one point batch without
+textures, bloom or additional render targets.
