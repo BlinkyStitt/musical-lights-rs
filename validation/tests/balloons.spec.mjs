@@ -227,8 +227,10 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
       return Math.abs(v.current[1] - Math.max(.4, 1.2 * scene.height / scene.width));
     })).toBeLessThan(.005);
     const scene = await page.locator('.balloon-layer').boundingBox();
-    const controls = await page.locator('.audio-controls').boundingBox();
-    expect(scene.y + scene.height).toBeLessThanOrEqual(controls.y);
+    expect(scene.y).toBe(0);
+    expect(scene.height).toBe(size.height);
+    await expect(page.locator('.audio-controls')).toBeHidden();
+    await expect(page.locator('.fullscreen-toolbar')).toBeInViewport({ ratio: 1 });
     expect((await physicsState(page)).balls.map(b => b.radius)).toEqual(initial.balls.map(b => b.radius));
     await expect.poll(() => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
