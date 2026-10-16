@@ -5,6 +5,18 @@ export async function normalView(page) {
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   if (await exit.isVisible()) await exit.click();
 }
+// Fullscreen controls share the page's nodes inside the top-half dialog.
+export async function openFullscreenSettings(page) {
+  if (await page.locator('.audio-card').getAttribute('data-expanded') === null) return;
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(dialog).toBeVisible();
+}
+export async function closeFullscreenSettings(page) {
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  if (await dialog.isVisible()) await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+}
 // Sample real viewport intersections after each scroll without taking a DOM
 // trace snapshot for every intermediate scroll/expect transport round trip.
 export async function scrollingIntersections(page, selectors) {
@@ -97,12 +109,13 @@ export async function syntheticAudio(page, permission = 'granted') {
       const at = window.audioNow = Math.max(window.audioNow, window.lastAnalysisTime ?? 0) + .01;
       const state = new Float64Array(102); state.set([0, 1, .18], 99); state[0] = at; state[1] = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0; state[2] = 5;
       for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], edge ? at : -1, 0], 3 + i * 4);
-      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
+      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
     };
   }, { permission });
 }
 export async function startFrozen(page) {
   await physicsReady(page);
+  await openFullscreenSettings(page);
   // Most physics fixtures measure fixed source columns. Scrolling has its own
   // end-to-end checks and can be re-enabled explicitly after this helper.
   await page.locator('.scroll-lights').uncheck();
@@ -111,6 +124,7 @@ export async function startFrozen(page) {
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await closeFullscreenSettings(page);
   await page.evaluate(async () => {
     // Controlled clock fixture suppresses the real interruption event.
     // These controller fixtures isolate note-driven motion from the decorative floor.

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { physicsReady } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, physicsReady } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 for (const theme of ['light', 'dark']) {
@@ -25,17 +25,29 @@ for (const theme of ['light', 'dark']) {
     await expect(page.locator('.input-source-controls')).toBeHidden();
     for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
+      await openFullscreenSettings(page);
       for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
         const control = page.getByRole('checkbox', { name: label, exact: true });
         await control.locator('..').evaluate(n => n.scrollIntoView({ block: 'center' }));
         await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
         expect(await control.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       }
+      await closeFullscreenSettings(page);
       const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
       await exit.evaluate(n => n.scrollIntoView({ block: 'center' }));
       await expect(exit).toBeInViewport({ ratio: 1 });
       expect(await exit.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const overlaps = await page.locator('.scene-controls').evaluate(node => {
+        const controls = [...node.querySelectorAll('button,input,output')].filter(n => !n.hidden && n.getBoundingClientRect().width > 0);
+        return controls.flatMap((a, i) => controls.slice(i + 1).flatMap(b => {
+          const x = a.getBoundingClientRect(), y = b.getBoundingClientRect();
+          const area = Math.max(0, Math.min(x.right, y.right) - Math.max(x.left, y.left))
+            * Math.max(0, Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top));
+          return area > .5 ? [[a.className, b.className]] : [];
+        }));
+      });
+      expect(overlaps).toEqual([]);
     }
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await page.locator('.scroll-lights').focus(); await page.keyboard.press('Space');
@@ -45,7 +57,7 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
-test('lit geometry, contact pigments and Reduced Motion drift use the physical scene', async ({ page }) => {
+test('lit geometry and gradual contact pigments use the physical scene with Reduced Motion', async ({ page }) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
@@ -72,32 +84,30 @@ test('lit geometry, contact pigments and Reduced Motion drift use the physical s
     u.stripState.value.forEach((s, i) => { s.z = edges[i]; });
     u.lightStrength.value.copy(strength); u.colorEmission.value.copy(emission);
     lights.forEach((n, i) => { n.intensity = intensities[i]; });
-    // Sample the real outer front coating. Joined spline patches omit the
-    // internal end faces of the former rectangular bars.
+    // Isolate one prescribed bar and sample its physical side face. The old
+    // XY-only outline painted this entire face black, even under fill light.
     const count = v.bars.count, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, 0);
-    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)]; hidden.forEach(n => { n.visible = false; });
+    const hidden = [v.balls, v.sideBars.mesh, v.enclosure]; hidden.forEach(n => { n.visible = false; });
     const object = new THREE.Object3D(); object.position.set(.6, .15, 0); object.scale.set(1, .3, 1); object.updateMatrix();
     v.bars.count = 1; v.bars.setMatrixAt(0, object.matrix); v.bars.instanceMatrix.needsUpdate = true;
-    const point = new THREE.Vector3(.6, .12, v.config[5] / 2).project(v.camera);
+    const point = new THREE.Vector3(.6 + (v.layout[3] - v.layout[4]) / 2, .12, 0).project(v.camera);
     sum();
     const pixel = ((Math.floor((point.y + 1) * 80) * 240) + Math.floor((point.x + 1) * 120)) * 4;
-    const frontBrightness = pixels[pixel] + pixels[pixel + 1] + pixels[pixel + 2];
+    const sideBrightness = pixels[pixel] + pixels[pixel + 1] + pixels[pixel + 2];
     v.bars.count = count; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
     hidden.forEach(n => { n.visible = true; });
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
-    return { lit, dark, attackOnly, frontBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
+    return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
   expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(24); expect(state.pointLights).toBe(0); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);
   expect(state.attackOnly).toBeGreaterThan(state.dark + 100);
-  expect(state.frontBrightness).toBeGreaterThan(30);
+  expect(state.sideBrightness).toBeGreaterThan(30);
   expect(state.pattern).toEqual(state.pigments.slice(0, 3));
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const phase = await page.evaluate(() => document.querySelector('#dancinglights').physics.patternTime.value);
-  await page.waitForTimeout(150);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.patternTime.value)).toBe(phase);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.balls.material.transparent)).toBe(false);
   expect(errors).toEqual([]);
 });
 
@@ -174,4 +184,56 @@ test('source selection waits for its handlers and digital transport to initializ
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.listening-toggle')).not.toBeChecked();
   expect(await page.evaluate(() => microphoneRequests)).toBe(0);
+});
+
+test('slider buttons step once and value editors validate, cancel and save', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page);
+  const exit = page.getByRole('button', {name: 'Exit fullscreen', exact: true});
+  if (await exit.isVisible()) await exit.click();
+  await page.locator('.display-controls').evaluate(node => { node.open = true; });
+  await page.getByRole('button', {name: 'Decrease Camera angle (degrees)', exact: true}).focus();
+  await page.keyboard.press('Tab'); await expect(page.locator('.camera-rotation')).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(page.getByRole('button', {name: 'Increase Camera angle (degrees)', exact: true})).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
+  await page.keyboard.press('Enter'); await expect(page.getByRole('spinbutton', {name: 'Camera angle (degrees) value', exact: true})).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
+  for (const [selector, name, value, next] of [
+    ['.camera-rotation', 'Camera angle (degrees)', '12', '13'],
+    ['.depth-slider', 'Box depth (cm)', '199', '200'],
+    ['.flight-height', 'Flight height (% of available space)', '35', '36'],
+  ]) {
+    const range = page.locator(selector), edit = page.getByRole('button', {name: `Edit ${name}`, exact: true});
+    const positions = await range.locator('..').evaluate(group => {
+      const [minus, slider, plus, value] = [...group.children].slice(0, 4).map(node => node.getBoundingClientRect());
+      return { centers: [minus, slider, plus, value].map(box => box.y + box.height / 2),
+        leftToRight: minus.right <= slider.left && slider.right <= plus.left && plus.right <= value.left };
+    });
+    expect(Math.max(...positions.centers) - Math.min(...positions.centers)).toBeLessThan(2);
+    expect(positions.leftToRight).toBe(true);
+    await edit.click();
+    // Type into the editor selected by the real click. Locator.fill/press
+    // would focus it again and could hide a broken editor focus transition.
+    await page.keyboard.type(value); await page.keyboard.press('Enter'); await expect(range).toHaveValue(value);
+    await page.getByRole('button', {name: `Increase ${name}`, exact: true}).click(); await expect(range).toHaveValue(next);
+    await page.getByRole('button', {name: `Decrease ${name}`, exact: true}).click(); await expect(range).toHaveValue(value);
+    await edit.click(); await page.keyboard.type('99999'); await page.keyboard.press('Enter');
+    const editorState = () => range.locator('..').evaluate(group => {
+      const range = group.querySelector('input[type=range]'), editor = group.querySelector('.slider-editor');
+      const box = editor.getBoundingClientRect();
+      return { value: range.value, visible: box.width > 0 && box.height > 0 && getComputedStyle(editor).visibility === 'visible',
+        type: editor.type, label: editor.getAttribute('aria-label'), focused: document.activeElement === editor };
+    });
+    await expect.poll(editorState).toEqual({ value, visible: true, type: 'number', label: `${name} value`, focused: true });
+    await page.keyboard.press('Escape');
+    await expect.poll(editorState).toEqual({ value, visible: false, type: 'number', label: `${name} value`, focused: false });
+  }
+  const { saved, audio } = await page.evaluate(() => ({ saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')),
+    audio: !!document.querySelector('.audio-card').activeAudioContext }));
+  expect(saved.cameraAngle).toBe(12); expect(saved.physics[5]).toBeCloseTo(1.99,5); expect(saved.flight).toBe(35);
+  expect(audio).toBe(false);
+  await page.reload(); await physicsReady(page);
+  await expect.poll(() => page.evaluate(() => ({ depth: document.querySelector('.depth-slider').value,
+    flight: document.querySelector('.flight-height').value, fits: document.documentElement.scrollWidth <= innerWidth })))
+    .toEqual({ depth: '199', flight: '35', fits: true });
 });

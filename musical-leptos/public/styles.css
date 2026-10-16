@@ -69,8 +69,6 @@ h2 { font-size: 1.35rem; letter-spacing: -.025em; margin: 0; }
 .physics-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .5rem; }
 .physics-fields input { width: 6rem; margin-left: .5rem; }
 .physics-status { margin: 0; font-size: .8rem; }
-.audio-card[data-expanded] .physics-controls { display: none; }
-.audio-card[data-expanded] .physics-status:not(:empty) { position: absolute; bottom: 1rem; z-index: 2; background: var(--surface); }
 .spectrum-labels { position: absolute; bottom: .4rem; left: 1rem; right: 1rem; display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .6rem; letter-spacing: .13em; }
 .audio-controls { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-bottom: 1rem; }
 .scroll-control { display: inline-flex; align-items: center; gap: .25rem; font-size: .85rem; }
@@ -85,22 +83,10 @@ button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--line); }
 .frame-rate { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7ch; text-align: right; }
 .display-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
 .wake-status { white-space: nowrap; }
-.screen-error, .audio-stopped { color: var(--ink); font-size: .82rem; margin: 0; }
+.screen-error, .audio-stopped, .analysis-status { color: var(--ink); font-size: .82rem; margin: 0; }
 .screen-error:not(:empty) { margin-top: .75rem; }
 html:has(.audio-card[data-expanded]), body:has(.audio-card[data-expanded]) { overflow: hidden; }
 .site-shell:has(.audio-card[data-expanded]) { visibility: hidden; }
-.audio-card[data-expanded] { visibility: visible; display: flex; flex-direction: column; justify-content: flex-end; gap: .5rem; position: fixed; inset: 0; z-index: 100; width: 100%; height: var(--expanded-height, 100dvh); margin: 0; padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left)); border: 0; border-radius: 0; overflow-x: hidden; overflow-y: auto; background: var(--plot); touch-action: pan-y pinch-zoom; }
-/* Keep the enclosure behind a footer whose rows reserve their actual height. */
-.audio-card[data-expanded] > :not(.song-tools, .display-note, .recognized-song, .recovery-notices) { position: absolute; }
-.audio-card[data-expanded] .spectrum-panel { inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 0; padding: 0; border: 0; border-radius: 0; }
-.audio-card[data-expanded] #dancinglights { height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
-.audio-card[data-expanded] .audio-controls { position: absolute; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 3; padding: 0; }
-.audio-card[data-expanded] .fullscreen-button { position: fixed; top: max(.75rem, env(safe-area-inset-top)); left: max(.75rem, env(safe-area-inset-left)); z-index: 101; width: auto; height: auto; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid var(--line); overflow: visible; clip-path: none; white-space: nowrap; pointer-events: auto; }
-.audio-card[data-expanded] :is(.mic-status, .primary, .scroll-control, .spectrum-labels, .control-note, .wake-status, .calibration-status, .calibration-controls) { display: none; }
-.audio-card[data-expanded] .display-note { position: relative; order: 2; flex: none; align-self: flex-end; z-index: 3; margin: 0; pointer-events: none; }
-.audio-card[data-expanded] .frame-rate { padding: .2rem .35rem; border-radius: 4px; color: var(--ink); background: var(--surface); }
-/* Recovery instructions must paint above every row of the song footer. */
-.audio-card[data-expanded] :is(.audio-error, .screen-error, .audio-stopped):not(:empty) { position: absolute; bottom: max(.75rem, env(safe-area-inset-bottom)); left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right)); z-index: 4; padding: .75rem; background: var(--surface); border-radius: 9px; }
 .audio-card::backdrop { background: var(--paper); }
 .audio-error { color: var(--ink); font-size: .82rem; margin: 0; overflow-wrap: anywhere; }
 .audio-error:not(:empty) { border-left: 3px solid var(--alert); padding-left: .75rem; margin-top: .75rem; }
@@ -139,7 +125,6 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .frequency-tooltip { display: flex; align-items: center; gap: .45rem; position: absolute; top: .25rem; left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: .3rem .6rem; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: .75rem; pointer-events: none; }
 .frequency-tooltip[hidden] { display: none; }
 .frequency-swatch { width: .85rem; height: .85rem; flex: none; background: var(--band-color); border: 1px solid currentColor; }
-.audio-card[data-expanded] .frequency-tooltip { top: var(--fullscreen-control-bottom, 10rem); }
 
 .calibration-status { margin: .25rem 0; font-size: .8rem; }
 .calibration-controls { margin-top: .5rem; font-size: .875rem; }
@@ -153,8 +138,6 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .microphone-permission, .permission-help { font-size: .82rem; margin: .75rem 0; }
 .permission-help summary { cursor: pointer; }
 .permission-help p { max-width: 70ch; line-height: 1.5; }
-.audio-card[data-expanded] :is(.microphone-permission, .permission-help) { display: none; }
-.audio-card[data-expanded] .motion-controls { display: none; }
 .runtime-update { display: block; width: fit-content; min-height: 44px; padding: .6rem 0; }
 .song-tools { margin: 1rem 0; font-size: .82rem; }
 .song-tools p { max-width: 70ch; }
@@ -167,17 +150,11 @@ footer { border-top: 1px solid var(--line); padding: 1rem 0; color: var(--muted)
 .recognized-song { display: flex; gap: .75rem; align-items: center; min-width: 0; padding: .5rem; margin-bottom: .5rem; font-size: .85rem; background: var(--surface); color: var(--ink); border-radius: 6px; }
 .song-window { flex: 1; min-width: 0; overflow: hidden; }
 .song-title { display: block; width: max-content; white-space: nowrap; }
-.song-overflow .song-title, .audio-card[data-expanded] .song-title { animation: song-scroll var(--song-duration) var(--song-delay) linear infinite; }
+.song-overflow .song-title { animation: song-scroll var(--song-duration) var(--song-delay) linear infinite; }
 @keyframes song-scroll { from { transform: translateX(var(--song-entry)); } to { transform: translateX(var(--song-travel)); } }
 @media (prefers-reduced-motion: reduce) {
-  .song-title, .song-overflow .song-title, .audio-card[data-expanded] .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
+  .song-title, .song-overflow .song-title { animation: none; white-space: normal; width: auto; overflow-wrap: anywhere; }
 }
-.audio-card[data-expanded] .song-tools { position: relative; order: 1; flex: none; z-index: 3; margin: 0; pointer-events: none; }
-.audio-card[data-expanded] .song-tools > :not(.recognition-status, .recognition-cooldown) { display: none; }
-.audio-card[data-expanded] :is(.recognition-status, .recognition-cooldown) { width: fit-content; margin: 0; padding: .4rem .6rem; border-radius: 6px; background: var(--surface); }
-.audio-card[data-expanded] .button-row { max-width: calc(100vw - 10.5rem); justify-content: flex-end; }
-.audio-card[data-expanded] .recognized-song { position: relative; order: 3; flex: none; z-index: 3; margin: 0; pointer-events: none; }
-.audio-card[data-expanded] .runtime-update { position: absolute; bottom: max(5rem, env(safe-area-inset-bottom)); left: .75rem; z-index: 3; padding: .6rem; background: var(--surface); }
 
 /* Shared native controls, used by Rust and JavaScript. */
 .site-header { flex-wrap: wrap; padding-block: .5rem; }
@@ -199,9 +176,6 @@ nav { flex-wrap: wrap; }
 .advanced-page { padding-block: 1rem; }
 .reduced-motion-note { display: none; }
 @media (prefers-reduced-motion: reduce) { .reduced-motion-note { display: block; } }
-.audio-card[data-expanded] :is(.setting-switch, .settings-section, .motion-status) { display: none; }
-.audio-card[data-expanded] .song-detection { display: inline-flex; }
-.audio-card[data-expanded] .physics-status:not(:empty) { z-index: 4; }
 @media (max-width: 600px) {
   .control-row, .settings-section label:not(.setting-switch) { align-items: flex-start; flex-direction: column; gap: .35rem; }
   .settings-section :is(input:not([type=checkbox]), select, textarea) { width: 100%; }
@@ -232,19 +206,6 @@ nav { flex-wrap: wrap; }
 .ring-progress { stroke: currentColor; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--recognition-progress, 0)); }
 .recognition-ring[data-phase="off"] { opacity: .45; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.audio-card[data-expanded] { justify-content: flex-end; }
-.audio-card[data-expanded] .audio-controls { top: max(.5rem, env(safe-area-inset-top)); left: max(.5rem, env(safe-area-inset-left)); right: max(.5rem, env(safe-area-inset-right)); padding: 0; }
-.audio-card[data-expanded] .button-row { max-width: none; justify-content: flex-start; gap: .25rem .5rem; }
-.audio-card[data-expanded] .button-row .setting-switch { display: inline-flex; }
-.audio-card[data-expanded] .button-row .motion-controls { display: flex; }
-.audio-card[data-expanded] .fullscreen-button { position: static; min-height: 44px; }
-.audio-card[data-expanded] .button-row .mic-status:has(span:not(:empty)) { display: block; }
-.audio-card[data-expanded] :is(.input-source-controls, .playback-controls, .tone-status, .song-tools, .display-note, .reduced-motion-note) { display: none; }
-.audio-card[data-expanded] .recognized-song { width: 100%; max-height: 32vh; overflow: auto; border-radius: 0; padding: .35rem 0; background: none; font-size: clamp(1rem, min(3.5vw, 5cqh), 1.4rem); font-weight: 600; text-shadow: 0 0 4px var(--plot), 0 0 8px var(--plot); }
-.audio-card[data-expanded] .recovery-notices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); position: relative; order: 2; z-index: 4; padding: 2px; max-height: 25vh; overflow: auto; background: var(--surface); border-radius: 9px; }
-.audio-card[data-expanded] .recovery-notices:not(:has(> :not(:empty))) { display: none; }
-.audio-card[data-expanded] .recovery-notices > :empty { display: none; }
-.audio-card[data-expanded] .recovery-notices :is(.audio-error, .screen-error, .audio-stopped, .physics-status, .runtime-update):not(:empty) { position: static; margin: 0; padding: .5rem .75rem; display: block; }
 .input-source-controls .control-row { min-width: 0; gap: .5rem; }
 .input-source-controls :is(select, input) { min-height: 44px; min-width: 0; max-width: 100%; font: inherit; }
 .input-source-controls select { flex: 1; width: 10rem; }
@@ -256,9 +217,9 @@ nav { flex-wrap: wrap; }
 .button-row > .setting-switch, .button-row > button, .button-row > .listening-controls, .button-row > .motion-controls { min-width: 0; min-height: 44px; margin: 0; }
 /* Keep microphone controls together and let their message use both columns. */
 .button-row .listening-controls { grid-column: span 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .5rem; align-items: start; }
-.button-row .setting-switch { white-space: normal; min-height: 44px; }
-.button-row .setting-switch span[role="button"] { cursor: help; padding: .3rem 0; }
-.button-row .setting-switch span[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch { white-space: normal; min-height: 44px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch span[role="button"] { cursor: help; padding: .3rem 0; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch span[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
 .button-row .mic-status, .display-note { display: none !important; }
 .visual-content { min-width: 0; }
 /* The normal page shares the expanded presentation order. Settings and
@@ -295,54 +256,22 @@ nav { flex-wrap: wrap; }
 .camera-controls input { flex: 1; min-width: 0; min-height: 44px; }
 .camera-angle { min-width: 5ch; font-variant-numeric: tabular-nums; }
 .control-help { pointer-events: none; position: fixed; z-index: 120; padding: .75rem; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--surface); box-shadow: 0 4px 20px #0004; font-size: .85rem; line-height: 1.5; max-height: calc(100dvh - 24px); overflow: auto; }
-.audio-card[data-expanded] { container: visualizer / size; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(6, max-content); align-content: start; gap: .25rem; }
-.audio-card[data-expanded] > .visual-content { position: relative; inset: auto; grid-row: 1; grid-column: 1; min-height: 0; display: flex; flex-direction: column; }
-.audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: none; height: max(200px, 80cqh); min-height: 200px; display: flex; }
-.audio-card[data-expanded] #dancinglights { flex: 1; height: auto; min-height: 0; }
-.audio-card[data-expanded] .audio-controls { position: relative; inset: auto; grid-row: 6; grid-column: 1; width: 100%; padding: .25rem; background: var(--surface); border-radius: 8px; }
-.audio-card[data-expanded] .recognized-song { position: relative; grid-row: 3; grid-column: 1; min-height: 0; margin: 0; max-height: none; overflow: visible; align-items: flex-start; pointer-events: auto; }
-/* The scene has its own height; messages grow below it and the page can scroll. */
-.audio-card[data-expanded] .recovery-notices { position: relative; grid-row: 2; grid-column: 1; min-height: 0; max-height: none; overflow: visible; }
-.audio-card[data-expanded] .button-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .15rem .5rem; }
-.audio-card[data-expanded] :is(.display-controls, .video-form) { display: none; }
-.audio-card[data-expanded].video-editing .video-form { display: flex; margin: 0; }
-.audio-card[data-expanded].video-editing .video-entry { position: fixed; z-index: 5; top: calc(var(--video-editor-top, 0px) + max(.75rem, env(safe-area-inset-top))); left: max(.75rem, env(safe-area-inset-left)); right: max(.75rem, env(safe-area-inset-right)); max-height: calc(var(--video-editor-height, 100dvh) - max(.75rem, env(safe-area-inset-top)) - .75rem); overflow: auto; margin: 0; padding: .75rem; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 4px 20px #0004; }
-.audio-card[data-expanded].video-editing .video-form input { font-size: 16px; }
-.audio-card[data-expanded].video-editing:not(.video-active) .video-panel { padding: 0; }
-.audio-card[data-expanded] .control-help { position: fixed; }
-.audio-card[data-expanded].video-active .video-panel { flex: none; min-height: 200px; }
-.audio-card[data-expanded].video-active .youtube-frame { height: clamp(200px, 28cqh, 360px); aspect-ratio: auto; }
-.audio-card[data-expanded] .frequency-tooltip { top: 8px; }
 @media (max-width: 600px) and (orientation: portrait) {
   .button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .camera-controls .control-row { flex-wrap: wrap; }
 }
-@container visualizer (orientation: portrait) and (max-width: 600px) {
-  .audio-card[data-expanded] .button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@container visualizer (orientation: landscape) {
-  .audio-card[data-expanded].video-active > .visual-content { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; min-height: 0; }
-  .audio-card[data-expanded].video-active :is(.video-panel, .youtube-frame, .youtube-frame iframe) { min-height: 0; }
-  .audio-card[data-expanded].video-active .youtube-frame { height: 100%; aspect-ratio: auto; }
-  .audio-card[data-expanded].video-active .video-panel { padding: 0 .5rem 0 0; display: flex; flex-direction: column; }
-  .audio-card[data-expanded].video-active .youtube-frame { flex: 1; }
-}
-@container visualizer (min-width: 800px) and (orientation: landscape) {
-  .audio-card[data-expanded] .button-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-}
 /* The switch has a 44px hit area; its visible pill remains compact. */
-.button-row .setting-switch { padding: 0; gap: .3rem; min-width: 0; }
-.button-row .setting-switch span { min-width: 0; }
-.button-row .setting-switch input { width: 44px; height: 44px; border: 0; background: transparent; }
-.button-row .setting-switch input::before { content: ''; position: absolute; box-sizing: border-box; left: 1px; top: 10px; width: 42px; height: 24px; border: 2px solid var(--muted); border-radius: 20px; background: var(--surface); }
-.button-row .setting-switch input::after { left: 5px; top: 14px; width: 16px; height: 16px; }
-.button-row .setting-switch input:checked { background: transparent; }
-.button-row .setting-switch input:checked::before { background: var(--primary); border-color: var(--primary); }
-.button-row .setting-switch input:checked::after { left: 23px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch { padding: 0; gap: .3rem; min-width: 0; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch span { min-width: 0; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input { width: 44px; height: 44px; border: 0; background: transparent; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input::before { content: ''; position: absolute; box-sizing: border-box; left: 1px; top: 10px; width: 42px; height: 24px; border: 2px solid var(--muted); border-radius: 20px; background: var(--surface); }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input::after { left: 5px; top: 14px; width: 16px; height: 16px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input:checked { background: transparent; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input:checked::before { background: var(--primary); border-color: var(--primary); }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input:checked::after { left: 23px; }
 .button-row .recognition-control { display: grid; grid-template-columns: minmax(0, 1fr) 18px; align-items: center; gap: .25rem; }
 .button-row .listening-controls > .recognition-status { grid-column: 1 / -1; max-width: none; }
 .button-row .recognition-ring { width: 18px; height: 18px; }
-.audio-card[data-expanded] .recognition-status { max-height: none; overflow: visible; }
 .recognition-status[data-routine="true"] { display: none; }
 .paired-bars .meter-track { inset: var(--balloon-headroom) 0 var(--plot-baseline); }
 .paired-bars::before { display: none; }
@@ -352,9 +281,6 @@ nav { flex-wrap: wrap; }
 .direction-error:empty { display: none; }
 
 .scroll-controls { min-height: 44px; }
-
-.audio-card[data-expanded] .camera-controls { position: relative; inset: auto; grid-row: 4; grid-column: 1; width: 100%; margin: 0; gap: .5rem; font-size: .8rem; }
-.audio-card[data-expanded] .camera-controls .control-row { flex-direction: row; align-items: center; flex-wrap: nowrap; min-width: 0; gap: .5rem; }
 
 .loudness-readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem 1rem; font-size: .8rem; }
 /* Reserve numeric slots before capture starts, so the first values do not resize the scene. */
@@ -366,18 +292,67 @@ nav { flex-wrap: wrap; }
 .scene-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
 .depth-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .25rem .5rem; }
 .depth-controls .control-row { grid-column: 1; }
-.depth-controls .control-row > span { display: flex; flex-direction: column; white-space: nowrap; }
+.depth-controls .control-row > label { white-space: nowrap; }
 .depth-status { min-width: 0; font-size: .7rem; }
 @media (max-width: 700px) { .scene-controls { grid-template-columns: minmax(0, 1fr); } }
-@container visualizer (orientation: landscape) and (min-width: 500px) {
-  .audio-card[data-expanded] .scene-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 .depth-controls button, .audio-tuning select { min-height: 44px; }
 .audio-tuning, .render-tuning { display: grid; gap: .5rem; }
-.audio-card[data-expanded] > .settings-section { display: none; }
-.audio-card[data-expanded] .loudness-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); position: relative; font-size: .65rem; grid-row: 5; grid-column: 1; z-index: 3; }
-.audio-card[data-expanded] .loudness-readouts output { line-height: .8125rem; }
-.audio-card[data-expanded] .loudness-readouts small { display: none; }
-.audio-card[data-expanded] > .scene-controls { position: relative; inset: auto; width: 100%; grid-row: 4; grid-column: 1; }
-.audio-card[data-expanded] .scene-controls .camera-controls { grid-row: auto; grid-column: auto; }
-@container visualizer (max-height: 500px) { .audio-card[data-expanded] .loudness-readouts { display: none; } }
+/* Native sliders retain keyboard operation; their values also support direct entry. */
+.control-row > label { margin: 0; min-height: 0; }
+.slider-control { display: flex; align-items: center; gap: .25rem; min-width: 0; flex: 1; }
+.slider-control input[type="range"] { width: 0; flex: 1; min-width: 36px; }
+.slider-control .slider-step { width: 44px; min-width: 44px; height: 44px; padding: 0; font-size: 1.25rem; }
+.slider-control .slider-value, .slider-control .slider-editor { min-width: 44px; min-height: 44px; width: 7ch; padding: .25rem; font-variant-numeric: tabular-nums; }
+.slider-control .depth-status { width: 9ch; }
+.slider-control .slider-editor { flex: 0 0 7ch; }
+.slider-control [hidden] { display: none; }
+.scene-controls .control-row > label { font-size: .8rem; }
+
+@container visualizer (orientation: landscape) and (min-width: 500px) and (max-width: 700px) {
+  .audio-card[data-expanded] .scene-controls .control-row { flex-direction: column; align-items: stretch; gap: 0; }
+  .audio-card[data-expanded] .scene-controls .frame-rate { align-self: end; margin-bottom: .75rem; }
+}
+
+
+/* Fullscreen has one fixed scene. Only the top-half settings body scrolls. */
+.fullscreen-toolbar { display: none; }
+.fullscreen-settings:not([open]) { display: none; }
+.audio-card[data-expanded] { visibility: visible; container: visualizer / size; position: fixed; inset: 0; z-index: 100; width: 100%; height: var(--expanded-height, 100dvh); margin: 0; padding: 0; border: 0; border-radius: 0; overflow: hidden; display: block; background: var(--plot); touch-action: pinch-zoom; }
+.audio-card[data-expanded] > .visual-content { position: absolute; inset: 0; min-height: 0; display: flex; flex-direction: column; }
+.audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: 1; min-height: 0; height: auto; padding: 0; border: 0; border-radius: 0; display: flex; }
+.audio-card[data-expanded] #dancinglights { flex: 1; height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
+.audio-card[data-expanded] .spectrum-labels { display: none; }
+.audio-card[data-expanded] .fullscreen-toolbar { position: absolute; top: max(.5rem, env(safe-area-inset-top)); left: max(.5rem, env(safe-area-inset-left)); right: max(.5rem, env(safe-area-inset-right)); z-index: 5; display: flex; align-items: center; gap: .5rem; pointer-events: none; }
+.audio-card[data-expanded] .fullscreen-toolbar button { min-height: 44px; pointer-events: auto; background: var(--surface); color: var(--ink); border-color: var(--line); }
+.audio-card[data-expanded] .fullscreen-button { margin-right: auto; }
+.fullscreen-toolbar .setting-switch { pointer-events: auto; padding: 0 .35rem; border-radius: 6px; background: var(--surface); }
+.fullscreen-settings-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; flex: none; }
+.audio-card[data-expanded] .fullscreen-settings { position: fixed; inset: calc(var(--video-editor-top, 0px) + max(.5rem, env(safe-area-inset-top))) max(.5rem, env(safe-area-inset-right)) auto max(.5rem, env(safe-area-inset-left)); margin: 0 auto; width: auto; max-width: 70rem; box-sizing: border-box; height: calc(50% - var(--video-editor-top, 0px) - max(.5rem, env(safe-area-inset-top))); max-height: calc(var(--video-editor-height, 100dvh) - max(.5rem, env(safe-area-inset-top))); padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); overflow: hidden; }
+.audio-card[data-expanded] .fullscreen-settings[open] { display: flex; flex-direction: column; }
+.fullscreen-settings::backdrop { background: transparent; }
+.fullscreen-settings-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .75rem; border-bottom: 1px solid var(--line); }
+.fullscreen-settings-header h2 { margin: 0; font-size: 1.1rem; }
+.fullscreen-settings-header button { min-height: 44px; }
+.fullscreen-settings-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: .75rem; display: flex; flex-direction: column; gap: .75rem; }
+.fullscreen-settings-body > * { flex: none; }
+.fullscreen-settings .audio-controls { padding: 0; }
+.fullscreen-settings .control-help { max-height: calc(50dvh - 24px); }
+.audio-card[data-expanded]:not(.video-active) .video-panel { display: none; }
+.audio-card[data-expanded] .video-entry { display: none; }
+.audio-card[data-expanded].video-editing .video-entry { display: block; }
+.audio-card[data-expanded].video-editing .video-form { display: flex; margin: 0; }
+.audio-card[data-expanded] .video-form input { font-size: 16px; }
+.audio-card[data-expanded].video-active .video-panel { flex: none; height: 28%; min-height: 0; padding: 0; }
+.audio-card[data-expanded].video-active :is(.youtube-frame, .youtube-frame iframe) { height: 100%; min-height: 0; aspect-ratio: auto; }
+.audio-card[data-expanded] .recognized-song { position: absolute; bottom: max(.5rem, env(safe-area-inset-bottom)); left: .75rem; right: .75rem; z-index: 2; margin: 0; pointer-events: none; font-size: 1rem; text-shadow: 0 0 4px var(--plot); }
+.audio-card[data-expanded] .song-title { animation: song-scroll var(--song-duration) var(--song-delay) linear infinite; }
+.audio-card[data-expanded] .recovery-notices { position: absolute; top: calc(max(.5rem, env(safe-area-inset-top)) + 48px); left: .5rem; right: .5rem; z-index: 4; padding: 2px; max-height: calc(50% - 64px); overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices:not(:has(> :not(:empty))) { display: none; }
+.audio-card[data-expanded] .recovery-notices > :empty { display: none; }
+.audio-card[data-expanded] .recovery-notices > :not(:empty) { position: static; margin: 0; padding: .5rem .75rem; }
+.audio-card[data-expanded] .frequency-tooltip { top: 64px; }
+@container visualizer (orientation: landscape) {
+  .audio-card[data-expanded].video-active > .visual-content { flex-direction: row; }
+  .audio-card[data-expanded].video-active .video-panel { width: 50%; height: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .audio-card[data-expanded] .song-title { animation: none; white-space: normal; } }

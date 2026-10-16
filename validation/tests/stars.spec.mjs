@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady, normalView, syntheticAudio, startFrozen } from '../physics-state.mjs';
+import { openFullscreenSettings, physicsReady, normalView, syntheticAudio, startFrozen } from '../physics-state.mjs';
 
 for (const route of ['/', '/advanced/']) {
   test(`starfield twinkles behind foreground geometry on ${route}`, async ({ page }, info) => {
@@ -26,7 +26,7 @@ for (const route of ['/', '/advanced/']) {
       try {
         const first = read(0, false), later = read(2400, false), steady = read(0, true);
         const steadyLater = read(5000, true);
-        v.lighting.uniforms.colorAttack.value = 3; v.mirrors.setCount(2048);
+        v.lighting.uniforms.colorAttack.value = 3; v.current[v.layout[17]+4]=2;
         v.scene.children.filter(node => node !== v.starfield.points).forEach(node => { node.visible = false; });
         v.setCamera(40); const independent = read(5000, true);
         let bright = 0, opaque = 0;
@@ -109,6 +109,7 @@ test('catalog stars respond to musical tempo and qualified attacks, then clear o
   expect(result.samePhase).toBe(0); expect(result.attackChange).toBeGreaterThan(10);
   expect(result.reduced).toBe(0); expect(result.stopped).toBe(0);
   for (const landmark of result.landmarks) expect(landmark.peak, JSON.stringify(landmark)).toBeGreaterThan(80);
+  await openFullscreenSettings(page);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   await expect.poll(() => page.evaluate(() => {
     const uniforms = document.querySelector('#dancinglights').physics.starfield.uniforms;

@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './tests',
   globalSetup: './browser-startup.mjs',
   // Real AudioContexts must not compete with each other and offline WASM
-  // stress tests. Callback gaps correctly stop capture; they are not retries.
+  // stress tests. Sample gaps invalidate continuity acceptance even after recovery.
   fullyParallel: false,
   retries: 0,
   workers: 1,
@@ -24,8 +24,8 @@ export default defineConfig({
         '--no-proxy-server',
       ] },
     } },
-    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/advanced.spec.mjs', '**/musical-motion.spec.mjs', '**/mirrors.spec.mjs', '**/lighting-auto.spec.mjs', '**/stars.spec.mjs', '**/capture-startup.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs', '**/recognition.spec.mjs', '**/youtube.spec.mjs'], use: { browserName: 'webkit' } },
-    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/mobile-layout.spec.mjs', '**/stars.spec.mjs', '**/mirrors.spec.mjs', '**/permissions.spec.mjs', '**/capture-startup.spec.mjs', '**/youtube.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
+    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/advanced.spec.mjs', '**/musical-motion.spec.mjs', '**/mirrors.spec.mjs', '**/box-depth.spec.mjs', '**/antialias.spec.mjs', '**/color-fill.spec.mjs', '**/audio-recovery.spec.mjs', '**/lighting-auto.spec.mjs', '**/stars.spec.mjs', '**/star-twinkle.spec.mjs', '**/capture-startup.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs', '**/recognition.spec.mjs', '**/youtube.spec.mjs', '**/fullscreen-settings.spec.mjs'], use: { browserName: 'webkit' } },
+    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/mobile-layout.spec.mjs', '**/stars.spec.mjs', '**/star-twinkle.spec.mjs', '**/mirrors.spec.mjs', '**/box-depth.spec.mjs', '**/antialias.spec.mjs', '**/color-fill.spec.mjs', '**/audio-recovery.spec.mjs', '**/permissions.spec.mjs', '**/capture-startup.spec.mjs', '**/youtube.spec.mjs', '**/fullscreen-settings.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
   ],
   webServer: {
     command: 'node server.mjs',

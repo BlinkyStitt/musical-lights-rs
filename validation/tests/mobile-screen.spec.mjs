@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { normalView, physicsReady, physicsState } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, physicsState } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
 test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }, info) => {
@@ -198,22 +198,27 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   await expect(page.locator('.calibration-controls')).toBeHidden();
   await expect(page.locator('.control-note')).toBeHidden();
   await expect(page.locator('.wake-status')).toBeHidden();
+  await openFullscreenSettings(page);
   await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
+  await page.locator('.frame-rate').scrollIntoViewIfNeeded();
   await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
   for (const label of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
     await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeVisible();
   }
+  await closeFullscreenSettings(page);
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
   for (const viewport of [{ width: 390, height: 664 }, { width: 844, height: 390 }, { width: 390, height: 664 }]) {
     await page.setViewportSize(viewport);
     await expect.poll(async () => (await page.locator('.audio-card').boundingBox()).height).toBe(viewport.height);
+    await openFullscreenSettings(page);
     await page.locator('.audio-controls').scrollIntoViewIfNeeded();
     const graph = await page.locator('#dancinglights').boundingBox();
-    const controls = await page.locator('.audio-controls').boundingBox();
     expect(graph.height).toBeGreaterThan(160);
-    expect(graph.y + graph.height).toBeLessThanOrEqual(controls.y);
-    expect(controls.y + controls.height).toBeLessThanOrEqual(viewport.height);
+    expect(graph.y + graph.height).toBe(viewport.height);
+    const modal = await page.locator('.fullscreen-settings').boundingBox();
+    expect(modal.y + modal.height).toBeLessThanOrEqual(viewport.height / 2);
+    await closeFullscreenSettings(page);
     await expect(exit).toBeInViewport({ ratio: 1 });
   }
   await page.screenshot({ path: 'test-results/iphone-lights-only.png' });
@@ -238,7 +243,7 @@ test('iPhone fullscreen shows only the live lights without the native API', asyn
   expect(errors).toEqual([]);
 });
 
-test('fullscreen frequency labels expire above the bottom controls and keyboard users can reach Exit', async ({ page }) => {
+test('fullscreen frequency labels expire below the toolbar and keyboard users can reach Exit', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto('http://127.0.0.1:8101');
   await physicsReady(page); await normalView(page);
@@ -250,11 +255,19 @@ test('fullscreen frequency labels expire above the bottom controls and keyboard 
   await expect(readout).toHaveText(hit.label);
   await expect(readout).toBeInViewport({ ratio: 1 });
   const box = await readout.boundingBox();
-  expect(box.y + box.height).toBeLessThanOrEqual((await page.locator('.audio-controls').boundingBox()).y);
+  const toolbar = await page.locator('.fullscreen-toolbar').boundingBox();
+  expect(box.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height);
+  expect(box.y + box.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight / 2));
   await expect(readout).toBeHidden({ timeout: 3500 });
   await expect(page.locator('.fullscreen-hint')).toHaveCount(0);
-  // Focus the first bar with the keyboard, then move back to the exit control.
+  // Traverse the toolbar in reverse visual order to reach Exit from the bars.
   await page.getByRole('meter').first().focus();
+  for (const control of [page.getByRole('button', { name: 'Settings', exact: true }),
+    page.getByRole('button', { name: 'Listening', exact: true }),
+    page.getByRole('checkbox', { name: 'Listening', exact: true })]) {
+    await page.keyboard.press('Shift+Tab');
+    await expect(control).toBeFocused();
+  }
   await page.keyboard.press('Shift+Tab');
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   await expect(exit).toBeFocused();
@@ -273,7 +286,9 @@ test('a rejected native fullscreen request still expands the page and Escape exi
   await physicsReady(page); await normalView(page);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+  await openFullscreenSettings(page);
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeVisible();
+  await closeFullscreenSettings(page);
   await expect(page.locator('.screen-error')).toBeEmpty();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();

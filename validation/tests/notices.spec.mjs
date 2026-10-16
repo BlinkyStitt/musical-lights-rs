@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, physicsReady } from '../physics-state.mjs';
 const origin='http://127.0.0.1:8101';
 test.describe('expanded recovery notice geometry', () => {
   test.use({ hasTouch: true });
@@ -25,9 +25,9 @@ test.describe('expanded recovery notice geometry', () => {
       await expect(page.locator('.physics-status')).toBeInViewport({ ratio: 1 });
       expect(await page.evaluate(() => {
         const rect = selector => document.querySelector(selector).getBoundingClientRect();
-        const scene = rect('.balloon-layer'), notices = rect('.recovery-notices'), controls = rect('.scene-controls');
-        return { belowScene: notices.top >= scene.bottom, aboveControls: notices.bottom <= controls.top };
-      })).toEqual({ belowScene: true, aboveControls: true });
+        const scene = rect('.balloon-layer'), notices = rect('.recovery-notices'), toolbar = rect('.fullscreen-toolbar');
+        return { sceneFullHeight: scene.bottom === innerHeight, belowToolbar: notices.top >= toolbar.bottom, topHalf: notices.bottom <= innerHeight / 2 };
+      })).toEqual({ sceneFullHeight: true, belowToolbar: true, topHalf: true });
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
       await page.evaluate(() => document.querySelector('#dancinglights').physics.notice.clear());

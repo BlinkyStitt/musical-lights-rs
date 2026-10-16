@@ -42,7 +42,9 @@ export class VisualizerScreen {
     this.onKey = event => {
       // The restored controls can queue an entry before a native exit finishes.
       // Escape cancels that request even while the page is already visible.
-      if (event.key === 'Escape' && (this.expanded || this.pendingFullscreenState === true)) {
+      if (event.key === 'Escape' && !event.defaultPrevented
+          && !event.target?.closest?.('dialog[open]')
+          && (this.expanded || this.pendingFullscreenState === true)) {
         event.preventDefault();
         this.toggleFullscreen(false, false);
       }
@@ -185,10 +187,11 @@ export class VisualizerScreen {
   }
 
   setExpanded(expanded) {
+    const entering = expanded && !this.expanded;
     this.expanded = expanded;
     this.clearGesture();
     this.element.toggleAttribute('data-expanded', expanded);
-    if (expanded) this.element.scrollTop = 0;
+    if (entering) this.element.scrollTop = 0;
     this.emit();
   }
 

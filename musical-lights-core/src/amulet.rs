@@ -183,6 +183,9 @@ impl Renderer {
         let connected = snapshot.is_some_and(|(_, received)| now.saturating_sub(received) <= 2000);
         let (state, received) = snapshot.map_or((None, now), |(s, t)| (Some(s), t));
         let elapsed = now.saturating_sub(received);
+        let motion = state.map_or_else(crate::pattern_motion::PatternMotion::default, |s| {
+            crate::pattern_motion::PatternMotion::from_sample(s.motion, elapsed)
+        });
         let usable_heading = state.filter(|s| {
             matches!(s.heading.quality, 3 | 4) && s.heading.age.get() as u64 + elapsed <= 200
         });
@@ -336,6 +339,11 @@ impl Renderer {
                         * spot(x, y, 0.5 * Float::sin(orbit), 0.5 * Float::cos(orbit));
                 }
             } else if settings.mode == 2 {
+                // Steer local waves toward the low edge. Shared sections retain
+                // their UTC phase and stable roster mapping.
+                let direction = motion.tilt[0] * x + motion.tilt[1] * y;
+                let angle = angle + direction * 0.15;
+                let r = (r - direction * 0.2).clamp(0.0, 1.0);
                 color = match settings.preset {
                     0 => rainbow(angle + 2.0 * r - local_time / 8.0),
                     1 => {
@@ -374,6 +382,9 @@ impl Renderer {
                     }
                     _ => rgb([0.0; 3]),
                 };
+                // A short intensity dip recovers with the shake envelope. It
+                // preserves hue, dark sections, and the configured power cap.
+                color *= 1.0 - motion.shake * 0.35;
                 if settings.preset == 3
                     && !time.synchronized
                     && now % 2000 < 100

@@ -2,7 +2,7 @@
 use crate::errors::{MyError, MyResult};
 use serde::{Deserialize, Serialize};
 pub const MESSAGE_BAUD_RATE: u32 = 115200;
-pub const BOARD_SCHEMA_VERSION: u8 = 2;
+pub const BOARD_SCHEMA_VERSION: u8 = 3;
 macro_rules! little {
     ($name:ident, $type:ty, $size:expr) => {
         #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -61,6 +61,49 @@ pub struct Heading {
     pub faults: L2,
     pub tilt: L2,
     pub calibration_revision: L4,
+}
+/// Accelerometer controls in the body frame, independent of magnetic heading.
+/// Vectors use signed i16 milligravity in little-endian L2 fields. Quality:
+/// 0 unavailable, 1 nominal sensor scale, 2 accepted calibration applied.
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Motion {
+    pub acceleration: [L2; 3],
+    pub gravity: [L2; 3],
+    pub shake: L2,
+    pub captured_at: L4,
+    pub age: L2,
+    pub quality: u8,
+    pub calibration_revision: L4,
+}
+impl Default for Motion {
+    fn default() -> Self {
+        Self {
+            acceleration: [L2::new(0); 3],
+            gravity: [L2::new(0); 3],
+            shake: L2::new(0),
+            captured_at: L4::new(0),
+            age: L2::new(u16::MAX),
+            quality: 0,
+            calibration_revision: L4::new(0),
+        }
+    }
+}
+impl Motion {
+    pub fn valid(&self) -> bool {
+        match self.quality {
+            0 => *self == Self::default(),
+            1 | 2 => {
+                self.acceleration
+                    .iter()
+                    .chain(&self.gravity)
+                    .all(|v| (v.get() as i16).unsigned_abs() <= 8000)
+                    && self.shake.get() <= 16000
+                    && (self.quality == 2) == (self.calibration_revision.get() != 0)
+            }
+            _ => false,
+        }
+    }
 }
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,6 +169,7 @@ pub struct StateSnapshot {
     pub roster_revision: L4,
     pub local: Position,
     pub heading: Heading,
+    pub motion: Motion,
     pub clock: Clock,
     pub battery: Battery,
     pub health: L2,
@@ -228,6 +272,7 @@ impl Message {
                     && s.local.valid()
                     && s.local.flags.get() == s.health.get() & 7
                     && crate::radio::valid_health(s.health.get())
+                    && s.motion.valid()
                     && s.heading.quality <= 7
                     && s.heading.faults.get() & !127 == 0
                     && s.heading.tilt.get() <= 9000

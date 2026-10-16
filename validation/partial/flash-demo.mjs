@@ -55,7 +55,7 @@ try {
         await page.evaluate(async ({ state, at }) => {
           window.audioNow = at;
           window.testNode.port.dispatchEvent(new MessageEvent('message', { data: {
-            type: 'frame', sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state: new Float64Array(state), clipped: 0,
+            type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state: new Float64Array(state), clipped: 0,
           } }));
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         }, { state, at: offset + at });

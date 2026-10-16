@@ -21,7 +21,7 @@ export class PhoneReport {
     const fields = [
       ['Gravity (m/s²)', 1, 0, 30, .01], ['Density (kg/m³)', 2, 1, 20000, 1],
       ['Bounce (ratio)', 3, 0, 1, .01], ['Friction (ratio)', 4, 0, 2, .01],
-      ['Enclosure depth (m)', 5, .2, 2, .01], ['Bar rise duration (ms)', 6, 20, 2000, 10],
+      ['Bar rise duration (ms)', 6, 20, 2000, 10],
       ['Reduced Motion attack duration (ms)', 7, 320, 4000, 10],
     ];
     this.physicsHost.innerHTML = `<summary>Physics</summary>
@@ -58,7 +58,7 @@ export class PhoneReport {
       <button type="button" class="phone-export" disabled>Export test report</button>`;
     this.listen('.physics-defaults', 'click', () => {
       if (this.active) return;
-      const config = [...this.defaults]; config[0] = view.height;
+      const config = [...this.defaults]; config[0] = view.height; config[5] = view.config[5];
       for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
         const index = Number(node.dataset.config); node.value = Number((config[index] * (index >= 6 ? 1000 : 1)).toPrecision(6));
       }
@@ -80,7 +80,7 @@ export class PhoneReport {
       if (detail.sessionId !== this.toneMetadata?.sessionId || this.audioState?.state === 'stopped') return;
       const count = detail.trace.length / detail.traceStride;
       if (this.toneRows + count <= 50000) {
-        this.toneChunks.push({ sessionId: detail.sessionId, receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime,
+        this.toneChunks.push({ sessionId: detail.sessionId, receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime, continuity: detail.continuity,
           workletAudioTime: detail.audioTime, inputStartSample: detail.inputStartSample, stride: detail.traceStride, values: detail.trace });
         this.toneRows += count;
       } else this.toneDropped += count;
@@ -104,6 +104,8 @@ export class PhoneReport {
         this.query('.tone-export').disabled = true;
         this.query('.tone-trace-status').textContent = '';
       }
+      if (this.active && detail.continuity?.segment > (this.metadata.continuity?.segment ?? 0))
+        this.invalidate('Audio sample gap during test');
       this.toneMetadata = detail; this.audioState = detail;
       const active = detail.state !== 'stopped';
       for (const selector of ['.tone-kind', '.tone-frequency', '.tone-level', '.tone-trace']) this.query(selector).disabled = active;
@@ -115,9 +117,9 @@ export class PhoneReport {
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v7', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v8', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
-        rowLayout: 'ISO sample index, total sones, 240 specific values, 24 one-Bark integrals, gain, 24 log-loudness novelty values, 24 log-loudness values, 102-value shared presentation, 24 acoustic event timestamps, 24 suppression counts',
+        rowLayout: 'ISO sample index, total sones, 240 specific values, 24 one-Bark integrals, gain, 24 log-loudness novelty values, 24 log-loudness values, 102-value shared presentation, 24 acoustic event timestamps, 24 suppression counts, analysis segment index',
         displayMapping: 'ISO one-Bark integrals; one shared gain and headroom scale. Shared-coefficient 1 Euro presentation. Onsets use canonical log-loudness changes, independent of gain. Settings are engineering controls, not model coefficients.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead, independent of callback size. Transport, physics and render timestamps are separate.',
         audioSettings: view.settings.audio, renderSettings: { ...view.settings },
@@ -178,7 +180,7 @@ export class PhoneReport {
       device: this.query('.phone-device').value.trim(), browser: this.query('.phone-browser').value.trim(), lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
       cameraDegrees: this.view.cameraBase, cameraMotion: this.view.settings.cameraMotion, scrolling: this.view.card.querySelector('.scroll-lights').checked, warmupSeconds: 15, measurementSeconds: 300,
-      audioSource: 'generated PCM → AudioWorklet → loudness WASM',
+      audioSource: 'generated PCM → AudioWorklet → loudness WASM', continuity: { ...this.audioState.continuity },
       startedAt: new Date().toISOString(), config, layout: this.view.layout, palette: Array.from(this.view.palette) };
     this.query('.phone-start').disabled = true; this.query('.phone-finish').disabled = false;
     this.query('.physics-reset').disabled = true; this.query('.phone-export').disabled = true;

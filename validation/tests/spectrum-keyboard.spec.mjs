@@ -42,7 +42,8 @@ async function expectSample(page, index) {
 
 test('spectrum has one Tab stop, direct exits, and remembers the last focused sample', async ({ page }) => {
   const fullscreen = page.getByRole('button', { name: 'Fullscreen', exact: true });
-  const camera = page.locator('.camera-rotation');
+  // The step button is the first camera control in native Tab order.
+  const camera = page.getByRole('button', { name: 'Decrease Camera angle (degrees)', exact: true });
   await expect(page.getByRole('meter')).toHaveCount(24);
   await expect(page.locator('.bark-group[role="group"]')).toHaveCount(24);
   await expect(page.locator('.meter[tabindex="0"]')).toHaveCount(1);
@@ -223,8 +224,20 @@ test('keyboard can exit fullscreen from the last sample and route re-entry start
   await page.keyboard.press('Enter');
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   await expect(exit).toBeFocused();
+  const toolbar = [page.getByRole('checkbox', { name: 'Listening', exact: true }),
+    page.getByRole('button', { name: 'Listening', exact: true }),
+    page.getByRole('button', { name: 'Settings', exact: true })];
+  await expect(toolbar[0]).toBeEnabled();
+  for (const control of toolbar) {
+    await page.keyboard.press('Tab');
+    await expect(control).toBeFocused();
+  }
   await page.keyboard.press('Tab');
   await expectSample(page, 23);
+  for (const control of [...toolbar].reverse()) {
+    await page.keyboard.press('Shift+Tab');
+    await expect(control).toBeFocused();
+  }
   await page.keyboard.press('Shift+Tab');
   await expect(exit).toBeFocused();
   await page.keyboard.press('Enter');

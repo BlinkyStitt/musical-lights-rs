@@ -139,7 +139,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
     expect(p.messages[0].data.state.length).toBe(102);
-    expect(Object.keys(p.messages[0].data).sort()).toEqual(['accentSequence', 'calibration', 'clipped', 'quantum', 'readouts', 'sessionId', 'sones', 'state', 'tempo', 'tempoConfidence', 'type']);
+    expect(Object.keys(p.messages[0].data).sort()).toEqual(['accentSequence', 'calibration', 'clipped', 'continuity', 'quantum', 'readouts', 'sessionId', 'sones', 'state', 'tempo', 'tempoConfidence', 'type']);
     expect(Number.isInteger(p.messages[0].data.accentSequence)).toBe(true);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));
@@ -148,7 +148,7 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
   }
 });
 
-test('selected channel survives opposite phase and invalid input or gaps stop analysis', () => {
+test('selected channel survives opposite phase and invalid PCM stops analysis', () => {
   const samples = tone(48000, 1000, .1);
   const inverted = samples.map(v => -v);
   const a = processor(0), b = processor(1);
@@ -163,9 +163,9 @@ test('selected channel survives opposite phase and invalid input or gaps stop an
   expect(a.push(bad)).toBe(false);
   expect(a.messages.at(-1).data.message).toContain('sample 108');
   expect(a.push(new Float32Array(128))).toBe(false);
-  b.scope.currentFrame += 128;
-  expect(b.push(new Float32Array(128), new Float32Array(128))).toBe(false);
-  expect(b.messages.at(-1).data.message).toContain('clock jumped by 128 samples');
+  const invalid = new Float32Array(128); invalid[0] = Infinity;
+  expect(b.push(new Float32Array(128), invalid)).toBe(false);
+  expect(b.messages.at(-1).data.message).toContain('not finite');
 });
 
 test('reference calibration uses exactly three seconds across callback partitions', () => {
@@ -363,4 +363,131 @@ test('initial microphone gate survives saved-settings configuration while digita
     if (microphone) assert(targets.every(value=>value===0), 'saved settings must retain microphone gating');
     else assert(targets.some(value=>value>0), 'digital input must bypass the gate');
   }
+});
+
+
+test('forward gaps reject the block before an explicit reset and preserve raw sample accounting', () => {
+  const p = processor(), w = p.value.wasm, h = p.value.processor;
+  expect(p.push(new Float32Array(128))).toBe(true);
+  new Float32Array(w.memory.buffer, w.processor_input(h), 128).fill(1);
+  const before = w.processor_clipped(h);
+  expect(w.processor_process(h, 128, 256n)).toBe(0);
+  expect(w.processor_error(h)).toBe(3);
+  expect(w.processor_gap_expected(h)).toBe(128n);
+  expect(w.processor_gap_received(h)).toBe(256n);
+  expect(w.processor_clipped(h)).toBe(before);
+  expect(w.processor_process(h, 128, 256n)).toBe(0);
+  expect(w.processor_recover_discontinuity(h)).toBe(1);
+  expect(w.processor_recover_discontinuity(h)).toBe(0);
+  expect(w.processor_process(h, 128, 256n)).toBe(1);
+  expect(w.processor_clipped(h)).toBe(before + 128);
+  expect(w.processor_segment(h)).toBe(1);
+  expect(w.processor_missing_samples(h)).toBe(128n);
+});
+
+test('recovered analysis equals a fresh calibrated segment at the real clock without growing memory or the UI queue', () => {
+  const options = { pascalsPerUnit: 1.5, microphone: true, visual: [0, -60, 0, 2], sessionId: 12 };
+  const p = processor(0, false, options), reference = processor(0, false, options);
+  const memory = p.value.wasm.memory.buffer.byteLength;
+  const pcm = tone(48000, 1000, .02);
+  for (let at = 0; at < pcm.length; at += 128) expect(p.push(pcm.subarray(at, at + 128))).toBe(true);
+  const expected = p.scope.currentFrame;
+  p.scope.currentFrame += 128; reference.scope.currentFrame = p.scope.currentFrame;
+  for (let at = 0; at < pcm.length; at += 128) {
+    const block = pcm.subarray(at, at + 128);
+    expect(p.push(block)).toBe(true); expect(reference.push(block)).toBe(true);
+  }
+  expect(p.snapshot()).toEqual(reference.snapshot());
+  expect(p.value.wasm.memory.buffer.byteLength).toBe(memory);
+  expect(p.messages).toHaveLength(1);
+  p.value.port.onmessage({ data: { type: 'ack' } }); expect(p.push(new Float32Array(128))).toBe(true);
+  expect(p.messages).toHaveLength(2);
+  expect(p.messages.at(-1).data.continuity).toEqual({ segment: 1, missingSamples: 128, overlapSamples: 0, expectedSample: expected, receivedSample: expected + 128, calibrationCancellations: 0 });
+});
+
+test('a gap cancels incomplete calibration, retains the accepted scale and applies queued settings', () => {
+  const settings = [.8,2,20,1,1,.8,.01,.1,.03,.25,.01,.15,.1,.3,.01,.16,.06,.18,60,200,8,3,2,.125,30,.1,10,240];
+  const p = processor(0, false, { pascalsPerUnit: 1.5, sessionId: 22, settings, visual: [0,-60,0,2] });
+  for (let i = 0; i < 20; i++) expect(p.push(tone(128, 1000, .02))).toBe(true);
+  p.value.port.onmessage({ data: { type: 'calibrate', dbSpl: 94 } });
+  settings[0] = .7;
+  p.value.port.onmessage({ data: { type: 'settings', sessionId: 22, revision: 2, settings, visual: [0,-60,0,4] } });
+  p.scope.currentFrame += 128;
+  const reference = processor(0, false, { pascalsPerUnit: 1.5, settings, visual: [0,-60,0,4] });
+  reference.scope.currentFrame = p.scope.currentFrame;
+  const pcm = tone(48000 * 4, 1000, .02);
+  for (let at = 0; at < pcm.length; at += 128) {
+    const block = pcm.subarray(at, at + 128);
+    expect(p.push(block)).toBe(true); expect(reference.push(block)).toBe(true);
+  }
+  expect(p.snapshot()).toEqual(reference.snapshot());
+  expect(p.value.wasm.processor_revision(p.value.processor)).toBe(2);
+  expect(p.value.wasm.processor_calibration_result(p.value.processor)).toBe(0);
+  expect(p.value.wasm.processor_calibration_cancellations(p.value.processor)).toBe(1);
+});
+
+test('diagnostic rows retain actual sample indices and identify both sides of a gap', () => {
+  const p = processor(0, true);
+  p.scope.currentFrame = 2 ** 32 - 512;
+  for (let i = 0; i < 8; i++) { expect(p.push(tone(128, 1000, .02))).toBe(true); p.value.port.onmessage({ data: { type: 'ack' } }); }
+  const expected = p.scope.currentFrame; p.scope.currentFrame += 128;
+  for (let i = 0; i < 8; i++) { expect(p.push(tone(128, 1000, .02))).toBe(true); p.value.port.onmessage({ data: { type: 'ack' } }); }
+  const rows = [];
+  for (const { data } of p.messages) {
+    expect(data.traceVersion).toBe(7); expect(data.traceStride).toBe(466);
+    for (let at = 0; at < data.trace.length; at += data.traceStride) rows.push(data.trace.slice(at, at + data.traceStride));
+  }
+  expect(rows.some(row => row[465] === 0)).toBe(true);
+  expect(rows.some(row => row[465] === 1)).toBe(true);
+  for (const row of rows) {
+    expect(row[0] < expected || row[0] >= expected + 128).toBe(true);
+    if (row[465] === 1) expect(row[0]).toBeGreaterThanOrEqual(expected + 128);
+  }
+});
+
+
+test('repeated forward gaps stay bounded and never make invalid PCM recoverable', () => {
+  const p = processor(), w = p.value.wasm, h = p.value.processor;
+  const memory = w.memory.buffer.byteLength;
+  expect(p.push(new Float32Array(128))).toBe(true);
+  for (let i = 0; i < 20; i++) {
+    p.scope.currentFrame += 128;
+    expect(p.push(new Float32Array(128))).toBe(true);
+  }
+  expect(w.processor_segment(h)).toBe(20);
+  expect(w.processor_missing_samples(h)).toBe(2560n);
+  expect(w.memory.buffer.byteLength).toBe(memory);
+  expect(p.messages).toHaveLength(1);
+  const invalid = new Float32Array(128); invalid[17] = Infinity;
+  expect(p.push(invalid)).toBe(false);
+  expect(w.processor_recover_discontinuity(h)).toBe(0);
+  expect(p.messages.at(-1).data.message).toContain('not finite');
+});
+
+
+test('a backward clock rejects first, starts a declared overlapping segment and matches fresh analysis', () => {
+  const options = { pascalsPerUnit: 1.5, sessionId: 28 };
+  const p = processor(0, true, options), reference = processor(0, true, options);
+  p.scope.currentFrame = 1024;
+  for (let i = 0; i < 8; i++) { expect(p.push(tone(128, 1000, .02))).toBe(true); p.value.port.onmessage({ data: { type: 'ack' } }); }
+  const expected = p.scope.currentFrame, received = expected - 128;
+  const w = p.value.wasm, h = p.value.processor, memory = w.memory.buffer.byteLength;
+  expect(w.processor_process(h, 128, BigInt(received))).toBe(0);
+  expect(w.processor_error(h)).toBe(3);
+  expect(w.processor_gap_expected(h)).toBe(BigInt(expected)); expect(w.processor_gap_received(h)).toBe(BigInt(received));
+  expect(w.processor_recover_discontinuity(h)).toBe(1);
+  expect(w.processor_recover_discontinuity(h)).toBe(0);
+  p.scope.currentFrame = received; reference.scope.currentFrame = received;
+  for (let i = 0; i < 32; i++) {
+    const freshPCM = tone(128, 500, .01);
+    expect(p.push(freshPCM)).toBe(true); expect(reference.push(freshPCM)).toBe(true);
+    p.value.port.onmessage({ data: { type: 'ack' } });
+  }
+  expect(p.snapshot()).toEqual(reference.snapshot()); expect(w.memory.buffer.byteLength).toBe(memory);
+  expect(p.messages.at(-1).data.continuity).toEqual({ segment: 1, missingSamples: 0, overlapSamples: 128, expectedSample: expected, receivedSample: received, calibrationCancellations: 0 });
+  const rows = p.messages.flatMap(({ data }) => Array.from({ length: data.trace.length / data.traceStride }, (_, row) => data.trace.slice(row * data.traceStride, (row + 1) * data.traceStride)));
+  const before = rows.filter(row => row[465] === 0), after = rows.filter(row => row[465] === 1);
+  expect(before.length).toBeGreaterThan(0); expect(after.length).toBeGreaterThan(0);
+  expect(after[0][0]).toBe(received); expect(after[0][0]).toBeLessThan(before.at(-1)[0]);
+  for (let i = 1; i < after.length; i++) expect(after[i][0]).toBeGreaterThan(after[i - 1][0]);
 });

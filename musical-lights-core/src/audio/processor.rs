@@ -66,6 +66,10 @@ impl LoudnessProcessor {
         self.gain.configure(self.settings, self.options);
         self.chunk_phase = 0;
     }
+    /// Reject a discontinuous block before gate, readout or filter state advances.
+    pub fn check_continuity(&self, first_sample: u64) -> Result<(), LoudnessError> {
+        self.meter.check_continuity(first_sample)
+    }
     pub fn set_microphone(&mut self, microphone: bool) {
         self.microphone = microphone;
     }
@@ -110,6 +114,7 @@ impl LoudnessProcessor {
         if let Some(index) = samples.iter().position(|v| !v.is_finite()) {
             return Err(LoudnessError::NonFiniteSample { index });
         }
+        self.check_continuity(first_sample)?;
         let Self {
             meter,
             gain,
@@ -204,5 +209,43 @@ impl Default for LoudnessProcessor {
             SoundField::Free,
             AudioSettings::default(),
         )
+    }
+}
+
+#[cfg(test)]
+mod continuity_tests {
+    use super::*;
+
+    #[test]
+    fn rejected_clock_does_not_advance_gate_or_presentation() {
+        let mut actual = LoudnessProcessor::default();
+        let mut reference = LoudnessProcessor::default();
+        let options = VisualOptions {
+            gate_enabled: true,
+            ..VisualOptions::default()
+        };
+        for processor in [&mut actual, &mut reference] {
+            processor.set_microphone(true);
+            assert!(processor.queue_settings(1, AudioSettings::default(), options));
+            processor.push_pcm(&[0.0; 128], 0, false, |_| {}).unwrap();
+        }
+        assert_eq!(actual.check_continuity(128), Ok(()));
+        assert_eq!(
+            actual.push_pcm(&[0.5; 128], 256, false, |_| {}),
+            Err(LoudnessError::Discontinuity {
+                expected: 128,
+                received: 256
+            })
+        );
+        for processor in [&mut actual, &mut reference] {
+            processor.push_pcm(&[0.0; 128], 128, false, |_| {}).unwrap();
+        }
+        let mut a = [0.0; LoudnessSnapshot::TRANSPORT_LEN];
+        let mut b = a;
+        actual.snapshot().write_transport(&mut a);
+        reference.snapshot().write_transport(&mut b);
+        assert_eq!(a, b);
+        assert_eq!(actual.gate.is_open(), reference.gate.is_open());
+        assert_eq!(actual.revision(), reference.revision());
     }
 }

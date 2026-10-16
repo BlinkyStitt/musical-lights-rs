@@ -103,7 +103,7 @@ function reset(values) {
   simulation?.free();
   config = values ?? PhysicsSimulation.defaults();
   simulation = new PhysicsSimulation(config, palette);
-  input = new Float32Array(layout[22]); input[32] = config[0];
+  input = new Float32Array(layout[22]); input[32] = config[0]; input[62] = config[5];
   simulation.input(input);
   simulation.set_tempo(tempo);
   if (danceOptions) simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);

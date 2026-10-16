@@ -49,9 +49,16 @@
 
 - Keep common controls grouped, Listening beside Identify song, visible focus,
   native switches and 44-pixel touch targets. Use hover/focus help and a mobile
-  tap popup. Keep less common settings collapsed below the scene.
-- Mobile opens in the expanded video/visualizer/bottom-controls layout without
-  starting audio or requesting native fullscreen. Normal pages use the same
+  tap popup. Keep less common settings collapsed below the scene on normal pages.
+  In fullscreen, place the shared controls in a Settings modal over the top
+  half of the scene. Keep the lower half visible through a clear backdrop.
+  Keep the main view fixed. Scroll settings inside the modal body; keep its
+  Close button fixed and trap focus.
+  Escape closes Settings before it exits fullscreen. Keep Listening to the left
+  of the gear button in the top toolbar when Settings is closed. Reuse the
+  same Listening control inside the modal when Settings is open.
+- Mobile opens in the expanded video/visualizer layout with Settings and Exit
+  controls, without starting audio or requesting native fullscreen. Normal pages use the same
   video/scene/bottom-controls order, with extra settings and learning below.
   Keep Exit usable in short
   landscape screens, with safe areas, recognition and recovery notices.
@@ -65,36 +72,27 @@
   loudness peak. Defaults rise from 5% at 60 BPM to 50% at 200 BPM. Advanced
   settings expose the endpoint tempos, probabilities and curve. Preserve
   seeded replay and reject invalid settings; do not reverse on a fixed timer.
-- Mirrors must be transparent from outside the box. Bound reflection cost and
-  measure it; prefer instancing and avoid recursive reflection cameras, shadow
-  maps and bloom for this phone-oriented view. Reduced Motion disables
-  automatic scrolling, camera motion and additional pigment drift.
-- Mirror count controls drawing only. New users start in Auto mode, which selects
-  1–32 depth images from measured startup frame cadence. Selecting Auto explicitly
-  tests the full 0–2048 range. Saved manual choices remain unchanged. Advanced allows 0–2048 images; validate the
-  upper bound and saved settings without changing physical ball counts. Eight
-  full-size background boxes flank the
-  physical center box and reuse all source bands in matching vertical banks.
-  Center posts span the collider depth.
-  Ball depth images are fading translated copies, not optical reflections.
-  Bars extend as continuous geometry with a smooth depth fade; do not restore
-  per-copy end faces or brightness steps. Cull background bars against their
-  full extruded bounds and verify visible pixels before claiming savings.
-  Cull ball depth images with all six camera planes. Keep cells that enter the
-  view farther back and retain the requested setting and pool capacity. Verify
-  complete-batch pixel equivalence and measure the submitted prefix. High-count
-  GPU results do not establish software-renderer or phone FPS acceptance.
-  Do not add
-  simulated balls for background boxes or depth images. Keep all bands responsive
-  with the configured rise duration; measure packet-to-render delay as well as steps.
-  Hide BPM when audio stops; silence eases to
-  the shared core's 60 BPM fallback without changing loudness or filtered targets.
+- Depth controls the physical enclosure in centimeters, from 20 to 200 with a
+  48 cm default. Apply it live without resetting the balls or their colors.
+  Keep eight opaque physical balls and eight full-size background boxes beside
+  the center box. Reuse all source bands in matching vertical banks. Extend
+  source posts through the actual collider depth. Cull side posts against
+  their complete bounds and verify visible pixels before claiming savings.
+  Use one transparent outer coating with no internal partitions. Keep drawing
+  bounded; avoid recursive cameras, shadow maps and bloom.
+- Start each ball in the color of the source band at its spawn X. Physical
+  contacts pick up source colors with or without audio. Fill the rolling surface
+  gradually with core-owned, elapsed-time calculations. Do not add autonomous
+  hue cycling. Reduced Motion stops scrolling, camera motion and extra pigment
+  drift. Keep all bands responsive with the configured rise duration; measure
+  packet-to-render delay as well as steps. Hide BPM when audio stops; silence
+  eases to the shared core's 60 BPM fallback without changing loudness or targets.
 - Show one scrolling artist/song title in expanded mode. Keep the progress
   ring and errors beside Identify song. Show small rendered FPS beside the angle
   slider in normal Home and expanded mode. Camera motion uses a smooth horizontal
   sweep without attack shake or vertical wobble. Do not draw box-frame outlines
   or black bar borders. Retain white attack edges. Repeat source lighting across
-  the nine banks and depth copies, with one outer coating and no internal walls.
+  the nine banks, with one outer coating and no internal walls.
   Normal-page scenes use equal gutters and a responsive 320–560 pixel height.
   The default sweep spans −10° to +10° over a 48-second cycle.
 - Listening adds a core-owned travelling floor of at most one sixth of bar

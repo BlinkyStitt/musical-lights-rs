@@ -20,9 +20,10 @@ use lsm9ds1::{self, accel, gyro, interface::SpiInterface, mag};
 use musical_lights_core::{
     clock::UtcClock,
     controller::Controller,
-    gps::{Fix, GpsParser, PpsCounter},
+    gps::{Fix, GpsParser, PpsCounter, PpsHistory},
     message::*,
     navigation::{HeadingEstimator, ImuSample, declination},
+    pattern_motion::{MOTION_FRESH_MS, MotionEstimator},
     provisioning::{F4, StmRecord},
     radio::{self as wire, Network, Report},
     sensor_mount::ImuMounts,
@@ -47,9 +48,11 @@ pub struct State {
     pub fix: Option<Fix>,
     pub fix_utc_verified: bool,
     pub heading: Heading,
+    pub motion: Motion,
+    pub motion_at: u64,
     pub clock: UtcClock,
     pub network: Option<Network>,
-    pub pps: Option<(u64, u64)>,
+    pub pps: PpsHistory,
     pub radio_fault: bool,
     pub gps_fault: bool,
     pub sensor_fault: bool,
@@ -167,7 +170,7 @@ pub async fn controller(
                 s.clock = UtcClock::default();
                 s.sensor_fault = true;
                 s.gps_fault = true;
-                s.pps = None;
+                s.pps.record(None);
             }
             match command.command {
                 None => {
@@ -186,7 +189,7 @@ pub async fn controller(
                             .fix
                             .and_then(|f| f.hdop)
                             .map_or(u16::MAX, |h| (h * 100.0).clamp(0.0, 65534.0) as u16);
-                        let pps_age = s.pps.map_or(u32::MAX, |(_, at)| {
+                        let pps_age = s.pps.latest().map_or(u32::MAX, |at| {
                             now().saturating_sub(at).min(u32::MAX as u64) as u32
                         });
                         result.data.extend_from_slice(&1u16.to_le_bytes()).unwrap();
@@ -247,12 +250,14 @@ pub async fn pps(mut capture: InputCapture<'static, peripherals::TIM2>, state: S
         .await
         {
             Ok(value) => {
-                state.lock().await.pps = musical_lights_core::gps::pps_timestamp(value, now_us())
-                    .map(|edge| (edge, edge / 1000));
+                state.lock().await.pps.record(
+                    musical_lights_core::gps::pps_timestamp(value, now_us())
+                        .map(|edge| edge / 1000),
+                );
             }
             Err(_) => {
                 let _ = now_us();
-                state.lock().await.pps = None;
+                state.lock().await.pps.record(None);
             }
         }
     }
@@ -278,7 +283,7 @@ pub async fn gps(mut uart: Uart<'static, Async>, _enable: Output<'static>, state
                         if !discarding && let Ok(text) = core::str::from_utf8(&line) {
                             if let Some(fix) = parser.push(text, now()) {
                                 let mut s = state.lock().await;
-                                let pps = s.pps.map(|(_, at)| at);
+                                let pps = s.pps.for_capture(fix.captured_ms);
                                 let timing = s.settings.as_ref().and_then(|s| s.gps_timing);
                                 s.fix_utc_verified = musical_lights_core::gps::verify_epoch(
                                     &mut s.clock,
@@ -366,6 +371,7 @@ pub async fn imu(accel_device: SensorDevice, mag_device: SensorDevice, state: Sh
     }
     let mut heading = HeadingEstimator::default();
     let mut preview = HeadingEstimator::default();
+    let mut motion = MotionEstimator::default();
     let mut sample = ImuSample {
         accel: [0.0; 3],
         gyro: [0.0; 3],
@@ -385,11 +391,13 @@ pub async fn imu(accel_device: SensorDevice, mag_device: SensorDevice, state: Sh
     loop {
         let at = now();
         let mut new_gyro = false;
+        let mut new_accel = false;
         let acquire = async {
             if imu.accel_data_available().await? {
                 let (x, y, z) = imu.read_accel_raw().await?;
                 sample.accel = [x, y, z].map(|v| v as f64 * 0.000122 * 9.80665);
                 sample.accel_at = at;
+                new_accel = true;
                 valid |= 1;
                 sample.saturated = [x, y, z].iter().any(|v| v.unsigned_abs() >= 32760);
             }
@@ -426,6 +434,22 @@ pub async fn imu(accel_device: SensorDevice, mag_device: SensorDevice, state: Sh
                 s.boot,
             )
         };
+        if new_accel {
+            let value = motion.update(
+                sample.accel,
+                sample.saturated,
+                calibration.as_ref(),
+                ImuMounts::default(),
+                at,
+            );
+            let mut s = state.lock().await;
+            s.motion = if run.is_some() {
+                Motion::default()
+            } else {
+                value
+            };
+            s.motion_at = at;
+        }
         if new_gyro {
             let declination = fix.filter(|f| f.age_ms(at) <= 60000).and_then(declination);
             let mut value = heading.update(
@@ -587,9 +611,16 @@ pub async fn snapshots(state: Shared, out: Out) {
                     local: position(&s, at),
                     health: L2::new(health(&s, at)),
                     heading: s.heading,
+                    motion: s.motion,
                     slot: 255,
                     ..Default::default()
                 };
+                let motion_age = at.saturating_sub(s.motion_at);
+                if s.sensor_fault || s.run.is_some() || motion_age > MOTION_FRESH_MS {
+                    snapshot.motion = Motion::default();
+                } else if snapshot.motion.quality != 0 {
+                    snapshot.motion.age = L2::new(motion_age as u16);
+                }
                 snapshot.heading.age = L2::new(
                     (snapshot.heading.age.get() as u64 + at.saturating_sub(s.heading_at))
                         .min(u16::MAX as u64) as u16,

@@ -89,6 +89,66 @@ fn pps_wrap_extends_one_mhz_capture() {
 }
 const EPOCH: u64 = 1791806400000;
 #[test]
+fn paired_gps_sentences_crossing_pps_keep_the_first_sentences_edge() {
+    use crate::gps::{PpsHistory, verify_epoch};
+    let timing = GpsTiming::parse("0,900,999,10,80").unwrap();
+    for gga_first in [false, true] {
+        let mut parser = GpsParser::default();
+        let mut clock = UtcClock::default();
+        let mut pps = PpsHistory::default();
+        pps.record(Some(0));
+        for second in 0..5 {
+            let rmc = nmea(&std::format!(
+                "GPRMC,1200{second:02}.000,A,3746.4940,N,12225.1640,W,0,0,121026,,,A"
+            ));
+            let gga = nmea(&std::format!(
+                "GPGGA,1200{second:02}.000,3746.4940,N,12225.1640,W,1,08,0.9,10,M,30,M,,"
+            ));
+            let (first, last) = if gga_first {
+                (&gga, &rmc)
+            } else {
+                (&rmc, &gga)
+            };
+            assert!(parser.push(first, second * 1000 + 950).is_none());
+            pps.record(Some((second + 1) * 1000));
+            let fix = parser.push(last, second * 1000 + 1050).unwrap();
+            assert_eq!(fix.captured_ms, second * 1000 + 950);
+            assert!(crate::gps::pps_anchor(fix, pps.latest().unwrap(), Some(timing)).is_none());
+            assert_eq!(pps.for_capture(fix.captured_ms), Some(second * 1000));
+            assert_eq!(
+                verify_epoch(
+                    &mut clock,
+                    fix,
+                    pps.for_capture(fix.captured_ms),
+                    Some(timing)
+                ),
+                second == 4
+            );
+        }
+        assert_eq!(clock.state(), ClockState::Locked);
+    }
+}
+
+#[test]
+fn pps_history_rejects_future_stale_missing_and_reset_edges() {
+    use crate::gps::PpsHistory;
+    let mut pps = PpsHistory::default();
+    assert_eq!(pps.for_capture(950), None);
+    pps.record(Some(1000));
+    assert_eq!(pps.for_capture(950), None);
+    assert_eq!(pps.for_capture(1000), Some(1000));
+    assert_eq!(pps.for_capture(1999), Some(1000));
+    assert_eq!(pps.for_capture(2000), None);
+    pps.record(Some(3000));
+    assert_eq!(pps.for_capture(2950), None);
+    pps.record(Some(2000)); // A late task wake-up must not reorder captures.
+    assert_eq!(pps.latest(), Some(3000));
+    pps.record(None);
+    assert_eq!(pps.latest(), None);
+    assert_eq!(pps.for_capture(3050), None);
+}
+
+#[test]
 fn provisioned_gps_timing_acquires_from_parsed_epochs_and_bounds_pps_association() {
     let timing = GpsTiming::parse("0,100,400,10,80").unwrap();
     let mut parser = GpsParser::default();
@@ -445,7 +505,7 @@ fn revised_uart_fixture_and_stream_recovery_do_not_accept_old_payloads() {
         uptime: L4::new(2),
         health: L2::new(0x1800),
     });
-    let fixture = unhex("03020402010101020201010104187f7900");
+    let fixture = unhex("0303040201010102020101010418d27c00");
     let mut encoder = MessageEncoder::new();
     assert_eq!(encoder.encode(&heartbeat).unwrap(), fixture);
     for split in 0..fixture.len() {
@@ -485,6 +545,11 @@ fn revised_uart_fixture_and_stream_recovery_do_not_accept_old_payloads() {
             assert!(r.is_err());
         }
     } // Superseded version-1 heartbeat with a valid CRC.
+    for b in unhex("03020402010101020201010104187f7900") {
+        if let Some(r) = decoder.feed(b) {
+            assert!(r.is_err());
+        }
+    } // Superseded version-2 heartbeat with a valid CRC.
 }
 #[test]
 fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
@@ -492,6 +557,15 @@ fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
         boot: L4::new(1),
         sequence: L4::new(1),
         roster_revision: L4::new(1),
+        motion: Motion {
+            acceleration: [L2::new((-500i16) as u16), L2::new(0), L2::new(866)],
+            gravity: [L2::new((-500i16) as u16), L2::new(0), L2::new(866)],
+            shake: L2::new(123),
+            captured_at: L4::new(u32::MAX - 5),
+            age: L2::new(25),
+            quality: 1,
+            calibration_revision: L4::new(0),
+        },
         slot: 0,
         count: 8,
         ..Default::default()
@@ -515,12 +589,17 @@ fn uart_complete_snapshot_and_commands_fit_the_512_byte_limit() {
     }
     let mut encoder = MessageEncoder::new();
     let frame = encoder.encode(&Message::StateSnapshot(snapshot)).unwrap();
-    assert!(frame.len() <= 331);
+    assert!(frame.len() <= 356);
+    assert!(frame.len() * 20 * 10 < MESSAGE_BAUD_RATE as usize * 63 / 100);
+    println!(
+        "Full seven-peer motion snapshot: {} bytes at 20 Hz",
+        frame.len()
+    );
     // Independent Python fixed-width serialization, CRC-16 and COBS fixture.
     assert_eq!(
         frame,
         unhex(
-            "040201010101020101010101010101010101020101010101010101010101010101010101010101010101010101010101010101010101010101010101010109ffffffffffffffff03e8030105ffffffff01010101010104080702020101010201010101010101010101010101010101010101010102010480800102030201010102010101010101010101010101010101010101010101020104808002020402010101020101010101010101010101010101010101010101010201048080030205020101010201010101010101010101010101010101010101010102010480800402060201010102010101010101010101010101010101010101010101020104808005020702010101020101010101010101010101010101010101010101010201048080060208020101010201010101010101010101010101010101010101010102010480800703e34c00"
+            "0403010101010201010101010101010101010201010101010101010101010101010101010101010101010101010101010101010101030cfe010562030cfe010462037b06faffffff19020101010101010101010101010109ffffffffffffffff03e8030105ffffffff010101010101040807020201010102010101010101010101010101010101010101010101020104808001020302010101020101010101010101010101010101010101010101010201048080020204020101010201010101010101010101010101010101010101010102010480800302050201010102010101010101010101010101010101010101010101020104808004020602010101020101010101010101010101010101010101010101010201048080050207020101010201010101010101010101010101010101010101010102010480800602080201010102010101010101010101010101010101010101010101020104808007039ada00"
         )
     );
     let command = Message::Command(Command {
@@ -947,7 +1026,7 @@ fn magnetic_model_matches_all_noaa_wmm2025_reference_values() {
     assert_eq!(checked, 100);
 }
 
-fn coefficients() -> Coefficients {
+pub(crate) fn coefficients() -> Coefficients {
     let zero = F4::new(0.0);
     let one = F4::new(1.0);
     let mut c = Coefficients {
@@ -1204,4 +1283,157 @@ fn pps_anchor_uses_capture_time_across_wrap_and_rejects_stale_edges() {
     assert_eq!(pps_timestamp(1001, now), None); // Future edge, not a previous wrap.
     assert_eq!(pps_timestamp(5, 2_000_005), Some(5));
     assert_eq!(pps_timestamp(5, 2_000_006), None);
+}
+
+#[test]
+fn motion_snapshot_validation_and_freshness_do_not_require_magnetic_heading() {
+    let mut s = StateSnapshot {
+        boot: L4::new(1),
+        sequence: L4::new(1),
+        slot: 255,
+        ..Default::default()
+    };
+    let mut estimator = crate::pattern_motion::MotionEstimator::default();
+    s.motion = estimator.update(
+        [9.80665, 0.0, 0.0],
+        false,
+        None,
+        crate::sensor_mount::ImuMounts::default(),
+        u32::MAX as u64 + 10,
+    );
+    assert_eq!(s.motion.captured_at.get(), 9);
+    assert_eq!(s.heading.quality, 0);
+    assert!(Message::StateSnapshot(s.clone()).valid());
+    let mut encoder = MessageEncoder::new();
+    let wire = encoder.encode(&Message::StateSnapshot(s.clone())).unwrap();
+    let mut decoder = MessageDecoder::new();
+    let decoded = wire
+        .iter()
+        .filter_map(|b| decoder.feed(*b))
+        .next()
+        .unwrap()
+        .unwrap();
+    assert_eq!(decoded, Message::StateSnapshot(s.clone()));
+    for change in 0..4 {
+        let mut bad = s.clone();
+        match change {
+            0 => bad.motion.quality = 3,
+            1 => bad.motion.acceleration[0] = L2::new(8001),
+            2 => bad.motion.shake = L2::new(16001),
+            _ => bad.motion.calibration_revision = L4::new(1),
+        }
+        assert!(!Message::StateSnapshot(bad).valid());
+    }
+    s.motion.quality = 0;
+    assert!(!Message::StateSnapshot(s).valid());
+}
+#[test]
+fn amulet_patterns_use_motion_but_navigation_and_shared_sections_keep_their_contracts() {
+    use palette::LinSrgb;
+    let mut settings = sparkle();
+    let mut s = StateSnapshot {
+        boot: L4::new(1),
+        sequence: L4::new(1),
+        slot: 0,
+        count: 8,
+        roster_revision: L4::new(1),
+        ..Default::default()
+    };
+    let mut estimator = crate::pattern_motion::MotionEstimator::default();
+    s.motion = estimator.update(
+        [9.80665, 0.0, 0.0],
+        false,
+        None,
+        crate::sensor_mount::ImuMounts::default(),
+        0,
+    );
+    let mut moving = [LinSrgb::new(0.0, 0.0, 0.0); 494];
+    let mut neutral = moving;
+    for preset in 0..=4 {
+        settings.preset = preset;
+        crate::amulet::Renderer::default().render(
+            &settings,
+            Some((&s, 0)),
+            0,
+            0.7,
+            false,
+            &mut moving,
+        );
+        let mut base = s.clone();
+        base.motion = Motion::default();
+        crate::amulet::Renderer::default().render(
+            &settings,
+            Some((&base, 0)),
+            0,
+            0.7,
+            false,
+            &mut neutral,
+        );
+        if preset == 3 {
+            assert_eq!(moving, neutral);
+        } else {
+            assert_ne!(moving, neutral);
+        }
+        for (lo, hi) in [(0, 256), (256, 320), (320, 404), (404, 494)] {
+            if preset != 3 {
+                assert_ne!(&moving[lo..hi], &neutral[lo..hi]);
+            }
+        }
+        let mut stale = s.clone();
+        stale.motion.age = L2::new(101);
+        crate::amulet::Renderer::default().render(
+            &settings,
+            Some((&stale, 0)),
+            0,
+            0.7,
+            false,
+            &mut moving,
+        );
+        assert_eq!(moving, neutral);
+        s.motion.shake = L2::new(1500);
+        crate::amulet::Renderer::default().render(
+            &settings,
+            Some((&s, 0)),
+            0,
+            0.7,
+            false,
+            &mut moving,
+        );
+        assert_ne!(moving, neutral);
+        assert!(moving.iter().all(|c| {
+            [c.red, c.green, c.blue]
+                .iter()
+                .all(|v| (0.0..=1.0).contains(v))
+        }));
+        s.motion.shake = L2::new(0);
+    }
+    for mode in 0..=1 {
+        s.motion = estimator.update(
+            [0.0, 9.80665, 0.0],
+            false,
+            None,
+            crate::sensor_mount::ImuMounts::default(),
+            200,
+        );
+        s.motion.shake = L2::new(1500);
+        settings.mode = mode;
+        crate::amulet::Renderer::default().render(
+            &settings,
+            Some((&s, 0)),
+            0,
+            0.0,
+            false,
+            &mut moving,
+        );
+        s.motion = Motion::default();
+        crate::amulet::Renderer::default().render(
+            &settings,
+            Some((&s, 0)),
+            0,
+            0.0,
+            false,
+            &mut neutral,
+        );
+        assert_eq!(moving, neutral);
+    }
 }

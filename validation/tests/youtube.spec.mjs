@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 async function setup(page, path = '/') {
@@ -36,6 +36,7 @@ async function setup(page, path = '/') {
   await page.goto(origin + path); await physicsReady(page); await normalView(page);
 }
 async function load(page) {
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   await page.locator('.youtube-link').fill('https://youtu.be/abcDEF012_-?t=1m23s');
   await page.getByRole('button', { name: 'Load video', exact: true }).click();
@@ -94,6 +95,7 @@ for (const resizeLayout of [false, true]) {
       return v.canvasHeight === document.querySelector('.balloon-layer').getBoundingClientRect().height;
     })).toBe(true);
     const before = await geometry();
+    await openFullscreenSettings(page);
     await page.getByRole('button', { name: 'Video', exact: true }).click();
     await expect(page.locator('.youtube-link')).toBeFocused();
     expect(await geometry()).toEqual(before);
@@ -113,9 +115,12 @@ for (const resizeLayout of [false, true]) {
     await expect(editor).toBeHidden(); await expect(page.locator('.youtube-link')).not.toBeFocused();
     expect(await page.locator('.audio-card').evaluate(n => n.style.getPropertyValue('--expanded-height'))).toBe('');
     await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => window.keyboardViewport(844));
+    await openFullscreenSettings(page);
     await page.getByRole('button', { name: 'Video', exact: true }).click();
     await page.setViewportSize({ width: 844, height: 390 }); await page.evaluate(() => window.keyboardViewport(390));
     await expect.poll(() => page.locator('.audio-card').evaluate(n => n.getBoundingClientRect().height)).toBe(390);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.fullscreen-settings')).not.toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
     await expect(page.locator('.youtube-link')).not.toBeFocused();
@@ -129,6 +134,7 @@ test('expanded entry without a loaded video does not reserve or resize the scene
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   const sceneHeight = await page.locator('.balloon-layer').evaluate(n => n.getBoundingClientRect().height);
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   expect(await page.locator('.balloon-layer').evaluate(n => n.getBoundingClientRect().height)).toBe(sceneHeight);
   await page.getByRole('button', { name: 'Clear YouTube link', exact: true }).click();
@@ -143,6 +149,7 @@ test('expanded entry without a loaded video does not reserve or resize the scene
 });
 test('default video is ready to load and the clear button preserves playback and an empty preference', async ({ page }) => {
   await setup(page);
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   await expect(page.locator('.youtube-link')).toHaveValue('https://www.youtube.com/watch?v=6d4NOjyd2Ik');
   await expect(page.locator('.youtube-frame iframe')).toHaveCount(0);
@@ -150,6 +157,7 @@ test('default video is ready to load and the clear button preserves playback and
   await expect(page.locator('.youtube-frame iframe')).toHaveAttribute('src', /embed\/6d4NOjyd2Ik/);
   await page.evaluate(() => window.videoPlayer.playVideo());
   const clear = page.getByRole('button', { name: 'Clear YouTube link', exact: true });
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   expect(await clear.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await clear.focus(); await page.keyboard.press('Enter');
@@ -159,6 +167,7 @@ test('default video is ready to load and the clear button preserves playback and
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
   expect(await page.evaluate(() => window.micRequests)).toBe(0);
   await page.reload(); await physicsReady(page); await normalView(page);
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   await expect(page.locator('.youtube-link')).toHaveValue('');
 });
@@ -178,10 +187,11 @@ for (const path of ['/', '/advanced/']) {
     for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(viewport);
       await expect.poll(async () => page.evaluate(() => {
-        const video = document.querySelector('.youtube-frame').getBoundingClientRect(), scene = document.querySelector('.balloon-layer').getBoundingClientRect(), controls = document.querySelector('.audio-controls').getBoundingClientRect();
+        const video = document.querySelector('.youtube-frame').getBoundingClientRect(), scene = document.querySelector('.balloon-layer').getBoundingClientRect();
         const portrait = innerHeight > innerWidth;
-        return { minimum: video.width >= 200 && video.height >= 200, bounded: scene.bottom <= controls.top, separated: portrait ? video.bottom <= scene.top : video.right <= scene.left, fits: document.documentElement.scrollWidth <= innerWidth };
+        return { minimum: video.width >= 200 && video.height >= 200, bounded: scene.bottom <= innerHeight, separated: portrait ? video.bottom <= scene.top : video.right <= scene.left, fits: document.documentElement.scrollWidth <= innerWidth };
       })).toEqual({ minimum: true, bounded: true, separated: true, fits: true });
+      await closeFullscreenSettings(page);
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
       await expect.poll(() => page.evaluate(() => {
@@ -199,7 +209,7 @@ for (const path of ['/', '/advanced/']) {
   });
 }
 for (const reducedMotion of ['reduce', 'no-preference']) {
-  test(`short landscape scrolls to recognition, recovery and all controls below YouTube with ${reducedMotion}`, async ({ page }, info) => {
+  test(`short landscape keeps the scene fixed and puts controls in top-half settings with ${reducedMotion}`, async ({ page }, info) => {
     await page.emulateMedia({ reducedMotion, colorScheme: reducedMotion === 'reduce' ? 'light' : 'dark' });
     await page.setViewportSize({ width: 568, height: 320 });
     await setup(page); await load(page);
@@ -215,21 +225,15 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
     });
     await expect.poll(() => page.evaluate(() => {
       const rect = selector => document.querySelector(selector).getBoundingClientRect();
-      const video = rect('.youtube-frame iframe'), scene = rect('.balloon-layer');
-      const recovery = rect('.recovery-notices'), song = rect('.recognized-song'), controls = rect('.audio-controls');
-      return { videoVisible: video.width > 0 && video.height > 0,
-        sceneVisible: scene.height >= 200, separated: video.right <= scene.left,
-        sceneAboveNotices: scene.bottom <= recovery.top, noticesAboveSong: recovery.bottom <= song.top,
-        songAboveControls: song.bottom <= controls.top, scrolls: document.querySelector('.audio-card').scrollHeight > document.querySelector('.audio-card').clientHeight,
-        widthFits: document.documentElement.scrollWidth <= innerWidth };
-    })).toEqual({ videoVisible: true, sceneVisible: true, separated: true, sceneAboveNotices: true,
-      noticesAboveSong: true, songAboveControls: true, scrolls: true, widthFits: true });
-    for (const selector of ['.audio-error', '.recognized-song', '.recognition-status']) {
-      const row = page.locator(selector);
-      await row.evaluate(n => n.scrollIntoView({ block: 'center' }));
-      await expect(row).toBeInViewport({ ratio: 1 });
-      expect(await row.evaluate(n => n.scrollHeight <= n.clientHeight)).toBe(true);
-    }
+      const video = rect('.youtube-frame iframe'), scene = rect('.balloon-layer'), recovery = rect('.recovery-notices');
+      const card = document.querySelector('.audio-card');
+      return { videoVisible: video.width >= 200 && video.height >= 200, sceneVisible: scene.height >= 200,
+        separated: video.right <= scene.left, topNotices: recovery.bottom <= innerHeight / 2,
+        fixed: card.scrollHeight === card.clientHeight, widthFits: document.documentElement.scrollWidth <= innerWidth };
+    })).toEqual({ videoVisible: true, sceneVisible: true, separated: true, topNotices: true, fixed: true, widthFits: true });
+    await openFullscreenSettings(page);
+    await page.locator('.recognition-status').scrollIntoViewIfNeeded();
+    await expect(page.locator('.recognition-status')).toBeInViewport();
     for (const name of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
       const control = page.getByRole('checkbox', { name, exact: true });
       await control.locator('..').scrollIntoViewIfNeeded();
@@ -238,6 +242,7 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
     }
     await page.getByRole('button', { name: 'Video', exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeInViewport({ ratio: 1 });
+    await closeFullscreenSettings(page);
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
     if (reducedMotion === 'reduce') {
@@ -258,6 +263,7 @@ test('speaker playback and microphone capture share an audio session, and stoppi
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
   expect(await page.evaluate(() => window.videoPlayer.destroyed ?? false)).toBe(false);
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   await page.locator('.youtube-link').fill('https://example.com/video');
   await page.getByRole('button', { name: 'Load video', exact: true }).click();
@@ -387,6 +393,7 @@ test('stale replaced or removed video callbacks cannot change the current microp
   await page.evaluate(() => { players[0].pauseVideo(); players[0].error(100); });
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('play-and-record');
   await expect(page.locator('.youtube-status')).toBeEmpty();
+  await openFullscreenSettings(page);
   await page.getByRole('button', { name: 'Video', exact: true }).click();
   await page.getByRole('button', { name: 'Remove video', exact: true }).click();
   await page.evaluate(() => players[1].playVideo());

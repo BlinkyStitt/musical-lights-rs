@@ -14,8 +14,10 @@ from provision import Console
 
 class FirmwareToolsTests(unittest.TestCase):
     def test_independent_board_fixture(self):
-        data = decode_frame(bytes.fromhex("03020402010101020201010104187f7900"))
-        self.assertEqual(data, bytes([2, 4, 0]) + struct.pack("<IIH", 1, 2, 0x1800))
+        data = decode_frame(bytes.fromhex("0303040201010102020101010418d27c00"))
+        self.assertEqual(data, bytes([3, 4, 0]) + struct.pack("<IIH", 1, 2, 0x1800))
+        with self.assertRaises(ValueError):
+            decode_frame(bytes.fromhex("03020402010101020201010104187f7900"))
         with self.assertRaises(ValueError):
             decode_frame(bytes.fromhex("0301040201010102020101010418887700"))
         with self.assertRaises(ValueError):

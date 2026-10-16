@@ -134,25 +134,55 @@ pub fn sphere_drag_factor(radius: f32, speed: f32, mass: f32, dt: f32) -> f32 {
     1.0 / (1.0 + coefficient * speed.max(0.0) * dt / mass)
 }
 
-/// A new physical contact can transfer pigment only during an audio attack.
-/// Decorative bar motion and resting pressure cannot qualify as an attack.
-pub fn contact_pigment_blend(attack: f32, impulse: f32, mass: f32) -> f32 {
-    if ![attack, impulse, mass].iter().all(|v| v.is_finite())
-        || !(0.0..=1.0).contains(&attack)
-        || attack == 0.0
-        || impulse <= 0.0
-        || mass <= 0.0
-    {
+/// A new physical bar contact blends its color into the ball. Audio does not
+/// qualify painting; callers exclude persistent resting pressure.
+pub fn contact_pigment_blend(impulse: f32, mass: f32) -> f32 {
+    if ![impulse, mass].iter().all(|v| v.is_finite()) || impulse <= 0.0 || mass <= 0.0 {
         return 0.0;
     }
     (impulse / mass * 0.15).clamp(0.0, 0.5)
 }
 
-/// Retains three recent contact pigments. Call only on a new attacking contact, so
-/// persistent resting pressure cannot continuously recolor a ball or LED.
-pub fn remember_pigment(history: &mut [f32; 9], pigment: [f32; 3]) {
-    history.copy_within(0..6, 3);
-    history[..3].copy_from_slice(&pigment);
+/// Time constant for each of three connected surface regions. The last region
+/// reaches 95% of a held contact target in approximately 1.13 seconds.
+pub const PIGMENT_FILL_SECONDS: f32 = 0.18;
+
+/// Spread the contact target through three connected regions without replacing
+/// visible colors at an impact. This is the exact constant-target solution of
+/// three cascaded first-order filters, so elapsed time sets the fill rate.
+/// Regions stay attached to the ball as it rolls. No allocation or render clock.
+pub fn advance_pigment(surface: &mut [f32; 9], target: [f32; 3], dt: f32) {
+    if !dt.is_finite()
+        || dt <= 0.0
+        || !surface
+            .iter()
+            .chain(target.iter())
+            .all(|v| (0.0..=1.0).contains(v))
+    {
+        return;
+    }
+    // Bound the polynomial before evaluating it, including after a long pause.
+    let t = (dt / PIGMENT_FILL_SECONDS).min(60.0);
+    let decay = Float::exp(-t);
+    for c in 0..3 {
+        let first = surface[c] - target[c];
+        let middle = surface[3 + c] - target[c];
+        let last = surface[6 + c] - target[c];
+        surface[c] = (target[c] + decay * first).clamp(0.0, 1.0);
+        surface[3 + c] = (target[c] + decay * (middle + t * first)).clamp(0.0, 1.0);
+        surface[6 + c] =
+            (target[c] + decay * (last + t * middle + 0.5 * t * t * first)).clamp(0.0, 1.0);
+    }
+}
+
+/// Mean of the smooth lower/middle/upper surface field. Keep lighting on the
+/// visible fill rather than jumping to the new contact target.
+pub fn pigment_color(surface: &[f32; 9]) -> [f32; 3] {
+    core::array::from_fn(|c| {
+        surface[3 + c]
+            + 0.25 * (surface[c] - surface[3 + c])
+            + 0.25 * (surface[6 + c] - surface[3 + c])
+    })
 }
 
 #[cfg(test)]
@@ -260,27 +290,69 @@ mod tests {
         assert!((0.0..=1.0).contains(&sphere_drag_factor(0.1, 1e9, 1e-6, 1.0)));
     }
     #[test]
-    fn pigment_requires_an_active_attack_and_a_physical_impulse() {
-        assert_eq!(contact_pigment_blend(0.0, 1.0, 1.0), 0.0);
-        assert_eq!(contact_pigment_blend(1.0, 0.0, 1.0), 0.0);
-        assert_eq!(contact_pigment_blend(0.01, 1.0, 1.0), 0.15);
-        assert_eq!(contact_pigment_blend(1.0, 100.0, 1.0), 0.5);
-        for (attack, impulse, mass) in [
-            (f32::NAN, 1.0, 1.0),
-            (1.1, 1.0, 1.0),
-            (-1.0, 1.0, 1.0),
-            (1.0, f32::INFINITY, 1.0),
-            (1.0, -1.0, 1.0),
-            (1.0, 1.0, 0.0),
+    fn pigment_requires_a_finite_physical_impulse_and_mass() {
+        assert_eq!(contact_pigment_blend(0.0, 1.0), 0.0);
+        assert_eq!(contact_pigment_blend(1.0, 1.0), 0.15);
+        assert_eq!(contact_pigment_blend(100.0, 1.0), 0.5);
+        for (impulse, mass) in [
+            (f32::NAN, 1.0),
+            (f32::INFINITY, 1.0),
+            (-1.0, 1.0),
+            (1.0, 0.0),
+            (1.0, -1.0),
+            (1.0, f32::NAN),
+            (1.0, f32::INFINITY),
         ] {
-            assert_eq!(contact_pigment_blend(attack, impulse, mass), 0.0);
+            assert_eq!(contact_pigment_blend(impulse, mass), 0.0);
         }
     }
     #[test]
-    fn remembers_contacts_in_order() {
-        let mut history = [0.0; 9];
-        remember_pigment(&mut history, [1.0, 0.0, 0.0]);
-        remember_pigment(&mut history, [0.0, 1.0, 0.0]);
-        assert_eq!(history, [0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    fn pigment_fills_regions_in_order_without_an_impact_jump() {
+        let mut surface = [0.0; 9];
+        advance_pigment(&mut surface, [1.0, 0.0, 0.0], 1.0 / 120.0);
+        assert!(surface[0] > surface[3] && surface[3] > surface[6]);
+        assert!(surface[0] < 0.05 && surface[6] > 0.0);
+        assert!(pigment_color(&surface)[0] < 0.015);
+        surface = [0.0; 9];
+        advance_pigment(&mut surface, [1.0, 0.0, 0.0], PIGMENT_FILL_SECONDS);
+        for (actual, expected) in [surface[0], surface[3], surface[6]]
+            .into_iter()
+            .zip([0.63212055, 0.2642411, 0.0803014])
+        {
+            assert!((actual - expected).abs() < 1e-6);
+        }
+        advance_pigment(&mut surface, [1.0, 0.0, 0.0], 1.4);
+        assert!(surface[6] > 0.95);
+    }
+    #[test]
+    fn pigment_fill_uses_elapsed_time_and_stays_bounded_when_retargeted() {
+        let run = |hz| {
+            let mut surface = [0.0; 9];
+            for target in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] {
+                for _ in 0..hz {
+                    advance_pigment(&mut surface, target, 1.0 / hz as f32);
+                    assert!(surface.iter().all(|v| (0.0..=1.0).contains(v)));
+                }
+            }
+            surface
+        };
+        let expected = run(120);
+        for hz in [30, 60, 240] {
+            for (a, b) in run(hz).into_iter().zip(expected) {
+                assert!((a - b).abs() < 3e-6);
+            }
+        }
+        let mut surface = [0.2; 9];
+        assert_eq!(pigment_color(&surface), [0.2; 3]);
+        for dt in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            advance_pigment(&mut surface, [1.0; 3], dt);
+            assert_eq!(surface, [0.2; 9]);
+        }
+        for invalid in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
+            advance_pigment(&mut surface, [invalid; 3], 1.0);
+            assert_eq!(surface, [0.2; 9]);
+        }
+        advance_pigment(&mut surface, [1.0; 3], f32::MAX);
+        assert_eq!(surface, [1.0; 9]);
     }
 }

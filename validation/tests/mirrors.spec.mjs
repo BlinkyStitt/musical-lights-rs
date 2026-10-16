@@ -1,16 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
-// Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    if (!localStorage.getItem('musical-lights-display-v1'))
-      localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 }));
-  });
-});
-async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
+async function normal(page) { await physicsReady(page); await normalView(page); }
 
 test('bars continue above and below the physical room', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -20,7 +13,7 @@ test('bars continue above and below the physical room', async ({ page }) => {
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     v.draw(performance.now());
-    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
+    const hidden = [v.balls, v.sideBars.mesh, v.enclosure];
     hidden.forEach(mesh => mesh.visible = false);
     const target = new THREE.WebGLRenderTarget(32, 32), pixels = new Uint8Array(32 * 32 * 4), samples = [];
     const camera = new THREE.OrthographicCamera(-.01, .01, .01, -.01, .01, 10);
@@ -40,46 +33,6 @@ test('bars continue above and below the physical room', async ({ page }) => {
   for (const pixel of samples) { expect(pixel[3]).toBe(255); expect(Math.max(...pixel.slice(0, 3))).toBeGreaterThan(100); }
 });
 
-test('continuous depth surfaces have no color steps at old copy boundaries', async ({ page }, info) => {
-  await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
-  await page.evaluate(() => window.sendBars(Array(24).fill(.8)));
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedHeight(0))).toBeGreaterThan(.1);
-  const evidence = await page.evaluate(async () => {
-    const v = document.querySelector('#dancinglights').physics;
-    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
-    v.draw(performance.now());
-    // Isolate a production spline patch to inspect its actual lit top.
-    const hidden = [v.balls, v.sideBars.mesh, v.enclosure, ...v.mirrors.meshes.map(({ mesh }) => mesh)];
-    const visibility = hidden.map(mesh => mesh.visible), count = v.bars.count;
-    hidden.forEach(mesh => mesh.visible = false); v.bars.count = 1;
-    const matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array);
-    const x = matrix.elements[12];
-    const y = v.renderedHeight(0), depth = v.config[5], mid = -depth * v.mirrors.count / 2;
-    const halfSpan = depth * (v.mirrors.count + 1) * .55;
-    const camera = new THREE.OrthographicCamera(-halfSpan, halfSpan, .15, -.15, .01, 10);
-    camera.up.set(1, 0, 0); camera.position.set(x, y + 2, mid); camera.lookAt(x, y, mid); camera.updateMatrixWorld();
-    const target = new THREE.WebGLRenderTarget(1000, 100), pixels = new Uint8Array(1000 * 100 * 4);
-    try {
-      v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera); v.renderer.readRenderTargetPixels(target, 0, 0, 1000, 100, pixels);
-      const sample = z => {
-        const point = new THREE.Vector3(x, y, z).project(camera);
-        const offset = (50 * 1000 + Math.floor((point.x + 1) * 500)) * 4;
-        return Array.from(pixels.slice(offset, offset + 3));
-      };
-      return { seams: [1, 2, 3].map(n => [sample(depth / 2 - n * depth + .002), sample(depth / 2 - n * depth - .002)]),
-        triangles: v.balls.geometry.index.count / 3, physicalBalls: v.layout[21], copies: v.mirrors.meshes.length };
-    } finally { hidden.forEach((mesh, i) => mesh.visible = visibility[i]); v.bars.count = count; v.renderer.setRenderTarget(null); target.dispose(); }
-  });
-  for (const [before, after] of evidence.seams) {
-    expect(Math.max(...before)).toBeGreaterThan(30); expect(Math.max(...after)).toBeGreaterThan(30);
-    expect(Math.max(...before.map((value, i) => Math.abs(value - after[i])))).toBeLessThanOrEqual(4);
-  }
-  expect(evidence.triangles).toBe(1280); expect(evidence.physicalBalls).toBe(8); expect(evidence.copies).toBe(1);
-  await info.attach('continuous-bar-seams.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
-});
-
 test('off-screen bar culling preserves visible pixels across angles and depth settings', async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
   const evidence = await page.evaluate(async () => {
@@ -89,24 +42,88 @@ test('off-screen bar culling preserves visible pixels across angles and depth se
     const target = new THREE.WebGLRenderTarget(320, 240), pixels = new Uint8Array(320 * 240 * 4), evidence = [];
     const read = () => { v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
     const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); return read(); };
+    const current=v.current, previous=v.previous;
+    v.current=current.slice(); v.previous=(previous??current).slice();
     try {
-      for (const count of [0, 3, 8, 17, 44, 2048]) for (const angle of [-40, -10, 0, 10, 40]) {
-        v.mirrors.setCount(count); v.setCamera(angle); v.renderer.setRenderTarget(target);
+      for (const depth of [.2, .35, .48, .8, 1.2, 2]) for (const angle of [-40, -10, 0, 10, 40]) {
+        v.current[v.layout[17]+4] = depth; v.previous[v.layout[17]+4] = depth; v.setCamera(angle); v.renderer.setRenderTarget(target);
         // Compare the production draw itself; an extra draw has no assertion.
         v.draw(performance.now());
         const visible = v.sideBars.mesh.count, actual = read();
         v.sideBars.update(v.layout); const all = v.sideBars.mesh.count, expected = render();
         let changed = 0;
         for (let i = 0; i < actual.length; i += 4) if (Math.abs(actual[i] - expected[i]) + Math.abs(actual[i + 1] - expected[i + 1]) + Math.abs(actual[i + 2] - expected[i + 2]) > 3) changed++;
-        evidence.push({ angle, count, visible, all, changed });
+        evidence.push({ angle, depth, visible, all, changed });
       }
-    } finally { v.mirrors.setCount(v.settings.mirrorCount); v.renderer.setRenderTarget(null); target.dispose(); }
+    } finally { v.current=current; v.previous=previous; v.renderer.setRenderTarget(null); target.dispose(); }
     return evidence;
   });
   for (const sample of evidence) { expect(sample.changed, JSON.stringify(sample)).toBe(0); expect(sample.visible).toBeLessThanOrEqual(sample.all); }
   expect(evidence.some(sample => sample.visible < sample.all)).toBe(true);
   await expect(page.getByRole('meter')).toHaveCount(24);
   await info.attach('bar-culling.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+});
+
+test('whole-bar clipping matches fragment-only clipping across depth, scroll and camera views', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const { barProjection } = await import(new URL(`${base}physics/enclosure.js`, document.baseURI));
+    const target = new THREE.WebGLRenderTarget(320, 240), pixels = new Uint8Array(320 * 240 * 4), result = [];
+    const meshes = [v.bars, v.sideBars.mesh], materials = meshes.map(mesh => mesh.material);
+    const current = v.current, previous = v.previous; v.current = current.slice(); v.previous = (previous ?? current).slice();
+    const references = materials.map(material => {
+      const reference = material.clone();
+      reference.onBeforeCompile = shader => {
+        material.onBeforeCompile(shader);
+        // Independent reference: rasterize every bar and let the established
+        // fragment bounds discard it, including the background bank offset.
+        shader.vertexShader = shader.vertexShader.replace(barProjection, barProjection.slice(0, barProjection.indexOf('float padding')));
+      };
+      reference.customProgramCacheKey = () => 'fragment-only-' + material.customProgramCacheKey();
+      return reference;
+    });
+    const read = () => { v.renderer.readRenderTargetPixels(target, 0, 0, 320, 240, pixels); return pixels.slice(); };
+    try {
+      for (const depth of [.2, .35, .48, 1.2, 2]) for (const [angle, pan, phase] of [[-40, 0, 0], [-10, .5, .03], [0, .5, .6], [12, .5, 1.19], [40, 1, 23.999]]) {
+        v.current[v.layout[20]] = phase; v.previous[v.layout[20]] = phase;
+        v.current[v.layout[17]+4]=depth; v.previous[v.layout[17]+4]=depth; v.cameraPan.x = pan; v.setCamera(angle); v.renderer.setRenderTarget(target); v.draw(performance.now()); const actual = read();
+        meshes.forEach((mesh, i) => { mesh.material = references[i]; }); v.render(v.camera); const expected = read();
+        meshes.forEach((mesh, i) => { mesh.material = materials[i]; });
+        let changed = 0;
+        for (let i = 0; i < actual.length; i += 4) if (Math.abs(actual[i] - expected[i]) + Math.abs(actual[i + 1] - expected[i + 1]) + Math.abs(actual[i + 2] - expected[i + 2]) > 3) changed++;
+        result.push({ depth, angle, pan, phase, changed });
+      }
+    } finally {
+      meshes.forEach((mesh, i) => { mesh.material = materials[i]; }); references.forEach(material => material.dispose());
+      v.current = current; v.previous = previous; v.cameraPan.reset(); v.setCamera(v.cameraBase); v.renderer.setRenderTarget(null); target.dispose();
+    }
+    return result;
+  });
+  for (const row of evidence) expect(row.changed, JSON.stringify(row)).toBe(0);
+  await info.attach('whole-bar-clipping.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+});
+
+test('GPU backpressure keeps simulation and camera input active and resumes drawing', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics, gl = v.renderer.getContext();
+    const original = gl.clientWaitSync;
+    const frames = async count => { for (let i = 0; i < count; i++) await new Promise(resolve => requestAnimationFrame(resolve)); };
+    gl.clientWaitSync = () => gl.TIMEOUT_EXPIRED;
+    try {
+      await frames(5); const start = { rendered: v.metrics.frames, tick: v.current[2], received: v.received, x: v.cameraPan.x };
+      v.cameraPan.press({ key: 'd' }); await frames(15); v.cameraPan.clear();
+      const blocked = { rendered: v.metrics.frames, tick: v.current[2], received: v.received, x: v.cameraPan.x, queued: v.gpuFrames.queued };
+      gl.clientWaitSync = original; await frames(10);
+      return { start, blocked, resumed: v.metrics.frames, stopped: !!v.notice.persistent };
+    } finally { gl.clientWaitSync = original; v.cameraPan.clear(); }
+  });
+  expect(result.blocked.queued).toBe(2); expect(result.blocked.rendered).toBe(result.start.rendered);
+  expect(result.blocked.tick).toBeGreaterThan(result.start.tick); expect(result.blocked.received).toBeGreaterThan(result.start.received);
+  expect(result.blocked.x).toBeGreaterThan(result.start.x); expect(result.resumed).toBeGreaterThan(result.blocked.rendered); expect(result.stopped).toBe(false);
 });
 
 test('normal scenes fill a larger centered frame before and after fullscreen', async ({ page }) => {
@@ -154,7 +171,7 @@ test('all nine bar banks share source lighting without internal wall partitions'
     v.draw(performance.now());
     const camera = new THREE.OrthographicCamera(-v.width * 4.5, v.width * 4.5, v.height / 2, -v.height / 2, .01, 20);
     camera.position.set(v.width / 2, v.height / 2, 2); camera.lookAt(v.width / 2, v.height / 2, 0); camera.updateMatrixWorld();
-    v.sideBars.update(v.layout, camera, v.mirrors.count, v.config[5]);
+    v.sideBars.update(v.layout, camera, v.renderedDepth);
     const target = new THREE.WebGLRenderTarget(1440, 360), pixels = new Uint8Array(1440 * 360 * 4);
     try {
       v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
@@ -172,7 +189,7 @@ test('all nine bar banks share source lighting without internal wall partitions'
       return { colors, walls: v.enclosure.count, wallWidth: v.enclosure.instanceMatrix.array[0],
         width: v.width, wallCenter: v.enclosure.instanceMatrix.array[12],
         outlines: v.scene.children.some(n => n.isLine), lights: v.scene.children.filter(n => n.isPointLight).length,
-        copyMaterials: v.mirrors.meshes.map(({ mesh }) => mesh.material.type) };
+        copied: v.scene.children.some(mesh => mesh.geometry?.attributes.copyDepth) };
     } finally { v.renderer.setRenderTarget(null); target.dispose(); }
   });
   for (const banks of result.colors) {
@@ -182,7 +199,7 @@ test('all nine bar banks share source lighting without internal wall partitions'
   expect(result.walls).toBe(1); expect(result.wallWidth).toBeCloseTo(result.width * 9, 5);
   expect(result.wallCenter).toBeCloseTo(result.width / 2, 5);
   expect(result.outlines).toBe(false); expect(result.lights).toBe(0);
-  expect(result.copyMaterials).toEqual(['MeshLambertMaterial']);
+  expect(result.copied).toBe(false);
 });
 
 test('paired physical bars stay contained and visible without Quiet/Loud labels', async ({ page }) => {
@@ -215,7 +232,7 @@ test('paired physical bars stay contained and visible without Quiet/Loud labels'
   }
 });
 
-test('one transparent enclosure shows bounded depth copies and preserves source pixels at oblique views', async ({ page }, info) => {
+test('one faint outer coating preserves source pixels and bounded rendering at oblique views', async ({ page }, info) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
@@ -230,20 +247,33 @@ test('one transparent enclosure shows bounded depth copies and preserves source 
       const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4);
       const render = () => { v.renderer.setRenderTarget(target); v.render(v.camera); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
       const reflected = render(), passes = v.renderer.info.render.calls;
-      v.mirrors.meshes.forEach(({ mesh }) => { mesh.visible = false; });
-      const plain = render(); v.mirrors.meshes.forEach(({ mesh }) => { mesh.visible = true; });
-      let changes = 0, sourcePixels = 0;
+      v.enclosure.visible = false;
+      const plain = render(); v.enclosure.visible = true;
+      let changes = 0, sourcePixels = 0; const differences = [];
       for (let i = 0; i < pixels.length; i += 4) {
-        if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) changes++;
+        if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) {
+          changes++;
+          if (differences.length < 32) differences.push({ x: i / 4 % 240, y: Math.floor(i / 4 / 240),
+            reflected: Array.from(reflected.slice(i, i + 4)), plain: Array.from(plain.slice(i, i + 4)) });
+        }
         if (plain[i] + plain[i + 1] + plain[i + 2] > 60) sourcePixels++;
       }
       const normals = v.enclosure.geometry.groups.map(group => new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal, v.enclosure.geometry.index.getX(group.start)).negate().toArray());
       const result = { changes, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
-        passes, targets: v.mirrors.meshes.length, pixels: v.canvas.width * v.canvas.height,
-        negativeScales: v.mirrors.meshes.some(({ mesh }) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array).determinant() < 0) };
+        passes, targets: v.enclosure.count, pixels: v.canvas.width * v.canvas.height,
+        negativeScales: new THREE.Matrix4().fromArray(v.enclosure.instanceMatrix.array).determinant() < 0 };
+      if (changes) Object.assign(result, { differences, reflected: Array.from(reflected), plain: Array.from(plain),
+        camera: { position: v.camera.position.toArray(), projection: v.camera.projectionMatrix.toArray() },
+        room: { height: v.current[1], depth: v.config[5] }, gl: v.renderer.getContext().getContextAttributes() });
       v.renderer.setRenderTarget(null); target.dispose(); v.cameraBase = 0; v.setCamera(0); return result;
     }, angle);
-    expect(state.changes).toBeGreaterThan(150);
+    if (state.changes) {
+      await info.attach(`coating-reflected-${angle}.rgba`, { body: Buffer.from(state.reflected), contentType: 'application/octet-stream' });
+      await info.attach(`coating-plain-${angle}.rgba`, { body: Buffer.from(state.plain), contentType: 'application/octet-stream' });
+      delete state.reflected; delete state.plain;
+      await info.attach(`coating-difference-${angle}.json`, { body: JSON.stringify(state), contentType: 'application/json' });
+    }
+    expect(state.changes).toBe(0);
     expect(state.sourcePixels).toBeGreaterThan(200);
     expect(state.walls).toBe(6); expect(state.targets).toBe(1); expect(state.negativeScales).toBe(false);
     expect(state.pixels).toBeLessThanOrEqual(200000);
@@ -290,48 +320,34 @@ test('Advanced saves bounded direction endpoints and curve without starting audi
   await expect(page.locator('.listening-toggle')).not.toBeChecked();
 });
 
-test('mirror count saves, rejects fractions and resets without changing physics', async ({ page }) => {
+test('physical depth changes preserve active audio and reset to the default without respawning balls', async ({ page }) => {
   await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
-  await page.locator('.display-controls > summary').click();
-  await page.evaluate(() => { window.mirrorMeshes = document.querySelector('#dancinglights').physics.mirrors.meshes.map(({mesh})=>mesh); });
   await page.locator('.listening-toggle').check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
-  await page.evaluate(() => { window.mirrorAudioFrames=0;document.querySelector('.audio-card').addEventListener('audio-tempo',()=>window.mirrorAudioFrames++); });
-  for (const count of [0, 1, 17, 64, 2048]) {
-    await page.locator('.mirror-count').fill(String(count)); await page.locator('.mirror-count').dispatchEvent('change');
-    expect(await page.evaluate(() => {
-      const v = document.querySelector('#dancinglights').physics;
-      return [v.settings.mirrorCount, v.mirrors.count, v.balls.count, v.layout[21], v.sideBars.capacity,
-        v.mirrors.meshes.every(({mesh},i)=>mesh===window.mirrorMeshes[i])];
-    })).toEqual([count, count, 8, 8, 400, true]);
+  await page.evaluate(() => { window.depthAudioFrames=0; const v=document.querySelector('#dancinglights').physics;
+    window.depthMeshes=[v.balls,v.bars,v.sideBars.mesh,v.enclosure];
+    v.card.addEventListener('audio-tempo',()=>window.depthAudioFrames++); });
+  for (const cm of [20,48,100,200]) {
+    await page.locator('.depth-slider').fill(String(cm));
+    await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(cm/100,5);
+    expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;
+      return {balls:v.balls.count,capacity:v.sideBars.capacity,same:[v.balls,v.bars,v.sideBars.mesh,v.enclosure].every((mesh,i)=>mesh===window.depthMeshes[i])};
+    })).toEqual({balls:8,capacity:400,same:true});
   }
-  await expect.poll(()=>page.evaluate(()=>window.mirrorAudioFrames)).toBeGreaterThan(5);
+  await expect.poll(()=>page.evaluate(()=>window.depthAudioFrames)).toBeGreaterThan(5);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
-  for (const invalid of ['1.5', '2049', '-1']) {
-    await page.locator('.mirror-count').fill(invalid); await page.locator('.mirror-count').dispatchEvent('change');
-    expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.mirrorCount)).toBe(2048);
-    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(2048);
-  }
-  // Reset from the maximum manual count while these controls are in view.
-  await page.locator('.display-reset').click();
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.settings.depthMode)).toBe('auto');
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile.done), { timeout: 30000 }).toBe(true);
-  const selected = Number(await page.locator('.mirror-count').inputValue());
-  expect(selected).toBeGreaterThanOrEqual(0); expect(selected).toBeLessThanOrEqual(2048);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.mirrors.count)).toBe(selected);
-  await page.locator('.mirror-count').fill('2048'); await page.locator('.mirror-count').dispatchEvent('change');
-  // Reload last: restoration needs no second scroll through the scene at
-  // the maximum manual count. The hidden control still exposes its value.
-  await page.reload(); await physicsReady(page);
-  await expect(page.locator('.mirror-count')).toHaveValue('2048');
-  expect(await page.evaluate(() => {
-    const v = document.querySelector('#dancinglights').physics;
-    return [v.settings.depthMode, v.mirrors.count, v.balls.count];
-  })).toEqual(['manual', 2048, 8]);
+  await page.locator('.display-controls > summary').click(); await page.locator('.display-reset').click();
+  await expect(page.locator('.depth-slider')).toHaveValue('48');
+  await expect.poll(()=>page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;return v.current[v.layout[17]+4];})).toBeCloseTo(.48,5);
+  // Reset is below the scene. Resume drawing before sampling rendered geometry.
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(.48,5);
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
 });
 
 test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {
   await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await physicsReady(page);
+  await openFullscreenSettings(page);
   await expect(page.locator('.tempo-readout')).toBeHidden();
   await page.locator('.listening-toggle').check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
@@ -354,14 +370,17 @@ test('full-size background boxes repeat all source bands beside the physical cen
     const results = [];
     try {
       for (const angle of [-40, 40]) {
-        v.mirrors.setCount(44); v.setCamera(angle); v.draw(performance.now());
+        v.setCamera(angle); v.draw(performance.now());
+        const center=new THREE.Vector3(v.width/2,v.visibleHeight/2,0);
+        v.camera.position.sub(center).multiplyScalar(9).add(center); v.camera.lookAt(center); v.camera.updateMatrixWorld();
+        v.sideBars.update(v.layout,v.camera,v.renderedDepth);
         const copy = render();
         // Hide only the new outer banks. Keep background and lighting identical.
         for (let i = 0; i < v.sideBars.mesh.count; i++)
           if (Math.abs(v.sideBars.offsets[i]) > 2 * v.width + .00001) v.sideBars.mesh.instanceMatrix.array[i * 16 + 12] += 1000;
         v.sideBars.mesh.instanceMatrix.needsUpdate = true;
         const withoutOuter = render();
-        v.sideBars.update(v.layout, v.camera, v.mirrors.count, v.config[5]);
+        v.sideBars.update(v.layout, v.camera, v.renderedDepth);
         v.sideBars.mesh.visible = false;
         const without = render(); v.sideBars.mesh.visible = true;
         // Inspect the complete source bank contract independently of the
@@ -373,7 +392,7 @@ test('full-size background boxes repeat all source bands beside the physical cen
         results.push({ angle, outerChanged: copy.reduce((n,x,i)=>n+Number(Math.abs(x-withoutOuter[i])>8),0), changed: copy.reduce((n,x,i)=>n+Number(Math.abs(x-without[i])>8),0),
           banks:[-4,-3,-2,-1,1,2,3,4].map(box=>new Set(bands.filter((_,i)=>Math.abs(offsets[i]-box*v.width)<1e-6)).size),
           tipError:Math.max(...tips.map(Math.abs)),balls:v.balls.count,
-          depth:v.bars.geometry.parameters.depth,physicalDepth:v.config[5],
+          depth:v.bars.geometry.parameters.depth*Math.abs(v.bars.instanceMatrix.array[10]),physicalDepth:v.renderedDepth,
           width:v.sideBars.geometry.parameters.width,sourceWidth:v.bars.geometry.parameters.width,
           boxes:v.enclosure.count });
       }
@@ -396,7 +415,7 @@ test('center supports and neighboring bars fill the same physical depth', async 
   const result=await page.evaluate(()=>{
     const v=document.querySelector('#dancinglights').physics; v.draw(performance.now()); v.sideBars.update(v.layout);
     const source=v.bars.instanceMatrix.array, side=v.sideBars.mesh.instanceMatrix.array;
-    return {depth:v.bars.geometry.parameters.depth,physicalDepth:v.config[5],sideDepth:v.sideBars.geometry.parameters.depth,
+    return {depth:v.bars.geometry.parameters.depth*Math.abs(v.bars.instanceMatrix.array[10]),physicalDepth:v.renderedDepth,sideDepth:v.sideBars.geometry.parameters.depth*Math.abs(v.sideBars.mesh.instanceMatrix.array[10]),
       centers:Array.from({length:24},(_,i)=>source[i*16+14]),
       widths:[v.bars.geometry.parameters.width,v.sideBars.geometry.parameters.width],
       heightError:Math.max(...Array.from({length:v.sideBars.mesh.count},(_,i)=>Math.abs(Math.abs(side[i*16+5])-v.renderedHeight(v.sideBars.sourceBands[i])))),
@@ -433,110 +452,6 @@ test('offscreen rendering stops while audio and physics keep running', async ({ 
   await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.metrics.frames)).toBeGreaterThan(before.frames);
 });
 
-test('instanced depth copies match literal translated geometry from both camera sides', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion:'reduce' });
-  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
-  const results=await page.evaluate(async()=>{
-    const v=document.querySelector('#dancinglights').physics;
-    const base=document.querySelector('meta[name="musical-lights-assets"]').content;
-    const THREE=await import(new URL(`${base}physics/three.module.js`,document.baseURI));
-    const target=new THREE.WebGLRenderTarget(240,160),pixels=new Uint8Array(240*160*4),results=[];
-    const render=()=>{v.renderer.setRenderTarget(target);v.render(v.camera);v.renderer.readRenderTargetPixels(target,0,0,240,160,pixels);return pixels.slice();};
-    try {
-      for(const [angle,vertical] of [[-40,0],[0,0],[40,0],[20,.8],[-20,-.8]]) {
-        v.setCamera(angle,vertical);v.draw(performance.now());const actual=render(),references=[];
-        for(const entry of v.mirrors.meshes) {
-          entry.mesh.visible=false;
-          const {source,capacity,matrices,colors,attributes}=entry.staged;
-          for(let layer=0;layer<v.mirrors.count;layer++) {
-            const geometry=entry.mesh.geometry.clone();
-            for(const {name,attr,values} of attributes) geometry.setAttribute(name,new THREE.InstancedBufferAttribute(values.slice(),attr.itemSize));
-            const material=source.material.clone();
-            material.defines={...source.material.defines};
-            material.onBeforeCompile=shader=>{
-              source.material.onBeforeCompile(shader);
-              // Literal transforms move geometry. Undo only the depth shift
-              // in the lighting position, independently of copy projection.
-              const shift=(layer+1)*v.config[5];
-              shader.vertexShader=shader.vertexShader.replace('vViewPosition = -(modelViewMatrix * vec4(world, 1.0)).xyz;',`vViewPosition = -(modelViewMatrix * vec4(world + vec3(0.0, 0.0, ${shift}), 1.0)).xyz;`);
-              shader.vertexShader=shader.vertexShader.replace('vViewPosition = - mvPosition.xyz;',`vViewPosition = -(mvPosition.xyz + (modelViewMatrix * vec4(0.0, 0.0, ${shift}, 0.0)).xyz);`);
-              shader.vertexShader=shader.vertexShader.replace('nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));', `nearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz + vec3(0.0, 0.0, ${shift}), normalize(transformedNormal));`);
-              // The display contract retains emitted/spilled light through depth.
-              const fade = v.settings.depthFade ** (layer + 1);
-              shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`outgoingLight = outgoingLight * ${fade} + (totalEmissiveRadiance + nearbyLight) * ${1 - fade};\n#include <opaque_fragment>`);
-            };
-            material.customProgramCacheKey=()=>`literal-depth-${entry.staged.kind}-${layer}`;
-            const mesh=new THREE.InstancedMesh(geometry,material,capacity);mesh.frustumCulled=false;
-            mesh.instanceMatrix.array.set(matrices);mesh.instanceColor=new THREE.InstancedBufferAttribute(colors.slice(),3);
-            // Translate the copied transforms independently of the production
-            // shader. Both paths use instance coordinates, so touching surfaces
-            // do not compare two different model-view rounding orders.
-            for(let i=0;i<capacity;i++) mesh.instanceMatrix.array[i*16+14]-=(layer+1)*v.config[5];
-            v.scene.add(mesh);references.push(mesh);
-          }
-        }
-        const expected=render();let error=0,changed=0;
-        for(let i=0;i<actual.length;i+=4){let delta=0;for(let c=0;c<3;c++)delta+=Math.abs(actual[i+c]-expected[i+c]);error+=delta;if(delta>6)changed++;}
-        results.push({angle,vertical,meanError:error/(240*160*3),changed});
-        for(const mesh of references){v.scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();mesh.dispose();}
-        v.mirrors.meshes.forEach(({mesh})=>{mesh.visible=true;});
-      }
-    } finally {v.renderer.setRenderTarget(null);target.dispose();}
-    return results;
-  });
-  for(const result of results){expect(result.meanError,JSON.stringify(result)).toBeLessThan(1);expect(result.changed,JSON.stringify(result)).toBeLessThan(240*160*.005);}
-});
-
-test('camera depth culling preserves pixels from the complete copied-ball batch', async ({ page }, info) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
-  const evidence = await page.evaluate(async () => {
-    const v = document.querySelector('#dancinglights').physics;
-    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
-    const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4), results = [];
-    const render = () => {
-      v.renderer.setRenderTarget(target); v.render(v.camera);
-      v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice();
-    };
-    try {
-      v.mirrors.setCount(64);
-      for (const [angle, vertical] of [[-40, 0], [0, 0], [40, 0], [20, .8], [-20, -.8]]) {
-        v.setCamera(angle, vertical); v.camera.far = 12; v.camera.updateProjectionMatrix();
-        v.draw(performance.now());
-        const culled = v.mirrors.meshes[0].mesh.count, actual = render();
-        // Submit every requested image with the same shader and camera. Only
-        // the production frustum rejection differs from this full batch.
-        for (const { mesh, staged } of v.mirrors.meshes) {
-          mesh.count = 64 * staged.capacity; mesh.visible = true;
-          for (let layer = 0; layer < 64; layer++) {
-            mesh.instanceMatrix.array.set(staged.matrices, layer * staged.matrices.length);
-            mesh.instanceColor.array.set(staged.colors, layer * staged.colors.length);
-            for (const { name, values } of staged.attributes)
-              mesh.geometry.attributes[name].array.set(values, layer * values.length);
-          }
-          for (const attr of [mesh.instanceMatrix, mesh.instanceColor, ...staged.attributes.map(({ name }) => mesh.geometry.attributes[name])]) {
-            attr.clearUpdateRanges(); attr.addUpdateRange(0, mesh.count * attr.itemSize); attr.needsUpdate = true;
-          }
-        }
-        const full = v.mirrors.meshes[0].mesh.count, expected = render();
-        let changed = 0;
-        for (let i = 0; i < actual.length; i++) if (actual[i] !== expected[i]) changed++;
-        results.push({ angle, vertical, culled, full, changed });
-      }
-    } finally {
-      v.renderer.setRenderTarget(null); target.dispose();
-      v.mirrors.setCount(v.settings.mirrorCount); v.camera.far = 200; v.camera.updateProjectionMatrix();
-    }
-    return results;
-  });
-  for (const result of evidence) {
-    expect(result.culled, JSON.stringify(result)).toBeLessThan(result.full);
-    expect(result.changed, JSON.stringify(result)).toBe(0);
-  }
-  await info.attach('depth-culling-pixels.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
-});
-
 test('digital tempo is visible with Listening off and hides on pause and natural end', async ({ page }, info) => {
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
   await page.evaluate(() => {
@@ -569,7 +484,7 @@ test('digital tempo is visible with Listening off and hides on pause and natural
 });
 
 
-test('full-size background bands show lit faces and depth copies separate at oblique angles', async ({ page }, info) => {
+test('full-size background bands show lit faces and physical depth at oblique angles', async ({ page }, info) => {
   await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await startFrozen(page);
   await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; v.settings.cameraMotion = false; window.sendBars(Array(24).fill(.8)); });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[0])).toBeCloseTo(.8, 5);
@@ -589,7 +504,7 @@ test('full-size background bands show lit faces and depth copies separate at obl
         const center = new THREE.Vector3(v.width / 2, v.visibleHeight / 2, 0);
         camera.position.sub(center).multiplyScalar(9).add(center);
         camera.lookAt(center); camera.updateMatrixWorld();
-        v.sideBars.update(v.layout, camera, v.mirrors.count, v.config[5]);
+        v.sideBars.update(v.layout, camera, v.renderedDepth);
         v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
         v.renderer.readRenderTargetPixels(target, 0, 0, 900, 500, pixels);
         const fills = [];
@@ -606,8 +521,8 @@ test('full-size background bands show lit faces and depth copies separate at obl
           fills.push(brightness);
         }
         const source = new THREE.Vector3(v.width / 2, v.renderedHeight(12), v.config[5] / 2);
-        const depths = [0, -1, -2].map(z => source.clone().add(new THREE.Vector3(0, 0, z * v.config[5])).project(v.camera).toArray());
-        results.push({ angle, fills, depths, physicalBalls: v.balls.count, triangles: v.bars.geometry.index.count / 3, chords: v.layout[24] });
+        const depths = [0, -.5, -1].map(z => source.clone().add(new THREE.Vector3(0, 0, z * v.renderedDepth)).project(v.camera).toArray());
+        results.push({ angle, fills, depths, physicalBalls: v.balls.count, triangles: v.bars.geometry.index.count / 3 });
       }
     } finally { v.balls.visible = true; v.renderer.setRenderTarget(null); target.dispose(); }
     return results;
@@ -615,7 +530,7 @@ test('full-size background bands show lit faces and depth copies separate at obl
   for (const result of results) {
     expect(result.fills.length).toBeGreaterThanOrEqual(192);
     for (const brightness of result.fills) expect(brightness, JSON.stringify(result)).toBeGreaterThan(70);
-    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(8 * result.chords);
+    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(12);
     expect(Math.abs(result.depths[0][0] - result.depths[1][0])).toBeGreaterThan(.01);
     expect(Math.abs(result.depths[1][0] - result.depths[2][0])).toBeGreaterThan(.01);
   }
@@ -649,11 +564,13 @@ for (const path of ['/', '/advanced/']) {
       detail: { bpm: 132, confidence: .9, accentSequence: 0 },
     })));
     const tempo = page.locator('.tempo-readout'), fps = page.locator('.frame-rate');
-    await expect(tempo).toHaveText('132 BPM');
+    await expect.poll(() => page.evaluate(() => {
+      const nodes = document.querySelectorAll('.tempo-readout'), node = nodes[0];
+      return { text: node.textContent, count: nodes.length, live: node.getAttribute('aria-live'),
+        besideFPS: node.parentElement === document.querySelector('.frame-rate').parentElement };
+    })).toEqual({ text: '132 BPM', count: 1, live: 'off', besideFPS: true });
     await fps.scrollIntoViewIfNeeded();
     await expect(tempo).toBeInViewport({ ratio: 1 });
-    expect(await tempo.evaluate(node => node.parentElement === document.querySelector('.frame-rate').parentElement)).toBe(true);
-    await expect(tempo).toHaveCount(1); await expect(tempo).toHaveAttribute('aria-live', 'off');
     for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -664,8 +581,15 @@ for (const path of ['/', '/advanced/']) {
         return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
       });
       await expect(tempo).toHaveText('132 BPM');
-      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation', '.fullscreen-button']);
-      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1, '.fullscreen-button': 1 });
+      // This loop owns a closed dialog. Keep native activation and its
+      // visibility check without probing the same known state twice.
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation']);
+      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1 });
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
+      await expect(page.locator('.fullscreen-button')).toBeInViewport({ ratio: 1 });
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     }
@@ -676,36 +600,52 @@ for (const path of ['/', '/advanced/']) {
 
 test('Home and expanded mode share a small rendered FPS readout', async ({ page }) => {
   await page.addInitScript(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Capture disabled for presentation check'); }; });
-  await page.goto(origin); await physicsReady(page);
+  await page.goto(origin); await physicsReady(page); await normalView(page);
   const fps = page.locator('.frame-rate');
-  if (await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).isVisible())
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  const readout = () => page.evaluate(() => {
+    const nodes = document.querySelectorAll('.frame-rate'), node = nodes[0];
+    return { count: nodes.length, text: node.textContent, live: node.getAttribute('aria-live'),
+      small: parseFloat(getComputedStyle(node).fontSize) < parseFloat(getComputedStyle(node.parentElement).fontSize),
+      parent: node.parentElement.className, diagnostics: document.querySelectorAll('.diagnostic-fps').length };
+  });
   await fps.scrollIntoViewIfNeeded();
-  await expect(fps).toHaveCount(1);
   await expect(fps).toBeInViewport({ ratio: 1 });
-  await expect(fps).toHaveText(/^\d+ FPS$/);
-  await expect(fps).toHaveAttribute('aria-live', 'off');
-  expect(await fps.evaluate(node => parseFloat(getComputedStyle(node).fontSize) < parseFloat(getComputedStyle(node.parentElement).fontSize))).toBe(true);
+  await page.waitForFunction(() => /^\d+ FPS$/.test(document.querySelector('.frame-rate').textContent), null, { timeout: 5000 });
+  const initial = await readout();
+  expect(initial).toMatchObject({ count: 1, live: 'off', small: true });
+  expect(initial.text).toMatch(/^\d+ FPS$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await expect(fps).toHaveCount(1);
-  await expect(fps).toHaveText(/^\d+ FPS$/);
-  expect(Number((await fps.textContent()).split(' ')[0])).toBeGreaterThan(0);
-  for (const viewport of [{width:390,height:664},{width:568,height:320}]) {
-    await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
+  await page.waitForFunction(() => {
+    const card = document.querySelector('.audio-card');
+    return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+  });
+  const expanded = await readout();
+  expect(expanded.count).toBe(1); expect(expanded.text).toMatch(/^\d+ FPS$/);
+  expect(Number(expanded.text.split(' ')[0])).toBeGreaterThan(0);
+  for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('.audio-card').hasAttribute('data-expanded') && !document.fullscreenElement);
     await page.setViewportSize(viewport);
-    await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
-    await expect(fps).toHaveText(/^\d+ FPS$/);
-    await fps.scrollIntoViewIfNeeded();
-    await expect(fps).toBeInViewport({ratio:1});
-    await expect(page.locator('.camera-rotation')).toBeInViewport({ratio:1});
-    await page.getByRole('button',{name:'Exit fullscreen',exact:true}).scrollIntoViewIfNeeded();
-    await expect(page.getByRole('button',{name:'Exit fullscreen',exact:true})).toBeInViewport({ratio:1});
-    expect(await fps.evaluate(node => node.parentElement.className)).toBe('camera-controls');
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await page.waitForFunction(() => {
+      const card = document.querySelector('.audio-card');
+      return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+    });
+    // This loop owns a closed dialog. Keep native activation and its
+    // visibility check without probing the same known state twice.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+    expect(await scrollingIntersections(page, ['.frame-rate', '.camera-rotation'])).toEqual({ '.frame-rate': 1, '.camera-rotation': 1 });
+    const state = await readout();
+    expect(state.text).toMatch(/^\d+ FPS$/); expect(state.parent).toBe('camera-controls');
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
   }
-  await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
-  await expect(fps).toHaveCount(1);
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await fps.scrollIntoViewIfNeeded();
   await expect(fps).toBeVisible();
-  await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+  expect(await readout()).toMatchObject({ count: 1, diagnostics: 0 });
 });
 
 for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
@@ -745,6 +685,7 @@ for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
 test('camera sweep turns smoothly on the horizontal plane without attack shake', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(origin); await physicsReady(page);
+  await openFullscreenSettings(page);
   const result = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     cancelAnimationFrame(v.request); v.request = null;
@@ -781,49 +722,93 @@ test('camera sweep turns smoothly on the horizontal plane without attack shake',
   expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;v.cameraControl.blur();v.cameraBase=12;v.updateCamera(50000);return v.rotation;})).toBe(12);
 });
 
-test('depth-copy uploads follow the active count and keep pooled geometry', async ({ page }) => {
+test('physical depth drawing reuses geometry and bounded GPU buffers', async ({ page }) => {
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
-  const evidence = await page.evaluate(() => {
-    const v=document.querySelector('#dancinglights').physics,gl=v.renderer.getContext();
-    v.draw(performance.now());
-    const pools=v.mirrors.meshes.map(({mesh})=>mesh);
-    const original=gl.bufferSubData, originalDelete=gl.deleteBuffer, records=[];
-    let releases = 0; gl.deleteBuffer = function() { releases++; return originalDelete.apply(this, arguments); };
+  const evidence=await page.evaluate(()=>{
+    const v=document.querySelector('#dancinglights').physics, gl=v.renderer.getContext(); v.draw(performance.now());
+    const meshes=[v.balls,v.bars,v.sideBars.mesh,v.enclosure], geometries=meshes.map(mesh=>mesh.geometry), buffers=meshes.map(mesh=>mesh.instanceMatrix);
+    const current=v.current, previous=v.previous; v.current=current.slice(); v.previous=(previous??current).slice();
+    const original=gl.bufferSubData, originalDelete=gl.deleteBuffer, records=[]; let releases=0;
+    gl.deleteBuffer=function(){releases++;return originalDelete.apply(this,arguments);};
     try {
-      for(const count of [0,1,3,17,3]) {
-        gl.bufferSubData = original;
-        const oldPool = v.mirrors.poolCount, oldGeometry = v.mirrors.meshes[0].mesh.geometry, oldReleases = releases;
-        v.mirrors.setCount(count);
-        // Allocate a newly grown pool once; steady frames upload only active data.
+      for(const depth of [.2,.48,2,.2]) {
+        v.current[v.layout[17]+4]=depth;v.previous[v.layout[17]+4]=depth;
+        const uploads=[], arrays=new Set(meshes.flatMap(mesh=>[mesh.instanceMatrix.array,mesh.instanceColor?.array]).filter(Boolean));
+        gl.bufferSubData=function(target,offset,data,start=0,length){if(arrays.has(data))uploads.push({capacity:data.byteLength,actual:(length??data.length-start)*data.BYTES_PER_ELEMENT});return original.apply(this,arguments);};
         v.draw(performance.now());
-        const arrays=new Map();
-        for(const {mesh,staged} of v.mirrors.meshes) {
-          for(const attr of [mesh.instanceMatrix,mesh.instanceColor,...staged.attributes.map(({name})=>mesh.geometry.attributes[name])])
-            arrays.set(attr.array,mesh.count*attr.itemSize*attr.array.BYTES_PER_ELEMENT);
-        }
-        const uploads=[];
-        gl.bufferSubData=function(target,offset,data,start=0,length) {
-          if(arrays.has(data)) uploads.push({expected:arrays.get(data),actual:(length ?? data.length-start)*data.BYTES_PER_ELEMENT});
-          return original.apply(this,arguments);
-        };
-        v.draw(performance.now());
-        records.push({count,uploads,grew: v.mirrors.poolCount > oldPool, releases: releases - oldReleases,
-          geometryRetained: v.mirrors.meshes[0].mesh.geometry === oldGeometry,
-          geometries: v.renderer.info.memory.geometries, pooled:v.mirrors.meshes.every(({mesh},i)=>mesh===pools[i]),
-          balls:v.balls.count,boxes:v.enclosure.count});
+        records.push({uploads,releases,retained:meshes.every((mesh,i)=>mesh.geometry===geometries[i]&&mesh.instanceMatrix===buffers[i]),
+          geometries:v.renderer.info.memory.geometries,balls:v.balls.count,boxes:v.enclosure.count});
       }
-    } finally {gl.bufferSubData=original;gl.deleteBuffer=originalDelete;v.mirrors.setCount(v.settings.mirrorCount);}
+    } finally {gl.bufferSubData=original;gl.deleteBuffer=originalDelete;v.current=current;v.previous=previous;}
     return records;
   });
-  for(const record of evidence) {
-    expect(record.geometryRetained).toBe(!record.grew);
-    if (record.grew) expect(record.releases).toBeGreaterThanOrEqual(2);
-    expect(record.geometries).toBe(evidence[0].geometries);
-    expect(record.pooled).toBe(true);expect(record.balls).toBe(8);expect(record.boxes).toBe(1);
-    if(record.count===0) expect(record.uploads).toHaveLength(0);
-    else {
-      expect(record.uploads.length).toBeGreaterThanOrEqual(2);
-      for(const upload of record.uploads) expect(upload.actual).toBe(upload.expected);
-    }
+  for(const record of evidence){
+    expect(record.retained).toBe(true);expect(record.releases).toBe(0);expect(record.geometries).toBeLessThanOrEqual(6);
+    expect(record.balls).toBe(8);expect(record.boxes).toBe(1);expect(record.uploads.length).toBeGreaterThanOrEqual(2);
+    for(const upload of record.uploads){expect(upload.actual).toBeGreaterThan(0);expect(upload.actual).toBeLessThanOrEqual(upload.capacity);}
   }
+});
+
+test('WASD pans the website camera within the main box and preserves its audio world', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({
+    version: 1, cameraMotion: false, cameraAngle: 0, mirrorCount: 6, depthMode: 'manual',
+  })));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    document.activeElement?.blur();
+    const v = document.querySelector('#dancinglights').physics;
+    window.cameraWorld = { view: v, worker: v.worker, renderer: v.renderer };
+  });
+  for (const [key, axis, bound] of [['d', 'x', 1], ['a', 'x', 0], ['w', 'y', 1], ['s', 'y', 0]]) {
+    await page.keyboard.down(key);
+    await expect.poll(() => page.evaluate(axis => document.querySelector('#dancinglights').physics.cameraPan[axis], axis), { timeout: 7000 }).toBe(bound);
+    await page.keyboard.up(key);
+  }
+  const state = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { x: v.camera.position.x, y: v.camera.position.y, width: v.width,
+      height: v.visibleHeight, world: v.worker === cameraWorld.worker && v.renderer === cameraWorld.renderer,
+      balls: v.balls.count, meters: document.querySelectorAll('#dancinglights [role="meter"]').length,
+      audioSession: !!v.card.dataset.audioSession, keys: v.cameraPan.keys.size, reduced: v.reduced.matches };
+  });
+  expect(state.x).toBe(0); expect(state.y).toBe(0); expect(state.world).toBe(true);
+  expect(state.balls).toBe(8); expect(state.meters).toBe(24); expect(state.keys).toBe(0);
+  expect(state.audioSession).toBe(false); expect(state.reduced).toBe(true);
+  await page.locator('.display-controls > summary').click();
+  await page.getByRole('button', { name: 'Reset display', exact: true }).click();
+  expect(await page.evaluate(() => { const p = document.querySelector('#dancinglights').physics.cameraPan; return [p.x, p.y]; })).toEqual([.5, .5]);
+});
+
+test('WASD leaves typing and shortcuts intact and clears on blur, hiding and route cleanup', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  const input = page.getByRole('textbox', { name: 'YouTube link' });
+  await input.fill(''); await input.pressSequentially('wasd'); await expect(input).toHaveValue('wasd');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+a');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.down('d');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(1);
+  await input.focus();
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('d'); await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down('w');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('w'); await page.keyboard.down('a');
+  await page.locator('footer').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sceneVisible)).toBe(false);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('a'); await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.keyboard.down('s');
+  await page.evaluate(() => { window.previousCameraView = document.querySelector('#dancinglights').physics; });
+  await page.getByRole('link', { name: 'About', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.previousCameraView.closed)).toBe(true);
+  expect(await page.evaluate(() => window.previousCameraView.cameraPan.keys.size)).toBe(0);
+  await page.keyboard.up('s'); await page.keyboard.press('d');
+  expect(await page.evaluate(() => window.previousCameraView.cameraPan.keys.size)).toBe(0);
 });

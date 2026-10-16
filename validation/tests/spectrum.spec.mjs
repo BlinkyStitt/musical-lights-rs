@@ -22,7 +22,7 @@ for (const width of [320, 375, 1440]) {
       const meters = [...document.querySelectorAll('.meter')];
       const track = document.querySelector('.meter-track').getBoundingClientRect();
       const graph = document.querySelector('#dancinglights').getBoundingClientRect();
-      const front = view.bars.instanceMatrix.array[14] + view.bars.geometry.boundingBox.max.z;
+      const front = view.bars.instanceMatrix.array[14] + Math.abs(view.bars.instanceMatrix.array[10]) * view.bars.geometry.boundingBox.max.z;
       return {
         headroom: (track.top - graph.top) / graph.height,
         expectedHeadroom: (1 - new THREE.Vector3(0, view.current[view.layout[17]+1], front).project(view.camera).y) / 2,
@@ -91,7 +91,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
     const state = new Float64Array(102); state.set([0, 1, .18], 99);
     state.set([window.transportContext.currentTime + .1, 0, 5]);
     for (let i = 0; i < 24; i++) state.set([1, 1, -1, 0], 3 + i * 4);
-    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
+    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
   });
   await expect.poll(async () => {
     const state = await physicsState(page);
@@ -103,7 +103,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
     const state = new Float64Array(102); state.set([0, 1, .18], 99);
     state[0] = window.transportContext.currentTime;
     state[2] = NaN;
-    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
+    window.transportPort.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state } }));
     // Observe in-page while shutdown occurs, independent of driver round trips.
     return new Promise(resolve => {
       const start = performance.now();
