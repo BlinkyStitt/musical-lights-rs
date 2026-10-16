@@ -134,8 +134,8 @@ pub fn sphere_drag_factor(radius: f32, speed: f32, mass: f32, dt: f32) -> f32 {
     1.0 / (1.0 + coefficient * speed.max(0.0) * dt / mass)
 }
 
-/// A new physical bar contact blends its color into the ball. Audio does not
-/// qualify painting; callers exclude persistent resting pressure.
+/// Strength of a qualified physical light contact. Callers apply the audio
+/// policy and exclude persistent resting pressure.
 pub fn contact_pigment_blend(impulse: f32, mass: f32) -> f32 {
     if ![impulse, mass].iter().all(|v| v.is_finite()) || impulse <= 0.0 || mass <= 0.0 {
         return 0.0;
@@ -143,39 +143,85 @@ pub fn contact_pigment_blend(impulse: f32, mass: f32) -> f32 {
     (impulse / mass * 0.15).clamp(0.0, 0.5)
 }
 
-/// Time constant for each of three connected surface regions. The last region
-/// reaches 95% of a held contact target in approximately 1.13 seconds.
-pub const PIGMENT_FILL_SECONDS: f32 = 0.18;
+/// Shared shape and blend edges for the three soft swirl regions. Rendering
+/// uses this profile; contact injection uses the same ball-local surface point.
+pub const PIGMENT_SWIRL: [f32; 7] = [7.0, 3.0, 3.0, 4.0, -0.85, 0.15, 0.9];
 
-/// Spread the contact target through three connected regions without replacing
-/// visible colors at an impact. This is the exact constant-target solution of
-/// three cascaded first-order filters, so elapsed time sets the fill rate.
-/// Regions stay attached to the ball as it rolls. No allocation or render clock.
-pub fn advance_pigment(surface: &mut [f32; 9], target: [f32; 3], dt: f32) {
-    if !dt.is_finite()
-        || dt <= 0.0
-        || !surface
+/// A new contact paints in silence. Active audio requires a qualified attack;
+/// a new attack can also light a bar that already supports the ball.
+pub fn pigment_contact_eligible(
+    attack_required: bool,
+    attack: f32,
+    new_contact: bool,
+    new_attack: bool,
+) -> bool {
+    (0.0..=1.0).contains(&attack)
+        && (!attack_required || attack > 0.0)
+        && (new_contact || (attack_required && new_attack))
+}
+
+/// Soft material weights at a unit point on the rolling ball.
+pub fn pigment_weights(point: [f32; 3]) -> [f32; 3] {
+    if !point.iter().all(|v| v.is_finite()) {
+        return [0.0; 3];
+    }
+    let [y_rate, bend, x_rate, z_rate, low, middle, high] = PIGMENT_SWIRL;
+    let wave =
+        Float::sin(y_rate * point[1] + bend * Float::sin(x_rate * point[0]) + z_rate * point[2]);
+    let smooth = |a: f32, b: f32| {
+        let t = ((wave - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let first = smooth(low, middle);
+    let second = smooth(middle, high);
+    [
+        (1.0 - first) * (1.0 - second),
+        first * (1.0 - second),
+        second,
+    ]
+}
+
+/// Inject contacted light into its soft swirl regions. Other regions retain
+/// their colors; a global target must not turn the whole ball into one color.
+pub fn paint_pigment(targets: &mut [f32; 9], color: [f32; 3], point: [f32; 3], blend: f32) {
+    if !(0.0..=1.0).contains(&blend)
+        || !targets
             .iter()
-            .chain(target.iter())
+            .chain(color.iter())
             .all(|v| (0.0..=1.0).contains(v))
     {
         return;
     }
-    // Bound the polynomial before evaluating it, including after a long pause.
-    let t = (dt / PIGMENT_FILL_SECONDS).min(60.0);
-    let decay = Float::exp(-t);
-    for c in 0..3 {
-        let first = surface[c] - target[c];
-        let middle = surface[3 + c] - target[c];
-        let last = surface[6 + c] - target[c];
-        surface[c] = (target[c] + decay * first).clamp(0.0, 1.0);
-        surface[3 + c] = (target[c] + decay * (middle + t * first)).clamp(0.0, 1.0);
-        surface[6 + c] =
-            (target[c] + decay * (last + t * middle + 0.5 * t * t * first)).clamp(0.0, 1.0);
+    for (region, weight) in pigment_weights(point).into_iter().enumerate() {
+        for c in 0..3 {
+            let target = &mut targets[region * 3 + c];
+            *target += (color[c] - *target) * blend * weight;
+        }
     }
 }
 
-/// Mean of the smooth lower/middle/upper surface field. Keep lighting on the
+/// Each visible region reaches 95% of a held target in approximately 0.54 s.
+pub const PIGMENT_FILL_SECONDS: f32 = 0.18;
+
+/// Ease visible light toward each region's own target. The exact exponential
+/// solution makes fill independent of callbacks, contact substeps and rendering.
+pub fn advance_pigment(surface: &mut [f32; 9], targets: &[f32; 9], dt: f32) {
+    if !dt.is_finite()
+        || dt <= 0.0
+        || !surface
+            .iter()
+            .chain(targets.iter())
+            .all(|v| (0.0..=1.0).contains(v))
+    {
+        return;
+    }
+    let blend = 1.0 - Float::exp(-(dt / PIGMENT_FILL_SECONDS).min(60.0));
+    for (value, target) in surface.iter_mut().zip(targets) {
+        *value += (*target - *value) * blend;
+    }
+}
+
+/// Weighted mean of the soft swirl regions. Keep lighting on the
 /// visible fill rather than jumping to the new contact target.
 pub fn pigment_color(surface: &[f32; 9]) -> [f32; 3] {
     core::array::from_fn(|c| {
@@ -307,30 +353,39 @@ mod tests {
         }
     }
     #[test]
-    fn pigment_fills_regions_in_order_without_an_impact_jump() {
-        let mut surface = [0.0; 9];
-        advance_pigment(&mut surface, [1.0, 0.0, 0.0], 1.0 / 120.0);
-        assert!(surface[0] > surface[3] && surface[3] > surface[6]);
-        assert!(surface[0] < 0.05 && surface[6] > 0.0);
-        assert!(pigment_color(&surface)[0] < 0.015);
-        surface = [0.0; 9];
-        advance_pigment(&mut surface, [1.0, 0.0, 0.0], PIGMENT_FILL_SECONDS);
-        for (actual, expected) in [surface[0], surface[3], surface[6]]
-            .into_iter()
-            .zip([0.63212055, 0.2642411, 0.0803014])
-        {
-            assert!((actual - expected).abs() < 1e-6);
-        }
-        advance_pigment(&mut surface, [1.0, 0.0, 0.0], 1.4);
-        assert!(surface[6] > 0.95);
+    fn contact_light_fills_its_regions_without_erasing_the_swirl() {
+        let mut surface = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        let mut targets = surface;
+        paint_pigment(&mut targets, [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], 0.5);
+        assert_eq!(surface, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert!(targets[2] > 0.45 && targets[5] > 0.0);
+        assert_eq!(&targets[6..9], &[1.0, 0.0, 0.0]);
+        advance_pigment(&mut surface, &targets, 1.0 / 120.0);
+        assert!(surface[2] > 0.0 && surface[2] < 0.05);
+        assert!(pigment_color(&surface)[2] < 0.015);
+        surface = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        advance_pigment(&mut surface, &targets, PIGMENT_FILL_SECONDS);
+        assert!((surface[2] / targets[2] - 0.63212055).abs() < 1e-6);
+        advance_pigment(&mut surface, &targets, 2.0);
+        assert!((surface[2] - targets[2]).abs() < 1e-5);
+        assert!(
+            surface[2] - surface[8] > 0.45,
+            "the held swirl collapsed to one color"
+        );
     }
     #[test]
     fn pigment_fill_uses_elapsed_time_and_stays_bounded_when_retargeted() {
         let run = |hz| {
             let mut surface = [0.0; 9];
-            for target in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] {
+            let mut targets = surface;
+            for (color, point) in [
+                ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]),
+                ([0.0, 1.0, 0.0], [0.0, 0.0, -1.0]),
+                ([0.0, 0.0, 1.0], [0.0, 1.0, 0.0]),
+            ] {
+                paint_pigment(&mut targets, color, point, 0.5);
                 for _ in 0..hz {
-                    advance_pigment(&mut surface, target, 1.0 / hz as f32);
+                    advance_pigment(&mut surface, &targets, 1.0 / hz as f32);
                     assert!(surface.iter().all(|v| (0.0..=1.0).contains(v)));
                 }
             }
@@ -345,14 +400,49 @@ mod tests {
         let mut surface = [0.2; 9];
         assert_eq!(pigment_color(&surface), [0.2; 3]);
         for dt in [0.0, -1.0, f32::NAN, f32::INFINITY] {
-            advance_pigment(&mut surface, [1.0; 3], dt);
+            advance_pigment(&mut surface, &[1.0; 9], dt);
             assert_eq!(surface, [0.2; 9]);
         }
         for invalid in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
-            advance_pigment(&mut surface, [invalid; 3], 1.0);
+            advance_pigment(&mut surface, &[invalid; 9], 1.0);
             assert_eq!(surface, [0.2; 9]);
+            let mut targets = surface;
+            paint_pigment(&mut targets, [invalid; 3], [0.0, 0.0, 1.0], 0.5);
+            assert_eq!(targets, surface);
+            paint_pigment(&mut targets, [1.0; 3], [0.0, 0.0, 1.0], invalid);
+            assert_eq!(targets, surface);
         }
-        advance_pigment(&mut surface, [1.0; 3], f32::MAX);
+        advance_pigment(&mut surface, &[1.0; 9], f32::MAX);
         assert_eq!(surface, [1.0; 9]);
+    }
+    #[test]
+    fn active_audio_only_adds_color_on_qualified_contact_or_new_attack() {
+        assert!(pigment_contact_eligible(false, 0.0, true, false));
+        assert!(!pigment_contact_eligible(false, 0.0, false, true));
+        assert!(!pigment_contact_eligible(true, 0.0, true, true));
+        assert!(pigment_contact_eligible(true, 0.5, true, false));
+        assert!(pigment_contact_eligible(true, 0.5, false, true));
+        assert!(!pigment_contact_eligible(true, 0.5, false, false));
+        for invalid in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
+            assert!(!pigment_contact_eligible(true, invalid, true, true));
+        }
+    }
+    #[test]
+    fn swirl_weights_are_bounded_and_invalid_contact_points_do_not_paint() {
+        for point in [
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
+        ] {
+            let weights = pigment_weights(point);
+            assert!(weights.iter().all(|v| (0.0..=1.0).contains(v)));
+            assert!((weights.iter().sum::<f32>() - 1.0).abs() < 1e-6);
+        }
+        let mut targets = [0.2; 9];
+        paint_pigment(&mut targets, [1.0; 3], [f32::NAN, 0.0, 1.0], 0.5);
+        assert_eq!(targets, [0.2; 9]);
     }
 }

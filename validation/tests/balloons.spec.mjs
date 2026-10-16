@@ -29,7 +29,7 @@ test('idle contacts fill ball colors without inventing audio attacks', async ({ 
   expect(evidence.changed).toBe(true);
 });
 
-test('physical contacts fill color independently of acoustic attack edges', async ({ page }) => {
+test('active microphone contacts fill color only from attacking bars', async ({ page }) => {
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
   await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
   const before = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments));
@@ -38,7 +38,8 @@ test('physical contacts fill color independently of acoustic attack edges', asyn
     const v = document.querySelector('#dancinglights').physics;
     return Math.min(...v.current.slice(v.layout[9], v.layout[10])) / v.current[v.layout[17] + 1];
   })).toBeGreaterThan(.95);
-  await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value,i)=>value!==before[i]),before)).toBe(true);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[63])).toBe(1);
+  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments))).toEqual(before);
   await page.evaluate(() => window.sendBars(Array(24).fill(0)));
   await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeLessThan(.0031);
   await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));

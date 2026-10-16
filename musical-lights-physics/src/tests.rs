@@ -68,20 +68,27 @@ fn radius(i: usize) -> f32 {
     SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
 }
 
-// Ball 0 starts at source 6. Contact blends the target, then fills the surface
-// in order; it must not replace a visible pigment slot.
+fn target_color(sim: &Simulation, ball: usize) -> [f32; 3] {
+    pigment_color(
+        sim.color_targets[ball * 9..ball * 9 + 9]
+            .try_into()
+            .unwrap(),
+    )
+}
+
+// Ball 0 starts at source 6. Contact lights its local swirl regions gradually;
+// it must not replace a visible pigment slot or add an unrelated source color.
 fn assert_first_ball_fills_toward_source(sim: &Simulation, source: usize) {
     let initial = sim.palette[6];
-    let target = sim.colors[0];
+    let target = target_color(sim, 0);
     assert!(target[0] > initial[0] && target[0] < sim.palette[source][0]);
     for (c, &start) in initial.iter().enumerate() {
         for region in 0..3 {
             let value = sim.pigments[region * 3 + c];
-            assert!(value >= start.min(target[c]) - 1e-6);
-            assert!(value <= start.max(target[c]) + 1e-6);
+            assert!(value >= start.min(sim.palette[source][c]) - 1e-6);
+            assert!(value <= start.max(sim.palette[source][c]) + 1e-6);
         }
     }
-    assert!(sim.pigments[0] >= sim.pigments[3] && sim.pigments[3] >= sim.pigments[6]);
     assert_eq!(
         &sim.snapshot.values[18..21],
         &pigment_color(sim.pigments[..9].try_into().unwrap())
@@ -1501,11 +1508,11 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
     });
     isolate(&mut sim, &[0]);
     place(&mut sim, 0, Vector::new(0.625, 0.3, 0.0), Vector::ZERO);
-    let initial = sim.colors[0];
+    let initial = target_color(&sim, 0);
     for _ in 0..HZ * 2 {
         sim.step();
     }
-    let resting = sim.colors[0];
+    let resting = target_color(&sim, 0);
     assert_ne!(
         initial, resting,
         "The initial impact must pick up the contacted bar's color"
@@ -1514,7 +1521,7 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
     for _ in 0..HZ * 2 {
         sim.step();
     }
-    assert_eq!(resting, sim.colors[0]);
+    assert_eq!(resting, target_color(&sim, 0));
 }
 
 #[test]
@@ -1829,7 +1836,7 @@ fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
         Vector::new(PITCH / 2.0, 0.15, 0.0),
         Vector::ZERO,
     );
-    let initial = sim.colors[0];
+    let initial = target_color(&sim, 0);
     let mut impulse = 0.0;
     for _ in 0..HZ {
         sim.step();
@@ -1838,8 +1845,8 @@ fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
         assert!(position(&sim, 0).x <= WIDTH - radius(0) + 0.002);
     }
     assert!(impulse > 0.0);
-    assert!(sim.colors[0][0] > initial[0]);
-    assert!(sim.colors[0][0] < sim.palette[23][0]);
+    assert!(target_color(&sim, 0)[0] > initial[0]);
+    assert!(target_color(&sim, 0)[0] < sim.palette[23][0]);
     // Enable actual lateral motion and phone force while maintaining enclosure bounds.
     sim.apply(SimulationInput {
         tick: sim.tick,
@@ -2011,7 +2018,7 @@ fn quiet_bar_contacts_pick_up_the_contacted_color() {
         Vector::new(PITCH * 12.5, radius(0) + 0.025, 0.0),
         Vector::ZERO,
     );
-    let colors = sim.colors;
+    let colors = sim.color_targets;
     let pigments = sim.pigments;
     let mut impulse = 0.0;
     for _ in 0..HZ * 2 {
@@ -2019,7 +2026,7 @@ fn quiet_bar_contacts_pick_up_the_contacted_color() {
         impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
     }
     assert!(impulse > 0.0, "The quiet bar must make physical contact");
-    assert_ne!(sim.colors, colors);
+    assert_ne!(sim.color_targets, colors);
     assert_ne!(sim.pigments, pigments);
     assert_first_ball_fills_toward_source(&sim, 12);
 }
@@ -2036,7 +2043,7 @@ fn idle_and_listening_contacts_pick_up_colors_without_audio_attacks() {
             Vector::new(PITCH * 12.5, 0.3, 0.0),
             Vector::ZERO,
         );
-        let colors = sim.colors;
+        let colors = sim.color_targets;
         let pigments = sim.pigments;
         let mut impulse = 0.0;
         let mut minimum = f64::INFINITY;
@@ -2062,7 +2069,7 @@ fn idle_and_listening_contacts_pick_up_colors_without_audio_attacks() {
         }
         assert!(impulse > 0.0, "The wave must make physical contact");
         assert!(maximum - minimum > 0.01, "The bars must move");
-        assert_ne!(sim.colors, colors);
+        assert_ne!(sim.color_targets, colors);
         assert_ne!(sim.pigments, pigments);
         assert!(sim.input.attacks.iter().all(|value| *value == 0.0));
     }
@@ -2102,7 +2109,7 @@ fn both_bar_ends_pick_up_the_contacted_color_at_every_audio_attack_strength() {
                 Vector::new(0.625, y + sign * (radius(0) + 0.02), 0.0),
                 Vector::new(0.0, -sign, 0.0),
             );
-            let colors = sim.colors;
+            let colors = sim.color_targets;
             let pigments = sim.pigments;
             let mut impulse = 0.0;
             for _ in 0..HZ / 3 {
@@ -2110,7 +2117,7 @@ fn both_bar_ends_pick_up_the_contacted_color_at_every_audio_attack_strength() {
                 impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
             }
             assert!(impulse > 0.0);
-            assert_ne!(sim.colors, colors);
+            assert_ne!(sim.color_targets, colors);
             assert_ne!(sim.pigments, pigments);
             assert_first_ball_fills_toward_source(&sim, 12);
         }
@@ -2132,17 +2139,24 @@ fn contact_fill_continues_while_resting_without_repainting_the_target() {
         sim.step();
     }
     assert_first_ball_fills_toward_source(&sim, 12);
-    let target = sim.colors;
-    let previous_error = (sim.pigments[6] - target[0][0]).abs();
+    let target = sim.color_targets;
+    let error = |surface: &[f32]| {
+        surface
+            .iter()
+            .zip(&target[..9])
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f32, f32::max)
+    };
+    let previous_error = error(&sim.pigments[..9]);
     for _ in 0..120 {
         sim.step();
     }
     assert_eq!(
-        sim.colors, target,
+        sim.color_targets, target,
         "Resting pressure must not add new color"
     );
-    assert!((sim.pigments[6] - target[0][0]).abs() < previous_error);
-    assert!((sim.pigments[6] - target[0][0]).abs() < 0.001);
+    assert!(error(&sim.pigments[..9]) < previous_error);
+    assert!(error(&sim.pigments[..9]) < 0.001);
 }
 
 #[test]
@@ -2309,7 +2323,7 @@ fn initial_ball_colors_match_spawn_x_and_stay_uniform_without_contacts() {
     for (i, band) in sources.into_iter().enumerate() {
         let x = position(&sim, i).x;
         assert!(x >= band as f32 * PITCH && x < (band + 1) as f32 * PITCH);
-        assert_eq!(sim.colors[i], sim.palette[band]);
+        assert_eq!(target_color(&sim, i), sim.palette[band]);
         for color in sim.pigments[i * 9..i * 9 + 9].as_chunks::<3>().0 {
             assert_eq!(color, &sim.palette[band]);
         }
@@ -2394,7 +2408,7 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
         Vector::new(PITCH * 12.5, radius(0) + 0.025, 0.0),
         Vector::ZERO,
     );
-    let initial = sim.colors[0];
+    let initial = target_color(&sim, 0);
     let mut contacted = false;
     for tick in 0..HZ * 2 {
         let before = sim.pigments;
@@ -2402,18 +2416,18 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
         for (old, new) in before.into_iter().zip(sim.pigments) {
             assert!((old - new).abs() < 0.038, "tick {tick}: surface jumped");
         }
-        if !contacted && sim.colors[0] != initial {
+        if !contacted && target_color(&sim, 0) != initial {
             contacted = true;
             let delta = |region: usize| sim.pigments[region * 3] - before[region * 3];
-            assert!(delta(0) > delta(1) && delta(1) > delta(2));
-            assert!(delta(0) > 0.0 && delta(2) >= 0.0);
+            assert!((0..3).any(|region| delta(region) > 0.0));
+            assert!((0..3).all(|region| delta(region) >= 0.0));
             assert!((sim.snapshot.values[18] - initial[0]).abs() < 0.01);
         }
     }
     assert!(contacted);
     assert_first_ball_fills_toward_source(&sim, 12);
     // A new target during filling must also remain continuous.
-    sim.colors[0] = [0.0, 1.0, 0.0];
+    sim.color_targets[..9].copy_from_slice(&[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]);
     let before = sim.pigments;
     sim.step();
     for (old, new) in before.into_iter().zip(sim.pigments) {
@@ -2475,4 +2489,115 @@ fn both_halves_of_each_flat_top_transfer_the_same_source_color() {
             assert!(contacted, "no flat-top contact: end={end}, offset={offset}");
         }
     }
+}
+
+#[test]
+fn active_audio_requires_attacking_contacts_and_a_new_attack_can_light_resting_balls() {
+    let mut sim = world(SimulationConfig {
+        restitution: 0.0,
+        ..SimulationConfig::default()
+    });
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(12.5 * PITCH, BASELINE + radius(0), 0.0),
+        Vector::ZERO,
+    );
+    sim.apply(SimulationInput {
+        attack_required: true,
+        ..sim.input
+    })
+    .unwrap();
+    let initial = sim.color_targets;
+    let mut impulse = 0.0;
+    for _ in 0..HZ {
+        sim.step();
+        impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
+    }
+    assert!(
+        impulse > 0.0,
+        "the quiet source must physically support the ball"
+    );
+    assert_eq!(
+        sim.color_targets, initial,
+        "a non-attacking bar repainted the ball"
+    );
+    let before = sim.pigments;
+    let mut attacks = [0.0; COUNT];
+    attacks[12] = 1.0;
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        attacks,
+        ..sim.input
+    })
+    .unwrap();
+    sim.step();
+    assert_ne!(
+        sim.color_targets, initial,
+        "a new attack did not light the resting contact"
+    );
+    for (old, new) in before.into_iter().zip(sim.pigments) {
+        assert!((old - new).abs() < 0.038);
+    }
+    let held = sim.color_targets;
+    for _ in 0..HZ {
+        sim.step();
+    }
+    assert_eq!(
+        sim.color_targets, held,
+        "held pressure repeatedly painted one attack"
+    );
+    attacks[12] = 0.25;
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        attacks,
+        ..sim.input
+    })
+    .unwrap();
+    sim.step();
+    assert_eq!(sim.color_targets, held);
+    attacks[12] = 0.75;
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        attacks,
+        ..sim.input
+    })
+    .unwrap();
+    sim.step();
+    assert_ne!(
+        sim.color_targets, held,
+        "a later attack on the same contact was lost"
+    );
+}
+
+#[test]
+fn physical_contact_injects_color_at_the_rolling_balls_material_point() {
+    let run = |angle| {
+        let mut sim = world(SimulationConfig {
+            restitution: 0.0,
+            ..SimulationConfig::default()
+        });
+        isolate(&mut sim, &[0]);
+        place(
+            &mut sim,
+            0,
+            Vector::new(12.5 * PITCH, BASELINE + radius(0), 0.0),
+            Vector::ZERO,
+        );
+        sim.world.bodies[sim.balls[0].0].set_rotation(Rotation::from_rotation_x(angle), true);
+        for _ in 0..HZ {
+            sim.step();
+        }
+        assert_first_ball_fills_toward_source(&sim, 12);
+        sim.color_targets[..9].to_vec()
+    };
+    let upright = run(0.0);
+    let turned = run(core::f32::consts::PI);
+    assert_ne!(
+        upright, turned,
+        "rotation must change which swirl regions receive the contact light"
+    );
+    assert!(upright[0] > upright[6]);
+    assert!(turned[6] > turned[0]);
 }

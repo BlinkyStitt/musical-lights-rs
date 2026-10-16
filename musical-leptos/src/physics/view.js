@@ -57,7 +57,7 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(63);
+    this.input = new Float32Array(64);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
@@ -142,6 +142,7 @@ export class PhysicsView {
         this.preview.postMessage({ type: 'pulse', time: now / 1000, reduced: this.reduced.matches, direction: this.horizontalDirection ?? 1 });
       }
       this.input[31] = this.reduced.matches ? 1 : 0;
+      this.input[63] = this.card.dataset.audioState === 'playing' ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
@@ -355,7 +356,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 18 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 30 || data.layout[18] !== 19 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];
@@ -404,14 +405,17 @@ export class PhysicsView {
     const ballMaterial = new THREE.MeshLambertMaterial({ transparent: false, opacity: 1, depthWrite: true });
     ballMaterial.onBeforeCompile = shader => {
       this.lighting.apply(shader);
+      shader.uniforms.swirlShape = { value: new THREE.Vector4(...this.layout.slice(23, 27)) };
+      shader.uniforms.swirlEdges = { value: new THREE.Vector3(...this.layout.slice(27, 30)) };
       shader.vertexShader = 'attribute vec3 pigmentA; attribute vec3 pigmentB; attribute vec3 pigmentC; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nobjectPoint = position; paintA = pigmentA; paintB = pigmentB; paintC = pigmentC;');
-      shader.fragmentShader = 'varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'uniform vec4 swirlShape; uniform vec3 swirlEdges; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        // A soft connected field follows the rolling surface. Fixed-tick
-        // pigment diffusion supplies the fill; contacts never swap stripes.
-        float height = clamp(.5 + .5 * objectPoint.y + .08 * sin(3.0 * objectPoint.x + 2.0 * objectPoint.z), 0.0, 1.0);
-        vec3 pigment = mix(mix(paintA, paintB, smoothstep(0.0, .5, height)), paintC, smoothstep(.5, 1.0, height));
+        // The core supplies the contact-local swirl profile and eased colors.
+        // Material coordinates keep its soft curves attached while the ball rolls.
+        vec3 surfacePoint = normalize(objectPoint);
+        float wave = sin(swirlShape.x * surfacePoint.y + swirlShape.y * sin(swirlShape.z * surfacePoint.x) + swirlShape.w * surfacePoint.z);
+        vec3 pigment = mix(mix(paintA, paintB, smoothstep(swirlEdges.x, swirlEdges.y, wave)), paintC, smoothstep(swirlEdges.y, swirlEdges.z, wave));
         diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };

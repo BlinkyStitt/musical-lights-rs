@@ -262,13 +262,18 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 17 starts each ball uniformly in the source color at its actual
+Physics protocol 19 starts each ball uniformly in the source color at its actual
 spawn X coordinate. It rejects replays from previous engines. Physical rolling
-reveals a soft surface field that fills gradually with contacted colors.
+reveals three soft swirl regions. A contact adds its bar color at the ball's
+material contact point, and each visible region fills toward its own target
+with a 180 ms time constant. Other regions retain their colors. The shared core
+supplies the swirl profile for both contact injection and drawing.
 Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
 white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
-intensity. Distinct physical bar contacts blend sphere colors with or without
-audio. Persistent resting pressure cannot keep repainting the ball.
+intensity. In silence, distinct physical bar contacts add color. During microphone
+or digital playback, only attacking bars add color; a new attack can also light
+an existing resting contact. Persistent pressure or a held attack cannot keep
+repainting the ball. The numeric input records this audio paint policy for replay.
 
 Hidden pages and lost WebGL contexts pause both clocks. Return resets the
 frame clock. Route cleanup closes audio, terminates the worker, removes sensor

@@ -3,8 +3,8 @@ use musical_lights_core::lights::bar_motion::{DEFAULT_ATTACK_SECONDS, Motion};
 use musical_lights_core::lights::bar_surface::{BarSurface, JOIN_FRACTION};
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
 use musical_lights_core::lights::musical_motion::{
-    DirectionOdds, advance_pigment, contact_pigment_blend, paired_bar_extent, pigment_color,
-    sphere_drag_factor,
+    DirectionOdds, PIGMENT_SWIRL, advance_pigment, contact_pigment_blend, paint_pigment,
+    paired_bar_extent, pigment_color, pigment_contact_eligible, sphere_drag_factor,
 };
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
@@ -15,7 +15,8 @@ use prism::RampPrism;
 pub const COUNT: usize = 24;
 pub const ATTACK_OFFSET: usize = 38;
 pub const DEPTH_INPUT: usize = ATTACK_OFFSET + COUNT;
-pub const INPUT_LEN: usize = DEPTH_INPUT + 1;
+pub const PAINT_INPUT: usize = DEPTH_INPUT + 1;
+pub const INPUT_LEN: usize = PAINT_INPUT + 1;
 pub const BALL_COUNT: usize = 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
@@ -402,6 +403,8 @@ pub struct SimulationInput {
     pub levels: [f32; COUNT],
     /// Current audio attack edges, separate from physical and decorative travel.
     pub attacks: [f32; COUNT],
+    /// Active microphone or digital audio only paints from attacking bands.
+    pub attack_required: bool,
     pub acceleration: [f32; 3],
     pub gravity: Option<[f32; 3]>,
     pub pointer: Option<[f32; 3]>,
@@ -416,6 +419,7 @@ impl Default for SimulationInput {
             tick: 0,
             levels: [0.0; COUNT],
             attacks: [0.0; COUNT],
+            attack_required: false,
             acceleration: [0.0; 3],
             gravity: None,
             pointer: None,
@@ -456,7 +460,8 @@ pub struct Simulation {
     accent_sequence: u32,
     palette: [[f32; 3]; COUNT],
     // Contact targets; visible surface colors fill toward these at fixed ticks.
-    colors: [[f32; 3]; BALL_COUNT],
+    color_targets: [f32; BALL_COUNT * 9],
+    previous_attacks: [f32; COUNT],
     pigments: [f32; BALL_COUNT * 9],
     touching: [[bool; COUNT]; BALL_COUNT],
     ceiling: RigidBodyHandle,
@@ -625,7 +630,7 @@ impl Simulation {
                     .restitution(config.restitution),
             )
         });
-        let colors = std::array::from_fn(|i| {
+        let colors: [[f32; 3]; BALL_COUNT] = std::array::from_fn(|i| {
             let band = ((spawn[i].x / PITCH) as usize).min(COUNT - 1);
             palette[band]
         });
@@ -639,7 +644,8 @@ impl Simulation {
             surface_deltas: vec![0.0; SURFACE_COUNT],
             surface_dimensions: vec![[config.height, config.depth]; SURFACE_COUNT],
             palette,
-            colors,
+            color_targets: std::array::from_fn(|i| colors[i / 9][i % 3]),
+            previous_attacks: [0.0; COUNT],
             // Start uniformly with the source band under the actual spawn X.
             // Contact targets spread through these surface regions over time.
             pigments: std::array::from_fn(|i| colors[i / 9][i % 3]),
@@ -889,6 +895,10 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 1] = required.saturating_sub(MAX_SUBSTEPS) as f32;
         self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
+        let new_attacks: [bool; COUNT] = std::array::from_fn(|i| {
+            self.input.attacks[i] > 0.0 && self.input.attacks[i] > self.previous_attacks[i]
+        });
+        let mut painted = [[false; COUNT]; BALL_COUNT];
         for substep in 0..substeps {
             let previous_surface = self.surface;
             let previous_ceiling = self.ceiling_height;
@@ -1088,12 +1098,9 @@ impl Simulation {
                         driven[end] |= u32::from(inward && impulse > 0.0 && moving_inward) << i;
                         // A ramp spans two colour halves. Attribute the physical
                         // contact to the same source band as the visible coating.
-                        let Some(contact) = pair
-                            .manifolds
-                            .iter()
-                            .flat_map(|m| m.data.solver_contacts.iter())
-                            .next()
-                        else {
+                        let Some((manifold, contact)) = pair.manifolds.iter().find_map(|m| {
+                            m.data.solver_contacts.first().map(|contact| (m, contact))
+                        }) else {
                             continue;
                         };
                         let (left, right) = chord_points(&self.world.colliders[other]);
@@ -1108,17 +1115,37 @@ impl Simulation {
                         let onset = active && impulse > 0.0 && !self.touching[i][j] && !touching[j];
                         touching[j] |= active && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
-                        if onset {
+                        if active
+                            && !painted[i][j]
+                            && pigment_contact_eligible(
+                                self.input.attack_required,
+                                self.input.attacks[j],
+                                onset,
+                                new_attacks[j],
+                            )
+                        {
                             let mass = self.world.bodies[self.balls[i].0].mass();
                             let blend = contact_pigment_blend(impulse, mass);
                             if blend == 0.0 {
                                 continue;
                             }
-                            // Pick up the contacted source color, with or without audio.
-                            for c in 0..3 {
-                                self.colors[i][c] +=
-                                    (self.palette[j][c] - self.colors[i][c]) * blend;
-                            }
+                            let ball = &self.world.bodies[self.balls[i].0];
+                            let outward = manifold.data.normal
+                                * if pair.collider1 == collider {
+                                    1.0
+                                } else {
+                                    -1.0
+                                };
+                            let local = ball.rotation().inverse() * outward;
+                            paint_pigment(
+                                (&mut self.color_targets[i * 9..i * 9 + 9])
+                                    .try_into()
+                                    .expect("fixed pigment targets"),
+                                self.palette[j],
+                                local.to_array(),
+                                blend,
+                            );
+                            painted[i][j] = true;
                         }
                     }
                 }
@@ -1167,10 +1194,11 @@ impl Simulation {
             .as_chunks_mut::<9>()
             .0
             .iter_mut()
-            .zip(self.colors)
+            .zip(self.color_targets.as_chunks::<9>().0)
         {
             advance_pigment(surface, target, DT);
         }
+        self.previous_attacks = self.input.attacks;
         self.tick += 1;
         self.write_transforms();
     }
@@ -1301,7 +1329,7 @@ impl PhysicsSimulation {
         musical_lights_core::lights::musical_motion::listening_level(level, band, seconds, reduced)
     }
     pub fn layout() -> Vec<f32> {
-        vec![
+        let mut layout = vec![
             COUNT as f32,
             HZ as f32,
             WIDTH,
@@ -1320,12 +1348,14 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            18.0, // flat caps with straight joins, continuous contact fill and live depth
+            19.0, // localized swirl fill, recorded audio paint policy and straight joins
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
-            INPUT_LEN as f32, // physical inputs followed by each source's audio attack edge
-        ]
+            INPUT_LEN as f32, // physical inputs, attack edges, depth and paint policy
+        ];
+        layout.extend(PIGMENT_SWIRL);
+        layout
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
         // 24 levels, acceleration xyz, pointer active + xyz, reduced, height,
@@ -1336,15 +1366,17 @@ impl PhysicsSimulation {
             || ![0.0, 1.0].contains(&values[31])
             || ![0.0, 1.0].contains(&values[33])
             || ![0.0, 1.0].contains(&values[37])
+            || ![0.0, 1.0].contains(&values[PAINT_INPUT])
         {
             return Err(JsError::new(
-                "Expected 63 simulation inputs with scrolling, gravity, audio attacks and enclosure depth",
+                "Expected 64 simulation inputs with scrolling, gravity, audio attacks and enclosure depth, plus the paint policy",
             ));
         }
         let input = SimulationInput {
             tick: self.0.tick,
             levels: std::array::from_fn(|i| values[i]),
             attacks: std::array::from_fn(|i| values[ATTACK_OFFSET + i]),
+            attack_required: values[PAINT_INPUT] == 1.0,
             acceleration: [values[24], values[25], values[26]],
             gravity: (values[37] == 1.0).then_some([values[34], values[35], values[36]]),
             pointer: (values[27] == 1.0).then_some([values[28], values[29], values[30]]),

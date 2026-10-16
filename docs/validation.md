@@ -711,8 +711,8 @@ fixture with the real processor and its real completion acknowledgement.
 Each source keeps a flat top across 48 mm of its 50 mm pitch. A straight
 2 mm join connects adjacent tops without an open slot. The shared Rust profile
 preserves the source heights and bounds every join by its endpoints, including
-the scrolling seam. Protocol 18 records the same 24 heights, live depth and
-continuous contact colors; it does not publish spline coefficients.
+the scrolling seam. Protocol 19 records the same 24 heights, live depth, attack-only paint policy
+and contact-local swirl colors; it does not publish spline coefficients.
 
 Physics uses one flat prism and one joining prism per pitch, with fixed topology
 and exact projection onto their extruded quadrilaterals. The adapter removes
@@ -1061,3 +1061,17 @@ unchanged lower-half pixels, scene and collider size, control identity,
 settings persistence, keyboard focus, native fullscreen exit, and route cleanup.
 The scene does not scroll. The modal body has its own scroll area and a fixed
 Close button. These are browser checks; they do not prove physical-phone speed.
+
+
+## Contact-light swirl
+
+The core owns the soft swirl weights, physical-contact eligibility, regional color
+targets and 180 ms exponential fill. Native regressions check material contact
+points on rotated balls, attack-only microphone/digital painting, new attacks on
+resting contacts, persistent-pressure suppression and gradual changes. Spawn colors
+still follow X. Core checks cover bounded invalid input and elapsed-time independence.
+The WASM harness records the paint policy and rejects replays with a missing policy;
+its physical states must remain identical across the three paint-policy cases.
+Browser pixel checks retain the existing per-tick color-jump limit and verify
+visible color variation after contact. Reduced Motion keeps the material swirl
+attached to physical rolling and adds no automatic pigment motion.

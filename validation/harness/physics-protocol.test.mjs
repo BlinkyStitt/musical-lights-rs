@@ -5,14 +5,15 @@ import init, { PhysicsSimulation } from '../../musical-lights-physics/pkg/physic
 import { replayReport } from '../replay-physics.mjs';
 const wasm = await init({ module_or_path: await readFile(new URL('../../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
 
-test('the built WASM accepts protocol 18 scrolling and stops at its published phase', () => {
+test('the built WASM accepts protocol 19 scrolling and stops at its published phase', () => {
   const layout = PhysicsSimulation.layout();
-  assert.equal(layout[18], 18, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
+  assert.equal(layout[18], 19, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
   assert.equal(layout[0], 24);
   assert(Math.abs(layout[4] - .002) < 1e-8, 'Straight joins fill the former 2 mm gap');
   assert.equal(layout[5], 0, 'Flat tips have no seam trough');
   assert.equal(layout[21], 8);
-  assert.equal(layout[22], 63, 'Audio attack edges and live enclosure depth are recorded inputs');
+  assert.equal(layout[22], 64, 'Audio attacks, depth and the attack-only paint policy are recorded inputs');
+  assert.equal(layout.length, 30, 'The shared core supplies the seven swirl profile values');
   assert.equal(layout[9], 3 + 8 * layout[8]);
   assert.equal(layout[11] - layout[10], 8 * 24);
   const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), new Float32Array(72).fill(.5));
@@ -159,4 +160,40 @@ test('built WASM starts every ball uniformly in its actual spawn-X band', () => 
       for(let p=0;p<3;p++)assert.deepEqual(Array.from(pigments.slice(i*9+p*3,i*9+p*3+3)),expected);
     }
   } finally {sim.free();}
+});
+
+
+test('built WASM records attack-only paint policy and preserves physical replay', async () => {
+  const layout = Array.from(PhysicsSimulation.layout()), config = Array.from(PhysicsSimulation.defaults());
+  const palette = Array.from({ length: 72 }, (_, i) => i % 3 === 0 ? Math.floor(i / 3) / 24 : .2);
+  const runs = [];
+  for (const [required, attacking] of [[false, false], [true, false], [true, true]]) {
+    const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
+    try {
+      const read = () => Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]));
+      const initial = read();
+      const values = Array(layout[22]).fill(0); values.fill(1, 0, 24);
+      values[32] = config[0]; values[62] = config[5]; values[63] = Number(required);
+      values.fill(attacking ? .5 : 0, 38, 62); sim.input(new Float32Array(values));
+      for (let tick = 0; tick < 120; tick++) sim.step();
+      const finalSnapshot = read();
+      const colors = state => Array.from({ length: 8 }, (_, i) => state.slice(3 + i * layout[8] + 15, 3 + i * layout[8] + 18));
+      if (required && !attacking) assert.deepEqual(colors(finalSnapshot), colors(initial));
+      else assert.notDeepEqual(colors(finalSnapshot), colors(initial));
+      const report = { type: 'musical-lights-phone-report-v5', config, palette, layout, initialTempo: 120,
+        inputs: [{ tick: 0, values: [...values] }], finalTick: sim.tick(), finalSnapshot };
+      assert((await replayReport(report)).every(result => result.matches));
+      if (required && !attacking) {
+        const missing = structuredClone(report); missing.inputs[0].values[63] = 0;
+        // A wrong paint policy must produce a different recorded color history.
+        await assert.rejects(replayReport(missing), /Physics replay differs/);
+      }
+      runs.push(finalSnapshot.filter((_, i) => i < 3 || i >= layout[9] || (i - 3) % layout[8] < 15));
+      for (const invalid of [-.1, 1.1, NaN]) {
+        values[63] = invalid; assert.throws(() => sim.input(new Float32Array(values)));
+      }
+      assert.throws(() => sim.input(new Float32Array(63)), /Expected 64 simulation inputs/);
+    } finally { sim.free(); }
+  }
+  assert.deepEqual(runs[0], runs[1]); assert.deepEqual(runs[1], runs[2]);
 });
