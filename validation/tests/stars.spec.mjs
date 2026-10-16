@@ -26,7 +26,7 @@ for (const route of ['/', '/advanced/']) {
       try {
         const first = read(0, false), later = read(2400, false), steady = read(0, true);
         const steadyLater = read(5000, true);
-        v.lighting.uniforms.colorAttack.value = 3; v.mirrors.setCount(2048);
+        v.lighting.uniforms.colorAttack.value = 3; v.current[v.layout[17]+4]=2;
         v.scene.children.filter(node => node !== v.starfield.points).forEach(node => { node.visible = false; });
         v.setCamera(40); const independent = read(5000, true);
         let bright = 0, opaque = 0;

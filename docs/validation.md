@@ -980,6 +980,14 @@ range. Reset display restores the startup range. Saved Auto counts start within
 The baseline draws the physical scene with zero depth copies. Bars and balls
 keep moving during measurement, including short captured audio bursts.
 
+The animation scheduler permits at most two GPU frames in flight. It polls a
+WebGL completion fence with zero timeout and keeps input, audio and physics
+updates active while drawing waits. FPS, Auto depth and phone reports count
+submitted frames only. Context loss and route cleanup release fence state.
+Whole bars outside their source window move outside clip space before
+rasterization; partial bars retain fragment clipping. Pixel tests compare this
+path with fragment-only clipping across scroll phases, camera views and depths.
+
 ## GPS, amulet and live tuning checks
 
 `python3 validation/validate.py core` checks the pinned std/libm/alloc/defmt/Embassy
@@ -1007,6 +1015,34 @@ GPS/PPS epoch timing, radio capacity, installed heading error, LED response and
 output timing, electrical load, thermal behavior and runtime need physical acceptance.
 The current GPS board timing profile has unknown uncertainty, so it cannot report
 Locked. No battery measurement profile exists; battery state remains Unknown.
+
+## Audio sample gaps
+
+A sample-clock discontinuity starts a new analysis segment at the real received
+sample index. Capture and digital playback keep the same graph, transport,
+monitor and source controls. The app shows a recovery notice. The processor
+records missing and overlapping clock intervals separately. It does not fill those intervals with silence or repeat samples. It resets loudness,
+gain, gate, tempo and attack history, and keeps the accepted calibration and tuning.
+An interrupted reference measurement is canceled. Invalid PCM or a missing channel
+remains an error. A backward clock starts a new declared segment without
+rewinding playback; sample indices stay truthful within each segment.
+
+The current worklet trace is version 7, with 466 values per row. The final value
+identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v8`
+and include continuity counters in their chunks and session metadata. Diagnostic
+plots break at segment boundaries. A sample gap invalidates an active phone FPS
+record even when playback recovers; recovery is not continuity acceptance.
+
+## Starfield twinkle
+
+Catalog positions and display tints remain fixed. Independent brightness cycles
+and brief glints continue with audio stopped. Reliable BPM sets an additional
+pulse rate; qualified source-band attacks brighten and slightly enlarge their
+stars. Digital playback can drive both effects with Listening off. Reduced
+Motion holds the sky steady. The renderer still uses one point batch without
+textures, bloom or additional render targets.
+
+## Fullscreen settings
 
 Fullscreen settings use the same control nodes as the normal page.
 `validation/tests/fullscreen-settings.spec.mjs` checks the top-half dialog,

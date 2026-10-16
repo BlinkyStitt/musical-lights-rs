@@ -5,9 +5,9 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
-test('idle waves preserve ball pigments despite real bar contacts', async ({ page }) => {
+test('idle contacts fill ball colors without inventing audio attacks', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
-  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
   const evidence = await page.evaluate(() => new Promise(resolve => {
     const v = document.querySelector('#dancinglights').physics;
     const initial = Array.from(v.pigments), tick = v.current[2];
@@ -18,7 +18,7 @@ test('idle waves preserve ball pigments despite real bar contacts', async ({ pag
       changed ||= v.pigments.some((value, i) => value !== initial[i]);
       if (v.current[2] < tick + 120) { requestAnimationFrame(sample); return; }
       resolve({ changed, contacts, moved: v.input.slice(0, 24).some((value, i) => Math.abs(value - levels[i]) > .01),
-        attacks: Array.from(v.input.slice(38)), edges: Array.from(v.meshEdges) });
+        attacks: Array.from(v.input.slice(38,62)), edges: Array.from(v.meshEdges) });
     };
     sample();
   }));
@@ -26,26 +26,26 @@ test('idle waves preserve ball pigments despite real bar contacts', async ({ pag
   expect(evidence.moved).toBe(true);
   expect(evidence.edges.some(value => value > 0)).toBe(true);
   expect(evidence.attacks).toEqual(Array(24).fill(0));
-  expect(evidence.changed).toBe(false);
+  expect(evidence.changed).toBe(true);
 });
 
-test('only acoustic attack edges qualify new bar contacts for ball color', async ({ page }) => {
+test('physical contacts fill color independently of acoustic attack edges', async ({ page }) => {
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
-  await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+  await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
   const before = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments));
   await page.evaluate(() => window.sendBars(Array(24).fill(1)));
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     return Math.min(...v.current.slice(v.layout[9], v.layout[10])) / v.current[v.layout[17] + 1];
   })).toBeGreaterThan(.95);
-  expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments))).toEqual(before);
+  await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value,i)=>value!==before[i]),before)).toBe(true);
   await page.evaluate(() => window.sendBars(Array(24).fill(0)));
   await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeLessThan(.0031);
   await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
-  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38)))).toEqual(Array(24).fill(1));
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38,62)))).toEqual(Array(24).fill(1));
   await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value, i) => value !== before[i]), before)).toBe(true);
   await page.evaluate(() => { window.audioNow += .181; });
-  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38)))).toEqual(Array(24).fill(0));
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38,62)))).toEqual(Array(24).fill(0));
 });
 
 test('a subpixel seam fragment uses its visible wrapped copy for native hover', async ({ page }) => {
@@ -81,7 +81,7 @@ test('continuous scrolling carries source identity and stops in place', async ({
     const state = new Float64Array(102); state.set([0, 1, .18], 99); state.set([window.audioNow, 0, 5]);
     for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], i === 0 ? window.audioNow : -1, 0], 3 + i * 4);
     window.testNode.port.dispatchEvent(new MessageEvent('message', { data: {
-      type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
+      type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
     } }));
   });
   const sourceLabel = await page.getByRole('meter').first().getAttribute('aria-label');
@@ -146,7 +146,7 @@ for (const width of [375, 1440]) {
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.setViewportSize({ width, height: 900 });
     await syntheticAudio(page); await page.goto(url); await startFrozen(page);
-    await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input');
+    await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
     await expect(page.locator('#dancinglights canvas')).toHaveCount(1);
     await expect(page.getByRole('meter')).toHaveCount(24);
     const initial = await physicsState(page);
@@ -173,9 +173,9 @@ for (const width of [375, 1440]) {
         roofExtents: Array.from({ length: 24 }, (_, i) => v.renderedHeight(i, 1)) };
     });
     expect(render.ballInstances).toBe(8); expect(render.barInstances).toBe(144);
-    // One batch draws visible background banks and one draws ball depth images.
+    // One batch draws visible background banks; there are no copied balls.
     // One outer coating covers all nine banks; one point batch draws the stars.
-    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(6);
+    expect(render.type).toBe('WebGL2RenderingContext'); expect(render.calls).toBe(5);
     render.tops.forEach((top, i) => expect(top).toBeCloseTo(render.expected[i], 5));
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
@@ -188,8 +188,7 @@ for (const width of [375, 1440]) {
 
 test('resize preserves size, one worker and canvas; route close frees audio, GPU, observer and loop', async ({ page }) => {
   await page.addInitScript(() => {
-    // Keep all six scene geometries present; Auto starts with no depth images.
-    localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 }));
+    // Track all five physical-scene geometries through resize and disposal.
     window.workers = new Set(); window.observers = new Set(); window.frames = new Set();
     const Worker = window.Worker; window.Worker = class extends Worker {
       constructor(...args) { super(...args); window.workers.add(this); }
@@ -209,7 +208,7 @@ test('resize preserves size, one worker and canvas; route close frees audio, GPU
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     return v.renderer.info.memory.geometries;
-  })).toBe(6);
+  })).toBe(5);
   await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     window.originalView = v; window.originalCanvas = v.canvas; window.gl = v.renderer.getContext();
@@ -379,7 +378,7 @@ test('context loss pauses physics and restoration resumes without losing the Exi
 });
 
 test('phone page sends generated PCM through the audio processor and exports an honest incomplete report', async ({ page }) => {
-  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.depth-slider').fill('6'); await page.locator('.depth-slider').dispatchEvent('input'); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.goto(`${url}/advanced`); await physicsReady(page); await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input'); await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
@@ -388,15 +387,15 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await page.locator('.phone-device').fill('Mac emulation'); await page.locator('.phone-browser').fill('test browser'); await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
   await page.locator('.physics-controls').evaluate(node => { node.open = true; });
-  await page.locator('[data-config="5"]').fill('0.36');
+  await page.locator('.depth-slider').fill('36');
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
   await expect(page.locator('.direction-curve')).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.bars.geometry.parameters.depth)).toBeCloseTo(.36, 5);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(.36, 5);
   await expect.poll(() => page.evaluate(() => {
     const walls = document.querySelector('#dancinglights').physics.enclosure;
     return Array.from({ length: walls.count }, (_, i) => walls.instanceMatrix.array[i * 16 + 10]);
-  })).toEqual([Math.fround(.36 * 7)]);
+  })).toEqual([Math.fround(.36)]);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(40);
   await page.locator('.diagnostics-controls > summary').click();
   const sequence = await page.evaluate(() => document.querySelector('#dancinglights').physics.sequence);
@@ -628,13 +627,19 @@ for (const scenario of [
       const view = document.querySelector('#dancinglights').physics;
       const first = Array.from({ length: view.layout[21] }, (_, i) => view.current[3 + i * view.layout[8] + axis]);
       const travel = first.map(() => 0);
-      const end = performance.now() + 240;
+      const started = performance.now(), startTick = view.current[2];
+      const samples = [];
+      const end = started + 240;
       while (performance.now() < end) {
         window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration }));
         await new Promise(resolve => requestAnimationFrame(resolve));
         for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], direction * (view.current[3 + i * view.layout[8] + axis] - first[i]));
+        samples.push({ elapsed: performance.now() - started, tick: view.current[2], snapshotAge: view.metrics.snapshotAgeMs,
+          debt: view.metrics.debt, steps: view.metrics.physicsSteps, input: Array.from(view.input.slice(24, 27)),
+          positions: first.map((_, i) => view.current[3 + i * view.layout[8] + axis]) });
       }
-      return { first, travel, input: Array.from(view.input.slice(24, 27)) };
+      return { first, travel, input: Array.from(view.input.slice(24, 27)), startTick, endTick: view.current[2],
+        elapsed: performance.now() - started, samples };
     }, scenario);
     await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
     const lower = scenario.axis === 2 ? -before.config[5] / 2 : 0;
@@ -666,9 +671,6 @@ for (const scenario of [
 test('rotation-locked phone can enable shaking without starting the microphone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await syntheticAudio(page); await page.goto(url); await physicsReady(page);
-  // This steady-force fixture sends sensor samples at the rendered cadence.
-  // Finish startup's trial counts before measuring its 240 ms motion interval.
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.depthProfile?.done), { timeout: 30000 }).toBe(true);
   await page.locator('.scroll-lights').uncheck();
   // Measure sensor-only travel from rest. The independent idle sine must not
   // keep prescribing moving supports while this fixture establishes its floor.

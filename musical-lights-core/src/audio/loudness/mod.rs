@@ -184,6 +184,17 @@ impl LoudnessMeter {
         self.origin = first_sample_index;
     }
 
+    /// Check the authoritative sample clock without changing analysis state.
+    pub fn check_continuity(&self, first_sample: u64) -> Result<(), LoudnessError> {
+        if first_sample != self.next_sample {
+            return Err(LoudnessError::Discontinuity {
+                expected: self.next_sample,
+                received: first_sample,
+            });
+        }
+        Ok(())
+    }
+
     pub fn clipped_samples(&self) -> u64 {
         self.clipped_samples
     }
@@ -202,12 +213,7 @@ impl LoudnessMeter {
         if samples.is_empty() {
             return Err(LoudnessError::EmptyBlock);
         }
-        if first_sample_index != self.next_sample {
-            return Err(LoudnessError::Discontinuity {
-                expected: self.next_sample,
-                received: first_sample_index,
-            });
-        }
+        self.check_continuity(first_sample_index)?;
         first_sample_index
             .checked_add(samples.len() as u64)
             .ok_or(LoudnessError::SampleCounterOverflow)?;

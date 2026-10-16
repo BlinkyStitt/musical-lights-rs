@@ -2,14 +2,16 @@
 use musical_lights_core::lights::bar_motion::{DEFAULT_ATTACK_SECONDS, Motion};
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
 use musical_lights_core::lights::musical_motion::{
-    DirectionOdds, contact_pigment_blend, paired_bar_extent, remember_pigment, sphere_drag_factor,
+    DirectionOdds, advance_pigment, contact_pigment_blend, paired_bar_extent, pigment_color,
+    sphere_drag_factor,
 };
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
 
 pub const COUNT: usize = 24;
 pub const ATTACK_OFFSET: usize = 38;
-pub const INPUT_LEN: usize = ATTACK_OFFSET + COUNT;
+pub const DEPTH_INPUT: usize = ATTACK_OFFSET + COUNT;
+pub const INPUT_LEN: usize = DEPTH_INPUT + 1;
 pub const BALL_COUNT: usize = 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
@@ -32,7 +34,7 @@ pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + BALL_COUNT * COUNT;
 pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + BALL_COUNT;
 pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
 pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
-pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 4;
+pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 5;
 pub const SNAPSHOT_LEN: usize = SCROLL_OFFSET + 1;
 pub use musical_lights_core::lights::musical_motion::{
     SCROLL_EASE, SCROLL_PEAK_SPEED, SCROLL_SPEED,
@@ -141,6 +143,7 @@ pub struct SimulationInput {
     pub pointer: Option<[f32; 3]>,
     pub reduced_motion: bool,
     pub height: f32,
+    pub depth: f32,
     pub scrolling: bool,
 }
 impl Default for SimulationInput {
@@ -154,6 +157,7 @@ impl Default for SimulationInput {
             pointer: None,
             reduced_motion: false,
             height: SimulationConfig::default().height,
+            depth: SimulationConfig::default().depth,
             scrolling: false,
         }
     }
@@ -184,10 +188,12 @@ pub struct Simulation {
     flight_target: f32,
     accent_sequence: u32,
     palette: [[f32; 3]; COUNT],
+    // Contact targets; visible surface colors fill toward these at fixed ticks.
     colors: [[f32; 3]; BALL_COUNT],
     pigments: [f32; BALL_COUNT * 9],
     touching: [[bool; COUNT]; BALL_COUNT],
     ceiling: RigidBodyHandle,
+    depth_walls: [RigidBodyHandle; 2],
     ceiling_height: f32,
     resize_from: f32,
     resize_tick: u32,
@@ -229,37 +235,40 @@ impl Simulation {
             ..PhysicsWorld::default()
         };
         // Closed enclosure: every visible boundary has a physical collider.
-        for (normal, position) in [
+        let boundaries = [
             (Vector::Y, Vector::ZERO),
             (Vector::X, Vector::ZERO),
             (-Vector::X, Vector::new(WIDTH, 0.0, 0.0)),
             (Vector::Z, Vector::new(0.0, 0.0, -config.depth / 2.0)),
             (-Vector::Z, Vector::new(0.0, 0.0, config.depth / 2.0)),
-        ] {
+        ]
+        .map(|(normal, position)| {
             // Vertical walls shed tangential load instead of pinning spheres.
             // Keep the floor, ceiling, balls and bars on the configured material.
             let vertical = normal.y == 0.0;
-            world.insert(
-                RigidBodyBuilder::fixed().translation(position),
-                ColliderBuilder::halfspace(Unit::new_unchecked(normal))
-                    .friction(if vertical { 0.0 } else { config.friction })
-                    .friction_combine_rule(if vertical {
-                        CoefficientCombineRule::Min
-                    } else {
-                        CoefficientCombineRule::Average
-                    })
-                    .restitution(if vertical {
-                        WALL_RESTITUTION
-                    } else {
-                        config.restitution
-                    })
-                    .restitution_combine_rule(if vertical {
-                        CoefficientCombineRule::Max
-                    } else {
-                        CoefficientCombineRule::Average
-                    }),
-            );
-        }
+            world
+                .insert(
+                    RigidBodyBuilder::fixed().translation(position),
+                    ColliderBuilder::halfspace(Unit::new_unchecked(normal))
+                        .friction(if vertical { 0.0 } else { config.friction })
+                        .friction_combine_rule(if vertical {
+                            CoefficientCombineRule::Min
+                        } else {
+                            CoefficientCombineRule::Average
+                        })
+                        .restitution(if vertical {
+                            WALL_RESTITUTION
+                        } else {
+                            config.restitution
+                        })
+                        .restitution_combine_rule(if vertical {
+                            CoefficientCombineRule::Max
+                        } else {
+                            CoefficientCombineRule::Average
+                        }),
+                )
+                .0
+        });
         let (ceiling, _) = world.insert(
             RigidBodyBuilder::fixed().translation(Vector::new(0.0, config.height, 0.0)),
             ColliderBuilder::halfspace(Unit::new_unchecked(-Vector::Y))
@@ -330,6 +339,10 @@ impl Simulation {
                     .restitution(config.restitution),
             )
         });
+        let colors = std::array::from_fn(|i| {
+            let band = ((spawn[i].x / PITCH) as usize).min(COUNT - 1);
+            palette[band]
+        });
         let mut sim = Self {
             config,
             tick: 0,
@@ -337,8 +350,10 @@ impl Simulation {
             balls,
             bars,
             palette,
-            colors: std::array::from_fn(|i| palette[i * COUNT / BALL_COUNT]),
-            pigments: std::array::from_fn(|i| palette[(i / 9) * COUNT / BALL_COUNT][i % 3]),
+            colors,
+            // Start uniformly with the source band under the actual spawn X.
+            // Contact targets spread through these surface regions over time.
+            pigments: std::array::from_fn(|i| colors[i / 9][i % 3]),
             bar_positions: [f64::from(BASELINE); COUNT],
             bar_velocities: [0.0; COUNT],
             motions: [Motion::default(); COUNT],
@@ -351,6 +366,7 @@ impl Simulation {
             accent_sequence: 0,
             touching: [[false; COUNT]; BALL_COUNT],
             ceiling,
+            depth_walls: [boundaries[3], boundaries[4]],
             ceiling_height: config.height,
             resize_from: config.height,
             resize_tick: RESIZE_TICKS,
@@ -358,6 +374,7 @@ impl Simulation {
             driven: [[false; BALL_COUNT]; 2],
             input: SimulationInput {
                 height: config.height,
+                depth: config.depth,
                 ..SimulationInput::default()
             },
             snapshot: SimulationSnapshot {
@@ -386,6 +403,8 @@ impl Simulation {
                 .is_some_and(|p| p.iter().any(|v| !v.is_finite()))
             || !input.height.is_finite()
             || !(MIN_HEIGHT..=20.0).contains(&input.height)
+            || !input.depth.is_finite()
+            || !(0.2..=2.0).contains(&input.depth)
         {
             return Err("Invalid or late simulation input");
         }
@@ -469,6 +488,7 @@ impl Simulation {
                 self.world.bodies[handle].wake_up(true);
             }
         }
+        self.resize_depth();
         let old_travel = f64::from(self.bar_max() - BASELINE);
         self.flight_fraction +=
             (self.flight_target - self.flight_fraction).clamp(-0.5 * DT / 0.3, 0.5 * DT / 0.3);
@@ -715,18 +735,11 @@ impl Simulation {
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
                         if touching[j] && !self.touching[i][j] && impulse > 0.0 {
                             let mass = self.world.bodies[self.balls[i].0].mass();
-                            let blend = contact_pigment_blend(self.input.attacks[j], impulse, mass);
+                            let blend = contact_pigment_blend(impulse, mass);
                             if blend == 0.0 {
                                 continue;
                             }
-                            // Contact onset and the source's audio attack must coincide.
-                            let start = i * 9;
-                            remember_pigment(
-                                (&mut self.pigments[start..start + 9])
-                                    .try_into()
-                                    .expect("fixed pigment history"),
-                                self.palette[j],
-                            );
+                            // Pick up the contacted source color, with or without audio.
                             for c in 0..3 {
                                 self.colors[i][c] +=
                                     (self.palette[j][c] - self.colors[i][c]) * blend;
@@ -773,8 +786,53 @@ impl Simulation {
                 }
             }
         }
+        // Once per fixed tick, regardless of contact substeps or browser FPS.
+        for (surface, target) in self
+            .pigments
+            .as_chunks_mut::<9>()
+            .0
+            .iter_mut()
+            .zip(self.colors)
+        {
+            advance_pigment(surface, target, DT);
+        }
         self.tick += 1;
         self.write_transforms();
+    }
+    fn resize_depth(&mut self) {
+        let depth = self.input.depth;
+        if depth == self.config.depth {
+            return;
+        }
+        self.config.depth = depth;
+        for (i, handle) in self.depth_walls.iter().enumerate() {
+            self.world.bodies[*handle].set_translation(
+                Vector::new(0.0, 0.0, if i == 0 { -depth / 2.0 } else { depth / 2.0 }),
+                false,
+            );
+        }
+        for &(_, handle) in &self.bars {
+            self.world.colliders[handle].set_shape(SharedShape::cuboid(
+                PITCH / 2.0,
+                POST_HEIGHT / 2.0,
+                depth / 2.0,
+            ));
+        }
+        for (i, &(handle, _)) in self.balls.iter().enumerate() {
+            let body = &mut self.world.bodies[handle];
+            let mut position = body.translation();
+            let limit = depth / 2.0 - SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0 - CLEARANCE;
+            let z = position.z.clamp(-limit, limit);
+            if z != position.z {
+                position.z = z;
+                body.set_translation(position, true);
+                let mut velocity = body.linvel();
+                if velocity.z * z > 0.0 {
+                    velocity.z = 0.0;
+                    body.set_linvel(velocity, true);
+                }
+            }
+        }
     }
     fn resize_ceiling(&mut self) {
         if self.config.height >= self.ceiling_height {
@@ -815,6 +873,7 @@ impl Simulation {
             bar_max,
             hop_height,
             MIN_HEIGHT,
+            self.config.depth,
         ]);
         for (i, &(handle, _)) in self.balls.iter().enumerate() {
             let body = &self.world.bodies[handle];
@@ -825,7 +884,11 @@ impl Simulation {
             out[8] = body.mass();
             out[9..12].copy_from_slice(&body.linvel().to_array());
             out[12..15].copy_from_slice(&body.angvel().to_array());
-            out[15..18].copy_from_slice(&self.colors[i]);
+            out[15..18].copy_from_slice(&pigment_color(
+                self.pigments[i * 9..i * 9 + 9]
+                    .try_into()
+                    .expect("fixed pigment surface"),
+            ));
         }
         for i in 0..COUNT {
             values[VELOCITY_OFFSET + i] = self.bar_velocities[i] as f32;
@@ -880,7 +943,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            12.0, // attack-qualified pigment transfer; replay requires this engine
+            17.0, // faster continuous contact-color fill, spawn-X colors and live enclosure depth
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,
@@ -889,7 +952,7 @@ impl PhysicsSimulation {
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
         // 24 levels, acceleration xyz, pointer active + xyz, reduced, height,
-        // scrolling, gravity xyz + active, then 24 audio attack edges.
+        // scrolling, gravity xyz + active, then 24 audio attack edges and enclosure depth.
         if values.len() != INPUT_LEN
             || values.iter().any(|v| !v.is_finite())
             || ![0.0, 1.0].contains(&values[27])
@@ -898,7 +961,7 @@ impl PhysicsSimulation {
             || ![0.0, 1.0].contains(&values[37])
         {
             return Err(JsError::new(
-                "Expected 62 simulation inputs with scrolling and gravity enablement and audio attacks",
+                "Expected 63 simulation inputs with scrolling, gravity, audio attacks and enclosure depth",
             ));
         }
         let input = SimulationInput {
@@ -910,6 +973,7 @@ impl PhysicsSimulation {
             pointer: (values[27] == 1.0).then_some([values[28], values[29], values[30]]),
             reduced_motion: values[31] == 1.0,
             height: values[32],
+            depth: values[DEPTH_INPUT],
             scrolling: values[33] == 1.0,
         };
         self.0.apply(input).map_err(JsError::new)

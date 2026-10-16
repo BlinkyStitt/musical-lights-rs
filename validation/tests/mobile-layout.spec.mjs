@@ -25,7 +25,6 @@ test('phone opens expanded without capture and keeps settings in the top half wi
       for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
         await page.setViewportSize(viewport);
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
-        await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
         const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
           'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation'];
         expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
@@ -34,10 +33,12 @@ test('phone opens expanded without capture and keeps settings in the top half wi
           const camera = document.querySelector('.camera-controls').getBoundingClientRect();
           const controls = document.querySelector('.audio-controls').getBoundingClientRect();
           const slider = document.querySelector('.camera-rotation'), box = slider.getBoundingClientRect();
-          return { angle: document.querySelector('#dancinglights').physics.cameraBase, separate: controls.bottom <= camera.top, touchSize: box.height >= 44,
-            aligned: Math.abs(box.y + box.height / 2 - camera.y - camera.height / 2) < 1,
+          const row = slider.closest('.slider-control').getBoundingClientRect();
+          const dialog = document.querySelector('.fullscreen-settings'), modal = dialog.getBoundingClientRect();
+          return { dialogVisible: modal.width > 0 && modal.height > 0 && getComputedStyle(dialog).visibility === 'visible', angle: document.querySelector('#dancinglights').physics.cameraBase, separate: controls.bottom <= camera.top, touchSize: box.height >= 44,
+            aligned: Math.abs(box.y + box.height / 2 - row.y - row.height / 2) < 1,
             touchable: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === slider };
-        })).toEqual({ angle: 30, separate: true, touchSize: true, aligned: true, touchable: true });
+        })).toEqual({ dialogVisible: true, angle: 30, separate: true, touchSize: true, aligned: true, touchable: true });
         await page.keyboard.press('ArrowLeft');
         await expect.poll(() => page.evaluate(() => ({
           angle: document.querySelector('#dancinglights').physics.cameraBase,

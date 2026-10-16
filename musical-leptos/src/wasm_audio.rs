@@ -188,6 +188,7 @@ impl AudioSession {
         let weak = Rc::downgrade(&self.resources);
         let ack = js_sys::Object::new();
         Reflect::set(&ack, &"type".into(), &"ack".into())?;
+        let mut calibration_cancellations = 0;
         let callback = Closure::new(move |event: MessageEvent| {
             let Some(resources) = weak.upgrade() else {
                 return;
@@ -205,6 +206,17 @@ impl AudioSession {
                 .and_then(|v| v.as_string());
             match kind.as_deref() {
                 Some("frame") => {
+                    let cancellations = Reflect::get(&data, &"continuity".into())
+                        .ok()
+                        .and_then(|value| {
+                            Reflect::get(&value, &"calibrationCancellations".into()).ok()
+                        })
+                        .and_then(|value| value.as_f64())
+                        .unwrap_or(0.0) as u32;
+                    if cancellations > calibration_cancellations {
+                        calibration_cancellations = cancellations;
+                        on_update(AudioUpdate::Status(capture_status(&callback_node)));
+                    }
                     let parsed = Reflect::get(&data, &"state".into())
                         .ok()
                         .and_then(|v| v.dyn_into::<Float64Array>().ok())

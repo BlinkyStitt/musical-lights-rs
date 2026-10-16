@@ -2,7 +2,7 @@ import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, mirrorCount: 6, depthMode: 'auto', audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
+  cameraMotion: true, cameraAngle: 0, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
   ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL] };
@@ -18,11 +18,9 @@ export function readSettings(storage) {
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;
     for (const [key, , , min, max] of RENDER_CONTROLS) if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     if (validDirectionOdds(saved.directionOdds)) defaults.directionOdds = [...saved.directionOdds];
-    if (Number.isInteger(saved.mirrorCount) && saved.mirrorCount >= 0 && saved.mirrorCount <= 2048) { defaults.mirrorCount = saved.mirrorCount; defaults.depthMode = saved.depthMode === 'auto' ? 'auto' : 'manual'; }
-    if (defaults.depthMode === 'auto') defaults.mirrorCount = Math.max(1, Math.min(32, defaults.mirrorCount));
     for (const key of ['cameraMotion', 'scrolling']) if (typeof saved[key] === 'boolean') defaults[key] = saved[key];
     if (typeof saved.youtubeLink === 'string' && saved.youtubeLink.length <= 2048) defaults.youtubeLink = saved.youtubeLink;
-    if (Array.isArray(saved.physics) && saved.physics.length === 8 && saved.physics.every((v, i) => Number.isFinite(v) && v >= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][0] && v <= [[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][1])) defaults.physics = saved.physics;
+    if (Array.isArray(saved.physics) && saved.physics.length === 8 && saved.physics.every((v, i) => Number.isFinite(v) && Math.fround(v) >= Math.fround([[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][0]) && Math.fround(v) <= Math.fround([[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][1]))) defaults.physics = saved.physics;
   } catch { /* Private browsing still has session settings. */ }
   return defaults;
 }
@@ -118,13 +116,18 @@ export class Presentation {
       this.listen(node, 'change', () => { const value = checkbox ? node.checked : Number(node.value); if (!checkbox && (!node.validity.valid || !Number.isFinite(value))) return; this.settings[key] = value; this.save(); });
     }
     mountAudioControls(this);
-    const depths = [...card.querySelectorAll('.mirror-count, .depth-slider')];
-    const syncDepth = () => { for (const node of depths) node.value = this.settings.mirrorCount; card.querySelector('.depth-status').textContent = this.settings.depthMode === 'auto' ? `Auto: ${this.settings.mirrorCount}` : `${this.settings.mirrorCount}`; };
-    syncDepth();
-    for (const node of depths) this.listen(node, node.type === 'range' ? 'input' : 'change', () => { const count = Number(node.value); if (node.value === '' || !node.validity.valid || !Number.isInteger(count) || count < 0 || count > 2048) return; this.settings.depthMode = 'manual'; this.settings.mirrorCount = count; syncDepth(); this.save(); });
-    this.listen(card.querySelector('.depth-auto'), 'click', () => { this.settings.depthMode = 'auto'; syncDepth(); this.save(); card.dispatchEvent(new Event('depth-retest')); });
-    this.listen(card, 'depth-paused', () => { syncDepth(); card.querySelector('.depth-status').textContent = 'Auto paused'; card.querySelector('.depth-status').title = 'Select Auto to measure again.'; this.save(); });
-    this.listen(card, 'depth-selected', ({ detail }) => { if (this.settings.depthMode !== 'auto') return; this.settings.mirrorCount = detail.count; syncDepth(); card.querySelector('.depth-status').textContent = `Auto: ${detail.count}`; card.querySelector('.depth-status').title = `${detail.count} depth images · ${Math.round(detail.hz)} Hz target`; this.save(); });
+    this.syncDepth = () => {
+      const depth = card.querySelector('.depth-slider');
+      depth.value = Math.round((this.settings.physics?.[5] ?? .48) * 100);
+      depth.disabled = !card.querySelector('#dancinglights')?.physics?.ready;
+      card.querySelector('.depth-status').textContent = `${depth.value} cm`;
+    };
+    this.syncDepth();
+    this.listen(card.querySelector('.depth-slider'), 'input', event => {
+      const node = event.target, cm = Number(node.value);
+      if (node.disabled || !node.validity.valid || !Number.isInteger(cm) || cm < 20 || cm > 200) return;
+      this.settings.physics[5] = cm / 100; this.save();
+    });
     this.oddsInputs = ['.direction-slow-bpm', '.direction-fast-bpm', '.direction-low-chance', '.direction-high-chance', '.direction-curve'].map(s => card.querySelector(s));
     const writeOdds = () => this.oddsInputs.forEach((node, i) => { node.value = this.settings.directionOdds[i] * (i === 2 || i === 3 ? 100 : 1); });
     writeOdds();
@@ -135,13 +138,14 @@ export class Presentation {
       if (valid) { this.settings.directionOdds = odds; this.save(); }
     });
     card.querySelector('.camera-rotation').value = this.settings.cameraAngle;
-    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, mirrorCount: DEFAULT_SETTINGS.mirrorCount, depthMode: 'auto', scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle'], ['.mirror-count', 'mirrorCount']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; syncDepth(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    mountSliderControls(this);
     this.save(false);
     card.presentation = this;
     this.fullscreenSettings = new FullscreenSettings(this);
   }
   listen(target, type, callback, options) { target.addEventListener(type, callback, options); this.removers.push(() => target.removeEventListener(type, callback, options)); }
-  save(persist = true) { if (persist) { try { this.storage?.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Session settings remain usable. */ } } this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
+  save(persist = true) { this.syncDepth?.(); if (persist) { try { this.storage?.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Session settings remain usable. */ } } this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
   updateAudioType() {
     if (!navigator.audioSession) return;
     const type = this.microphoneActive ? 'play-and-record' : this.videoPlaying ? 'playback' : this.originalAudioType ?? 'auto';
@@ -247,12 +251,16 @@ class FullscreenSettings {
     this.card = presentation.card;
     this.moves = [];
     this.exit = this.card.querySelector('.fullscreen-button');
+    this.listening = this.card.querySelector('.listening-toggle').closest('label');
     this.toolbar = document.createElement('div');
     this.toolbar.className = 'fullscreen-toolbar';
     this.button = document.createElement('button');
     this.button.type = 'button';
+    this.button.tabIndex = 0;
     this.button.className = 'fullscreen-settings-button';
-    this.button.textContent = 'Settings';
+    this.button.setAttribute('aria-label', 'Settings');
+    this.button.title = 'Settings';
+    this.button.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 3-.5 2-2 1L4.5 5.5 2 9l1.5 1.5v3L2 15l2.5 3.5 2-1 2 1L9 21h6l.5-2.5 2-1 2 1L22 15l-1.5-1.5v-3L22 9l-2.5-3.5-2 1-2-1L15 3Z"/><circle cx="12" cy="12" r="3"/></svg>`;
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-controls', 'fullscreen-settings');
     this.button.setAttribute('aria-expanded', 'false');
@@ -285,12 +293,16 @@ class FullscreenSettings {
     node.before(marker);
     this.moves.push({ node, marker });
     destination.append(node);
+    return marker;
   }
   sync() {
     if (this.card.hasAttribute('data-expanded')) {
       if (this.moves.length) return;
       const active = document.activeElement;
       this.move(this.exit, this.toolbar);
+      this.toolbar.prepend(this.exit);
+      this.listeningMarker = this.move(this.listening, this.toolbar);
+      this.toolbar.insertBefore(this.listening, this.button);
       const controls = '.audio-controls, .scene-controls, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
       for (const node of [...this.card.children]) if (node.matches(controls)) this.move(node, this.body);
       this.move(this.card.querySelector('.video-entry'), this.body);
@@ -303,6 +315,7 @@ class FullscreenSettings {
     if (!this.card.hasAttribute('data-expanded') || this.dialog.open) return;
     this.presentation.hideHelp();
     this.dialog.append(this.presentation.popup);
+    this.listeningMarker.before(this.listening);
     this.dialog.showModal();
     this.body.scrollTop = 0;
     this.button.setAttribute('aria-expanded', 'true');
@@ -310,6 +323,7 @@ class FullscreenSettings {
   }
   hide() {
     if (this.dialog.open) this.dialog.close();
+    if (this.listeningMarker) this.toolbar.insertBefore(this.listening, this.button);
     this.presentation.hideHelp();
     this.card.append(this.presentation.popup);
     this.button.setAttribute('aria-expanded', 'false');
@@ -321,6 +335,7 @@ class FullscreenSettings {
     this.hide();
     for (const { node, marker } of this.moves) { marker.replaceWith(node); }
     this.moves.length = 0;
+    this.listeningMarker = null;
     if (!this.presentation.closed && active === this.exit) this.exit.focus({ preventScroll: true });
     this.presentation.hideHelp();
   }
@@ -329,5 +344,52 @@ class FullscreenSettings {
     this.restore();
     this.toolbar.remove();
     this.dialog.remove();
+  }
+}
+
+// Keep the native range as the single value and event source.
+function mountSliderControls(presentation) {
+  const { card } = presentation;
+  for (const range of card.querySelectorAll('input[type="range"]')) {
+    const name = range.getAttribute('aria-label');
+    const group = document.createElement('span'); group.className = 'slider-control';
+    range.before(group);
+    const minus = document.createElement('button'), plus = document.createElement('button');
+    for (const [button, text, action] of [[minus, '−', 'Decrease'], [plus, '+', 'Increase']]) {
+      button.type = 'button'; button.tabIndex = 0; button.textContent = text;
+      button.className = 'slider-step'; button.setAttribute('aria-label', `${action} ${name}`);
+    }
+    const existing = range.matches('.camera-rotation') ? card.querySelector('.camera-angle')
+      : range.matches('.depth-slider') ? card.querySelector('.depth-status') : null;
+    const value = existing ?? document.createElement('button');
+    value.type = 'button'; value.tabIndex = 0; value.classList.add('slider-value'); value.setAttribute('aria-label', `Edit ${name}`);
+    const editor = document.createElement('input');
+    Object.assign(editor, { type: 'number', min: range.min, max: range.max, step: range.step || '1', className: 'slider-editor', hidden: true });
+    editor.setAttribute('aria-label', `${name} value`);
+    group.append(minus, range, plus, value, editor);
+    const sync = () => { for (const node of [minus, plus, value, editor]) node.disabled = range.disabled; if (!existing) value.textContent = `${range.value}%`; };
+    const apply = () => {
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      range.dispatchEvent(new Event('change', { bubbles: true }));
+      sync();
+    };
+    const close = () => { editor.hidden = true; value.hidden = false; };
+    const commit = () => {
+      if (editor.value === '' || !editor.validity.valid) { editor.reportValidity(); return false; }
+      range.value = editor.value; apply(); close(); return true;
+    };
+    presentation.listen(minus, 'click', () => { range.stepDown(); apply(); });
+    presentation.listen(plus, 'click', () => { range.stepUp(); apply(); });
+    presentation.listen(value, 'click', () => {
+      editor.value = range.value; value.hidden = true; editor.hidden = false; editor.focus(); editor.select();
+    });
+    presentation.listen(editor, 'keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); if (commit()) value.focus(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); value.focus(); }
+    });
+    presentation.listen(editor, 'blur', () => { if (!editor.hidden) { if (editor.value !== '' && editor.validity.valid) commit(); else close(); } });
+    presentation.listen(range, 'input', sync);
+    presentation.listen(card, 'display-settings', sync);
+    sync();
   }
 }

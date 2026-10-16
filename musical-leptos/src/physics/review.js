@@ -86,7 +86,7 @@ export class ListeningReview {
       const v = this.view, b = 8; // Labelled 1 kHz source band; no normalized fitting.
       const renderedTime = Number.isFinite(v.renderedAt) && Number.isFinite(detail.receivedAudioTime) && Number.isFinite(detail.receivedAt)
         ? detail.receivedAudioTime + (v.renderedAt - detail.receivedAt) / 1000 : null;
-      this.samples.push({ at: trace[row + 315], band: b, raw: trace[row + 242 + b], filtered: trace[row + 319 + 4 * b],
+      this.samples.push({ at: trace[row + 315], analysisSegment: trace[row + stride - 1], band: b, raw: trace[row + 242 + b], filtered: trace[row + 319 + 4 * b],
         collider: v.current ? v.current[v.layout[9] + b] / v.height : 0,
         rendered: v.renderedHeight(b) / v.renderedEnclosureHeight, barBase: 'both',
         renderedAt: v.renderedAt, renderedTime, renderedTimeConfidence: renderedTime == null ? 'unverified' : 'host/context estimate',
@@ -139,8 +139,10 @@ export class ListeningReview {
     ctx.font = '14px sans-serif'; ctx.fillStyle = getComputedStyle(this.card).color; ctx.fillText('1 kHz source band · separate scales · time in seconds', 8, 18);
     for (const [field, scale, color, dash] of [['raw', .1, '#4477AA', []], ['filtered', 1, '#AA3377', [8, 4]], ['rendered', 1, '#228833', [2, 4]]]) {
       ctx.strokeStyle = color; ctx.setLineDash(dash); ctx.beginPath();
-      let started = false;
+      let started = false, segment;
       this.samples.forEach(s => {
+        if (segment !== s.analysisSegment) started = false;
+        segment = s.analysisSegment;
         const at = field === 'rendered' ? s.renderedTime : s.at;
         if (at == null) return;
         const x = at / duration * canvas.width, y = 240 - Math.min(1, s[field] * scale) * 200;

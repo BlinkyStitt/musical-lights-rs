@@ -187,10 +187,11 @@ export class VisualizerScreen {
   }
 
   setExpanded(expanded) {
+    const entering = expanded && !this.expanded;
     this.expanded = expanded;
     this.clearGesture();
     this.element.toggleAttribute('data-expanded', expanded);
-    if (expanded) this.element.scrollTop = 0;
+    if (entering) this.element.scrollTop = 0;
     this.emit();
   }
 

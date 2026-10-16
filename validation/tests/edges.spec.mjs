@@ -17,7 +17,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
           for (let i = 0; i < 24; i++) state.set([.4, .4, start, 0], 3 + i * 4);
           // Deliver both a newer snapshot and a duplicate; neither renews the attack.
           for (let repeat = 0; repeat < 2; repeat++) window.testNode.port.dispatchEvent(new MessageEvent('message', {
-            data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
+            data: { type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
           }));
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           edges.push({ age, edge: document.querySelector('#dancinglights').physics.edges[0] });
@@ -59,11 +59,11 @@ for (const colorScheme of ['light', 'dark']) for (const reducedMotion of ['no-pr
       v.draw(performance.now());
       const gl = v.renderer.getContext(), height = gl.drawingBufferHeight, width = gl.drawingBufferWidth;
       const values = new Uint8Array(width * 4);
-      const interior = new THREE.Vector3(v.width / 2, v.renderedHeight(0) / 2, v.bars.instanceMatrix.array[14] + v.bars.geometry.boundingBox.max.z).project(v.camera);
+      const interior = new THREE.Vector3(v.width / 2, v.renderedHeight(0) / 2, v.bars.instanceMatrix.array[14] + Math.abs(v.bars.instanceMatrix.array[10]) * v.bars.geometry.boundingBox.max.z).project(v.camera);
       gl.readPixels(0, Math.floor((interior.y + 1) * height / 2), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, values);
       // Sample the actual front face under perspective, rather than an
       // orthographic camera width. The depth moves this face toward the eye.
-      const projectedX = x => (new THREE.Vector3(x, 0, v.bars.instanceMatrix.array[14] + v.bars.geometry.boundingBox.max.z).project(v.camera).x + 1) * width / 2;
+      const projectedX = x => (new THREE.Vector3(x, 0, v.bars.instanceMatrix.array[14] + Math.abs(v.bars.instanceMatrix.array[10]) * v.bars.geometry.boundingBox.max.z).project(v.camera).x + 1) * width / 2;
       return { width, side: projectedX(0), plotWidth: projectedX(v.width) - projectedX(0), ratio: v.renderer.getPixelRatio(), row: Array.from(values), colors: Array.from(v.bars.instanceColor.array), edges: Array.from(v.edges) };
     });
     expect(pixels.edges).toEqual(Array(24).fill(reducedMotion === 'reduce' ? .5 : 1));

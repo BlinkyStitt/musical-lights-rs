@@ -13,7 +13,7 @@ use musical_lights_core::lights::dance::IdlePeak;
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
 const SNAPSHOT_SIZE: usize = LoudnessSnapshot::TRANSPORT_LEN;
-const TRACE_STRIDE: usize = 315 + SNAPSHOT_SIZE + 48;
+const TRACE_STRIDE: usize = 315 + SNAPSHOT_SIZE + 49;
 
 /// Idle visual adapter; no processor, audio session, or heap allocation needed.
 #[unsafe(no_mangle)]
@@ -52,6 +52,11 @@ struct AudioProcessor {
     reduced: bool,
     error_code: u32,
     error_detail: u32,
+    last_gap: Option<(u64, u64)>,
+    segment: u32,
+    missing_samples: u64,
+    overlap_samples: u64,
+    calibration_cancellations: u32,
     rms_power: f64,
     rms_count: u32,
     reference_level: Option<f64>,
@@ -83,6 +88,11 @@ impl AudioProcessor {
             reduced,
             error_code: 0,
             error_detail: 0,
+            last_gap: None,
+            segment: 0,
+            missing_samples: 0,
+            overlap_samples: 0,
+            calibration_cancellations: 0,
             rms_power: 0.0,
             rms_count: 0,
             reference_level: None,
@@ -119,6 +129,59 @@ impl AudioProcessor {
         self.queued = Some((revision, settings, options));
         true
     }
+    fn fail(&mut self, error: LoudnessError) -> bool {
+        (self.error_code, self.error_detail) = match error {
+            LoudnessError::NonFiniteSample { index } => (2, index as u32),
+            LoudnessError::Discontinuity { expected, received } => {
+                self.last_gap = Some((expected, received));
+                (3, expected.abs_diff(received).min(u32::MAX as u64) as u32)
+            }
+            LoudnessError::LevelOutOfRange { band } => (4, band as u32),
+            _ => (5, 0),
+        };
+        false
+    }
+    /// Start a new measured segment at a discontinuous real clock. Never pad or replay PCM.
+    /// The caller must submit the rejected, real block again at its actual index.
+    fn recover_discontinuity(&mut self) -> bool {
+        let Some((expected, received)) = self.last_gap else {
+            return false;
+        };
+        if self.error_code != 3 || received == expected {
+            return false;
+        }
+        let Some(segment) = self.segment.checked_add(1) else {
+            return false;
+        };
+        let Some(missing) = self
+            .missing_samples
+            .checked_add(received.saturating_sub(expected))
+        else {
+            return false;
+        };
+        let Some(overlap) = self
+            .overlap_samples
+            .checked_add(expected.saturating_sub(received))
+        else {
+            return false;
+        };
+        self.core.reset(received);
+        self.readouts = Readouts::new(self.settings);
+        self.readout_values = [0.0; 4];
+        self.chunk_phase = 0;
+        if self.reference_level.take().is_some() {
+            self.calibration_cancellations = self.calibration_cancellations.saturating_add(1);
+        }
+        self.rms_power = 0.0;
+        self.rms_count = 0;
+        self.calibration_result = 0.0;
+        self.segment = segment;
+        self.missing_samples = missing;
+        self.overlap_samples = overlap;
+        self.error_code = 0;
+        self.error_detail = 0;
+        true
+    }
     fn process(&mut self, len: usize, first_sample: u64) -> bool {
         if self.error_code != 0 {
             return false;
@@ -135,6 +198,9 @@ impl AudioProcessor {
         if !self.started {
             self.core.reset(first_sample);
             self.started = true;
+        }
+        if let Err(error) = self.core.check_continuity(first_sample) {
+            return self.fail(error);
         }
         self.clipped += self.input[..len].iter().filter(|v| v.abs() >= 1.0).count() as u64;
         let mut offset = 0;
@@ -161,6 +227,7 @@ impl AudioProcessor {
             let trace = &mut self.trace;
             let trace_count = &mut self.trace_count;
             let trace_dropped = &mut self.trace_dropped;
+            let segment = self.segment;
             if let Err(error) =
                 self.core
                     .push_pcm(pcm, first_sample + offset as u64, self.reduced, |result| {
@@ -196,6 +263,7 @@ impl AudioProcessor {
                                         result.acoustic_events[i].unwrap_or(-1.0);
                                     row[339 + SNAPSHOT_SIZE + i] = result.suppressed[i] as f64;
                                 }
+                                row[TRACE_STRIDE - 1] = f64::from(segment);
                                 *trace_count += 1;
                             } else {
                                 *trace_dropped = trace_dropped.saturating_add(1);
@@ -203,15 +271,7 @@ impl AudioProcessor {
                         }
                     })
             {
-                (self.error_code, self.error_detail) = match error {
-                    LoudnessError::NonFiniteSample { index } => (2, index as u32),
-                    LoudnessError::Discontinuity { expected, received } => {
-                        (3, expected.abs_diff(received).min(u32::MAX as u64) as u32)
-                    }
-                    LoudnessError::LevelOutOfRange { band } => (4, band as u32),
-                    _ => (5, 0),
-                };
-                return false;
+                return self.fail(error);
             }
             if let Some(level) = self.reference_level {
                 for &sample in pcm {
@@ -290,7 +350,7 @@ macro_rules! export {
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
 export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace = if enabled != 0 { Some(vec![0.0; TRACE_CAPACITY * TRACE_STRIDE].into_boxed_slice()) } else { None }; p.trace_count = 0; p.trace_dropped = 0; });
 export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ref().map_or(core::ptr::null(), |trace| trace.as_ptr()));
-export!(processor_trace_version(handle) -> u32, _p => 6);
+export!(processor_trace_version(handle) -> u32, _p => 7);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);
 export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);
@@ -307,6 +367,13 @@ export!(processor_sones(handle) -> f64, p => p.core.snapshot().total_sones);
 export!(processor_clipped(handle) -> f64, p => p.clipped as f64);
 export!(processor_error(handle) -> u32, p => p.error_code);
 export!(processor_error_detail(handle) -> u32, p => p.error_detail);
+export!(processor_recover_discontinuity(handle) -> u32, p => u32::from(p.recover_discontinuity()));
+export!(processor_segment(handle) -> u32, p => p.segment);
+export!(processor_missing_samples(handle) -> u64, p => p.missing_samples);
+export!(processor_overlap_samples(handle) -> u64, p => p.overlap_samples);
+export!(processor_gap_expected(handle) -> u64, p => p.last_gap.map_or(0, |gap| gap.0));
+export!(processor_gap_received(handle) -> u64, p => p.last_gap.map_or(0, |gap| gap.1));
+export!(processor_calibration_cancellations(handle) -> u32, p => p.calibration_cancellations);
 export!(processor_calibration_result(handle) -> f32, p => core::mem::take(&mut p.calibration_result));
 export!(processor_calibrate(handle, db_spl: f64) -> u32, p => {
     if !db_spl.is_finite() || p.reference_level.is_some() { return 0; }

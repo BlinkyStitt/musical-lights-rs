@@ -109,7 +109,7 @@ export async function syntheticAudio(page, permission = 'granted') {
       const at = window.audioNow = Math.max(window.audioNow, window.lastAnalysisTime ?? 0) + .01;
       const state = new Float64Array(102); state.set([0, 1, .18], 99); state[0] = at; state[1] = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0; state[2] = 5;
       for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], edge ? at : -1, 0], 3 + i * 4);
-      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
+      window.testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 } }));
     };
   }, { permission });
 }

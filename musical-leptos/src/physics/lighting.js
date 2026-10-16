@@ -5,7 +5,7 @@ export const LIGHT_FIELD = `
   uniform float stripPulse[24]; uniform float colorAttack;
   uniform vec3 glowBallPosition[8]; uniform vec3 glowBallColor[8];
   uniform vec3 lightExtent; uniform mat3 lightView;
-  uniform vec4 lightStrength; uniform vec2 colorEmission; uniform float reflectionFade;
+  uniform vec4 lightStrength; uniform vec2 colorEmission;
   vec3 sourceIllumination(vec3 delta, vec3 normal, vec3 color) {
     float squared = dot(delta, delta);
     float radius = lightStrength.z;
@@ -29,7 +29,6 @@ export const LIGHT_FIELD = `
     for (int i = 0; i < 8; i++) {
       vec3 delta = glowBallPosition[i] - point;
       delta.x -= floor(delta.x / lightExtent.x + .5) * lightExtent.x;
-      delta.z -= floor(delta.z / lightExtent.z + .5) * lightExtent.z;
       vec3 color = glowBallColor[i] * lightStrength.x * colorEmission.y;
       illumination += sourceIllumination(delta, normal, color);
     }
@@ -39,16 +38,6 @@ export const LIGHT_FIELD = `
     return lightField(point, normal * lightView);
   }
 `;
-// Bright through the first box, with a zero-slope join into a continuous
-// opacity fade. Spread the transition over several boxes, without copy-index
-// steps or dark opaque silhouettes against the sky.
-export const DEPTH_BRIGHTNESS = `
-  float depthBrightness(float distance) {
-    float beyond = max(0.0, distance - 1.0);
-    return pow(reflectionFade, beyond * beyond / (beyond + 4.0));
-  }
-`;
-
 // One bounded field: 24 paired full-depth strips and the eight physical balls.
 // Translation copies reuse it; no light objects, shadow maps, or bloom passes.
 export class SceneLighting {
@@ -65,7 +54,6 @@ export class SceneLighting {
       lightStrength: { value: new THREE.Vector4() },
       colorEmission: { value: new THREE.Vector2() },
       attackGlow: { value: 1 },
-      reflectionFade: { value: settings.depthFade ?? .72 },
     };
     this.configure(settings);
   }
@@ -74,13 +62,12 @@ export class SceneLighting {
     this.uniforms.colorEmission.value.set(settings.barGlow ?? .08, settings.ballGlow ?? .12);
     this.uniforms.attackGlow.value = settings.attackGlow ?? 1;
     this.uniforms.colorAttack.value = settings.colorAttack ?? 1;
-    this.uniforms.reflectionFade.value = settings.depthFade ?? .72;
   }
   apply(shader) {
     Object.assign(shader.uniforms, this.uniforms);
     shader.vertexShader = LIGHT_FIELD + 'varying vec3 nearbyIrradiance;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nnearbyIrradiance = localIllumination((instanceMatrix * vec4(position, 1.0)).xyz, normalize(transformedNormal));');
-    shader.fragmentShader = 'varying vec3 nearbyIrradiance; uniform vec2 colorEmission; uniform float reflectionFade;\n' + DEPTH_BRIGHTNESS + shader.fragmentShader;
+    shader.fragmentShader = 'varying vec3 nearbyIrradiance; uniform vec2 colorEmission;\n' + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nvec3 nearbyLight = diffuseColor.rgb * nearbyIrradiance;\nreflectedLight.indirectDiffuse += nearbyLight;');
   }
   update(view, heights, offset, phase, pitch, height, depth) {

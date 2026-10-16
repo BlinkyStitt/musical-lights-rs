@@ -512,14 +512,14 @@ pub fn DancingLights(
             </div>
             <div class="scene-controls">
             <div class="camera-controls">
-                <label class="control-row">"Angle"<input class="camera-rotation" aria-label="Camera angle (degrees)" title="W/S moves the view up/down. A/D moves it left/right within the main box." type="range" tabindex="0" min="-40" max="40" value="0"/></label>
-                <output class="camera-angle">"0°"</output>
+                <div class="control-row"><label for="camera-angle-slider">"Angle"</label><input id="camera-angle-slider" class="camera-rotation" aria-label="Camera angle (degrees)" title="W/S moves the view up/down. A/D moves it left/right within the main box." type="range" tabindex="0" min="-40" max="40" step="1" value="0"/></div>
+                <button class="camera-angle slider-value" type="button" aria-label="Edit camera angle">"0°"</button>
                 <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
             </div>
             <div class="camera-controls depth-controls">
-                <label class="control-row"><span>"Depth "<output class="depth-status">"Auto"</output></span><input class="depth-slider" aria-label="Depth images" type="range" min="0" max="2048" step="1" value="6"/></label>
-                <button class="depth-auto" type="button">"Auto"</button>
+                <div class="control-row"><label for="box-depth-slider">"Depth"</label><input id="box-depth-slider" class="depth-slider" aria-label="Box depth (cm)" type="range" min="20" max="200" step="1" value="48" disabled/></div>
+                <button class="depth-status slider-value" type="button" aria-label="Edit box depth">"48 cm"</button>
             </div>
             </div>
             <div class="display-note">
@@ -543,10 +543,7 @@ pub fn DancingLights(
                         <p>"1 is linear. Higher values delay the increase; lower values raise the chance sooner. A new attack must exceed the recent loudness peak before any probability draw."</p>
                         <p class="direction-error" role="status"></p>
                     </fieldset>
-                    <label class="control-row">"Flight height (% of available space)"<input class="flight-height" type="range" min="0" max="50" value="30"/></label>
-                    <label class="control-row">"Mirror images"<input class="mirror-count" type="number" min="0" max="2048" step="1" value="6"/></label>
-                    <p>"Fewer mirror images reduce drawing work. 0 turns depth images off. At the default box depth, 44 images match the nine-box width. Copies use the same bars and balls."</p>
-                    <p>"Startup chooses 1–32 images. Select Auto to test the full range for your device."</p>
+                    <div class="control-row"><label for="flight-height-slider">"Flight height (% of available space)"</label><input id="flight-height-slider" aria-label="Flight height (% of available space)" class="flight-height" type="range" min="0" max="50" step="1" value="30"/></div>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <p>"Smooth left-to-right rotation from the selected angle. The sweep stays within ±40°. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>
@@ -593,6 +590,7 @@ pub fn DancingLights(
             </Show>
             <div class="recovery-notices">
             <p class="physics-status" role="status"></p>
+            <p class="analysis-status" role="status"></p>
             <p class="audio-error" role="alert">{move || error_notice.get()}</p>
             <p class="audio-stopped" role="status">{move || if audio_stopped.get() && error_notice.get().is_none() {
                 "Audio stopped. Turn on Listening or use Play audio to restart."
