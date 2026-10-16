@@ -217,14 +217,21 @@ test('slider buttons step once and value editors validate, cancel and save', asy
     await page.getByRole('button', {name: `Increase ${name}`, exact: true}).click(); await expect(range).toHaveValue(next);
     await page.getByRole('button', {name: `Decrease ${name}`, exact: true}).click(); await expect(range).toHaveValue(value);
     await edit.click(); await input.fill('99999'); await input.press('Enter');
-    await expect(input).toBeVisible(); await expect(range).toHaveValue(value);
-    await input.press('Escape'); await expect(input).toBeHidden(); await expect(range).toHaveValue(value);
+    const editorState = () => range.locator('..').evaluate(group => {
+      const range = group.querySelector('input[type=range]'), editor = group.querySelector('.slider-editor');
+      const box = editor.getBoundingClientRect();
+      return { value: range.value, visible: box.width > 0 && box.height > 0 && getComputedStyle(editor).visibility === 'visible' };
+    });
+    await expect.poll(editorState).toEqual({ value, visible: true });
+    await input.press('Escape');
+    await expect.poll(editorState).toEqual({ value, visible: false });
   }
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('musical-lights-display-v1')));
+  const { saved, audio } = await page.evaluate(() => ({ saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')),
+    audio: !!document.querySelector('.audio-card').activeAudioContext }));
   expect(saved.cameraAngle).toBe(12); expect(saved.physics[5]).toBeCloseTo(1.99,5); expect(saved.flight).toBe(35);
-  expect(await page.evaluate(() => !!document.querySelector('.audio-card').activeAudioContext)).toBe(false);
+  expect(audio).toBe(false);
   await page.reload(); await physicsReady(page);
-  await expect(page.locator('.depth-slider')).toHaveValue('199');
-  await expect(page.locator('.flight-height')).toHaveValue('35');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect.poll(() => page.evaluate(() => ({ depth: document.querySelector('.depth-slider').value,
+    flight: document.querySelector('.flight-height').value, fits: document.documentElement.scrollWidth <= innerWidth })))
+    .toEqual({ depth: '199', flight: '35', fits: true });
 });
