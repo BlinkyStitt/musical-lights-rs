@@ -252,6 +252,7 @@ class FullscreenSettings {
     this.toolbar.className = 'fullscreen-toolbar';
     this.button = document.createElement('button');
     this.button.type = 'button';
+    this.button.tabIndex = 0;
     this.button.className = 'fullscreen-settings-button';
     this.button.setAttribute('aria-label', 'Settings');
     this.button.title = 'Settings';

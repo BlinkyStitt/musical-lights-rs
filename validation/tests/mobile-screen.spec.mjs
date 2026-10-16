@@ -260,8 +260,14 @@ test('fullscreen frequency labels expire below the toolbar and keyboard users ca
   expect(box.y + box.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight / 2));
   await expect(readout).toBeHidden({ timeout: 3500 });
   await expect(page.locator('.fullscreen-hint')).toHaveCount(0);
-  // Focus the first bar with the keyboard, then move back to the exit control.
+  // Traverse the toolbar in reverse visual order to reach Exit from the bars.
   await page.getByRole('meter').first().focus();
+  for (const control of [page.getByRole('button', { name: 'Settings', exact: true }),
+    page.getByRole('button', { name: 'Listening', exact: true }),
+    page.getByRole('checkbox', { name: 'Listening', exact: true })]) {
+    await page.keyboard.press('Shift+Tab');
+    await expect(control).toBeFocused();
+  }
   await page.keyboard.press('Shift+Tab');
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   await expect(exit).toBeFocused();
