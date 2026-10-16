@@ -25,6 +25,34 @@ impl Fix {
     }
 }
 
+/// Keep the preceding PPS while an RMC/GGA pair can span the next edge.
+/// Pairing and sentence-to-PPS delay are both strictly less than one second.
+#[derive(Default)]
+pub struct PpsHistory {
+    edges: [Option<u64>; 2],
+}
+impl PpsHistory {
+    pub fn record(&mut self, edge_ms: Option<u64>) {
+        if let Some(edge) = edge_ms {
+            if self.latest().is_none_or(|last| edge > last) {
+                self.edges = [self.edges[1], Some(edge)];
+            }
+        } else {
+            self.edges = [None; 2];
+        }
+    }
+    pub fn latest(&self) -> Option<u64> {
+        self.edges[1]
+    }
+    pub fn for_capture(&self, captured_ms: u64) -> Option<u64> {
+        self.edges.iter().rev().flatten().copied().find(|&edge| {
+            captured_ms
+                .checked_sub(edge)
+                .is_some_and(|delay| delay < 1000)
+        })
+    }
+}
+
 /// Join a complete measurement epoch to its captured PPS using installed limits.
 /// Unknown timing still reports acquisition, but can never lock the UTC clock.
 pub fn pps_anchor(fix: Fix, pps_ms: u64, timing: Option<GpsTiming>) -> Option<Anchor> {
