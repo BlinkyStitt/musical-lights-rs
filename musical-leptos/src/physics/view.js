@@ -92,10 +92,10 @@ export class PhysicsView {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
     // Draw the foreground and stars in one scene pass.
-    this.renderer = new THREE.WebGLRenderer({ alpha: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     // Bound fragment work on large and high-density displays. CSS controls
-    // and text keep their native resolution. Physical and reflected edges
-    // share the actual render scale, including after fullscreen resizes.
+    // and text keep their native resolution. Multisample antialiasing smooths
+    // geometry edges at this bounded scale, including after fullscreen resizes.
     this.pixelRatio = { value: 1 };
     this.renderer.localClippingEnabled = true;
     this.gpuFrames = new GpuFrames(this.renderer.getContext());
