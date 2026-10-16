@@ -212,19 +212,21 @@ test('slider buttons step once and value editors validate, cancel and save', asy
     expect(Math.max(...positions.centers) - Math.min(...positions.centers)).toBeLessThan(2);
     expect(positions.leftToRight).toBe(true);
     await edit.click();
-    const input = page.getByRole('spinbutton', {name: `${name} value`, exact: true});
-    await input.fill(value); await input.press('Enter'); await expect(range).toHaveValue(value);
+    // Type into the editor selected by the real click. Locator.fill/press
+    // would focus it again and could hide a broken editor focus transition.
+    await page.keyboard.type(value); await page.keyboard.press('Enter'); await expect(range).toHaveValue(value);
     await page.getByRole('button', {name: `Increase ${name}`, exact: true}).click(); await expect(range).toHaveValue(next);
     await page.getByRole('button', {name: `Decrease ${name}`, exact: true}).click(); await expect(range).toHaveValue(value);
-    await edit.click(); await input.fill('99999'); await input.press('Enter');
+    await edit.click(); await page.keyboard.type('99999'); await page.keyboard.press('Enter');
     const editorState = () => range.locator('..').evaluate(group => {
       const range = group.querySelector('input[type=range]'), editor = group.querySelector('.slider-editor');
       const box = editor.getBoundingClientRect();
-      return { value: range.value, visible: box.width > 0 && box.height > 0 && getComputedStyle(editor).visibility === 'visible' };
+      return { value: range.value, visible: box.width > 0 && box.height > 0 && getComputedStyle(editor).visibility === 'visible',
+        type: editor.type, label: editor.getAttribute('aria-label'), focused: document.activeElement === editor };
     });
-    await expect.poll(editorState).toEqual({ value, visible: true });
-    await input.press('Escape');
-    await expect.poll(editorState).toEqual({ value, visible: false });
+    await expect.poll(editorState).toEqual({ value, visible: true, type: 'number', label: `${name} value`, focused: true });
+    await page.keyboard.press('Escape');
+    await expect.poll(editorState).toEqual({ value, visible: false, type: 'number', label: `${name} value`, focused: false });
   }
   const { saved, audio } = await page.evaluate(() => ({ saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')),
     audio: !!document.querySelector('.audio-card').activeAudioContext }));
