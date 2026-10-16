@@ -627,13 +627,19 @@ for (const scenario of [
       const view = document.querySelector('#dancinglights').physics;
       const first = Array.from({ length: view.layout[21] }, (_, i) => view.current[3 + i * view.layout[8] + axis]);
       const travel = first.map(() => 0);
-      const end = performance.now() + 240;
+      const started = performance.now(), startTick = view.current[2];
+      const samples = [];
+      const end = started + 240;
       while (performance.now() < end) {
         window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration }));
         await new Promise(resolve => requestAnimationFrame(resolve));
         for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], direction * (view.current[3 + i * view.layout[8] + axis] - first[i]));
+        samples.push({ elapsed: performance.now() - started, tick: view.current[2], snapshotAge: view.metrics.snapshotAgeMs,
+          debt: view.metrics.debt, steps: view.metrics.physicsSteps, input: Array.from(view.input.slice(24, 27)),
+          positions: first.map((_, i) => view.current[3 + i * view.layout[8] + axis]) });
       }
-      return { first, travel, input: Array.from(view.input.slice(24, 27)) };
+      return { first, travel, input: Array.from(view.input.slice(24, 27)), startTick, endTick: view.current[2],
+        elapsed: performance.now() - started, samples };
     }, scenario);
     await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
     const lower = scenario.axis === 2 ? -before.config[5] / 2 : 0;
