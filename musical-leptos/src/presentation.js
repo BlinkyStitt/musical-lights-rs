@@ -276,7 +276,6 @@ class FullscreenSettings {
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     });
     presentation.listen(this.dialog, 'cancel', event => { event.preventDefault(); this.hide(); });
-    presentation.listen(this.dialog, 'close', () => this.finishClose());
     this.observer = new MutationObserver(() => this.sync());
     this.observer.observe(this.card, { attributes: true, attributeFilter: ['data-expanded'] });
     this.sync();
@@ -311,10 +310,6 @@ class FullscreenSettings {
   }
   hide() {
     if (this.dialog.open) this.dialog.close();
-    this.finishClose();
-  }
-  finishClose() {
-    if (this.dialog.open) return;
     this.presentation.hideHelp();
     this.card.append(this.presentation.popup);
     this.button.setAttribute('aria-expanded', 'false');

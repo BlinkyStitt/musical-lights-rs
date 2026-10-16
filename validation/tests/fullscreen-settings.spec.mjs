@@ -142,3 +142,26 @@ test('Escape respects focused controls, closes Settings, and exits with action h
   await expect(page.locator('.control-help')).not.toBeVisible();
   await expect(page.locator('.listening-toggle')).toBeVisible();
 });
+
+
+test('queued dialog close keeps new action help and Escape usable', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const result = await page.evaluate(async () => {
+    const card = document.querySelector('.audio-card'), dialog = card.querySelector('dialog');
+    const closed = new Promise(resolve => dialog.addEventListener('close', resolve, { once: true }));
+    // Isolate the event ordering in one browser turn. Trusted pointer close
+    // and focus return have separate coverage in the layout test above.
+    dialog.querySelector('.close-fullscreen-settings').click();
+    card.querySelector('.fullscreen-button').focus();
+    await closed;
+    return { open: dialog.open, help: !card.querySelector('.control-help').hidden,
+      exitFocused: document.activeElement === card.querySelector('.fullscreen-button') };
+  });
+  expect(result).toEqual({ open: false, help: true, exitFocused: true });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+});
