@@ -39,6 +39,9 @@ export class VisualizerScreen {
       if (!this.changingFullscreen) this.setExpanded(this.document.fullscreenElement === this.element);
     };
     this.onViewportChange = () => this.clearGesture();
+    // End the expanded view while it still belongs to the document, before
+    // the router removes it during Back/Forward navigation.
+    this.onNavigation = () => this.toggleFullscreen(false, false);
     this.onKey = event => {
       // The restored controls can queue an entry before a native exit finishes.
       // Escape cancels that request even while the page is already visible.
@@ -163,6 +166,7 @@ export class VisualizerScreen {
     this.document.addEventListener('touchend', this.onTouchEnd, { capture: true, passive: false });
     this.document.addEventListener('touchcancel', this.onPointerCancel, true);
     this.element.addEventListener('lostpointercapture', this.onLostPointerCapture);
+    this.window.addEventListener?.('popstate', this.onNavigation, true);
     this.window.addEventListener?.('resize', this.onViewportChange);
     this.window.addEventListener?.('orientationchange', this.onViewportChange);
     this.window.visualViewport?.addEventListener?.('resize', this.onViewportChange);
@@ -323,6 +327,7 @@ export class VisualizerScreen {
     this.document.removeEventListener('touchcancel', this.onPointerCancel, true);
     this.element.removeEventListener('lostpointercapture', this.onLostPointerCapture);
     this.suppressedFullscreenPointer = null;
+    this.window.removeEventListener?.('popstate', this.onNavigation, true);
     this.window.removeEventListener?.('resize', this.onViewportChange);
     this.window.removeEventListener?.('orientationchange', this.onViewportChange);
     this.window.visualViewport?.removeEventListener?.('resize', this.onViewportChange);

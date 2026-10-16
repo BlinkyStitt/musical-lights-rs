@@ -232,3 +232,32 @@ test('a focused control can consume Escape without exiting fullscreen', async t 
   env.document.dispatchEvent(event);
   expect(env.attributes.has('data-expanded')).toBe(true);
 });
+
+
+test('history navigation closes expanded state before route cleanup', async t => {
+  const env = environment(t);
+  env.document.fullscreenEnabled = false;
+  await env.screen.toggleFullscreen();
+  expect(env.attributes.has('data-expanded')).toBe(true);
+  const routeStates = [];
+  env.window.addEventListener('popstate', () => routeStates.push(env.attributes.has('data-expanded')));
+  env.window.dispatchEvent(new Event('popstate'));
+  expect(routeStates).toEqual([false]);
+  expect(env.screen.expanded).toBe(false);
+});
+
+test('history navigation cancels fullscreen entry that finishes after Back', async t => {
+  const env = environment(t);
+  let finish;
+  env.element.requestFullscreen = async () => {
+    await new Promise(resolve => { finish = resolve; });
+    env.document.fullscreenElement = env.element;
+    env.document.dispatchEvent(new Event('fullscreenchange'));
+  };
+  const entering = env.screen.toggleFullscreen();
+  env.window.dispatchEvent(new Event('popstate'));
+  finish(); await entering;
+  await expect.poll(() => env.screen.expanded).toBe(false);
+  expect(env.document.fullscreenElement).toBe(null);
+  expect(env.attributes.has('data-expanded')).toBe(false);
+});
