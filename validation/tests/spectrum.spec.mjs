@@ -46,7 +46,7 @@ for (const width of [320, 375, 1440]) {
     expect(geometry.hitRegionError).toBeLessThan(1);
     expect(geometry.counts).toEqual(Array(24).fill(1));
     expect(new Set(geometry.colors).size).toBe(24);
-    expect(geometry.layout[4]).toBe(0);
+    expect(geometry.layout[4]).toBeCloseTo(.002, 8);
     expect(geometry.layout[5]).toBe(0);
     expect(geometry.barWidth).toBeCloseTo(geometry.layout[3], 6);
     expect(geometry.canvas.width).toBe(geometry.graph.width);

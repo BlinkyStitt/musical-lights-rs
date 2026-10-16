@@ -80,7 +80,7 @@ test('browser WASM starts balls uniformly in the source band at their spawn X',a
       return {version:layout[18],palette:Array.from(new Float32Array(v.palette)),balls:Array.from({length:8},(_,i)=>({x:state[3+i*layout[8]],color:Array.from(state.slice(3+i*layout[8]+15,3+i*layout[8]+18)),pigments:Array.from(pigments.slice(i*9,i*9+9))}))};
     } finally {sim.free();}
   });
-  expect(colors.version).toBe(17);
+  expect(colors.version).toBe(18);
   for(const [i,band] of [6,18,10,2,6,22,2,14].entries()) {
     const ball=colors.balls[i],expected=colors.palette.slice(band*3,band*3+3);
     expect(ball.x).toBeGreaterThanOrEqual(band*.05-1e-6);expect(ball.x).toBeLessThan((band+1)*.05+1e-6);expect(ball.color).toEqual(expected);

@@ -3,7 +3,7 @@ import * as THREE from './three.module.js';
 export const BOX_OFFSETS = Object.freeze([-4, -3, -2, -1, 0, 1, 2, 3, 4]);
 // Source posts have their actual box depth. Clip wholly discarded scrolling
 // posts before rasterization, retaining conservative padding at window edges.
-export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - transformed.y); mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition; world.x -= backgroundOffset; float padding = .000001 * (1.0 + abs(instanceMatrix[3].x) + abs(backgroundOffset)); if (instanceMatrix[3].x + halfWidth - backgroundOffset < -padding || instanceMatrix[3].x - halfWidth - backgroundOffset > 1.2 + padding) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);';
+export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0); world = mvPosition.xyz; mvPosition.y -= sign(instanceMatrix[1].y) * barExtension * (.5 - position.y); mvPosition = modelViewMatrix * mvPosition; gl_Position = projectionMatrix * mvPosition; world.x -= backgroundOffset; float padding = .000001 * (1.0 + abs(instanceMatrix[3].x) + abs(backgroundOffset)); if (instanceMatrix[3].x + halfWidth - backgroundOffset < -padding || instanceMatrix[3].x - halfWidth - backgroundOffset > 1.2 + padding) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);';
 
 // One faint outer coating across the nine banks. No internal partitions,
 // mirrored geometry, depth copies or opaque walls against the stars.

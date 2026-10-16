@@ -1,5 +1,6 @@
 //! Fixed-step SI-unit simulation, shared without browser APIs by native tests and WASM.
 use musical_lights_core::lights::bar_motion::{DEFAULT_ATTACK_SECONDS, Motion};
+use musical_lights_core::lights::bar_surface::{BarSurface, JOIN_FRACTION};
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
 use musical_lights_core::lights::musical_motion::{
     DirectionOdds, advance_pigment, contact_pigment_blend, paired_bar_extent, pigment_color,
@@ -7,6 +8,9 @@ use musical_lights_core::lights::musical_motion::{
 };
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
+
+mod prism;
+use prism::RampPrism;
 
 pub const COUNT: usize = 24;
 pub const ATTACK_OFFSET: usize = 38;
@@ -19,6 +23,17 @@ pub const WIDTH: f32 = 1.2;
 pub const PITCH: f32 = WIDTH / COUNT as f32;
 // Keep the existing beach-ball sizes independent of the now full-width bars.
 pub const BALL_SIZE_UNIT: f32 = PITCH - 0.002;
+const BRIDGE_WIDTH: f32 = PITCH * JOIN_FRACTION as f32;
+const CAP_WIDTH: f32 = PITCH - BRIDGE_WIDTH;
+const SURFACE_END_COUNT: usize = COUNT * 3 * 2;
+const SURFACE_COUNT: usize = SURFACE_END_COUNT * 2;
+fn ramp_width(index: usize) -> f32 {
+    if index.is_multiple_of(2) {
+        CAP_WIDTH
+    } else {
+        BRIDGE_WIDTH
+    }
+}
 pub const POST_HEIGHT: f32 = 20.0;
 pub const MAX_SUBSTEPS: usize = 128;
 pub const MIN_HEIGHT: f32 = 0.40;
@@ -39,6 +54,255 @@ pub const SNAPSHOT_LEN: usize = SCROLL_OFFSET + 1;
 pub use musical_lights_core::lights::musical_motion::{
     SCROLL_EASE, SCROLL_PEAK_SPEED, SCROLL_SPEED,
 };
+
+/// Adjacent prisms describe one surface. Their end faces lie inside that solid
+/// and must not act as extra walls. At a shared convex vertex, both
+/// chords have the same closest point. Keep one owner of that contact so
+/// separate manifolds cannot turn the other's rebound into a resting contact.
+/// Concave joins retain both contacts: their closest points are distinct.
+struct JoinedSurface<'a> {
+    bars: &'a [(RigidBodyHandle, ColliderHandle)],
+    velocities: &'a [f64; COUNT],
+    inv_dt: f32,
+}
+fn chord_points(collider: &Collider) -> (Vector, Vector) {
+    let points = collider
+        .shape()
+        .as_shape::<RampPrism>()
+        .expect("ramp prism")
+        .points();
+    let pose = collider.position();
+    (
+        (pose * points[0] + pose * points[4]) / 2.0,
+        (pose * points[1] + pose * points[5]) / 2.0,
+    )
+}
+// During collision detection the prism already has its next tangent length,
+// while its rigid frame still has the current angle. Its current material
+// interval retains its fixed horizontal width, independent of that length change.
+fn material_endpoints(body: &RigidBody, width: f32) -> (Vector, Vector) {
+    let left = body.translation();
+    let tangent = body.rotation() * Vector::X;
+    (left, left + tangent * (width / tangent.x))
+}
+
+fn ramp_surface_flow(
+    body: &RigidBody,
+    point: Vector,
+    vertical_delta: f32,
+    inv_dt: f32,
+    width: f32,
+) -> Vector {
+    let frame = RigidBodyPosition {
+        position: *body.position(),
+        next_position: *body.next_position(),
+    }
+    .interpolate_velocity(inv_dt, Vector::ZERO);
+    let fraction = ((point.x - body.translation().x) / width).clamp(0.0, 1.0);
+    // The material origin follows the endpoint displacement exactly. Rapier's
+    // general pose-error composition can add coordinate roundoff to its
+    // interpolated translation when the frame also rotates.
+    let origin_velocity = (body.next_position().translation - body.translation()) * inv_dt;
+    let material = Vector::new(
+        origin_velocity.x,
+        origin_velocity.y + fraction * vertical_delta,
+        0.0,
+    );
+    material - frame.velocity_at_point(point, body.translation())
+}
+
+// Solver contacts retain their pre-step world point. Use that same rigid
+// lever arm and deformation flow when deciding whether the support is driven.
+fn ramp_contact_velocity(body: &RigidBody, point: Vector, flow: Vector, dt: f32) -> Vector {
+    let frame = RigidBodyVelocity {
+        linvel: body.linvel(),
+        angvel: body.angvel(),
+    };
+    let previous_origin = body.translation() - frame.linvel * dt;
+    frame.velocity_at_point(point, previous_origin) + flow
+}
+
+impl PhysicsHooks for JoinedSurface<'_> {
+    fn modify_solver_contacts(&self, context: &mut ContactModificationContext<'_>) {
+        let first = &context.colliders[context.collider1];
+        let second = &context.colliders[context.collider2];
+        let (surface, ball) = if first.user_data >> 16 != 0 && second.shape().as_ball().is_some() {
+            (first, second)
+        } else if second.user_data >> 16 != 0 && first.shape().as_ball().is_some() {
+            (second, first)
+        } else {
+            return;
+        };
+        let is_first = first.user_data >> 16 != 0;
+        let sign = if (surface.user_data & 0xffff) as usize <= COUNT * 2 {
+            1.0
+        } else {
+            -1.0
+        };
+        // The chord frame puts the real top at local y=0. Side and bottom
+        // contacts below it are buried in the joined solid. Keep the outer
+        // top, including its front/back edges at the enclosure walls.
+        context.solver_contacts.retain(|contact| {
+            let tracked = &context.manifold.points[contact.contact_id[0] as usize];
+            let point = if is_first {
+                tracked.local_p1
+            } else {
+                tracked.local_p2
+            };
+            sign * point.y >= -0.000002
+        });
+        if context.solver_contacts.is_empty() {
+            return;
+        }
+        let index = (surface.user_data >> 16) as usize - 1;
+        let end_start = index / (SURFACE_END_COUNT) * SURFACE_END_COUNT;
+        let end_len = SURFACE_END_COUNT;
+        let body = &context.bodies[surface.parent().expect("prescribed ramp")];
+        let (left, right) = material_endpoints(body, ramp_width(index));
+        let centre = ball.position().translation;
+        let edge = right - left;
+        let along = (centre - left).dot(edge);
+        if along <= 0.0 {
+            let previous = end_start + (index - end_start + end_len - 1) % end_len;
+            let previous_index = previous;
+            let (previous, _) = self.bars[previous];
+            if context.bodies[previous].is_enabled() {
+                let (before, join) =
+                    material_endpoints(&context.bodies[previous], ramp_width(previous_index));
+                if (join - left).length_squared() <= 1e-10
+                    && (centre - join).dot(join - before) < 0.0
+                {
+                    // The preceding face has the closer interior point.
+                    context.solver_contacts.clear();
+                }
+            }
+        } else if along >= edge.length_squared() {
+            let next = end_start + (index - end_start + 1) % end_len;
+            let next_index = next;
+            let (next, _) = self.bars[next];
+            if context.bodies[next].is_enabled() {
+                let (join, _) = material_endpoints(&context.bodies[next], ramp_width(next_index));
+                if (join - right).length_squared() <= 1e-10 {
+                    // The next face either has the closer interior point or
+                    // owns the shared vertex at its material frame origin.
+                    // That origin carries the vertex's real normal velocity,
+                    // including the first impact on a rapidly rising peak.
+                    context.solver_contacts.clear();
+                }
+            }
+        }
+        if context.solver_contacts.is_empty() {
+            return;
+        }
+        // Weld the sphere contact to the current material interval. Shape
+        // length changes along the tangent before Rapier advances its frame;
+        // its raw endpoint can therefore be ahead of the shared knot.
+        let fraction = (along / edge.length_squared()).clamp(0.0, 1.0);
+        let mut nearest = left + edge * fraction;
+        let depth = surface
+            .shape()
+            .as_shape::<RampPrism>()
+            .expect("ramp prism")
+            .points()[4]
+            .z;
+        nearest.z = centre.z.clamp(-depth, depth);
+        let delta = centre - nearest;
+        let face_normal = Vector::new(-edge.y, edge.x, 0.0).normalize() * sign;
+        let normal = if fraction > 0.0 && fraction < 1.0 && centre.z.abs() <= depth {
+            face_normal
+        } else {
+            let radial = delta.try_normalize().unwrap_or(face_normal);
+            if radial.dot(face_normal) >= 0.0 {
+                radial
+            } else {
+                -radial
+            }
+        };
+        let separation = delta.dot(normal) - ball.shape().as_ball().expect("sphere").radius;
+        let previous_normal = *context.normal;
+        *context.normal = if is_first { normal } else { -normal };
+        let alignment = previous_normal.dot(*context.normal).max(0.0);
+        for contact in context.solver_contacts.iter_mut() {
+            contact.point = nearest + normal * (separation * 0.5);
+            contact.dist = separation;
+            contact.warmstart_impulse *= alignment;
+            contact.warmstart_tangent_impulse *= alignment;
+            contact.warmstart_twist_impulse *= alignment;
+        }
+        let band = index / 2 % COUNT;
+        let delta = if index.is_multiple_of(2) {
+            0.0
+        } else {
+            sign * (self.velocities[(band + 1) % COUNT] - self.velocities[band]) as f32
+        };
+        for contact in context.solver_contacts.iter_mut() {
+            // Rapier models this as additional movement of the first surface.
+            // Supply the ramp's material deformation relative to its rigid
+            // frame, with the matching sign when the ramp is collider two.
+            let flow =
+                ramp_surface_flow(body, contact.point, delta, self.inv_dt, ramp_width(index));
+            contact.tangent_velocity = if is_first { flow } else { -flow };
+        }
+    }
+}
+
+/// A vertical-sided prism below one straight ramp. Its rigid frame follows
+/// a stable material endpoint and angle. Chord stretch changes the shape
+/// along its tangent, with no additional normal surface velocity.
+struct SurfaceSegment {
+    pose: Pose,
+    width: f32,
+    delta: f32,
+    height: f32,
+    depth: f32,
+    sign: f32,
+}
+fn surface_segment(
+    x: f32,
+    left: f32,
+    right: f32,
+    end: usize,
+    height: f32,
+    depth: f32,
+    width: f32,
+) -> SurfaceSegment {
+    let sign = if end == 0 { 1.0 } else { -1.0 };
+    let delta = sign * (right - left);
+    let y = if end == 0 { left } else { height - left };
+    let rotation = Rotation::from_rotation_z(delta.atan2(width));
+    SurfaceSegment {
+        pose: Pose::from_parts(Vector::new(x, y, 0.0), rotation),
+        width,
+        delta,
+        height,
+        depth,
+        sign,
+    }
+}
+impl SurfaceSegment {
+    fn shape(self) -> SharedShape {
+        let inverse = self.pose.rotation.inverse();
+        let Self {
+            width,
+            delta,
+            height,
+            depth,
+            sign,
+            ..
+        } = self;
+        let points = std::array::from_fn(|i| {
+            let z = if i < 4 { -depth / 2.0 } else { depth / 2.0 };
+            inverse
+                * match i % 4 {
+                    0 => Vector::new(0.0, 0.0, z),
+                    1 => Vector::new(width, delta, z),
+                    2 => Vector::new(width, -sign * height, z),
+                    _ => Vector::new(0.0, -sign * height, z),
+                }
+        });
+        SharedShape::new(RampPrism::new(points, sign))
+    }
+}
 
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -176,7 +440,10 @@ pub struct Simulation {
     pub tick: u64,
     world: PhysicsWorld,
     balls: [(RigidBodyHandle, ColliderHandle); BALL_COUNT],
-    bars: [(RigidBodyHandle, ColliderHandle); COUNT * 6],
+    bars: Vec<(RigidBodyHandle, ColliderHandle)>,
+    surface: BarSurface<COUNT>,
+    surface_deltas: Vec<f32>,
+    surface_dimensions: Vec<[f32; 2]>,
     bar_positions: [f64; COUNT],
     bar_velocities: [f64; COUNT],
     motions: [Motion; COUNT],
@@ -217,6 +484,7 @@ impl Simulation {
             integration_parameters: IntegrationParameters {
                 dt: DT,
                 num_solver_iterations: 8,
+                num_internal_stabilization_iterations: 8,
                 max_ccd_substeps: 1,
                 // Rapier's default assumes a 60 Hz step; our contact substeps
                 // can be smaller than that default minimum CCD interval.
@@ -275,26 +543,44 @@ impl Simulation {
                 .friction(config.friction)
                 .restitution(config.restitution),
         );
-        let bars = std::array::from_fn(|i| {
-            world.insert(
-                RigidBodyBuilder::kinematic_position_based().translation(Vector::new(
-                    ((i % COUNT) as f32 + 0.5) * PITCH + ((i / COUNT + 1) % 3) as f32 * WIDTH
-                        - WIDTH,
-                    if i < COUNT * 3 {
-                        BASELINE - POST_HEIGHT / 2.0
-                    } else {
-                        config.height - BASELINE + POST_HEIGHT / 2.0
-                    },
-                    0.0,
-                )),
-                // Full-pitch, flat tips meet without a slot or rounded trough.
-                // Use the same rectangular profile in the renderer.
-                ColliderBuilder::cuboid(PITCH / 2.0, POST_HEIGHT / 2.0, config.depth / 2.0)
-                    .user_data((COUNT + 1 + (i / (COUNT * 3)) * COUNT + i % COUNT) as u128)
-                    .friction(config.friction)
-                    .restitution(config.restitution),
-            )
-        });
+        let bars: Vec<_> = (0..SURFACE_COUNT)
+            .map(|index| {
+                let column = index / 2;
+                let end = index / SURFACE_END_COUNT;
+                let x = ((column % COUNT) as f32 + 0.5) * PITCH
+                    + ((column / COUNT + 1) % 3) as f32 * WIDTH
+                    - WIDTH;
+                let segment = surface_segment(
+                    x - CAP_WIDTH / 2.0
+                        + if index.is_multiple_of(2) {
+                            0.0
+                        } else {
+                            CAP_WIDTH
+                        },
+                    BASELINE,
+                    BASELINE,
+                    end,
+                    config.height,
+                    config.depth,
+                    ramp_width(index),
+                );
+                world.insert(
+                    RigidBodyBuilder::kinematic_position_based().pose(segment.pose),
+                    ColliderBuilder::new(segment.shape())
+                        // Prescribed frames rotate about their material endpoint.
+                        // A volume-derived COM creates a false endpoint velocity
+                        // during finite-step rotation and unnecessary mass updates.
+                        .mass_properties(MassProperties::default())
+                        .user_data(
+                            ((index as u128 + 1) << 16)
+                                | (COUNT + 1 + end * COUNT + column % COUNT) as u128,
+                        )
+                        .active_hooks(ActiveHooks::MODIFY_SOLVER_CONTACTS)
+                        .friction(config.friction)
+                        .restitution(config.restitution),
+                )
+            })
+            .collect();
         let mut order: [usize; BALL_COUNT] = std::array::from_fn(|i| i);
         order.sort_by(|&a, &b| SIZE_RATIOS[b].total_cmp(&SIZE_RATIOS[a]).then(a.cmp(&b)));
         let mut spawn = [Vector::ZERO; BALL_COUNT];
@@ -349,6 +635,9 @@ impl Simulation {
             world,
             balls,
             bars,
+            surface: BarSurface::new(&[f64::from(BASELINE); COUNT]),
+            surface_deltas: vec![0.0; SURFACE_COUNT],
+            surface_dimensions: vec![[config.height, config.depth]; SURFACE_COUNT],
             palette,
             colors,
             // Start uniformly with the source band under the actual spawn X.
@@ -553,9 +842,16 @@ impl Simulation {
             .enumerate()
             .filter_map(|(copy, &(h, _))| {
                 let post = &self.world.bodies[h];
-                let speed = bar_speeds[copy % COUNT];
-                let reach_x = f64::from(PITCH / 2.0) + SCROLL_PEAK_SPEED * f64::from(PITCH * DT);
-                let top = self.bar_positions[copy % COUNT] + speed * f64::from(DT);
+                let column = copy / 2;
+                let band = column % COUNT;
+                let speed = bar_speeds[(band + COUNT - 1) % COUNT]
+                    .max(bar_speeds[band])
+                    .max(bar_speeds[(band + 1) % COUNT]);
+                let reach_x = f64::from(PITCH) + SCROLL_PEAK_SPEED * f64::from(PITCH * DT);
+                let top = self.bar_positions[(band + COUNT - 1) % COUNT]
+                    .max(self.bar_positions[band])
+                    .max(self.bar_positions[(band + 1) % COUNT])
+                    + speed * f64::from(DT);
                 self.balls
                     .iter()
                     .enumerate()
@@ -565,7 +861,7 @@ impl Simulation {
                         body.is_enabled()
                             && f64::from((body.translation().x - post.translation().x).abs())
                                 <= reach_x + radius + ball_reach
-                            && if copy >= COUNT * 3 {
+                            && if copy >= SURFACE_END_COUNT {
                                 f64::from(body.translation().y) + radius + ball_reach
                                     >= f64::from(self.ceiling_height) - top
                             } else {
@@ -594,6 +890,8 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
         for substep in 0..substeps {
+            let previous_surface = self.surface;
+            let previous_ceiling = self.ceiling_height;
             self.resize_ceiling();
             let distance = self.dance.advance(enabled, self.tempo, f64::from(dt));
             self.scroll_speed = self.dance.speed();
@@ -605,39 +903,65 @@ impl Simulation {
                 self.bar_velocities[i] = (next - self.bar_positions[i]) / f64::from(dt);
                 self.bar_positions[i] = next;
             }
-            for (copy, &(handle, _)) in self.bars.iter().enumerate() {
-                let i = copy % COUNT;
-                let x = ((i as f64
+            self.surface = BarSurface::new(&self.bar_positions);
+            for (index, &(handle, collider)) in self.bars.iter().enumerate() {
+                let column = index / 2;
+                let band = column % COUNT;
+                let x = ((band as f64
                     + 0.5
                     + self.scroll_phase
-                    + (copy / COUNT % 3 + 1) as f64 * COUNT as f64)
+                    + (column / COUNT % 3 + 1) as f64 * COUNT as f64)
                     .rem_euclid((COUNT * 3) as f64)
                     - COUNT as f64)
                     * f64::from(PITCH);
-                let body = &mut self.world.bodies[handle];
-                let position = Vector::new(
-                    x as f32,
-                    if copy >= COUNT * 3 {
-                        self.ceiling_height - self.bar_positions[i] as f32 + POST_HEIGHT / 2.0
+                let x = x as f32 - CAP_WIDTH / 2.0
+                    + if index.is_multiple_of(2) {
+                        0.0
                     } else {
-                        (self.bar_positions[i] - f64::from(POST_HEIGHT / 2.0)) as f32
-                    },
-                    0.0,
-                );
-                // The other two copies are bookkeeping, not active physics.
-                // Enable a full pitch before reaching the enclosure so contact
-                // prediction is ready before any part of the post crosses a wall.
-                let active = (-PITCH..=WIDTH + PITCH).contains(&position.x);
-                if !body.is_enabled()
-                    || !active
-                    || (body.translation().x - position.x).abs() > WIDTH
-                {
-                    // Recycling and activation happen outside the closed enclosure.
-                    // Never sweep a recycled collider through the balls.
-                    body.set_translation(position, false);
+                        CAP_WIDTH
+                    };
+                let body = &mut self.world.bodies[handle];
+                let active = (-ramp_width(index)..=WIDTH).contains(&x);
+                if !active {
+                    body.set_enabled(false);
+                    continue;
                 }
-                body.set_enabled(active);
-                body.set_next_kinematic_translation(position);
+                let left = self.surface.sample(band, 0.0) as f32;
+                let right_fraction = if index.is_multiple_of(2) { 0.0 } else { 1.0 };
+                let right = self.surface.sample(band, right_fraction) as f32;
+                let segment = surface_segment(
+                    x,
+                    left,
+                    right,
+                    index / SURFACE_END_COUNT,
+                    self.ceiling_height,
+                    self.config.depth,
+                    ramp_width(index),
+                );
+                let pose = segment.pose;
+                if !body.is_enabled() || (body.translation().x - pose.translation.x).abs() > WIDTH {
+                    // Reactivated ramps must keep the real
+                    // surface velocity, rather than start at rest at the target.
+                    let previous = surface_segment(
+                        x - (distance * f64::from(PITCH)) as f32,
+                        previous_surface.sample(band, 0.0) as f32,
+                        previous_surface.sample(band, right_fraction) as f32,
+                        index / SURFACE_END_COUNT,
+                        previous_ceiling,
+                        self.config.depth,
+                        ramp_width(index),
+                    );
+                    body.set_position(previous.pose, false);
+                }
+                body.set_enabled(true);
+                if self.surface_deltas[index] != right - left
+                    || self.surface_dimensions[index] != [self.ceiling_height, self.config.depth]
+                {
+                    self.world.colliders[collider].set_shape(segment.shape());
+                    self.surface_deltas[index] = right - left;
+                    self.surface_dimensions[index] = [self.ceiling_height, self.config.depth];
+                }
+                body.set_next_kinematic_position(pose);
             }
             for (i, &(handle, _)) in self.balls.iter().enumerate() {
                 let body = &mut self.world.bodies[handle];
@@ -666,30 +990,37 @@ impl Simulation {
                 }
             }
             // Resolve fast ceiling compression without changing ordinary free
-            // impacts. Keep eight force-solver iterations; use extra positional
-            // stabilization only while a sphere is at/predictively near the roof.
+            // impacts. Force iterations remain bounded at eight; all contacts
+            // use eight positional stabilization iterations.
             let roof_contact = self.balls.iter().enumerate().any(|(i, (h, _))| {
                 let b = &self.world.bodies[*h];
                 b.is_enabled()
-                    && self.bars[COUNT * 3..].iter().any(|(post, _)| {
-                        let post = &self.world.bodies[*post];
-                        post.is_enabled()
-                            && (post.translation().x - b.translation().x).abs()
-                                <= PITCH / 2.0 + SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
-                            && b.translation().y
-                                + SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0
-                                + b.linvel().y.max(0.0) * dt
-                                >= post.translation().y - POST_HEIGHT / 2.0 - CLEARANCE
-                    })
+                    && self.bars[SURFACE_END_COUNT..]
+                        .iter()
+                        .any(|(post, collider)| {
+                            let post = &self.world.bodies[*post];
+                            if !post.is_enabled() {
+                                return false;
+                            }
+                            let (left, right) = chord_points(&self.world.colliders[*collider]);
+                            let radius = SIZE_RATIOS[i] * BALL_SIZE_UNIT / 2.0;
+                            (left.x - radius..=right.x + radius).contains(&b.translation().x)
+                                && b.translation().y + radius + b.linvel().y.max(0.0) * dt
+                                    >= left.y.min(right.y) - CLEARANCE
+                        })
             });
             self.world
                 .integration_parameters
                 .contact_softness
                 .natural_frequency = if roof_contact { 240.0 } else { 60.0 };
-            self.world
-                .integration_parameters
-                .num_internal_stabilization_iterations = if roof_contact { 8 } else { 1 };
-            self.world.step();
+            self.world.step_with_events(
+                &JoinedSurface {
+                    bars: &self.bars,
+                    velocities: &self.bar_velocities,
+                    inv_dt: 1.0 / dt,
+                },
+                &(),
+            );
             let mut supported = [0_u32; 2];
             let mut driven = [0_u32; 2];
             let mut supports = [[0_u32; BALL_COUNT]; 2];
@@ -717,7 +1048,7 @@ impl Simulation {
                         .fold(0.0_f32, |a, b| if b.abs() > a.abs() { b } else { a });
                     let active = pair.has_any_active_contact();
                     // One tag per source and end, including the wrapped copies.
-                    let tag = self.world.colliders[other].user_data as usize;
+                    let tag = (self.world.colliders[other].user_data & 0xffff) as usize;
                     for (end, sign) in [1.0, -1.0].iter().enumerate() {
                         if active && contact_y * sign > 0.1 && (1..=BALL_COUNT).contains(&tag) {
                             supports[end][i] |= 1 << (tag - 1);
@@ -725,15 +1056,59 @@ impl Simulation {
                     }
                     if tag > COUNT {
                         let end = (tag - COUNT - 1) / COUNT;
-                        let j = (tag - COUNT - 1) % COUNT;
-                        let inward = active && contact_y * if end == 0 { 1.0 } else { -1.0 } > 0.1;
+                        let band = (tag - COUNT - 1) % COUNT;
+                        // Even a steep pair of joined slopes can support a
+                        // sphere. The outer top needs an inward component,
+                        // rather than the old rectangular-tip angle cutoff.
+                        let inward = active && contact_y * if end == 0 { 1.0 } else { -1.0 } > 0.0;
                         supported[end] |= u32::from(inward) << i;
-                        driven[end] |=
-                            u32::from(inward && impulse > 0.0 && self.bar_velocities[j] > 0.0) << i;
-                        touching[j] |=
-                            pair.has_any_active_contact() && (self.touching[i][j] || impulse > 0.0);
+                        // A joined tip can move because either neighbour rose
+                        // or because the profile scrolled. Use its real contact
+                        // velocity, independent of the source knot's height.
+                        let surface = &self.world.bodies[self.world.colliders[other]
+                            .parent()
+                            .expect("prescribed surface body")];
+                        let moving_inward = pair.manifolds.iter().any(|manifold| {
+                            let normal = manifold.data.normal
+                                * if pair.collider2 == collider {
+                                    1.0
+                                } else {
+                                    -1.0
+                                };
+                            manifold.data.solver_contacts.iter().any(|contact| {
+                                let flow = if pair.collider1 == other {
+                                    contact.tangent_velocity
+                                } else {
+                                    -contact.tangent_velocity
+                                };
+                                ramp_contact_velocity(surface, contact.point, flow, dt).dot(normal)
+                                    > 0.0
+                            })
+                        });
+                        driven[end] |= u32::from(inward && impulse > 0.0 && moving_inward) << i;
+                        // A ramp spans two colour halves. Attribute the physical
+                        // contact to the same source band as the visible coating.
+                        let Some(contact) = pair
+                            .manifolds
+                            .iter()
+                            .flat_map(|m| m.data.solver_contacts.iter())
+                            .next()
+                        else {
+                            continue;
+                        };
+                        let (left, right) = chord_points(&self.world.colliders[other]);
+                        let piece = (self.world.colliders[other].user_data >> 16) as usize - 1;
+                        let j = if !piece.is_multiple_of(2)
+                            && contact.point.x > (left.x + right.x) * 0.5
+                        {
+                            (band + 1) % COUNT
+                        } else {
+                            band
+                        };
+                        let onset = active && impulse > 0.0 && !self.touching[i][j] && !touching[j];
+                        touching[j] |= active && (self.touching[i][j] || impulse > 0.0);
                         self.snapshot.values[IMPULSE_OFFSET + i * COUNT + j] += impulse;
-                        if touching[j] && !self.touching[i][j] && impulse > 0.0 {
+                        if onset {
                             let mass = self.world.bodies[self.balls[i].0].mass();
                             let blend = contact_pigment_blend(impulse, mass);
                             if blend == 0.0 {
@@ -811,12 +1186,14 @@ impl Simulation {
                 false,
             );
         }
-        for &(_, handle) in &self.bars {
-            self.world.colliders[handle].set_shape(SharedShape::cuboid(
-                PITCH / 2.0,
-                POST_HEIGHT / 2.0,
-                depth / 2.0,
-            ));
+        for (index, &(_, handle)) in self.bars.iter().enumerate() {
+            let shape = self.world.colliders[handle]
+                .shape()
+                .as_shape::<RampPrism>()
+                .expect("ramp prism")
+                .with_depth(depth);
+            self.world.colliders[handle].set_shape(SharedShape::new(shape));
+            self.surface_dimensions[index][1] = depth;
         }
         for (i, &(handle, _)) in self.balls.iter().enumerate() {
             let body = &mut self.world.bodies[handle];
@@ -929,8 +1306,8 @@ impl PhysicsSimulation {
             HZ as f32,
             WIDTH,
             PITCH,
-            0.0, // bar gap: adjacent posts meet edge to edge
-            0.0, // rectangular tips: no rounded trough at the seam
+            BRIDGE_WIDTH, // straight join width; the surface has no open gap
+            0.0,          // joined tips: no rounded trough at the seam
             POST_HEIGHT,
             0.0, // Historical headroom fraction; v2 publishes actual geometry below.
             BODY_STRIDE as f32,
@@ -943,7 +1320,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            17.0, // faster continuous contact-color fill, spawn-X colors and live enclosure depth
+            18.0, // flat caps with straight joins, continuous contact fill and live depth
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,

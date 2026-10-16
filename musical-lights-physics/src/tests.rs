@@ -1,5 +1,49 @@
 use super::*;
 
+fn surface_clearance(sim: &Simulation, collider: ColliderHandle, point: Vector) -> f32 {
+    // Exact distance to the extruded quadrilateral. Convex support-map point
+    // projection can choose an adjacent face at a thin prism's boundary.
+    let collider = &sim.world.colliders[collider];
+    let points = collider.shape().as_shape::<RampPrism>().unwrap().points();
+    let vertices: [Vector; 4] = std::array::from_fn(|i| collider.position() * points[i]);
+    let mut low = vertices
+        .into_iter()
+        .fold(Vector::splat(f32::INFINITY), Vector::min);
+    let mut high = vertices
+        .into_iter()
+        .fold(Vector::splat(f32::NEG_INFINITY), Vector::max);
+    low.z = -sim.config.depth / 2.0;
+    high.z = sim.config.depth / 2.0;
+    let bound = (low - point).max(point - high).max(Vector::ZERO).length();
+    // An enclosing-box distance is a lower bound. Far prisms cannot violate
+    // either the centre-containment check or the one-millimetre settling limit.
+    if bound > radius(0) {
+        return bound;
+    }
+    let p = Vector::new(point.x, point.y, 0.0);
+    let mut distance = f32::INFINITY;
+    let mut positive = false;
+    let mut negative = false;
+    for i in 0..4 {
+        let a = Vector::new(vertices[i].x, vertices[i].y, 0.0);
+        let b = Vector::new(vertices[(i + 1) % 4].x, vertices[(i + 1) % 4].y, 0.0);
+        let edge = b - a;
+        let delta = p - a;
+        let cross = edge.x * delta.y - edge.y * delta.x;
+        positive |= cross > 0.0;
+        negative |= cross < 0.0;
+        let nearest = a + edge * (delta.dot(edge) / edge.length_squared()).clamp(0.0, 1.0);
+        distance = distance.min((p - nearest).length());
+    }
+    let xy = if positive && negative {
+        distance
+    } else {
+        -distance
+    };
+    let z = point.z.abs() - sim.config.depth / 2.0;
+    (xy.max(0.0).powi(2) + z.max(0.0).powi(2)).sqrt() + xy.max(z).min(0.0)
+}
+
 fn world(config: SimulationConfig) -> Simulation {
     Simulation::new(config, std::array::from_fn(|i| [i as f32 / 24.0, 0.2, 0.8])).unwrap()
 }
@@ -42,6 +86,392 @@ fn assert_first_ball_fills_toward_source(sim: &Simulation, source: usize) {
         &sim.snapshot.values[18..21],
         &pigment_color(sim.pigments[..9].try_into().unwrap())
     );
+}
+
+#[test]
+fn changing_ramp_length_preserves_material_horizontal_velocity() {
+    for end in [0, 1] {
+        for (new_left, new_right) in [(0.2, 0.9), (0.4, 0.7)] {
+            let dt = DT / 16.0;
+            let old = surface_segment(0.5, 0.2, 0.7, end, 2.0, 0.24, PITCH);
+            let next = surface_segment(0.5, new_left, new_right, end, 2.0, 0.24, PITCH);
+            let rigid = RigidBodyPosition {
+                position: old.pose,
+                next_position: next.pose,
+            }
+            .interpolate_velocity(1.0 / dt, Vector::ZERO);
+            let sign = if end == 0 { 1.0 } else { -1.0 };
+            let left_speed = sign * (new_left - 0.2) / dt;
+            let right_speed = sign * (new_right - 0.7) / dt;
+            for fraction in [0.0, 0.37, 1.0] {
+                let mut body = RigidBodyBuilder::kinematic_position_based()
+                    .pose(old.pose)
+                    .build();
+                body.set_next_kinematic_position(next.pose);
+                let (left, right) = material_endpoints(&body, PITCH);
+                assert!((right.x - left.x - PITCH).abs() < 1e-6);
+                let point = left + (right - left) * fraction;
+                let flow =
+                    ramp_surface_flow(&body, point, right_speed - left_speed, 1.0 / dt, PITCH);
+                let expected_y = left_speed * (1.0 - fraction) + right_speed * fraction;
+                let velocity = rigid.velocity_at_point(point, left) + flow;
+                assert!(
+                    velocity.x.abs() < 1e-5,
+                    "stationary material moved horizontally: {velocity:?}"
+                );
+                assert!(
+                    (velocity.y - expected_y).abs() < 0.003,
+                    "wrong material rise: {velocity:?}"
+                );
+                // Match the published kinematic frame after integration. Release
+                // eligibility must use the same material motion as the solver.
+                let integrated = RigidBodyBuilder::kinematic_position_based()
+                    .pose(next.pose)
+                    .linvel(rigid.linvel)
+                    .angvel(rigid.angvel)
+                    .build();
+                let contact_velocity = ramp_contact_velocity(&integrated, point, flow, dt);
+                assert!(
+                    (contact_velocity - velocity).length() < 0.003,
+                    "solver and release eligibility disagree: {contact_velocity:?} vs {velocity:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_symmetric_rising_peak_has_no_lateral_launch() {
+    let mut sim = world(SimulationConfig {
+        height: 1.2,
+        ..SimulationConfig::default()
+    });
+    isolate(&mut sim, &[0]);
+    place(
+        &mut sim,
+        0,
+        Vector::new(12.5 * PITCH, BASELINE + radius(0), 0.0),
+        Vector::ZERO,
+    );
+    let mut levels = [0.0; COUNT];
+    levels[12] = 1.0;
+    input(&mut sim, levels);
+    sim.step();
+    assert!(
+        velocity(&sim, 0).x.abs() < 0.001,
+        "symmetric peak launched sideways: {:?}",
+        velocity(&sim, 0)
+    );
+    assert!(
+        position(&sim, 0).y > BASELINE + radius(0),
+        "peak did not lift the ball"
+    );
+}
+
+#[test]
+fn passive_flat_joins_cannot_accelerate_or_bump_a_rolling_ball() {
+    for roof in [false, true] {
+        let mut sim = world(SimulationConfig::default());
+        isolate(&mut sim, &[0]);
+        input(&mut sim, [0.15; COUNT]);
+        for _ in 0..HZ {
+            sim.step();
+        }
+        let top = sim.bar_positions[0] as f32;
+        let inward = if roof { -1.0 } else { 1.0 };
+        let y = if roof {
+            sim.ceiling_height - top - radius(0)
+        } else {
+            top + radius(0)
+        };
+        place(
+            &mut sim,
+            0,
+            Vector::new(0.15, y, 0.0),
+            Vector::new(0.4, 0.0, 0.0),
+        );
+        sim.apply(SimulationInput {
+            tick: sim.tick,
+            gravity: Some([0.0, -inward * sim.config.gravity, 0.0]),
+            ..sim.input
+        })
+        .unwrap();
+        for _ in 0..HZ * 2 {
+            sim.step();
+            let p = position(&sim, 0);
+            assert!(
+                velocity(&sim, 0).x <= 0.401,
+                "passive join accelerated ball: {:?}",
+                velocity(&sim, 0)
+            );
+            assert!(
+                (p.y - y) * inward <= 0.001,
+                "passive join made a false bump: {p:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn neighboring_band_rises_obey_the_configured_zero_release_hop() {
+    for height in [MIN_HEIGHT, 0.6, 2.596923] {
+        let mut sim = world(SimulationConfig {
+            height,
+            ..SimulationConfig::default()
+        });
+        isolate(&mut sim, &[0]);
+        sim.configure_dance(DirectionOdds::default().values(), 0.0, 1, 2.0)
+            .unwrap();
+        input(&mut sim, [0.15; COUNT]);
+        for _ in 0..HZ {
+            sim.step();
+        }
+        let initial_height = sim.bar_positions[12] as f32 + radius(0);
+        place(
+            &mut sim,
+            0,
+            Vector::new(12.5 * PITCH - CAP_WIDTH / 2.0, initial_height, 0.0),
+            Vector::ZERO,
+        );
+        for _ in 0..HZ {
+            sim.step();
+        }
+        let mut lift = 0.0_f32;
+        let mut impulse = 0.0;
+        let mut saw_release = false;
+        for tick in 0..HZ {
+            let mut levels = [0.15; COUNT];
+            if tick < HZ / 12 {
+                levels[11] = 1.0;
+                levels[13] = 1.0;
+            }
+            input(&mut sim, levels);
+            let carried = sim.supported[0][0] && sim.driven[0][0];
+            sim.step();
+            assert_eq!(sim.bar_velocities[12], 0.0);
+            let p = position(&sim, 0);
+            lift = lift.max(p.y - initial_height);
+            impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
+            let distance = sim.bars[..SURFACE_END_COUNT]
+                .iter()
+                .filter(|(body, _)| sim.world.bodies[*body].is_enabled())
+                .map(|(_, collider)| {
+                    let (a, b) = chord_points(&sim.world.colliders[*collider]);
+                    let edge = b - a;
+                    let closest =
+                        a + edge * ((p - a).dot(edge) / edge.length_squared()).clamp(0.0, 1.0);
+                    (p - closest).length()
+                })
+                .fold(f32::INFINITY, f32::min);
+            // Check separation from a driven support. A later drop onto a
+            // stationary or descending bar must retain ordinary restitution.
+            if carried && !sim.supported[0][0] && distance > radius(0) + 0.003 {
+                saw_release = true;
+                assert!(
+                    velocity(&sim, 0).y <= 0.001,
+                    "neighbouring bands launched the ball with zero configured hop: height={height}, tick={tick}, p={p:?}, v={:?}",
+                    velocity(&sim, 0)
+                );
+            }
+        }
+        assert!(saw_release, "no driven release observed at height {height}");
+        assert!(
+            lift > 0.001 && impulse > 0.0,
+            "neighbouring bands must physically lift the ball: lift={lift}, impulse={impulse}"
+        );
+    }
+}
+
+#[test]
+fn stationary_ramp_endpoints_do_not_gain_horizontal_velocity_when_slopes_change() {
+    let mut sim = world(SimulationConfig {
+        height: 2.596923,
+        ..SimulationConfig::default()
+    });
+    isolate(&mut sim, &[]);
+    input(
+        &mut sim,
+        std::array::from_fn(|i| if i.is_multiple_of(2) { 1.0 } else { 0.0 }),
+    );
+    for _ in 0..24 {
+        sim.step();
+        for &(handle, _) in &sim.bars {
+            let body = &sim.world.bodies[handle];
+            if body.is_enabled() {
+                let velocity = body.velocity_at_point(body.translation());
+                // Rapier derives velocity through four f32 pose products.
+                // Bound their roundoff in metres, then convert to velocity
+                // with the actual substep interval. The old frame produced
+                // 8.9 m/s here, rather than a few coordinate ulps.
+                let dt = DT / sim.snapshot.values[COST_OFFSET];
+                let roundoff =
+                    16.0 * f32::EPSILON * body.translation().abs().max_element().max(1.0);
+                assert!(
+                    velocity.x.abs() * dt <= roundoff,
+                    "stationary endpoint gained horizontal velocity {velocity:?} at tick {}",
+                    sim.tick
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn ramp_colliders_meet_at_the_published_render_vertices_on_both_ends() {
+    let mut sim = world(SimulationConfig {
+        height: 2.596923,
+        ..SimulationConfig::default()
+    });
+    isolate(&mut sim, &[]);
+    input(
+        &mut sim,
+        std::array::from_fn(|i| if i % 3 == 0 { 1.0 } else { 0.05 }),
+    );
+    for _ in 0..HZ {
+        sim.step();
+    }
+    for (index, &(handle, collider)) in sim.bars.iter().enumerate() {
+        let body = &sim.world.bodies[handle];
+        if !body.is_enabled() {
+            continue;
+        }
+        let band = index / 2 % COUNT;
+        let end = index / SURFACE_END_COUNT;
+        for vertex in 0..=1 {
+            let top = sim.surface.sample(
+                band,
+                if index.is_multiple_of(2) {
+                    0.0
+                } else {
+                    vertex as f64
+                },
+            ) as f32;
+            let point = Vector::new(
+                body.translation().x + vertex as f32 * ramp_width(index),
+                if end == 0 {
+                    top
+                } else {
+                    sim.ceiling_height - top
+                },
+                0.0,
+            );
+            let shape = &sim.world.colliders[collider];
+            let vertices = shape.shape().as_shape::<RampPrism>().unwrap().points();
+            let actual = (shape.position() * vertices[vertex]
+                + shape.position() * vertices[vertex + 4])
+                / 2.0;
+            assert!(
+                (point - actual).length() < 5e-6,
+                "ramp {index}, vertex {vertex}: expected {point:?}, actual {actual:?}"
+            );
+            let drawn = sim.snapshot.values
+                [BAR_OFFSET + (band + if index.is_multiple_of(2) { 0 } else { vertex }) % COUNT];
+            assert!((top - drawn).abs() < 2e-6, "render and collision diverged");
+        }
+    }
+}
+
+#[test]
+fn startup_waves_with_all_balls_do_not_trap_the_smallest_in_posts_or_walls() {
+    use musical_lights_core::lights::{
+        dance::IdlePeak,
+        musical_motion::{idle_wave, listening_level},
+    };
+    for height in [MIN_HEIGHT, 0.6, 1.2, 2.596923] {
+        for scrolling in [false, true] {
+            for listening in [false, true] {
+                let mut sim = world(SimulationConfig {
+                    height,
+                    ..SimulationConfig::default()
+                });
+                let mut peak = IdlePeak::default();
+                let mut sequence = 0;
+                let mut phase = 0.0;
+                for tick in 0..HZ * 30 {
+                    // The live preview publishes at 60 Hz. Its phase follows
+                    // physical scrolling direction, and idle crests can reverse it.
+                    if tick.is_multiple_of(2) {
+                        let seconds = f64::from(tick) / f64::from(HZ);
+                        if tick > 0 {
+                            phase += sim.dance.direction / 60.0;
+                        }
+                        sim.apply(SimulationInput {
+                            tick: sim.tick,
+                            height,
+                            scrolling,
+                            levels: std::array::from_fn(|band| {
+                                if listening {
+                                    listening_level(0.0, band, seconds, false)
+                                } else {
+                                    idle_wave(band, COUNT, phase, false) as f32
+                                }
+                            }),
+                            ..SimulationInput::default()
+                        })
+                        .unwrap();
+                        if !listening && peak.push(seconds, false) {
+                            sequence += 1;
+                            sim.accent(sequence).unwrap();
+                        }
+                    }
+                    sim.step();
+                    let p = position(&sim, 0);
+                    let wall =
+                        p.x.min(WIDTH - p.x)
+                            .min(p.y)
+                            .min(sim.ceiling_height - p.y)
+                            .min(sim.config.depth / 2.0 - p.z.abs());
+                    // Mixed-mass contacts permit transient surface overlap,
+                    // as in the full-world stress test. A centre may not escape.
+                    assert!(
+                        wall >= 0.0,
+                        "height={height}, scrolling={scrolling}, listening={listening}, tick={tick}: wall clearance {wall}, p={p:?}"
+                    );
+                    for &(post, collider) in &sim.bars {
+                        let post = &sim.world.bodies[post];
+                        if !post.is_enabled() {
+                            continue;
+                        }
+                        let distance = surface_clearance(&sim, collider, p);
+                        assert!(
+                            distance >= 0.0,
+                            "height={height}, scrolling={scrolling}, listening={listening}, tick={tick}: post clearance {distance}, p={p:?}"
+                        );
+                    }
+                }
+                input(&mut sim, [0.0; COUNT]);
+                for _ in 0..HZ * 120 {
+                    sim.step();
+                }
+                let p = position(&sim, 0);
+                let r = radius(0);
+                let clearance =
+                    p.x.min(WIDTH - p.x)
+                        .min(p.y)
+                        .min(sim.ceiling_height - p.y)
+                        .min(sim.config.depth / 2.0 - p.z.abs());
+                assert!(
+                    clearance >= r - 0.001,
+                    "Smallest ball remains in a wall: {p:?}"
+                );
+                assert!(
+                    velocity(&sim, 0).length() < 0.2,
+                    "Smallest ball did not settle"
+                );
+                for &(post, collider) in &sim.bars {
+                    let post = &sim.world.bodies[post];
+                    if !post.is_enabled() {
+                        continue;
+                    }
+                    let distance = surface_clearance(&sim, collider, p);
+                    assert!(
+                        distance >= r - 0.001,
+                        "Smallest ball remains in a post: {p:?}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -122,7 +552,13 @@ fn smallest_ball_clears_seams_after_spikes_and_motion_restarts() {
             .unwrap();
             sim.step();
             let p = position(&sim, 0);
-            assert!(p.x >= radius(0) - 0.002 && p.x <= WIDTH - radius(0) + 0.002);
+            assert!(
+                p.x >= radius(0) - 0.002 && p.x <= WIDTH - radius(0) + 0.002,
+                "height={}, tick={}, p={p:?}, v={:?}",
+                sim.config.height,
+                sim.tick,
+                velocity(&sim, 0)
+            );
             assert!(p.y >= radius(0) - 0.002 && p.y <= height - radius(0) + 0.002);
         }
         // Stopping motion clears sensor forces and restores downward gravity.
@@ -183,15 +619,12 @@ fn smallest_ball_does_not_pass_through_moving_staggered_posts() {
                 .unwrap();
                 sim.step();
                 let p = position(&sim, 0);
-                for (post, _) in &sim.bars {
+                for (post, collider) in &sim.bars {
                     let body = &sim.world.bodies[*post];
                     if !body.is_enabled() {
                         continue;
                     }
-                    let center = body.translation();
-                    let delta = (p - center).abs()
-                        - Vector::new(PITCH / 2.0, POST_HEIGHT / 2.0, sim.config.depth / 2.0);
-                    let clearance = delta.max(Vector::ZERO).length() - radius(0);
+                    let clearance = surface_clearance(&sim, *collider, p) - radius(0);
                     worst = worst.min(clearance);
                 }
             }
@@ -236,25 +669,29 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
         let before: Vec<_> = sim
             .bars
             .iter()
-            .map(|(h, _)| sim.world.bodies[*h].translation().x)
+            .map(|(h, _)| {
+                let body = &sim.world.bodies[*h];
+                (body.translation().x, body.is_enabled())
+            })
             .collect();
         sim.step();
         assert!(
             sim.bars
                 .iter()
-                .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
-                .count()
+                .enumerate()
+                .filter(|(_, (h, _))| sim.world.bodies[*h].is_enabled())
+                .map(|(index, _)| index / 2)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
                 <= 2 * (COUNT + 2)
         );
         for (i, (h, _)) in sim.bars.iter().enumerate() {
             let x = sim.world.bodies[*h].translation().x;
-            assert_eq!(
-                sim.world.bodies[*h].is_enabled(),
-                (-PITCH..=WIDTH + PITCH).contains(&x)
-            );
-            if (x - before[i]).abs() > PITCH {
-                assert!(x < -PITCH || x > WIDTH + PITCH);
-                assert!(before[i] < -PITCH || before[i] > WIDTH + PITCH);
+            if sim.world.bodies[*h].is_enabled() {
+                assert!((-PITCH..=WIDTH + PITCH).contains(&x));
+                if before[i].1 {
+                    assert!((x - before[i].0).abs() < PITCH);
+                }
             }
         }
     }
@@ -308,7 +745,7 @@ fn empty_space_strokes_skip_contact_work_but_nearby_strokes_keep_it() {
         place(sim, 0, Vector::new(PITCH / 2.0, 0.15, 0.0), Vector::ZERO);
     }
     let mut levels = [0.0; COUNT];
-    levels[23] = 1.0;
+    levels[12] = 1.0;
     input(&mut distant, levels);
     let mut quiet_cost = 0.0_f32;
     for _ in 0..6 {
@@ -1007,18 +1444,16 @@ fn invalid_inputs_and_configuration_leave_state_unchanged() {
 }
 
 #[test]
-fn exposed_bar_corner_deflects_a_ball_and_reports_the_bar_impulse() {
+fn sloped_band_join_deflects_a_ball_and_reports_the_bar_impulse() {
     let mut sim = world(SimulationConfig::default());
     isolate(&mut sim, &[0]);
     let top = 0.1;
-    let bar = &mut sim.world.bodies[sim.bars[12].0];
-    bar.set_translation(Vector::new(0.625, top - POST_HEIGHT / 2.0, 0.0), true);
-    sim.bar_positions[12] = f64::from(top);
     let mut levels = [0.0; COUNT];
     levels[12] = (top - BASELINE) / (sim.config.bar_max() - BASELINE);
     input(&mut sim, levels);
-    sim.motions[12].state.position = f64::from(levels[12]);
-    sim.motions[12].target = f64::from(levels[12]);
+    for _ in 0..HZ {
+        sim.step();
+    }
     place(
         &mut sim,
         0,
@@ -1416,7 +1851,13 @@ fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
     for _ in 0..HZ * 3 {
         sim.step();
         let p = position(&sim, 0);
-        assert!(p.x >= radius(0) - 0.002 && p.x <= WIDTH - radius(0) + 0.002);
+        assert!(
+            p.x >= radius(0) - 0.002 && p.x <= WIDTH - radius(0) + 0.002,
+            "height={}, tick={}, p={p:?}, v={:?}",
+            sim.config.height,
+            sim.tick,
+            velocity(&sim, 0)
+        );
         assert!(p.y >= radius(0) - 0.002 && p.y + radius(0) <= sim.ceiling_height + 0.002);
     }
 }
@@ -1762,11 +2203,10 @@ fn paired_bars_move_inward_together_and_leave_ball_clearance() {
         sim.step();
         assert_eq!(sim.world.gravity, gravity);
         for band in 0..COUNT {
-            let floor = sim.world.bodies[sim.bars[band].0].translation().y + POST_HEIGHT / 2.0;
-            let roof = sim.world.bodies[sim.bars[band + COUNT * 3].0]
+            let floor = sim.world.bodies[sim.bars[band * 2].0].translation().y;
+            let roof = sim.world.bodies[sim.bars[band * 2 + SURFACE_END_COUNT].0]
                 .translation()
-                .y
-                - POST_HEIGHT / 2.0;
+                .y;
             assert!((floor + roof - sim.ceiling_height).abs() < 1e-5);
             assert!(roof - floor >= radius(4) * 2.0);
         }
@@ -1828,7 +2268,12 @@ fn roof_bar_deflects_inward_and_reports_its_source_pigment() {
         impulse += sim.snapshot.values[IMPULSE_OFFSET + 12];
         inward |= velocity(&sim, 0).y < -0.1;
     }
-    assert!(impulse > 0.0 && inward);
+    assert!(
+        impulse > 0.0 && inward,
+        "impulse={impulse}, inward={inward}, p={:?}, v={:?}, tip={tip}",
+        position(&sim, 0),
+        velocity(&sim, 0)
+    );
     assert_first_ball_fills_toward_source(&sim, 12);
 }
 
@@ -1901,9 +2346,8 @@ fn live_depth_resizes_walls_and_posts_without_resetting_state() {
         assert_eq!(
             sim.world.colliders[handle]
                 .shape()
-                .as_cuboid()
-                .unwrap()
-                .half_extents
+                .compute_local_aabb()
+                .maxs
                 .z,
             1.0
         );
@@ -1974,5 +2418,61 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
     sim.step();
     for (old, new) in before.into_iter().zip(sim.pigments) {
         assert!((old - new).abs() < 0.038);
+    }
+}
+
+#[test]
+fn both_halves_of_each_flat_top_transfer_the_same_source_color() {
+    for end in 0..2 {
+        for offset in [-CAP_WIDTH / 4.0, CAP_WIDTH / 4.0] {
+            let mut sim = world(SimulationConfig::default());
+            isolate(&mut sim, &[0]);
+            input(&mut sim, [0.3; COUNT]);
+            for _ in 0..HZ {
+                sim.step();
+            }
+            let inward = if end == 0 { 1.0 } else { -1.0 };
+            let top = sim.bar_positions[12] as f32;
+            let y = if end == 0 {
+                top
+            } else {
+                sim.ceiling_height - top
+            };
+            place(
+                &mut sim,
+                0,
+                Vector::new(12.5 * PITCH + offset, y + inward * (radius(0) + 0.04), 0.0),
+                Vector::new(0.0, -inward * 0.2, 0.0),
+            );
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                gravity: Some([0.0, -inward * sim.config.gravity, 0.0]),
+                ..sim.input
+            })
+            .unwrap();
+            let mut contacted = false;
+            for _ in 0..HZ {
+                sim.step();
+                let impulses = &sim.snapshot.values[IMPULSE_OFFSET..IMPULSE_OFFSET + COUNT];
+                if impulses.iter().sum::<f32>() > 0.0 {
+                    assert!(
+                        impulses[12] > 0.0,
+                        "flat source lost its impulse: end={end}, offset={offset}, {impulses:?}"
+                    );
+                    for (band, &impulse) in impulses.iter().enumerate() {
+                        if band != 12 {
+                            assert_eq!(
+                                impulse, 0.0,
+                                "flat top recolored from band {band}: end={end}, offset={offset}"
+                            );
+                        }
+                    }
+                    assert_first_ball_fills_toward_source(&sim, 12);
+                    contacted = true;
+                    break;
+                }
+            }
+            assert!(contacted, "no flat-top contact: end={end}, offset={offset}");
+        }
     }
 }

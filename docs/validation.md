@@ -708,8 +708,19 @@ fixture with the real processor and its real completion acknowledgement.
 
 ### Full-depth supports, background boxes and all-band response
 
-The renderer uses finite unit-height boxes, scaled to each published physical
-bar height. Their full depth matches the physical support. Matching vertical
+Each source keeps a flat top across 48 mm of its 50 mm pitch. A straight
+2 mm join connects adjacent tops without an open slot. The shared Rust profile
+preserves the source heights and bounds every join by its endpoints, including
+the scrolling seam. Protocol 18 records the same 24 heights, live depth and
+continuous contact colors; it does not publish spline coefficients.
+
+Physics uses one flat prism and one joining prism per pitch, with fixed topology
+and exact projection onto their extruded quadrilaterals. The adapter removes
+buried end faces and assigns each shared convex vertex one contact owner.
+Concave joins retain distinct contacts. Prescribed frames follow material
+endpoints. Release eligibility uses the same material motion as the solver.
+Zero extra launch height still permits ordinary drops and rebounds.
+The visible mesh omits internal side caps. Its full depth matches the physical support. Matching vertical
 banks fill eight adjacent background boxes; all nine boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands. Balls, paired bar tips,
@@ -734,7 +745,7 @@ foreground occlusion, stable count and independence from audio lighting.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
-physical simulation stay unchanged. Background culling includes the full vertical
+source height measurements keep their existing meaning. Background culling includes the full vertical
 and depth extrusion. The browser suite checks visible pixels above and below the
 room, background stars, surface lighting, and complete-batch culling.
 

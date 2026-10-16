@@ -65,7 +65,7 @@ test('contact color fills a rolling surface gradually instead of swapping bands'
     }
   });
   await info.attach('contact-fill-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.version).toBe(17); expect(result.firstContact).toBeGreaterThan(0);
+  expect(result.version).toBe(18); expect(result.firstContact).toBeGreaterThan(0);
   expect(result.maximumJump).toBeGreaterThan(.001); expect(result.maximumJump).toBeLessThan(.038);
   expect(result.frames).toHaveLength(5);
   const [initial, impact, early, middle, late] = result.frames;

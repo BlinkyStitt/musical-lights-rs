@@ -67,14 +67,16 @@ test('native wake-lock status matches the browser grant and releases on route cl
 });
 
 for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812 }]) {
-  test(`fullscreen expands the live graph and follows browser exits at ${viewport.width}px`, async ({ page }) => {
+  test(`fullscreen expands the live graph and follows browser exits at ${viewport.width}px`, async ({ page }, info) => {
     await page.setViewportSize(viewport);
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.addInitScript(() => {
       MediaDevices.prototype.getUserMedia = async () => {
         const context = new AudioContext(); const oscillator = context.createOscillator();
         const destination = context.createMediaStreamDestination();
-        oscillator.connect(destination); oscillator.start(); await context.resume();
+        oscillator.connect(destination); oscillator.start();
+        window.pendingSourceContext = context;
+        await context.resume();
         window.sourceContext = context; window.sourceStream = destination.stream;
         return destination.stream;
       };
@@ -82,7 +84,20 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await page.goto('http://127.0.0.1:8101');
     await page.requestGC();
     await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
-    await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
+    try {
+      await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.some(node => Number(node.getAttribute('aria-valuenow')) > 0))).toBe(true);
+    } catch (error) {
+      const state = await page.evaluate(() => {
+        const card = document.querySelector('.audio-card'), owner = card.activeAudioContext;
+        return { audioState: card.dataset.audioState, session: card.dataset.audioSession,
+          ownerState: owner?.state, ownerTime: owner?.currentTime,
+          sourceState: window.pendingSourceContext?.state, sourceTime: window.pendingSourceContext?.currentTime,
+          tracks: window.sourceStream?.getTracks().map(track => ({ readyState: track.readyState, muted: track.muted })),
+          meters: [...document.querySelectorAll('[role=meter]')].map(node => node.getAttribute('aria-valuenow')) };
+      });
+      await info.attach('microphone-startup.json', { body: JSON.stringify(state), contentType: 'application/json' });
+      throw error;
+    }
     const before = await page.locator('#dancinglights').boundingBox();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();

@@ -1,6 +1,13 @@
 import * as THREE from './three.module.js';
 import { BOX_OFFSETS } from './enclosure.js';
 
+// A coloured flat top includes the two half-joins at its edges.
+// Straight segments cannot exceed their endpoints, including snapshot blends.
+export function rampMaximum(values, offset = 0) {
+  const left = values[offset], centre = values[offset + 1], right = values[offset + 2];
+  return Math.max(centre, (left + centre) / 2, (centre + right) / 2);
+}
+
 // Eight full-size background boxes beside the physical center box. Copy its
 // vertical bars, including the scrolling seam, without adding any physics.
 export class SideBars {
@@ -18,6 +25,7 @@ export class SideBars {
     this.geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.edges, 1));
     this.geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.pulses, 1));
     this.geometry.setAttribute('backgroundOffset', new THREE.InstancedBufferAttribute(this.offsets, 1));
+    this.geometry.setAttribute('rampHeights', new THREE.InstancedBufferAttribute(new Float32Array(this.capacity * 3), 3));
     this.material = bars.material.clone();
     this.material.onBeforeCompile = shader => {
       bars.material.onBeforeCompile(shader);
@@ -53,9 +61,11 @@ export class SideBars {
         // the submitted float32 bounds so a rounded JS sum cannot add a sliver.
         if (Math.fround(x + this.halfWidth) <= 0 || Math.fround(x - this.halfWidth) >= width) continue;
         if (camera) {
-          const y = source[i * 16 + 13], halfHeight = Math.abs(source[i * 16 + 5]) / 2;
-          this.bounds.min.set(x + offset - this.halfWidth, y - halfHeight - (source[i * 16 + 5] > 0 ? layout[6] : 0), -depth / 2);
-          this.bounds.max.set(x + offset + this.halfWidth, y + halfHeight + (source[i * 16 + 5] < 0 ? layout[6] : 0), depth / 2);
+          // Bound both straight half-ramps, including snapshot interpolation.
+          const top = rampMaximum(this.bars.geometry.attributes.rampHeights.array, i * 3);
+          const roof = source[i * 16 + 5] < 0;
+          this.bounds.min.set(x + offset - this.halfWidth, roof ? height - top : -layout[6], -depth / 2);
+          this.bounds.max.set(x + offset + this.halfWidth, roof ? height + layout[6] : top, depth / 2);
           if (!this.frustum.intersectsBox(this.bounds)) continue;
         }
         if (n >= this.capacity) throw Error('Background bars exceed the bounded seam capacity');
@@ -65,11 +75,13 @@ export class SideBars {
         this.edges[n] = this.bars.geometry.attributes.edge.array[i];
         this.pulses[n] = this.bars.geometry.attributes.pulse.array[i];
         this.offsets[n] = offset; this.sourceBands[n] = i % count;
+        this.geometry.attributes.rampHeights.array.set(
+          this.bars.geometry.attributes.rampHeights.array.subarray(i * 3, i * 3 + 3), n * 3);
         n++;
       }
     }
     this.mesh.count = n;
-    for (const attr of [this.geometry.attributes.edge, this.geometry.attributes.pulse, this.geometry.attributes.backgroundOffset, this.mesh.instanceMatrix, this.mesh.instanceColor]) {
+    for (const attr of [this.geometry.attributes.edge, this.geometry.attributes.pulse, this.geometry.attributes.backgroundOffset, this.geometry.attributes.rampHeights, this.mesh.instanceMatrix, this.mesh.instanceColor]) {
       attr.clearUpdateRanges(); attr.addUpdateRange(0, n * attr.itemSize); attr.needsUpdate = true;
     }
   }
