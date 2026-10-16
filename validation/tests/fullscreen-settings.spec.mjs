@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { normalView, physicsReady } from '../physics-state.mjs';
+import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 for (const path of ['/', '/advanced/']) {
@@ -34,6 +34,16 @@ for (const path of ['/', '/advanced/']) {
       const clip = { x: 0, y: Math.ceil(viewport.height / 2), width: viewport.width, height: Math.floor(viewport.height / 2) };
       const uncovered = await page.screenshot({ clip });
       const settings = page.getByRole('button', { name: 'Settings', exact: true });
+      await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeInViewport({ ratio: 1 });
+      expect(await page.evaluate(() => {
+        const toggle = document.querySelector('.listening-toggle'), label = toggle.closest('label');
+        const gear = document.querySelector('.fullscreen-settings-button');
+        const left = label.getBoundingClientRect(), right = gear.getBoundingClientRect();
+        return { toolbar: !!label.closest('.fullscreen-toolbar'), left: left.right <= right.left,
+          touch: toggle.getBoundingClientRect().height >= 44, gearWidth: right.width >= 44,
+          icon: gear.querySelector('svg')?.getAttribute('aria-hidden'), text: gear.textContent.trim(),
+          count: document.querySelectorAll('.listening-toggle').length };
+      })).toEqual({ toolbar: true, left: true, touch: true, gearWidth: true, icon: 'true', text: '', count: 1 });
       await settings.click();
       const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
       await expect(dialog).toBeVisible();
@@ -164,4 +174,44 @@ test('queued dialog close keeps new action help and Escape usable', async ({ pag
   expect(result).toEqual({ open: false, help: true, exitFocused: true });
   await page.keyboard.press('Escape');
   await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+});
+
+
+test('toolbar Listening keeps one microphone session through Settings and restores on exit', async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await syntheticAudio(page);
+  await page.addInitScript(() => {
+    const capture = MediaDevices.prototype.getUserMedia;
+    window.toolbarCaptures = 0;
+    MediaDevices.prototype.getUserMedia = async (...args) => { toolbarCaptures++; return capture.call(navigator.mediaDevices, ...args); };
+  });
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect(listening).toBeChecked();
+  await expect(listening).toBeInViewport({ ratio: 1 });
+  expect(await page.evaluate(() => {
+    const bar = document.querySelector('.fullscreen-toolbar'), label = bar.querySelector('label');
+    const gear = bar.querySelector('.fullscreen-settings-button'), exit = bar.querySelector('.fullscreen-button');
+    return { textFits: label.scrollWidth <= label.clientWidth, fits: bar.scrollWidth <= bar.clientWidth,
+      order: exit.getBoundingClientRect().right <= label.getBoundingClientRect().left && label.getBoundingClientRect().right <= gear.getBoundingClientRect().left };
+  })).toEqual({ textFits: true, fits: true, order: true });
+  await page.evaluate(() => { window.toolbarAudio = { context: testContext, input: document.querySelector('.listening-toggle'), session: document.querySelector('.audio-card').dataset.audioSession }; });
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(listening).toBeChecked();
+  expect(await listening.evaluate(n => !!n.closest('dialog'))).toBe(true);
+  const close = page.getByRole('button', { name: 'Close settings', exact: true });
+  if (info.project.use.hasTouch) await close.tap(); else await close.click();
+  await expect(listening).toBeChecked();
+  await expect(listening).toBeInViewport({ ratio: 1 });
+  expect(await page.evaluate(() => ({ same: testContext === toolbarAudio.context && document.querySelector('.listening-toggle') === toolbarAudio.input,
+    session: document.querySelector('.audio-card').dataset.audioSession === toolbarAudio.session, state: testContext.state, captures: toolbarCaptures }))).toEqual({ same: true, session: true, state: 'running', captures: 1 });
+  await listening.uncheck();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+  expect(await page.evaluate(() => toolbarAudio.context.state)).toBe('closed');
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  expect(await listening.evaluate(n => !!n.closest('.audio-controls') && !n.closest('.fullscreen-toolbar'))).toBe(true);
+  await expect(listening).not.toBeChecked();
+  await expect(listening).toHaveCount(1);
 });

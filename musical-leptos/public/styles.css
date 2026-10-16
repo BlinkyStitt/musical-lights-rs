@@ -217,9 +217,9 @@ nav { flex-wrap: wrap; }
 .button-row > .setting-switch, .button-row > button, .button-row > .listening-controls, .button-row > .motion-controls { min-width: 0; min-height: 44px; margin: 0; }
 /* Keep microphone controls together and let their message use both columns. */
 .button-row .listening-controls { grid-column: span 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .5rem; align-items: start; }
-.button-row .setting-switch { white-space: normal; min-height: 44px; }
-.button-row .setting-switch span[role="button"] { cursor: help; padding: .3rem 0; }
-.button-row .setting-switch span[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch { white-space: normal; min-height: 44px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch span[role="button"] { cursor: help; padding: .3rem 0; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch span[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
 .button-row .mic-status, .display-note { display: none !important; }
 .visual-content { min-width: 0; }
 /* The normal page shares the expanded presentation order. Settings and
@@ -261,14 +261,14 @@ nav { flex-wrap: wrap; }
   .camera-controls .control-row { flex-wrap: wrap; }
 }
 /* The switch has a 44px hit area; its visible pill remains compact. */
-.button-row .setting-switch { padding: 0; gap: .3rem; min-width: 0; }
-.button-row .setting-switch span { min-width: 0; }
-.button-row .setting-switch input { width: 44px; height: 44px; border: 0; background: transparent; }
-.button-row .setting-switch input::before { content: ''; position: absolute; box-sizing: border-box; left: 1px; top: 10px; width: 42px; height: 24px; border: 2px solid var(--muted); border-radius: 20px; background: var(--surface); }
-.button-row .setting-switch input::after { left: 5px; top: 14px; width: 16px; height: 16px; }
-.button-row .setting-switch input:checked { background: transparent; }
-.button-row .setting-switch input:checked::before { background: var(--primary); border-color: var(--primary); }
-.button-row .setting-switch input:checked::after { left: 23px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch { padding: 0; gap: .3rem; min-width: 0; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch span { min-width: 0; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input { width: 44px; height: 44px; border: 0; background: transparent; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input::before { content: ''; position: absolute; box-sizing: border-box; left: 1px; top: 10px; width: 42px; height: 24px; border: 2px solid var(--muted); border-radius: 20px; background: var(--surface); }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input::after { left: 5px; top: 14px; width: 16px; height: 16px; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input:checked { background: transparent; }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input:checked::before { background: var(--primary); border-color: var(--primary); }
+:is(.button-row, .fullscreen-toolbar) .setting-switch input:checked::after { left: 23px; }
 .button-row .recognition-control { display: grid; grid-template-columns: minmax(0, 1fr) 18px; align-items: center; gap: .25rem; }
 .button-row .listening-controls > .recognition-status { grid-column: 1 / -1; max-width: none; }
 .button-row .recognition-ring { width: 18px; height: 18px; }
@@ -306,9 +306,11 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: 1; min-height: 0; height: auto; padding: 0; border: 0; border-radius: 0; display: flex; }
 .audio-card[data-expanded] #dancinglights { flex: 1; height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
 .audio-card[data-expanded] .spectrum-labels { display: none; }
-.audio-card[data-expanded] .fullscreen-toolbar { position: absolute; top: max(.5rem, env(safe-area-inset-top)); left: max(.5rem, env(safe-area-inset-left)); right: max(.5rem, env(safe-area-inset-right)); z-index: 5; display: flex; justify-content: space-between; gap: .5rem; pointer-events: none; }
+.audio-card[data-expanded] .fullscreen-toolbar { position: absolute; top: max(.5rem, env(safe-area-inset-top)); left: max(.5rem, env(safe-area-inset-left)); right: max(.5rem, env(safe-area-inset-right)); z-index: 5; display: flex; align-items: center; gap: .5rem; pointer-events: none; }
 .audio-card[data-expanded] .fullscreen-toolbar button { min-height: 44px; pointer-events: auto; background: var(--surface); color: var(--ink); border-color: var(--line); }
-.audio-card[data-expanded] .fullscreen-button { order: -1; }
+.audio-card[data-expanded] .fullscreen-button { margin-right: auto; }
+.fullscreen-toolbar .setting-switch { pointer-events: auto; padding: 0 .35rem; border-radius: 6px; background: var(--surface); }
+.fullscreen-settings-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; flex: none; }
 .audio-card[data-expanded] .fullscreen-settings { position: fixed; inset: calc(var(--video-editor-top, 0px) + max(.5rem, env(safe-area-inset-top))) max(.5rem, env(safe-area-inset-right)) auto max(.5rem, env(safe-area-inset-left)); margin: 0 auto; width: auto; max-width: 70rem; box-sizing: border-box; height: calc(50% - var(--video-editor-top, 0px) - max(.5rem, env(safe-area-inset-top))); max-height: calc(var(--video-editor-height, 100dvh) - max(.5rem, env(safe-area-inset-top))); padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); overflow: hidden; }
 .audio-card[data-expanded] .fullscreen-settings[open] { display: flex; flex-direction: column; }
 .fullscreen-settings::backdrop { background: transparent; }
