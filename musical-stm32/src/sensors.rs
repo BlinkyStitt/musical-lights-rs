@@ -20,7 +20,7 @@ use lsm9ds1::{self, accel, gyro, interface::SpiInterface, mag};
 use musical_lights_core::{
     clock::UtcClock,
     controller::Controller,
-    gps::{Fix, GpsParser, PpsCounter},
+    gps::{Fix, GpsParser, PpsCounter, PpsHistory},
     message::*,
     navigation::{HeadingEstimator, ImuSample, declination},
     pattern_motion::{MOTION_FRESH_MS, MotionEstimator},
@@ -52,7 +52,7 @@ pub struct State {
     pub motion_at: u64,
     pub clock: UtcClock,
     pub network: Option<Network>,
-    pub pps: Option<(u64, u64)>,
+    pub pps: PpsHistory,
     pub radio_fault: bool,
     pub gps_fault: bool,
     pub sensor_fault: bool,
@@ -170,7 +170,7 @@ pub async fn controller(
                 s.clock = UtcClock::default();
                 s.sensor_fault = true;
                 s.gps_fault = true;
-                s.pps = None;
+                s.pps.record(None);
             }
             match command.command {
                 None => {
@@ -189,7 +189,7 @@ pub async fn controller(
                             .fix
                             .and_then(|f| f.hdop)
                             .map_or(u16::MAX, |h| (h * 100.0).clamp(0.0, 65534.0) as u16);
-                        let pps_age = s.pps.map_or(u32::MAX, |(_, at)| {
+                        let pps_age = s.pps.latest().map_or(u32::MAX, |at| {
                             now().saturating_sub(at).min(u32::MAX as u64) as u32
                         });
                         result.data.extend_from_slice(&1u16.to_le_bytes()).unwrap();
@@ -250,12 +250,14 @@ pub async fn pps(mut capture: InputCapture<'static, peripherals::TIM2>, state: S
         .await
         {
             Ok(value) => {
-                state.lock().await.pps = musical_lights_core::gps::pps_timestamp(value, now_us())
-                    .map(|edge| (edge, edge / 1000));
+                state.lock().await.pps.record(
+                    musical_lights_core::gps::pps_timestamp(value, now_us())
+                        .map(|edge| edge / 1000),
+                );
             }
             Err(_) => {
                 let _ = now_us();
-                state.lock().await.pps = None;
+                state.lock().await.pps.record(None);
             }
         }
     }
@@ -281,7 +283,7 @@ pub async fn gps(mut uart: Uart<'static, Async>, _enable: Output<'static>, state
                         if !discarding && let Ok(text) = core::str::from_utf8(&line) {
                             if let Some(fix) = parser.push(text, now()) {
                                 let mut s = state.lock().await;
-                                let pps = s.pps.map(|(_, at)| at);
+                                let pps = s.pps.for_capture(fix.captured_ms);
                                 let timing = s.settings.as_ref().and_then(|s| s.gps_timing);
                                 s.fix_utc_verified = musical_lights_core::gps::verify_epoch(
                                     &mut s.clock,
