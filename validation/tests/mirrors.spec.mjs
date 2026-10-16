@@ -551,11 +551,13 @@ for (const path of ['/', '/advanced/']) {
       detail: { bpm: 132, confidence: .9, accentSequence: 0 },
     })));
     const tempo = page.locator('.tempo-readout'), fps = page.locator('.frame-rate');
-    await expect(tempo).toHaveText('132 BPM');
+    await expect.poll(() => page.evaluate(() => {
+      const nodes = document.querySelectorAll('.tempo-readout'), node = nodes[0];
+      return { text: node.textContent, count: nodes.length, live: node.getAttribute('aria-live'),
+        besideFPS: node.parentElement === document.querySelector('.frame-rate').parentElement };
+    })).toEqual({ text: '132 BPM', count: 1, live: 'off', besideFPS: true });
     await fps.scrollIntoViewIfNeeded();
     await expect(tempo).toBeInViewport({ ratio: 1 });
-    expect(await tempo.evaluate(node => node.parentElement === document.querySelector('.frame-rate').parentElement)).toBe(true);
-    await expect(tempo).toHaveCount(1); await expect(tempo).toHaveAttribute('aria-live', 'off');
     for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
       await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -566,10 +568,14 @@ for (const path of ['/', '/advanced/']) {
         return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
       });
       await expect(tempo).toHaveText('132 BPM');
-      await openFullscreenSettings(page);
+      // This loop owns a closed dialog. Keep native activation and its
+      // visibility check without probing the same known state twice.
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
       const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation']);
       expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1 });
-      await closeFullscreenSettings(page);
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
       await expect(page.locator('.fullscreen-button')).toBeInViewport({ ratio: 1 });
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
@@ -612,11 +618,15 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
       const card = document.querySelector('.audio-card');
       return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
     });
-    await openFullscreenSettings(page);
+    // This loop owns a closed dialog. Keep native activation and its
+    // visibility check without probing the same known state twice.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
     expect(await scrollingIntersections(page, ['.frame-rate', '.camera-rotation'])).toEqual({ '.frame-rate': 1, '.camera-rotation': 1 });
     const state = await readout();
     expect(state.text).toMatch(/^\d+ FPS$/); expect(state.parent).toBe('camera-controls');
-    await closeFullscreenSettings(page);
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
   }
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
