@@ -114,3 +114,31 @@ test('settings close on native browser exit and route cleanup', async ({ page },
   await page.getByRole('link', { name: 'Home', exact: true }).click(); await physicsReady(page);
   await expect(page.locator('dialog')).toHaveCount(1);
 });
+
+
+test('Escape respects focused controls, closes Settings, and exits with action help open', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('.input-source').selectOption('generated');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const input = page.locator('.camera-rotation');
+  // A focused editor can consume Escape before the dialog's native cancel.
+  await input.evaluate(node => node.addEventListener('keydown', event => {
+    if (event.key === 'Escape') event.preventDefault();
+  }, { once: true }));
+  await input.focus(); await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+  await page.getByRole('button', { name: 'Close settings', exact: true }).focus();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).focus();
+  await expect(page.locator('.control-help')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+  await expect(page.locator('.control-help')).not.toBeVisible();
+  await expect(page.locator('.listening-toggle')).toBeVisible();
+});

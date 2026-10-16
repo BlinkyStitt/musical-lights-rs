@@ -106,7 +106,7 @@ export class Presentation {
       this.listen(window.visualViewport, 'scroll', () => this.updateVideoEditor());
     }
     this.listen(document, 'pointerdown', event => { if (!this.popup.contains(event.target) && !this.anchor?.contains(event.target)) this.hideHelp(); });
-    this.listen(document, 'keydown', event => { if (event.key === 'Escape' && !this.popup.hidden) { event.preventDefault(); event.stopImmediatePropagation(); this.hideHelp(); } }, true);
+    this.listen(document, 'keydown', event => { if (event.key === 'Escape' && !this.popup.hidden) this.hideHelp(); }, true);
     this.listen(window, 'scroll', () => this.positionHelp(), { passive: true });
     this.listen(window, 'resize', () => this.positionHelp());
     this.listen(card, 'audio-session', ({ detail }) => { this.microphoneActive = detail.source === 'microphone' && !['stopped', 'ended'].includes(detail.state); this.updateAudioType(); if (this.anchor?.dataset.help === 'listening-toggle') this.showHelp(this.anchor, 'listening-toggle'); });
@@ -277,12 +277,6 @@ class FullscreenSettings {
     });
     presentation.listen(this.dialog, 'cancel', event => { event.preventDefault(); this.hide(); });
     presentation.listen(this.dialog, 'close', () => this.finishClose());
-    // Consume Escape before the screen controller handles the fullscreen exit.
-    presentation.listen(document, 'keydown', event => {
-      if (event.key === 'Escape' && this.dialog.open) {
-        event.preventDefault(); event.stopImmediatePropagation(); this.hide();
-      }
-    }, true);
     this.observer = new MutationObserver(() => this.sync());
     this.observer.observe(this.card, { attributes: true, attributeFilter: ['data-expanded'] });
     this.sync();
