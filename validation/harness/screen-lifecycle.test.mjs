@@ -205,3 +205,19 @@ test('a late native exit event cannot hide an entry from Escape', async t => {
   expect(env.document.fullscreenElement).toBe(null);
   expect(env.attributes.has('data-expanded')).toBe(false);
 });
+
+
+test('a delayed fullscreen entry event preserves scrolling to the bottom controls', async t => {
+  const env = environment(t);
+  await env.screen.toggleFullscreen();
+  expect(env.element.scrollTop).toBe(0);
+  // The user can scroll before the browser delivers its native event after
+  // requestFullscreen resolves. Confirming entry must not jump back to top.
+  env.element.scrollTop = 240;
+  env.document.dispatchEvent(new Event('fullscreenchange'));
+  expect(env.element.scrollTop).toBe(240);
+  expect(env.attributes.has('data-expanded')).toBe(true);
+  await env.screen.toggleFullscreen();
+  await env.screen.toggleFullscreen();
+  expect(env.element.scrollTop).toBe(0);
+});
