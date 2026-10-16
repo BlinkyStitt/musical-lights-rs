@@ -1,4 +1,4 @@
-import { openFullscreenSettings, closeFullscreenSettings } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, scrollingIntersections } from '../physics-state.mjs';
 import { test, expect } from '@playwright/test';
 
 test('unsupported native screen APIs still allow the lights-only view', async ({ page }) => {
@@ -99,8 +99,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     }
     await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
     await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
-    await page.locator('.frame-rate').scrollIntoViewIfNeeded();
-    await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
+    expect(await scrollingIntersections(page, ['.frame-rate'])).toEqual({ '.frame-rate': 1 });
     await expect(page.locator('.site-header')).toBeHidden();
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });
