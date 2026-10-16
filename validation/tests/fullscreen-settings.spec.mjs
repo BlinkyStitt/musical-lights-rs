@@ -24,6 +24,10 @@ for (const path of ['/', '/advanced/']) {
         const v = document.querySelector('#dancinglights').physics;
         return v.canvasHeight === v.layer.getBoundingClientRect().height;
       })).toBe(true);
+      // Close can reveal Listening under the pointer. Compare the scene with
+      // hover help dismissed, including after a viewport orientation change.
+      await page.mouse.move(0, 0);
+      await expect(page.locator('.control-help')).not.toBeVisible();
       const before = await page.evaluate(() => {
         const v = document.querySelector('#dancinglights').physics;
         window.modalIdentity = { worker: v.worker, renderer: v.renderer, controls: document.querySelector('.listening-toggle'), render: v.renderer.render };
@@ -55,7 +59,17 @@ for (const path of ['/', '/advanced/']) {
       const box = await dialog.boundingBox();
       expect(box.y).toBeGreaterThanOrEqual(0);
       expect(box.y + box.height).toBeLessThanOrEqual(viewport.height / 2);
-      expect((await page.screenshot({ clip })).equals(uncovered), 'bottom-half pixels remain visible through the modal backdrop').toBe(true);
+      const covered = await page.screenshot({ clip });
+      if (!covered.equals(uncovered)) {
+        await info.attach(`bottom-before-${viewport.width}.png`, { body: uncovered, contentType: 'image/png' });
+        await info.attach(`bottom-after-${viewport.width}.png`, { body: covered, contentType: 'image/png' });
+        await info.attach('pixel-layout.json', { body: JSON.stringify(await page.evaluate(() => {
+          const v = document.querySelector('#dancinglights').physics;
+          return { canvas: [v.canvas.width, v.canvas.height, v.canvasWidth, v.canvasHeight], scene: v.layer.getBoundingClientRect().toJSON(),
+            modal: document.querySelector('dialog').getBoundingClientRect().toJSON(), viewport: [innerWidth, innerHeight], pending: v.resizePending };
+        })), contentType: 'application/json' });
+      }
+      expect(covered.equals(uncovered), 'bottom-half pixels remain visible through the modal backdrop').toBe(true);
       for (const selector of ['.listening-toggle', '.identify-song', '.motion-button', '.scroll-lights', '.camera-rotation', '.depth-slider', '.display-controls > summary', '.visual-gain-mode']) {
         if (selector === '.visual-gain-mode' && !await page.locator('.audio-tuning').evaluate(n => n.closest('details').open)) await page.getByText('Audio response & readouts', { exact: true }).click();
         await page.locator(selector).scrollIntoViewIfNeeded();
