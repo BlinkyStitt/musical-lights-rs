@@ -53,3 +53,12 @@ test('saved Physics settings retain the complete configuration at 20 and 30 ms r
     assert.equal(read([.8, 12, 16, .6, .4, .5, rise, .7]).physics, undefined);
   }
 });
+
+test('physics preferences accept the same Float32 boundaries as the WASM engine', () => {
+  const read=physics=>readSettings({getItem:()=>JSON.stringify({version:1,physics})});
+  for(const depth of [.2,.48,2]) {
+    const physics=Array.from(new Float32Array([.4,12,8,.72,.12,depth,.02,.32]));
+    assert.deepEqual(read(physics).physics,physics);
+  }
+  for(const value of [.3199,4.001]) assert.equal(read([.4,12,8,.72,.12,.48,.02,value]).physics,undefined);
+});
