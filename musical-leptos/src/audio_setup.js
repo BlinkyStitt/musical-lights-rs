@@ -20,7 +20,10 @@ export function suspendForStartup(context) {
 function beginSession(context, card, source) {
     if (context.audioRetired) throw new Error('Audio session has closed');
     const session = { sessionId: ++nextSession, source, sampleRate: context.sampleRate,
-        diagnostics: card.querySelector('.tone-trace')?.checked === true, state: 'starting', repeat: false };
+        diagnostics: card.querySelector('.tone-trace')?.checked === true, state: 'starting', repeat: false,
+        continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 } };
+    const analysisNotice = card.querySelector('.analysis-status');
+    if (analysisNotice) analysisNotice.textContent = '';
     contextSessions.set(context, session);
     session.restart = () => context.inputResume ?? { source };
     card.dataset.audioSession = String(session.sessionId);
@@ -56,6 +59,7 @@ function beginSession(context, card, source) {
     context.addEventListener('statechange', stateChanged);
     session.close = () => {
         session.publish('stopped', 'cleanup'); session.closed = true;
+        if (card.dataset.audioSession === String(session.sessionId) && analysisNotice) analysisNotice.textContent = '';
         context.removeEventListener('statechange', stateChanged);
     };
     return session;
@@ -141,6 +145,15 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
             } }));
         if (event.data.type === 'frame' && isCurrentProcessorMessage(node, event.data)) {
             const data = event.data;
+            const continuity = data.continuity;
+            const recovered = continuity.segment > session.continuity.segment;
+            const calibrationCanceled = continuity.calibrationCancellations > session.continuity.calibrationCancellations;
+            session.continuity = continuity;
+            if (recovered) {
+                const notice = card.querySelector('.analysis-status');
+                if (notice) notice.textContent = `Audio recovered after a timing change. Measurements restarted.${calibrationCanceled ? ' Calibration was interrupted; the last accepted calibration remains in use.' : ''}`;
+                session.publish(session.state, 'analysis resumed after sample gap');
+            }
             const now = performance.now();
             if (now - (session.readoutAt ?? -Infinity) >= 1000 / (context.loudnessSettings?.[26] ?? 10)) {
                 session.readoutAt = now;

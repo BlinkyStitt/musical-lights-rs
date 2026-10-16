@@ -17,7 +17,7 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
           for (let i = 0; i < 24; i++) state.set([.4, .4, start, 0], 3 + i * 4);
           // Deliver both a newer snapshot and a duplicate; neither renews the attack.
           for (let repeat = 0; repeat < 2; repeat++) window.testNode.port.dispatchEvent(new MessageEvent('message', {
-            data: { type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
+            data: { type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0 },
           }));
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           edges.push({ age, edge: document.querySelector('#dancinglights').physics.edges[0] });

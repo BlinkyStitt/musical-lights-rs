@@ -84,14 +84,14 @@ test(`diagnostic plot separates ${end} render geometry and its clock from analys
     view.bars.instanceMatrix.array[8 * 16 + 5] = .2 * view.height;
     view.bars.instanceMatrix.array[(8 + 72) * 16 + 5] = -.2 * view.height;
     if (Math.abs(view.renderedHeight(8, end === 'top' ? 1 : 0) / view.height - .2) > 1e-5) throw Error('Wrong rendered end');
-    const trace = new Float64Array(465);
+    const trace = new Float64Array(466);
     trace[315] = 1.1; trace[242 + 8] = 2.5; trace[319 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
     ctx.moveTo = function(x, y) { moves.push([x, y]); return original.call(this, x, y); };
-    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 465, receivedAt, receivedAudioTime: 1.25 } })); }
+    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 466, receivedAt, receivedAudioTime: 1.25 } })); }
     finally { ctx.moveTo = original; }
     const sample = review.samples[0];
-    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 465, receivedAt } }));
+    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 466, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
   }, end);
   expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase: 'both', renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });

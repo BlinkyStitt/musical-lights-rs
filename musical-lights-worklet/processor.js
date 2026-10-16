@@ -66,9 +66,16 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         for (let offset = 0; offset < samples.length;) {
             const length = Math.min(samples.length - offset, this.input.length);
             for (let i = 0; i < length; i++) this.input[i] = samples[offset + i];
-            if (!this.wasm.processor_process(this.processor, length, BigInt(currentFrame + offset))) {
-                this.fail(this.analysisError());
-                return false;
+            const firstSample = BigInt(currentFrame + offset);
+            if (!this.wasm.processor_process(this.processor, length, firstSample)) {
+                // Reject the discontinuous block first, then explicitly start a
+                // new analysis segment at that same sample index. Playback and
+                // capture keep running. Never fill clock intervals with synthetic or replayed PCM.
+                if (!this.wasm.processor_recover_discontinuity(this.processor)
+                    || !this.wasm.processor_process(this.processor, length, firstSample)) {
+                    this.fail(this.analysisError());
+                    return false;
+                }
             }
             offset += length;
         }
@@ -96,7 +103,15 @@ class LoudnessProcessor extends AudioWorkletProcessor {
                 this.wasm.processor_trace_clear(this.processor);
                 transfer.push(trace.buffer);
             }
-            this.port.postMessage({ type: 'frame', sessionId: this.sessionId, ...extra, state, sones: this.wasm.processor_sones(this.processor), clipped: this.wasm.processor_clipped(this.processor), calibration: this.wasm.processor_calibration_result(this.processor) }, transfer);
+            const continuity = {
+                segment: this.wasm.processor_segment(this.processor),
+                missingSamples: Number(this.wasm.processor_missing_samples(this.processor)),
+                overlapSamples: Number(this.wasm.processor_overlap_samples(this.processor)),
+                expectedSample: Number(this.wasm.processor_gap_expected(this.processor)),
+                receivedSample: Number(this.wasm.processor_gap_received(this.processor)),
+                calibrationCancellations: this.wasm.processor_calibration_cancellations(this.processor),
+            };
+            this.port.postMessage({ type: 'frame', sessionId: this.sessionId, ...extra, continuity, state, sones: this.wasm.processor_sones(this.processor), clipped: this.wasm.processor_clipped(this.processor), calibration: this.wasm.processor_calibration_result(this.processor) }, transfer);
             this.pending = true;
             this.lastSent = currentFrame;
         }
@@ -107,7 +122,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         const detail = this.wasm.processor_error_detail(this.processor);
         return ({
             1: 'Invalid audio block.', 2: `sample ${detail} is not finite`,
-            3: `Audio sample clock jumped by ${detail} samples. Restart listening.`,
+            3: `Audio sample clock jumped by ${detail} samples (expected ${this.wasm.processor_gap_expected(this.processor)}, received ${this.wasm.processor_gap_received(this.processor)}). Restart listening.`,
             4: `Third-octave band ${detail} exceeds the model’s 120 dB SPL limit.`,
             5: 'Audio analysis stopped. Restart listening.',
             6: 'Calibration signal clipped. Reduce input gain and restart.',

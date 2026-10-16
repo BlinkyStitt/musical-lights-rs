@@ -594,6 +594,7 @@ pub fn DancingLights(
             </Show>
             <div class="recovery-notices">
             <p class="physics-status" role="status"></p>
+            <p class="analysis-status" role="status"></p>
             <p class="audio-error" role="alert">{move || error_notice.get()}</p>
             <p class="audio-stopped" role="status">{move || if audio_stopped.get() && error_notice.get().is_none() {
                 "Audio stopped. Turn on Listening or use Play audio to restart."

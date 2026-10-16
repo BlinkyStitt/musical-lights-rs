@@ -125,7 +125,7 @@ test('continuous scrolling carries source identity and stops in place', async ({
     const state = new Float64Array(102); state.set([0, 1, .18], 99); state.set([window.audioNow, 0, 5]);
     for (let i = 0; i < 24; i++) state.set([levels[i], levels[i], i === 0 ? window.audioNow : -1, 0], 3 + i * 4);
     window.testNode.port.dispatchEvent(new MessageEvent('message', { data: {
-      type: 'frame', sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
+      type: 'frame', continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 }, sones: 0, readouts: new Float64Array([-160, -160, 0, 1]), quantum: 128, sessionId: Number(document.querySelector('.audio-card').dataset.audioSession), state, clipped: 0,
     } }));
   });
   const sourceLabel = await page.getByRole('meter').first().getAttribute('aria-label');

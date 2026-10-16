@@ -1015,3 +1015,20 @@ GPS/PPS epoch timing, radio capacity, installed heading error, LED response and
 output timing, electrical load, thermal behavior and runtime need physical acceptance.
 The current GPS board timing profile has unknown uncertainty, so it cannot report
 Locked. No battery measurement profile exists; battery state remains Unknown.
+
+## Audio sample gaps
+
+A sample-clock discontinuity starts a new analysis segment at the real received
+sample index. Capture and digital playback keep the same graph, transport,
+monitor and source controls. The app shows a recovery notice. The processor
+records missing and overlapping clock intervals separately. It does not fill those intervals with silence or repeat samples. It resets loudness,
+gain, gate, tempo and attack history, and keeps the accepted calibration and tuning.
+An interrupted reference measurement is canceled. Invalid PCM or a missing channel
+remains an error. A backward clock starts a new declared segment without
+rewinding playback; sample indices stay truthful within each segment.
+
+The current worklet trace is version 7, with 466 values per row. The final value
+identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v8`
+and include continuity counters in their chunks and session metadata. Diagnostic
+plots break at segment boundaries. A sample gap invalidates an active phone FPS
+record even when playback recovers; recovery is not continuity acceptance.

@@ -21,8 +21,8 @@ export function flashTrace(module, pcm, reduced = false, { calibration = 2, chun
   const h = w.processor_create(1, calibration, Number(reduced)), rows = [];
   w.processor_trace_enable(h, 1);
   const stride = w.processor_trace_stride(h);
-  assert.equal(stride, 465);
-  assert.equal(w.processor_trace_version(h), 6);
+  assert.equal(stride, 466);
+  assert.equal(w.processor_trace_version(h), 7);
   assert.equal(w.processor_snapshot_length(h), 102);
   try {
     for (let at = 0; at < pcm.length; at += chunk) {
