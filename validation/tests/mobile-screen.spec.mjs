@@ -306,6 +306,7 @@ test('browser back closes the expanded view and restores the page', async ({ pag
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   await page.goBack();
+  await expect(page.getByRole('heading', { name: 'About Musical Lights', exact: true })).toBeVisible();
   await expect(page.locator('.site-header')).toBeVisible();
   await expect(page.locator('[data-expanded]')).toHaveCount(0);
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
