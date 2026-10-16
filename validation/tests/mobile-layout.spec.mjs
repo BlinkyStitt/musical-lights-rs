@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady, scrollingIntersections } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, physicsReady, scrollingIntersections } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
-test('phone opens expanded without capture and allows scrolling to notices, song and Exit in short landscape', async ({ browser }) => {
+test('phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();
@@ -22,15 +22,15 @@ test('phone opens expanded without capture and allows scrolling to notices, song
       });
       for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
         await page.setViewportSize(viewport);
+        await openFullscreenSettings(page);
         const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
-          'label:has(.motion-button)', 'label:has(.scroll-lights)', '.fullscreen-button',
-          '.physics-status', '.frame-rate', '.camera-rotation'];
+          'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation'];
         expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
         expect(await page.evaluate(() => {
           const camera = document.querySelector('.camera-controls').getBoundingClientRect();
           const controls = document.querySelector('.audio-controls').getBoundingClientRect();
           const slider = document.querySelector('.camera-rotation'), box = slider.getBoundingClientRect();
-          return { separate: camera.bottom <= controls.top, touchSize: box.height >= 44,
+          return { separate: controls.bottom <= camera.top, touchSize: box.height >= 44,
             aligned: Math.abs(box.y + box.height / 2 - camera.y - camera.height / 2) < 1,
             touchable: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === slider };
         })).toEqual({ separate: true, touchSize: true, aligned: true, touchable: true });
@@ -42,6 +42,9 @@ test('phone opens expanded without capture and allows scrolling to notices, song
           sceneLarge: document.querySelector('#dancinglights').getBoundingClientRect().height >= 200,
           fps: /^\d+ FPS$/.test(document.querySelector('.frame-rate').textContent),
         }))).toEqual({ angle: 29, sceneLarge: true, fps: true });
+        await closeFullscreenSettings(page);
+        await expect(page.locator('.physics-status')).toBeInViewport({ ratio: 1 });
+        await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
       }
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
       await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');

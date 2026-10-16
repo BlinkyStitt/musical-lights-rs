@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 // Mirror geometry fixtures use a fixed count. Auto has separate startup tests.
@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
       localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, mirrorCount: 6 }));
   });
 });
-async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
+async function normal(page) { await physicsReady(page); await normalView(page); }
 
 test('bars continue above and below the physical room', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -366,6 +366,7 @@ test('mirror count saves, rejects fractions and resets without changing physics'
 
 test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {
   await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await physicsReady(page);
+  await openFullscreenSettings(page);
   await expect(page.locator('.tempo-readout')).toBeHidden();
   await page.locator('.listening-toggle').check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
@@ -703,8 +704,11 @@ for (const path of ['/', '/advanced/']) {
         return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
       });
       await expect(tempo).toHaveText('132 BPM');
-      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation', '.fullscreen-button']);
-      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1, '.fullscreen-button': 1 });
+      await openFullscreenSettings(page);
+      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation']);
+      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1 });
+      await closeFullscreenSettings(page);
+      await expect(page.locator('.fullscreen-button')).toBeInViewport({ ratio: 1 });
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     }
@@ -734,9 +738,11 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
     await page.setViewportSize(viewport);
     await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
     await expect(fps).toHaveText(/^\d+ FPS$/);
+    await openFullscreenSettings(page);
     await fps.scrollIntoViewIfNeeded();
     await expect(fps).toBeInViewport({ratio:1});
     await expect(page.locator('.camera-rotation')).toBeInViewport({ratio:1});
+    await closeFullscreenSettings(page);
     await page.getByRole('button',{name:'Exit fullscreen',exact:true}).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button',{name:'Exit fullscreen',exact:true})).toBeInViewport({ratio:1});
     expect(await fps.evaluate(node => node.parentElement.className)).toBe('camera-controls');
@@ -784,6 +790,7 @@ for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
 test('camera sweep turns smoothly on the horizontal plane without attack shake', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(origin); await physicsReady(page);
+  await openFullscreenSettings(page);
   const result = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     cancelAnimationFrame(v.request); v.request = null;

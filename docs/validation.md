@@ -1007,3 +1007,10 @@ GPS/PPS epoch timing, radio capacity, installed heading error, LED response and
 output timing, electrical load, thermal behavior and runtime need physical acceptance.
 The current GPS board timing profile has unknown uncertainty, so it cannot report
 Locked. No battery measurement profile exists; battery state remains Unknown.
+
+Fullscreen settings use the same control nodes as the normal page.
+`validation/tests/fullscreen-settings.spec.mjs` checks the top-half dialog,
+unchanged lower-half pixels, scene and collider size, control identity,
+settings persistence, keyboard focus, native fullscreen exit, and route cleanup.
+The scene does not scroll. The modal body has its own scroll area and a fixed
+Close button. These are browser checks; they do not prove physical-phone speed.

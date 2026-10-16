@@ -1,3 +1,4 @@
+import { openFullscreenSettings, closeFullscreenSettings } from '../physics-state.mjs';
 import { test, expect } from '@playwright/test';
 
 test('unsupported native screen APIs still allow the lights-only view', async ({ page }) => {
@@ -90,19 +91,22 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     expect(card).toEqual({ x: 0, y: 0, ...viewport });
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
     expect((await page.locator('#dancinglights').boundingBox()).height).toBeGreaterThan(before.height + 100);
+    await expect(page.locator('.wake-status')).toBeHidden();
+    await expect(page.locator('.control-note')).toBeHidden();
+    await openFullscreenSettings(page);
     for (const name of ['Listening', 'Phone motion', 'Scroll lights', 'Identify song']) {
       await expect(page.getByRole('checkbox', { name, exact: true })).toBeVisible();
     }
-    await expect(page.locator('.control-note')).toBeHidden();
-    await expect(page.locator('.wake-status')).toBeHidden();
     await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
     await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
+    await page.locator('.frame-rate').scrollIntoViewIfNeeded();
     await expect(page.locator('.frame-rate')).toBeInViewport({ ratio: 1 });
     await expect(page.locator('.site-header')).toBeHidden();
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });
       await page.screenshot({ path: `test-results/fullscreen-${viewport.width}-${colorScheme}.png` });
     }
+    await closeFullscreenSettings(page);
     // Keep the real exit button available to touch users in the fullscreen view.
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
     await page.mouse.move(viewport.width / 2, 80);
