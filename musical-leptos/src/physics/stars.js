@@ -58,11 +58,13 @@ export class Starfield {
           float glint = pow(cycle, 10.0);
           float pulse = musical * pow(.5 + .5 * cos(6.28318530718 * beat + star.y), 8.0);
           float attack = attacks[int(star.z)];
-          brightness = min(1.0, star.w * (.35 + .65 * cycle)
-            + (.2 + .35 * star.w) * glint + .55 * pulse + .8 * attack);
+          // Halfway between the earlier subtle shimmer and the stronger glints.
+          brightness = min(1.0, star.w * (.575 + .425 * cycle)
+            + (.1 + .175 * star.w) * glint + (.275 + .11 * star.w) * pulse
+            + (.4 + .325 * star.w) * attack);
           starTint = tint;
           // Keep bright catalog stars visible when the room lowers its render resolution.
-          gl_PointSize = (star.x + .8 * glint + .6 * pulse + 1.2 * attack) * max(1.0, pixelRatio);
+          gl_PointSize = (star.x + .4 * glint + .3 * pulse + .6 * attack) * max(1.0, pixelRatio);
           // Gnomonic projection, 70-degree vertical field. Reject the rear hemisphere.
           if (position.z <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
           else gl_Position = vec4(position.x / (.7002075382 * aspect), position.y / .7002075382, position.z, position.z);
