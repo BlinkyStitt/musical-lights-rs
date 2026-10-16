@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { physicsReady } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, physicsReady } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 for (const theme of ['light', 'dark']) {
@@ -25,12 +25,14 @@ for (const theme of ['light', 'dark']) {
     await expect(page.locator('.input-source-controls')).toBeHidden();
     for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
+      await openFullscreenSettings(page);
       for (const label of ['Listening', 'Identify song', 'Phone motion', 'Scroll lights']) {
         const control = page.getByRole('checkbox', { name: label, exact: true });
         await control.locator('..').evaluate(n => n.scrollIntoView({ block: 'center' }));
         await expect(control.locator('..')).toBeInViewport({ ratio: 1 });
         expect(await control.locator('..').evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       }
+      await closeFullscreenSettings(page);
       const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
       await exit.evaluate(n => n.scrollIntoView({ block: 'center' }));
       await expect(exit).toBeInViewport({ ratio: 1 });

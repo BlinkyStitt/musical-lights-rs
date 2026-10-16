@@ -153,8 +153,7 @@ test('a backward analysis clock keeps the same playback position and declares it
   expect(after.continuity.missingSamples).toBe(0); expect(after.continuity.overlapSamples).toBe(128);
   expect(after.continuity.expectedSample - after.continuity.receivedSample).toBe(128);
   expect(after.chunks.some(c => c.values.some((value, i) => i % c.stride === 465 && value === 1))).toBe(true);
-  // Recovery notices flow below the fixed-size scene. Keep the existing
-  // scrollable bottom controls reachable without shrinking the collider.
+  // Recovery keeps the fixed scene and leaves Exit available in the toolbar.
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).scrollIntoViewIfNeeded();
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport();
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();

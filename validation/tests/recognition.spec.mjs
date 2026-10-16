@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { syntheticAudio, physicsReady, normalView } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, syntheticAudio, physicsReady, normalView } from '../physics-state.mjs';
 
 const localBase = 'http://127.0.0.1:8101';
 // Published-build checks still replace the endpoint with a same-origin mock.
@@ -209,6 +209,7 @@ test('song title fits a phone, appears in fullscreen, and respects Reduced Motio
   await expect(page.locator('.recognized-song')).toHaveClass(/song-overflow/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect(page.locator('.song-title')).toBeVisible();
+  await openFullscreenSettings(page);
   await expect(page.locator('.recognition-ring')).toBeVisible();
   await expect(page.locator('.recognition-cooldown, .cancel-recognition')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -219,7 +220,7 @@ test('song title fits a phone, appears in fullscreen, and respects Reduced Motio
   await expect.poll(() => page.evaluate(() => {
     const status = document.querySelector('.recognition-ring').getBoundingClientRect();
     const strip = document.querySelector('.recognized-song').getBoundingClientRect();
-    return strip.bottom <= status.top;
+    return status.bottom <= strip.top;
   })).toBe(true);
 });
 
@@ -339,6 +340,7 @@ test('the song toggle sits beside Listening below the lights on a narrow phone a
   await expect(identify).toHaveCSS('font-weight', '700');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await openFullscreenSettings(page);
   await identify.scrollIntoViewIfNeeded();
   await expect(identify).toBeInViewport();
   await expect(identify).toBeEnabled();
@@ -359,6 +361,7 @@ test('the song toggle sits beside Listening below the lights on a narrow phone a
   // still leave fullscreen intact after that deferred gesture would complete.
   await page.waitForTimeout(350);
   await expect(exit).toBeVisible();
+  await closeFullscreenSettings(page);
   await exit.click();
   await page.screenshot({ path: testInfo.outputPath('prominent-song-button-phone.png') });
 });
@@ -369,6 +372,7 @@ test.describe('song controls with touch input', () => {
     await page.setViewportSize({ width: 320, height: 720 });
     const uploads = await setup(page);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
+    await openFullscreenSettings(page);
     await page.getByRole('button', { name: 'Video', exact: true }).focus();
     await expect(page.locator('.control-help')).toBeVisible();
     await page.getByRole('checkbox', { name: 'Identify song', exact: true }).tap();
@@ -377,6 +381,7 @@ test.describe('song controls with touch input', () => {
     await page.waitForTimeout(350);
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
     expect(uploads).toHaveLength(1);
+    await closeFullscreenSettings(page);
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
   });
@@ -393,6 +398,7 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
   await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
   await expect(page.locator('.recognition-status')).toBeEmpty();
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await openFullscreenSettings(page);
   for (const viewport of [{ width: 320, height: 720 }, { width: 568, height: 320 }, { width: 320, height: 720 }]) {
     await page.setViewportSize(viewport);
     await expect(page.locator('.song-title')).toHaveCSS('white-space', 'normal');
@@ -402,10 +408,10 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
       const status = document.querySelector('.recognition-ring').getBoundingClientRect();
         const strip = document.querySelector('.recognized-song').getBoundingClientRect();
       const title = document.querySelector('.song-title').getBoundingClientRect();
-      return { statusBelowSong: strip.bottom <= status.top,
+      return { statusAboveSong: status.bottom <= strip.top,
         titleInsideStrip: title.top >= strip.top && title.bottom <= strip.bottom,
         titleInsideViewport: title.left >= 0 && title.right <= innerWidth && title.top >= 0 && title.bottom <= innerHeight };
-    })).toEqual({ statusBelowSong: true, titleInsideStrip: true, titleInsideViewport: true });
+    })).toEqual({ statusAboveSong: true, titleInsideStrip: true, titleInsideViewport: true });
     for (const selector of ['.recognition-ring', '.recognized-song']) {
       await page.locator(selector).scrollIntoViewIfNeeded();
       await expect(page.locator(selector)).toBeInViewport({ ratio: 1 });
@@ -417,6 +423,7 @@ test('fullscreen overlays stay above wrapped song titles with Reduced Motion', a
     return lines.getClientRects().length >= 3;
   })).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('fullscreen-wrapped-song.png') });
+  await closeFullscreenSettings(page);
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect(page.locator('.recognized-song')).toBeVisible();
   expect(await page.locator('.recognized-song').evaluate(strip => strip.getBoundingClientRect().top >= document.querySelector('.spectrum-panel').getBoundingClientRect().bottom)).toBe(true);

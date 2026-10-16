@@ -49,9 +49,14 @@
 
 - Keep common controls grouped, Listening beside Identify song, visible focus,
   native switches and 44-pixel touch targets. Use hover/focus help and a mobile
-  tap popup. Keep less common settings collapsed below the scene.
-- Mobile opens in the expanded video/visualizer/bottom-controls layout without
-  starting audio or requesting native fullscreen. Normal pages use the same
+  tap popup. Keep less common settings collapsed below the scene on normal pages.
+  In fullscreen, place the shared controls in a Settings modal over the top
+  half of the scene. Keep the lower half visible through a clear backdrop.
+  Keep the main view fixed. Scroll settings inside the modal body; keep its
+  Close button fixed and trap focus.
+  Escape closes Settings before it exits fullscreen.
+- Mobile opens in the expanded video/visualizer layout with Settings and Exit
+  controls, without starting audio or requesting native fullscreen. Normal pages use the same
   video/scene/bottom-controls order, with extra settings and learning below.
   Keep Exit usable in short
   landscape screens, with safe areas, recognition and recovery notices.

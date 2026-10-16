@@ -74,23 +74,25 @@ export class Presentation {
     this.settings = card.preferences = readSettings(this.storage);
     this.originalAudioType = navigator.audioSession?.type;
     this.microphoneActive = false; this.videoPlaying = false;
+    this.fullscreenButton = card.querySelector('.fullscreen-button');
     this.row = card.querySelector('.button-row'); this.panel = card.querySelector('.video-panel');
     this.panel.innerHTML = `<div class="video-entry"><form class="video-form"><label>YouTube link<span class="youtube-input"><input class="youtube-link" aria-label="YouTube link" type="url" placeholder="https://youtu.be/…" maxlength="2048" /><button type="button" class="clear-youtube" aria-label="Clear YouTube link" title="Clear YouTube link">×</button></span></label><button type="submit">Load video</button><button type="button" class="remove-video">Remove video</button></form><p class="youtube-status" role="status"></p></div><div class="youtube-frame"></div>`;
+    this.entry = this.panel.querySelector('.video-entry');
     this.videoButton = document.createElement('button'); this.videoButton.type = 'button'; this.videoButton.className = 'video-button'; this.videoButton.textContent = 'Video';
-    this.videoButton.setAttribute('aria-expanded', 'false'); this.row.insertBefore(this.videoButton, this.row.querySelector('.fullscreen-button'));
+    this.videoButton.setAttribute('aria-expanded', 'false'); this.row.insertBefore(this.videoButton, this.fullscreenButton);
     this.listen(this.videoButton, 'click', () => {
       this.card.classList.add('video-editing'); this.updateVideoEditor();
       this.panel.hidden = false; this.videoButton.setAttribute('aria-expanded', 'true');
-      this.panel.querySelector('input').focus();
+      this.entry.querySelector('input').focus();
     });
-    this.listen(this.panel.querySelector('form'), 'submit', event => { event.preventDefault(); this.loadVideo(this.panel.querySelector('input').value); });
-    this.listen(this.panel.querySelector('.clear-youtube'), 'click', () => {
-      const input = this.panel.querySelector('input'); input.value = ''; input.focus();
+    this.listen(this.entry.querySelector('form'), 'submit', event => { event.preventDefault(); this.loadVideo(this.entry.querySelector('input').value); });
+    this.listen(this.entry.querySelector('.clear-youtube'), 'click', () => {
+      const input = this.entry.querySelector('input'); input.value = ''; input.focus();
       this.settings.youtubeLink = ''; this.save();
-      this.panel.querySelector('.youtube-status').textContent = '';
+      this.entry.querySelector('.youtube-status').textContent = '';
     });
-    this.listen(this.panel.querySelector('.remove-video'), 'click', () => { this.endVideoEdit(); this.generation++; this.player?.destroy(); this.player = null; this.videoPlaying = false; this.updateAudioType(); this.panel.hidden = true; this.card.classList.remove('video-active'); this.videoButton.setAttribute('aria-expanded', 'false'); this.settings.youtubeLink = ''; this.panel.querySelector('input').value = ''; this.save(); });
-    this.panel.querySelector('input').value = this.settings.youtubeLink;
+    this.listen(this.entry.querySelector('.remove-video'), 'click', () => { this.endVideoEdit(); this.fullscreenSettings?.hide(); this.generation++; this.player?.destroy(); this.player = null; this.videoPlaying = false; this.updateAudioType(); this.panel.hidden = true; this.card.classList.remove('video-active'); this.videoButton.setAttribute('aria-expanded', 'false'); this.settings.youtubeLink = ''; this.entry.querySelector('input').value = ''; this.save(); });
+    this.entry.querySelector('input').value = this.settings.youtubeLink;
     this.popup = document.createElement('div'); this.popup.id = 'control-help'; this.popup.className = 'control-help'; this.popup.hidden = true; this.popup.setAttribute('role', 'tooltip'); card.append(this.popup);
     this.enhanceControls();
     this.observer = new MutationObserver(() => this.enhanceControls()); this.observer.observe(this.row, { childList: true, subtree: true });
@@ -102,7 +104,7 @@ export class Presentation {
       this.listen(window.visualViewport, 'scroll', () => this.updateVideoEditor());
     }
     this.listen(document, 'pointerdown', event => { if (!this.popup.contains(event.target) && !this.anchor?.contains(event.target)) this.hideHelp(); });
-    this.listen(document, 'keydown', event => { if (event.key === 'Escape' && !this.popup.hidden) { event.preventDefault(); event.stopImmediatePropagation(); this.hideHelp(); } }, true);
+    this.listen(document, 'keydown', event => { if (event.key === 'Escape' && !this.popup.hidden) this.hideHelp(); }, true);
     this.listen(window, 'scroll', () => this.positionHelp(), { passive: true });
     this.listen(window, 'resize', () => this.positionHelp());
     this.listen(card, 'audio-session', ({ detail }) => { this.microphoneActive = detail.source === 'microphone' && !['stopped', 'ended'].includes(detail.state); this.updateAudioType(); if (this.anchor?.dataset.help === 'listening-toggle') this.showHelp(this.anchor, 'listening-toggle'); });
@@ -140,6 +142,7 @@ export class Presentation {
     mountSliderControls(this);
     this.save(false);
     card.presentation = this;
+    this.fullscreenSettings = new FullscreenSettings(this);
   }
   listen(target, type, callback, options) { target.addEventListener(type, callback, options); this.removers.push(() => target.removeEventListener(type, callback, options)); }
   save(persist = true) { this.syncDepth?.(); if (persist) { try { this.storage?.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Session settings remain usable. */ } } this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
@@ -162,7 +165,7 @@ export class Presentation {
       this.listen(span, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(span, className); } });
       span.dataset.explanation = text;
     }
-    for (const button of [this.videoButton, this.row.querySelector('.fullscreen-button')]) {
+    for (const button of [this.videoButton, this.fullscreenButton]) {
       if (button.dataset.help) continue;
       button.dataset.help = 'action';
       this.listen(button, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(button, button === this.videoButton ? 'video' : 'fullscreen'); });
@@ -188,8 +191,8 @@ export class Presentation {
   hideHelp() { this.popup.hidden = true; this.anchor?.removeAttribute('aria-describedby'); this.anchor?.setAttribute('aria-expanded', 'false'); this.anchor = null; }
   updateVideoEditor() {
     const expanded = this.card.hasAttribute('data-expanded');
-    if (!expanded || !this.card.classList.contains('video-editing')) {
-      if (!expanded && this.editViewport && this.panel.contains(document.activeElement)) document.activeElement.blur();
+    if (!expanded || (!this.card.classList.contains('video-editing') && !this.fullscreenSettings?.dialog.open)) {
+      if (!expanded && this.editViewport && this.entry.contains(document.activeElement)) document.activeElement.blur();
       this.editViewport = null;
       for (const name of ['--expanded-height', '--video-editor-top', '--video-editor-height']) this.card.style.removeProperty(name);
       return;
@@ -207,13 +210,14 @@ export class Presentation {
   }
   endVideoEdit() {
     this.card.classList.remove('video-editing');
-    if (this.panel.contains(document.activeElement)) document.activeElement.blur();
+    if (this.entry.contains(document.activeElement)) document.activeElement.blur();
     this.updateVideoEditor();
   }
   async loadVideo(link) {
-    const status = this.panel.querySelector('.youtube-status');
+    const status = this.entry.querySelector('.youtube-status');
     let video; try { video = parseYouTube(link); } catch (error) { status.textContent = error.message; return; }
     this.endVideoEdit();
+    this.fullscreenSettings?.hide();
     const generation = ++this.generation;
     // Remember the submitted field now. A later clear must remain cleared,
     // even if the player API finishes loading after that action.
@@ -236,7 +240,100 @@ export class Presentation {
         } });
     } catch (error) { if (!this.closed && generation === this.generation) status.textContent = error.message; }
   }
-  close() { this.closed = true; this.generation++; this.endVideoEdit(); this.observer.disconnect(); this.screenObserver.disconnect(); for (const remove of this.removers) remove(); this.player?.destroy(); this.hideHelp(); this.microphoneActive = this.videoPlaying = false; this.updateAudioType(); this.popup.remove(); delete this.card.presentation; }
+  close() { this.closed = true; this.generation++; this.fullscreenSettings.close(); this.endVideoEdit(); this.observer.disconnect(); this.screenObserver.disconnect(); for (const remove of this.removers) remove(); this.player?.destroy(); this.hideHelp(); this.microphoneActive = this.videoPlaying = false; this.updateAudioType(); this.popup.remove(); delete this.card.presentation; }
+}
+
+// One control tree serves the page and the fullscreen dialog. Moving the DOM
+// preserves bound events, live values, audio sessions, and controller ownership.
+class FullscreenSettings {
+  constructor(presentation) {
+    this.presentation = presentation;
+    this.card = presentation.card;
+    this.moves = [];
+    this.exit = this.card.querySelector('.fullscreen-button');
+    this.toolbar = document.createElement('div');
+    this.toolbar.className = 'fullscreen-toolbar';
+    this.button = document.createElement('button');
+    this.button.type = 'button';
+    this.button.className = 'fullscreen-settings-button';
+    this.button.textContent = 'Settings';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-controls', 'fullscreen-settings');
+    this.button.setAttribute('aria-expanded', 'false');
+    this.toolbar.append(this.button);
+    this.dialog = document.createElement('dialog');
+    this.dialog.id = 'fullscreen-settings';
+    this.dialog.className = 'fullscreen-settings';
+    this.dialog.setAttribute('aria-labelledby', 'fullscreen-settings-title');
+    this.dialog.innerHTML = `<header class="fullscreen-settings-header"><h2 id="fullscreen-settings-title">Settings</h2><button type="button" class="close-fullscreen-settings" autofocus>Close settings</button></header><div class="fullscreen-settings-body"></div>`;
+    this.body = this.dialog.querySelector('.fullscreen-settings-body');
+    this.card.prepend(this.toolbar);
+    this.card.append(this.dialog);
+    presentation.listen(this.button, 'click', () => this.open());
+    presentation.listen(this.dialog.querySelector('button'), 'click', () => this.hide());
+    presentation.listen(this.dialog, 'keydown', event => {
+      if (event.key !== 'Tab') return;
+      const controls = [...this.dialog.querySelectorAll('button, input, select, textarea, summary, a[href], [tabindex]')]
+        .filter(node => node.tabIndex >= 0 && !node.disabled && node.checkVisibility({ visibilityProperty: true }));
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+    presentation.listen(this.dialog, 'cancel', event => { event.preventDefault(); this.hide(); });
+    this.observer = new MutationObserver(() => this.sync());
+    this.observer.observe(this.card, { attributes: true, attributeFilter: ['data-expanded'] });
+    this.sync();
+  }
+  move(node, destination) {
+    const marker = document.createComment('fullscreen control position');
+    node.before(marker);
+    this.moves.push({ node, marker });
+    destination.append(node);
+  }
+  sync() {
+    if (this.card.hasAttribute('data-expanded')) {
+      if (this.moves.length) return;
+      const active = document.activeElement;
+      this.move(this.exit, this.toolbar);
+      const controls = '.audio-controls, .scene-controls, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
+      for (const node of [...this.card.children]) if (node.matches(controls)) this.move(node, this.body);
+      this.move(this.card.querySelector('.video-entry'), this.body);
+      this.body.prepend(this.presentation.entry);
+      if (this.card.contains(active)) active.focus({ preventScroll: true });
+      this.presentation.hideHelp();
+    } else this.restore();
+  }
+  open() {
+    if (!this.card.hasAttribute('data-expanded') || this.dialog.open) return;
+    this.presentation.hideHelp();
+    this.dialog.append(this.presentation.popup);
+    this.dialog.showModal();
+    this.body.scrollTop = 0;
+    this.button.setAttribute('aria-expanded', 'true');
+    this.presentation.updateVideoEditor();
+  }
+  hide() {
+    if (this.dialog.open) this.dialog.close();
+    this.presentation.hideHelp();
+    this.card.append(this.presentation.popup);
+    this.button.setAttribute('aria-expanded', 'false');
+    this.presentation.endVideoEdit();
+    if (!this.presentation.closed && this.card.hasAttribute('data-expanded')) this.button.focus({ preventScroll: true });
+  }
+  restore() {
+    const active = document.activeElement;
+    this.hide();
+    for (const { node, marker } of this.moves) { marker.replaceWith(node); }
+    this.moves.length = 0;
+    if (!this.presentation.closed && active === this.exit) this.exit.focus({ preventScroll: true });
+    this.presentation.hideHelp();
+  }
+  close() {
+    this.observer.disconnect();
+    this.restore();
+    this.toolbar.remove();
+    this.dialog.remove();
+  }
 }
 
 // Keep the native range as the single value and event source.

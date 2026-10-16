@@ -41,7 +41,7 @@ test('box depth editor steps in centimeters, validates limits and restores witho
   await editor.fill('200');await editor.press('Enter');await expect(range).toHaveValue('200');
   await page.getByRole('button',{name:'Increase Box depth (cm)',exact:true}).click();await expect(range).toHaveValue('200');
   await page.getByRole('button',{name:'Edit Box depth (cm)',exact:true}).click();await editor.fill('201');await editor.press('Enter');await expect(editor).toBeVisible();await expect(range).toHaveValue('200');await editor.press('Escape');
-  await page.reload();await physicsReady(page);await expect(range).toHaveValue('200');
+  await page.reload();await physicsReady(page);await normalView(page);await expect(range).toHaveValue('200');
   expect(await page.evaluate(()=>!!document.querySelector('.audio-card').activeAudioContext)).toBe(false);
 });
 

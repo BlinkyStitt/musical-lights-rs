@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
 const origin = 'http://127.0.0.1:8101';
-async function normal(page) { const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true }); if (await exit.isVisible()) await exit.click(); }
+async function normal(page) { await physicsReady(page); await normalView(page); }
 
 test('bars continue above and below the physical room', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -334,6 +334,7 @@ test('physical depth changes preserve active audio and reset to the default with
 
 test('idle hides tempo and actual silent microphone PCM stays at 60 BPM', async ({ page }) => {
   await syntheticAudio(page); await page.goto(`${origin}/advanced/`); await physicsReady(page);
+  await openFullscreenSettings(page);
   await expect(page.locator('.tempo-readout')).toBeHidden();
   await page.locator('.listening-toggle').check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
@@ -565,8 +566,11 @@ for (const path of ['/', '/advanced/']) {
         return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
       });
       await expect(tempo).toHaveText('132 BPM');
-      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation', '.fullscreen-button']);
-      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1, '.fullscreen-button': 1 });
+      await openFullscreenSettings(page);
+      const visibility = await scrollingIntersections(page, ['.tempo-readout', '.frame-rate', '.camera-rotation']);
+      expect(visibility).toEqual({ '.tempo-readout': 1, '.frame-rate': 1, '.camera-rotation': 1 });
+      await closeFullscreenSettings(page);
+      await expect(page.locator('.fullscreen-button')).toBeInViewport({ ratio: 1 });
       await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     }
@@ -577,36 +581,48 @@ for (const path of ['/', '/advanced/']) {
 
 test('Home and expanded mode share a small rendered FPS readout', async ({ page }) => {
   await page.addInitScript(() => { MediaDevices.prototype.getUserMedia = async () => { throw new Error('Capture disabled for presentation check'); }; });
-  await page.goto(origin); await physicsReady(page);
+  await page.goto(origin); await physicsReady(page); await normalView(page);
   const fps = page.locator('.frame-rate');
-  if (await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).isVisible())
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  const readout = () => page.evaluate(() => {
+    const nodes = document.querySelectorAll('.frame-rate'), node = nodes[0];
+    return { count: nodes.length, text: node.textContent, live: node.getAttribute('aria-live'),
+      small: parseFloat(getComputedStyle(node).fontSize) < parseFloat(getComputedStyle(node.parentElement).fontSize),
+      parent: node.parentElement.className, diagnostics: document.querySelectorAll('.diagnostic-fps').length };
+  });
   await fps.scrollIntoViewIfNeeded();
-  await expect(fps).toHaveCount(1);
   await expect(fps).toBeInViewport({ ratio: 1 });
-  await expect(fps).toHaveText(/^\d+ FPS$/);
-  await expect(fps).toHaveAttribute('aria-live', 'off');
-  expect(await fps.evaluate(node => parseFloat(getComputedStyle(node).fontSize) < parseFloat(getComputedStyle(node.parentElement).fontSize))).toBe(true);
+  await page.waitForFunction(() => /^\d+ FPS$/.test(document.querySelector('.frame-rate').textContent), null, { timeout: 5000 });
+  const initial = await readout();
+  expect(initial).toMatchObject({ count: 1, live: 'off', small: true });
+  expect(initial.text).toMatch(/^\d+ FPS$/);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await expect(fps).toHaveCount(1);
-  await expect(fps).toHaveText(/^\d+ FPS$/);
-  expect(Number((await fps.textContent()).split(' ')[0])).toBeGreaterThan(0);
-  for (const viewport of [{width:390,height:664},{width:568,height:320}]) {
-    await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
+  await page.waitForFunction(() => {
+    const card = document.querySelector('.audio-card');
+    return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+  });
+  const expanded = await readout();
+  expect(expanded.count).toBe(1); expect(expanded.text).toMatch(/^\d+ FPS$/);
+  expect(Number(expanded.text.split(' ')[0])).toBeGreaterThan(0);
+  for (const viewport of [{ width: 390, height: 664 }, { width: 568, height: 320 }]) {
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('.audio-card').hasAttribute('data-expanded') && !document.fullscreenElement);
     await page.setViewportSize(viewport);
-    await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
-    await expect(fps).toHaveText(/^\d+ FPS$/);
-    await fps.scrollIntoViewIfNeeded();
-    await expect(fps).toBeInViewport({ratio:1});
-    await expect(page.locator('.camera-rotation')).toBeInViewport({ratio:1});
-    await page.getByRole('button',{name:'Exit fullscreen',exact:true}).scrollIntoViewIfNeeded();
-    await expect(page.getByRole('button',{name:'Exit fullscreen',exact:true})).toBeInViewport({ratio:1});
-    expect(await fps.evaluate(node => node.parentElement.className)).toBe('camera-controls');
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await page.waitForFunction(() => {
+      const card = document.querySelector('.audio-card');
+      return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+    });
+    await openFullscreenSettings(page);
+    expect(await scrollingIntersections(page, ['.frame-rate', '.camera-rotation'])).toEqual({ '.frame-rate': 1, '.camera-rotation': 1 });
+    const state = await readout();
+    expect(state.text).toMatch(/^\d+ FPS$/); expect(state.parent).toBe('camera-controls');
+    await closeFullscreenSettings(page);
+    await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport({ ratio: 1 });
   }
-  await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
-  await expect(fps).toHaveCount(1);
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await fps.scrollIntoViewIfNeeded();
   await expect(fps).toBeVisible();
-  await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
+  expect(await readout()).toMatchObject({ count: 1, diagnostics: 0 });
 });
 
 for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
@@ -646,6 +662,7 @@ for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
 test('camera sweep turns smoothly on the horizontal plane without attack shake', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(origin); await physicsReady(page);
+  await openFullscreenSettings(page);
   const result = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     cancelAnimationFrame(v.request); v.request = null;

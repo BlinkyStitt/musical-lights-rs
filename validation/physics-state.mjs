@@ -5,6 +5,18 @@ export async function normalView(page) {
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   if (await exit.isVisible()) await exit.click();
 }
+// Fullscreen controls share the page's nodes inside the top-half dialog.
+export async function openFullscreenSettings(page) {
+  if (await page.locator('.audio-card').getAttribute('data-expanded') === null) return;
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(dialog).toBeVisible();
+}
+export async function closeFullscreenSettings(page) {
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  if (await dialog.isVisible()) await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+}
 // Sample real viewport intersections after each scroll without taking a DOM
 // trace snapshot for every intermediate scroll/expect transport round trip.
 export async function scrollingIntersections(page, selectors) {
@@ -103,6 +115,7 @@ export async function syntheticAudio(page, permission = 'granted') {
 }
 export async function startFrozen(page) {
   await physicsReady(page);
+  await openFullscreenSettings(page);
   // Most physics fixtures measure fixed source columns. Scrolling has its own
   // end-to-end checks and can be re-enabled explicitly after this helper.
   await page.locator('.scroll-lights').uncheck();
@@ -111,6 +124,7 @@ export async function startFrozen(page) {
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
   await expect(page.locator('.listening-toggle')).toBeEnabled();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await closeFullscreenSettings(page);
   await page.evaluate(async () => {
     // Controlled clock fixture suppresses the real interruption event.
     // These controller fixtures isolate note-driven motion from the decorative floor.

@@ -1041,3 +1041,12 @@ pulse rate; qualified source-band attacks brighten and slightly enlarge their
 stars. Digital playback can drive both effects with Listening off. Reduced
 Motion holds the sky steady. The renderer still uses one point batch without
 textures, bloom or additional render targets.
+
+## Fullscreen settings
+
+Fullscreen settings use the same control nodes as the normal page.
+`validation/tests/fullscreen-settings.spec.mjs` checks the top-half dialog,
+unchanged lower-half pixels, scene and collider size, control identity,
+settings persistence, keyboard focus, native fullscreen exit, and route cleanup.
+The scene does not scroll. The modal body has its own scroll area and a fixed
+Close button. These are browser checks; they do not prove physical-phone speed.

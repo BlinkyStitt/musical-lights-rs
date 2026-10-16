@@ -221,3 +221,14 @@ test('a delayed fullscreen entry event preserves scrolling to the bottom control
   await env.screen.toggleFullscreen();
   expect(env.element.scrollTop).toBe(0);
 });
+
+
+test('a focused control can consume Escape without exiting fullscreen', async t => {
+  const env = environment(t, async () => sentinel());
+  await env.screen.toggleFullscreen();
+  const event = new Event('keydown', { cancelable: true });
+  Object.defineProperty(event, 'key', { value: 'Escape' });
+  event.preventDefault();
+  env.document.dispatchEvent(event);
+  expect(env.attributes.has('data-expanded')).toBe(true);
+});
