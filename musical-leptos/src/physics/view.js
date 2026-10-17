@@ -389,7 +389,9 @@ export class PhysicsView {
       this.config = data.config; this.input[62] = this.config[5];
       if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config); this.card.presentation.save(); }
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
-      this.previous = this.current = null; this.makeMeshes();
+      // The layout and GPU resources stay fixed across a physics reset.
+      // Only snapshot interpolation and local event history belong to the old world.
+      this.previous = this.current = null; this.starfield.reset();
       this.report?.receive(data);
     } else this.report?.receive(data);
   }
