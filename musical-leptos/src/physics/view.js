@@ -1,7 +1,7 @@
 import { SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
-import { Enclosure, barProjection } from './enclosure.js';
+import { Enclosure, barProjection, BAR_PROFILE } from './enclosure.js';
 import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
 import { Starfield } from './stars.js';
@@ -441,22 +441,15 @@ export class PhysicsView {
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
-      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barExtension: { value: this.layout[6] }, halfWidth: { value: pitch / 2 }, capHalfWidth: { value: (pitch - joinWidth) / 2 } });
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barExtension: { value: this.layout[6] } });
       shader.vertexShader = `attribute vec3 rampHeights; attribute float backgroundOffset;
-        uniform float halfWidth; uniform float capHalfWidth;
-        void rampAt(float x, out float height, out float slope) {
-          float halfJoin = halfWidth - capHalfWidth;
-          float fraction = clamp((abs(x) - capHalfWidth) / (2.0 * halfJoin), 0.0, 0.5);
-          float neighbour = x < 0.0 ? rampHeights.x : rampHeights.z;
-          height = mix(rampHeights.y, neighbour, fraction);
-          slope = abs(x) > capHalfWidth ? sign(x) * (neighbour - rampHeights.y) / (2.0 * halfJoin) : 0.0;
-        }
+        ${BAR_PROFILE}
         uniform float enclosureHeight; uniform float barExtension; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n` + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-        float normalHeight, normalSlope; rampAt(position.x, normalHeight, normalSlope);
+        float normalHeight, normalSlope; rampAt(position.x, rampHeights, normalHeight, normalSlope);
         if (normal.y > 0.5) objectNormal = vec3(-normalSlope, rampHeights.y, 0.0);`);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; coloredPulse = pulse; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
-      shader.vertexShader = shader.vertexShader.replace('local = position;', 'float surfaceHeight, surfaceSlope; rampAt(position.x, surfaceHeight, surfaceSlope); transformed.y = (position.y + 0.5) * surfaceHeight / rampHeights.y - 0.5; local = position;');
+      shader.vertexShader = shader.vertexShader.replace('local = position;', 'float surfaceHeight, surfaceSlope; rampAt(position.x, rampHeights, surfaceHeight, surfaceSlope); transformed.y = (position.y + 0.5) * surfaceHeight / rampHeights.y - 0.5; local = position;');
       shader.vertexShader = shader.vertexShader.replace('localIllumination((instanceMatrix * vec4(position, 1.0)).xyz', 'localIllumination((instanceMatrix * vec4(transformed, 1.0)).xyz');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
@@ -482,7 +475,7 @@ export class PhysicsView {
     this.renderer.compile(this.scene, this.camera);
   }
   draw(now) {
-    const [count, , , pitch, , , , , stride, barOffset] = this.layout;
+    const [count, , , pitch, joinWidth, , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
     const step = 1000 / this.layout[1];
@@ -547,7 +540,7 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, depth);
-    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth);
+    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth, joinWidth);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.bars.geometry.attributes.pulse.needsUpdate = true;

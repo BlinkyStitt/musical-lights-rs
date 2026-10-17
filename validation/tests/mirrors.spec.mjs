@@ -250,9 +250,11 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
       const reflected = render(), passes = v.renderer.info.render.calls;
       v.enclosure.visible = false;
       const plain = render(); v.enclosure.visible = true;
-      let changes = 0, sourcePixels = 0; const differences = [];
+      let changes = 0, coatingPixels = 0, sourcePixels = 0; const differences = [];
       for (let i = 0; i < pixels.length; i += 4) {
-        if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) {
+        const difference = Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]);
+        if (difference > 0) coatingPixels++;
+        if (difference > 12) {
           changes++;
           if (differences.length < 32) differences.push({ x: i / 4 % 240, y: Math.floor(i / 4 / 240),
             reflected: Array.from(reflected.slice(i, i + 4)), plain: Array.from(plain.slice(i, i + 4)) });
@@ -260,7 +262,7 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
         if (plain[i] + plain[i + 1] + plain[i + 2] > 60) sourcePixels++;
       }
       const normals = v.enclosure.geometry.groups.map(group => new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal, v.enclosure.geometry.index.getX(group.start)).negate().toArray());
-      const result = { changes, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
+      const result = { changes, coatingPixels, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
         passes, targets: v.enclosure.count, pixels: v.canvas.width * v.canvas.height,
         negativeScales: new THREE.Matrix4().fromArray(v.enclosure.instanceMatrix.array).determinant() < 0 };
       if (changes) Object.assign(result, { differences, reflected: Array.from(reflected), plain: Array.from(plain),
@@ -275,6 +277,7 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
       await info.attach(`coating-difference-${angle}.json`, { body: JSON.stringify(state), contentType: 'application/json' });
     }
     expect(state.changes).toBe(0);
+    expect(state.coatingPixels).toBeGreaterThan(0);
     expect(state.sourcePixels).toBeGreaterThan(200);
     expect(state.walls).toBe(6); expect(state.targets).toBe(1); expect(state.negativeScales).toBe(false);
     expect(state.pixels).toBeLessThanOrEqual(200000);

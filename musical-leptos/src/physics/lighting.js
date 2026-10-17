@@ -53,6 +53,8 @@ export class SceneLighting {
       lightView: { value: new THREE.Matrix3() },
       lightStrength: { value: new THREE.Vector4() },
       colorEmission: { value: new THREE.Vector2() },
+      halfWidth: { value: 0 },
+      capHalfWidth: { value: 0 },
       attackGlow: { value: 1 },
     };
     this.configure(settings);
@@ -70,8 +72,10 @@ export class SceneLighting {
     shader.fragmentShader = 'varying vec3 nearbyIrradiance; uniform vec2 colorEmission;\n' + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nvec3 nearbyLight = diffuseColor.rgb * nearbyIrradiance;\nreflectedLight.indirectDiffuse += nearbyLight;');
   }
-  update(view, heights, offset, phase, pitch, height, depth) {
+  update(view, heights, offset, phase, pitch, height, depth, joinWidth) {
     for (let i = 0; i < 24; i++) this.uniforms.stripPulse.value[i] = view.meshPulses[i];
+    this.uniforms.halfWidth.value = pitch / 2;
+    this.uniforms.capHalfWidth.value = (pitch - joinWidth) / 2;
     this.uniforms.lightExtent.value.set(view.width, height, depth);
     this.uniforms.lightView.value.setFromMatrix4(view.camera.matrixWorldInverse);
     for (let i = 0; i < 24; i++) this.uniforms.stripState.value[i].set(((i + phase) % 24 + .5) * pitch, heights[offset + i], view.meshEdges[i]);
