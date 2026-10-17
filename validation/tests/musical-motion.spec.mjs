@@ -211,7 +211,12 @@ test('slider buttons step once and value editors validate, cancel and save', asy
     });
     expect(Math.max(...positions.centers) - Math.min(...positions.centers)).toBeLessThan(2);
     expect(positions.leftToRight).toBe(true);
-    await edit.click();
+    await edit.hover(); await page.mouse.down();
+    // A real press can span a camera-label refresh. Keep the native click
+    // target alive through that draw, then type without refocusing the editor.
+    await page.evaluate(() => document.querySelector('#dancinglights').physics.updateCamera(performance.now() + 100));
+    await page.mouse.up();
+    await expect(page.getByRole('spinbutton', { name: `${name} value`, exact: true })).toBeFocused();
     // Type into the editor selected by the real click. Locator.fill/press
     // would focus it again and could hide a broken editor focus transition.
     await page.keyboard.type(value); await page.keyboard.press('Enter'); await expect(range).toHaveValue(value);

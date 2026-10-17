@@ -404,8 +404,24 @@ test('phone page sends generated PCM through the audio processor and exports an 
   await page.locator('.phone-device').fill('Mac emulation'); await page.locator('.phone-browser').fill('test browser'); await page.locator('.ios-version').fill('test-only Mac WebKit'); await page.locator('.low-power-off').check();
   await page.locator('.physics-controls').evaluate(node => { node.open = true; });
   await page.locator('.depth-slider').fill('36');
+  const resources = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.balls.uuid, v.bars.uuid, v.enclosure.uuid, v.starfield.points.uuid, v.sideBars.mesh.uuid];
+  });
   await page.getByRole('button', { name: 'Start five-minute test' }).click();
   await expect(page.locator('.physics-status')).toContainText('Warming');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.startMs)).not.toBeNull();
+  const frames = await page.evaluate(() => document.querySelector('#dancinglights').physics.metrics.frames);
+  // Require a fresh completed draw after the recording reset. An old depth
+  // readout must not make a stalled or newly rebuilt scene pass this check.
+  await expect.poll(() => page.evaluate(frames => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.metrics.frames > frames && v.gpuFrames.ready() && v.gpuFrames.queued === 0;
+  }, frames)).toBe(true);
+  expect(await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return [v.balls.uuid, v.bars.uuid, v.enclosure.uuid, v.starfield.points.uuid, v.sideBars.mesh.uuid];
+  })).toEqual(resources);
   await expect(page.locator('.direction-curve')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(.36, 5);
   await expect.poll(() => page.evaluate(() => {

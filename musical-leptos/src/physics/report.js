@@ -140,6 +140,8 @@ export class PhoneReport {
   listen(selector, type, listener) { const node = this.query(selector); node.addEventListener(type, listener); this.removers.push(() => node.removeEventListener(type, listener)); }
   readConfig() {
     const config = [...this.view.config]; config[0] = this.view.height;
+    // Capture the requested depth even if its next physics snapshot is pending.
+    config[5] = this.view.input[62];
     for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
       if (!node.reportValidity()) return null;
       const index = Number(node.dataset.config);
