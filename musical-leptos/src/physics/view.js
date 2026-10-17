@@ -349,7 +349,9 @@ export class PhysicsView {
     if (now - (this.sliderAt ?? -Infinity) >= 50) {
       this.sliderAt = now;
       if (!this.cameraDrag && !this.cameraControl.closest('.slider-control')?.contains(document.activeElement)) this.cameraControl.value = yaw;
-      this.card.querySelector('.camera-angle').textContent = yaw.toFixed(1) + '°';
+      // Keep the text node under the pointer. Replacing it during a press
+      // can cancel WebKit's native click before the value editor opens.
+      this.card.querySelector('.camera-angle').firstChild.nodeValue = yaw.toFixed(1) + '°';
     }
   }
   receive(data) {
