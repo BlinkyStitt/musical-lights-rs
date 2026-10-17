@@ -88,12 +88,12 @@ test('duplicate ticks, support, wrapping, camera and resize do not generate impa
   s.snapshot(state(3, { impulse: 2 }), layout, 102); assert.equal(s.bounceAt[0], 102);
   s.snapshot(state(4, { impulse: 2 }), layout, 200); assert.equal(s.bounceAt[0], 102);
   const camera = new THREE.PerspectiveCamera(30, 2, .01, 200); camera.position.z = 2; camera.updateMatrixWorld();
-  s.place(0, new THREE.Vector3(0, 0, 0), .001, camera); close(s.influences[0].z, .35);
+  s.place(0, new THREE.Vector3(0, 0, 0), .001, camera); close(s.influences[0].z, .70);
   camera.position.x = .5; camera.aspect = 1; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-  s.place(0, new THREE.Vector3(0, 0, 0), 1, camera); close(s.influences[0].z, .75);
+  s.place(0, new THREE.Vector3(0, 0, 0), 1, camera); close(s.influences[0].z, 1.50);
   assert(s.influences[0].x < 0); assert.equal(s.bounceAt[0], 102);
   s.place(0, new THREE.Vector3(0, 0, 0), .05, camera);
-  close(s.influences[0].z, 12 * .05 * camera.projectionMatrix.elements[5] / 4); s.dispose();
+  close(s.influences[0].z, 24 * .05 * camera.projectionMatrix.elements[5] / 4); s.dispose();
 });
 
 test('stale physics fades local responses after 250 ms and clears them at 550 ms', () => {

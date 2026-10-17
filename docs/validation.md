@@ -1050,9 +1050,12 @@ Catalog positions, display tints and point sizes remain fixed. The same 4,328
 stars animate, with brightness proportional to catalog brightness at 75% effect
 strength. Ambient shimmer stays within ±2% before that multiplier. Eight local
 regions follow the rendered balls and increase each star's seeded shimmer.
-Each region spans twelve projected ball radii, bounded to 35–75% of scene
-height, so it reaches exposed sky above the bars. Overlapping regions cap
-their combined amplitude before per-star variation, so they still twinkle.
+Each region spans twenty-four projected ball radii, bounded to 70–150% of scene
+height. Each ball adds four times the previous local response, with a smooth
+circular falloff that stays strong near the ball and becomes weaker farther away.
+All eight contributions add before per-star variation; there is no shared overlap
+cap. Catalog brightness still scales the light, so unclipped stars retain their
+brightness ratios when multiple balls overlap.
 Motion shimmer cycles at 0.76–1.15 Hz; faint ambient shimmer stays slower.
 Rolling uses linear or rotational rim speed, with an 80 ms rise and 300 ms
 release. New contacts can add a 25 ms rise and
@@ -1066,7 +1069,8 @@ Physics receipts update event history once per new tick. Projection changes do
 not create events. After 250 ms without a fresh tick, local effects fade over
 300 ms. Recreation and pause/resume clear history. The renderer retains one point
 batch without textures, bloom or extra render targets. Harness and controlled GPU
-checks cover contact timing, locality, brightness ratios and fixed point sizes.
+checks cover contact timing, distance falloff, additive overlaps, brightness ratios
+and fixed point sizes.
 A full-scene pixel check retains the catalog and opaque foreground at the app's
 normal resolution and checks visible light changes during rolling;
 these checks do not prove physical-phone speed.

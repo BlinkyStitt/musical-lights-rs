@@ -50,7 +50,7 @@ export class Starfield {
     geometry.setAttribute('twinkle', new THREE.BufferAttribute(twinkles, 1));
     // Eight fixed influence records: screen position in scene-height units,
     // radius and modulation. No per-frame allocations or extra drawing passes.
-    this.influences = Array.from({ length: BALL_COUNT }, () => new THREE.Vector4(0, 0, .35, 0));
+    this.influences = Array.from({ length: BALL_COUNT }, () => new THREE.Vector4(0, 0, .70, 0));
     this.uniforms = { time: { value: 0 }, pixelRatio, background: { value: this.background },
       aspect: { value: 1 }, motion: { value: 1 }, balls: { value: this.influences } };
     this.rolling = new Float32Array(BALL_COUNT);
@@ -76,13 +76,14 @@ export class Starfield {
           float local = 0.0;
           for (int i = 0; i < 8; i++) {
             float distance = length(screen - balls[i].xy) / balls[i].z;
-            local += (1.0 - smoothstep(.15, 1.0, distance)) * balls[i].w;
+            local += 4.0 * (1.0 - smoothstep(.15, 1.0, distance)) * balls[i].w;
           }
           // Each star retains its catalog brightness, tint and fixed point size.
-          // Ambient variation is at most +/-2%; the combined effect is bounded.
+          // Ambient variation stays faint; each of the eight local responses adds light.
           float ambient = .02 * sin(time * star.z + star.y);
-          // Bound overlaps before variation so crowded balls still twinkle.
-          float modulation = clamp(ambient + min(local, .60) * (.5 + .5 * variation), -.02, .60);
+          // Keep every ball's contribution. An overlap must strengthen the twinkle
+          // instead of hitting an early cap shared by the whole sky.
+          float modulation = ambient + local * (.5 + .5 * variation);
           brightness = star.w * (1.0 + .75 * twinkle * motion * modulation);
           starTint = tint;
           gl_PointSize = star.x * max(1.0, pixelRatio);
@@ -142,8 +143,8 @@ export class Starfield {
     // Use the mesh's interpolated position, independently of event history.
     this.projection.copy(position).applyMatrix4(camera.matrixWorldInverse);
     const influence = this.influences[index];
-    influence.z = Math.max(.35, Math.min(.75,
-      12 * radius * camera.projectionMatrix.elements[5] / (2 * Math.max(.001, -this.projection.z))));
+    influence.z = Math.max(.70, Math.min(1.50,
+      24 * radius * camera.projectionMatrix.elements[5] / (2 * Math.max(.001, -this.projection.z))));
     this.projection.copy(position).project(camera);
     influence.x = this.projection.x * camera.aspect / 2;
     influence.y = this.projection.y / 2;

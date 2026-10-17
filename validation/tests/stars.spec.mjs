@@ -141,7 +141,7 @@ test('star regions track rendered interpolation without camera impacts and reset
     v.setCamera(30); v.draw(now + 1000 / 120);
     const cameraMoved = sky.influences[0].x !== last;
     v.camera.aspect = 2; v.camera.updateProjectionMatrix(); v.draw(now + 1000 / 120);
-    const bounded = sky.influences.every(v => v.z >= .35 && v.z <= .75);
+    const bounded = sky.influences.every(v => v.z >= .70 && v.z <= 1.50);
     const noImpacts = Array.from(sky.bounceAt).every(v => v === -Infinity);
     const fixedStars = original.every((value, i) => value === sky.points.geometry.attributes.position.array[i]);
     v.pause(); const reset = sky.tick === null && sky.influences.every(v => v.w === 0);
