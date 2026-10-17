@@ -27,7 +27,7 @@ export class Starfield {
     this.background = new THREE.Color(BACKGROUND);
     scene.background = this.background;
     const positions = new Float32Array(STAR_COUNT * 3), properties = new Float32Array(STAR_COUNT * 4);
-    const colors = new Float32Array(STAR_COUNT * 3);
+    const colors = new Float32Array(STAR_COUNT * 3), twinkles = new Float32Array(STAR_COUNT);
     for (let i = 0; i < STAR_COUNT; i++) {
       const [id, ra, dec, magnitude, color] = CATALOG[i];
       const hash = Math.imul(id, 2654435761) >>> 0;
@@ -37,17 +37,20 @@ export class Starfield {
       properties.set([1 + 2.2 * prominence ** 2, hash / 4294967296 * Math.PI * 2,
         hash % 24, .12 + .65 * 10 ** (-.16 * (magnitude + 1.5))], i * 4);
       colors.set(starColor(color), i * 3);
+      // A stable half of the catalog twinkles; the other stars stay steady.
+      twinkles[i] = (hash >>> 8) & 1;
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('star', new THREE.BufferAttribute(properties, 4));
     geometry.setAttribute('tint', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('twinkle', new THREE.BufferAttribute(twinkles, 1));
     this.uniforms = { time: { value: 0 }, pixelRatio, background: { value: this.background },
       aspect: { value: 1 }, beat: { value: 0 }, musical: { value: 0 }, attacks: { value: new Float32Array(24) } };
     this.phase = 0; this.lastTime = null;
     const material = new THREE.ShaderMaterial({
       uniforms: this.uniforms, depthTest: false, depthWrite: false, toneMapped: false,
-      vertexShader: `attribute vec4 star; attribute vec3 tint;
+      vertexShader: `attribute vec4 star; attribute vec3 tint; attribute float twinkle;
         uniform float time; uniform float pixelRatio; uniform float aspect;
         uniform float beat; uniform float musical; uniform float attacks[24];
         varying float brightness; varying vec3 starTint;
@@ -55,11 +58,12 @@ export class Starfield {
           // Independent glints continue with all audio stopped. Different
           // phases and rates keep the catalog sky from pulsing as one sheet.
           float cycle = .5 + .5 * sin(time * (1.2 + .6 * fract(star.y)) + star.y);
-          float glint = pow(cycle, 10.0);
-          float pulse = musical * pow(.5 + .5 * cos(6.28318530718 * beat + star.y), 8.0);
-          float attack = attacks[int(star.z)];
-          // Halfway between the earlier subtle shimmer and the stronger glints.
-          brightness = min(1.0, star.w * (.575 + .425 * cycle)
+          float glint = twinkle * pow(cycle, 10.0);
+          float pulse = twinkle * musical * pow(.5 + .5 * cos(6.28318530718 * beat + star.y), 8.0);
+          float attack = twinkle * attacks[int(star.z)];
+          // Steady stars keep the mean catalog brightness. Selected stars retain
+          // the current glint strength, with idle and musical timing unchanged.
+          brightness = min(1.0, star.w * (.7875 + twinkle * .425 * (cycle - .5))
             + (.1 + .175 * star.w) * glint + (.275 + .11 * star.w) * pulse
             + (.4 + .325 * star.w) * attack);
           starTint = tint;

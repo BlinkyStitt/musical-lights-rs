@@ -32,8 +32,17 @@ for (const route of ['/', '/advanced/']) test(`star glints stay visible without 
       }
       return { strong, maximum };
     };
+    const twinkles = v.starfield.points.geometry.attributes.twinkle, selected = twinkles.array.slice();
     try {
       const idle = Array.from({ length: 12 }, (_, i) => read(i * 400));
+      // Independent GPU reference: animate the entire unchanged catalog, then
+      // compare the number of visible glints with the selected subset.
+      twinkles.array.fill(1); twinkles.needsUpdate = true;
+      const allStars = contrast(Array.from({ length: 12 }, (_, i) => read(i * 400)));
+      twinkles.array.fill(0); twinkles.needsUpdate = true;
+      const steadyStars = read(0, 120, 0, attack, false, true);
+      const steadyStarsLater = read(8000, 120, 250, attack, false, true);
+      twinkles.array.set(selected); twinkles.needsUpdate = true;
       // Compare half a beat at 120 BPM with a quarter beat at 60 BPM.
       // Twice the elapsed time at 60 BPM must reproduce the same phase.
       const initial = read(0, 120, 0, quiet, false, true), beat = read(0, 120, 250, quiet, false, true);
@@ -41,11 +50,12 @@ for (const route of ['/', '/advanced/']) test(`star glints stay visible without 
       const quietPixels = read(0), attacked = read(0, 0, 0, attack, false, true);
       const stopped = read(0, 120, 125, attack, false, false);
       const steady = read(0, 0, 0, quiet, true), steadyLater = read(8000, 120, 125, attack, true, true);
-      return { idle: contrast(idle), beat: contrast([initial, beat]), rate: contrast([beat, slow]), attack: contrast([quietPixels, attacked]),
+      return { allStars, selected: selected.reduce((sum, value) => sum + value, 0), steadyStars: steadyStars.every((value, i) => value === steadyStarsLater[i]), idle: contrast(idle), beat: contrast([initial, beat]), rate: contrast([beat, slow]), attack: contrast([quietPixels, attacked]),
         samePhase: samePhase.every((value, i) => value === beat[i]), stopped: stopped.every((value, i) => value === quietPixels[i]),
         reduced: steadyLater.every((value, i) => value === steady[i]), positionsUnchanged: positions.every((value, i) => value === v.starfield.points.geometry.attributes.position.array[i]),
         points: positions.length / 3, listening: card.querySelector('.listening-toggle').checked, context: Boolean(card.activeAudioContext) };
     } finally {
+      twinkles.array.set(selected); twinkles.needsUpdate = true;
       v.renderer.setRenderTarget(null); target.dispose(); hidden.forEach((node, i) => { node.visible = visibility[i]; });
       v.request = requestAnimationFrame(v.animate);
     }
@@ -54,6 +64,10 @@ for (const route of ['/', '/advanced/']) test(`star glints stay visible without 
   expect(result.idle.strong).toBeGreaterThan(50); expect(result.idle.maximum).toBeGreaterThan(100);
   expect(result.beat.strong).toBeGreaterThan(40); expect(result.rate.strong).toBeGreaterThan(20);
   expect(result.attack.strong).toBeGreaterThan(10); expect(result.attack.maximum).toBeGreaterThan(100);
+  expect(result.idle.strong).toBeLessThan(result.allStars.strong * .7);
+  expect(result.idle.strong).toBeGreaterThan(result.allStars.strong * .3);
+  expect(result.selected).toBeGreaterThan(8920 * .45); expect(result.selected).toBeLessThan(8920 * .55);
+  expect(result.steadyStars).toBe(true);
   expect(result.samePhase).toBe(true); expect(result.stopped).toBe(true); expect(result.reduced).toBe(true);
   expect(result.positionsUnchanged).toBe(true); expect(result.points).toBe(8920);
   expect(result.listening).toBe(false); expect(result.context).toBe(false);
