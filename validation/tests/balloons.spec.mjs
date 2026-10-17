@@ -32,6 +32,21 @@ test('idle contacts fill ball colors without inventing audio attacks', async ({ 
 test('active microphone contacts fill color only from attacking bars', async ({ page }) => {
   await syntheticAudio(page); await page.goto(url); await startFrozen(page);
   await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
+  // Accepted light keeps filling after audio starts. Wait for that fill to
+  // settle across 30 fresh physics ticks before testing new quiet contacts.
+  await page.waitForFunction(() => new Promise(resolve => {
+    const view = document.querySelector('#dancinglights').physics;
+    let tick = view.current[2], previous = Array.from(view.pigments);
+    const sample = () => {
+      if (view.current[2] >= tick + 30) {
+        const unchanged = view.pigments.every((value, i) => value === previous[i]);
+        tick = view.current[2]; previous = Array.from(view.pigments);
+        if (unchanged) { resolve(true); return; }
+      }
+      requestAnimationFrame(sample);
+    };
+    sample();
+  }), null, { timeout: 5000 });
   const before = await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments));
   await page.evaluate(() => window.sendBars(Array(24).fill(1)));
   await expect.poll(() => page.evaluate(() => {
