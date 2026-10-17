@@ -708,8 +708,19 @@ fixture with the real processor and its real completion acknowledgement.
 
 ### Full-depth supports, background boxes and all-band response
 
-The renderer uses finite unit-height boxes, scaled to each published physical
-bar height. Their full depth matches the physical support. Matching vertical
+Each source keeps a flat top across 48 mm of its 50 mm pitch. A straight
+2 mm join connects adjacent tops without an open slot. The shared Rust profile
+preserves the source heights and bounds every join by its endpoints, including
+the scrolling seam. Protocol 19 records the same 24 heights, live depth, attack-only paint policy
+and contact-local swirl colors; it does not publish spline coefficients.
+
+Physics uses one flat prism and one joining prism per pitch, with fixed topology
+and exact projection onto their extruded quadrilaterals. The adapter removes
+buried end faces and assigns each shared convex vertex one contact owner.
+Concave joins retain distinct contacts. Prescribed frames follow material
+endpoints. Release eligibility uses the same material motion as the solver.
+Zero extra launch height still permits ordinary drops and rebounds.
+The visible mesh omits internal side caps. Its full depth matches the physical support. Matching vertical
 banks fill eight adjacent background boxes; all nine boxes reuse the same source
 bands and only the center box contains simulated balls. Accessible meters and
 pointer meters remain attached to the center source bands. Balls, paired bar tips,
@@ -734,7 +745,7 @@ foreground occlusion, stable count and independence from audio lighting.
 
 Rendered bars extend 20 meters beyond their outer floor or ceiling base, using
 the published physical support span. Their inward tips, measured travel and
-physical simulation stay unchanged. Background culling includes the full vertical
+source height measurements keep their existing meaning. Background culling includes the full vertical
 and depth extrusion. The browser suite checks visible pixels above and below the
 room, background stars, surface lighting, and complete-batch culling.
 
@@ -1050,3 +1061,17 @@ unchanged lower-half pixels, scene and collider size, control identity,
 settings persistence, keyboard focus, native fullscreen exit, and route cleanup.
 The scene does not scroll. The modal body has its own scroll area and a fixed
 Close button. These are browser checks; they do not prove physical-phone speed.
+
+
+## Contact-light swirl
+
+The core owns the soft swirl weights, physical-contact eligibility, regional color
+targets and 180 ms exponential fill. Native regressions check material contact
+points on rotated balls, attack-only microphone/digital painting, new attacks on
+resting contacts, persistent-pressure suppression and gradual changes. Spawn colors
+still follow X. Core checks cover bounded invalid input and elapsed-time independence.
+The WASM harness records the paint policy and rejects replays with a missing policy;
+its physical states must remain identical across the three paint-policy cases.
+Browser pixel checks retain the existing per-tick color-jump limit and verify
+visible color variation after contact. Reduced Motion keeps the material swirl
+attached to physical rolling and adds no automatic pigment motion.

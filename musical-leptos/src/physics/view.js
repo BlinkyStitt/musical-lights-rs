@@ -1,7 +1,7 @@
 import { SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
-import { Enclosure, barProjection } from './enclosure.js';
+import { Enclosure, barProjection, BAR_PROFILE } from './enclosure.js';
 import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
 import { Starfield } from './stars.js';
@@ -57,7 +57,7 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(63);
+    this.input = new Float32Array(64);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
@@ -142,6 +142,7 @@ export class PhysicsView {
         this.preview.postMessage({ type: 'pulse', time: now / 1000, reduced: this.reduced.matches, direction: this.horizontalDirection ?? 1 });
       }
       this.input[31] = this.reduced.matches ? 1 : 0;
+      this.input[63] = this.card.dataset.audioState === 'playing' ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
@@ -355,7 +356,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout[18] !== 17 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 30 || data.layout[18] !== 19 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];
@@ -398,20 +399,23 @@ export class PhysicsView {
   }
   makeMeshes() {
     this.disposeMeshes();
-    const [count, , , pitch, gap] = this.layout;
+    const [count, , , pitch, joinWidth] = this.layout;
     const ballGeometry = sphereGeometry(7);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
     const ballMaterial = new THREE.MeshLambertMaterial({ transparent: false, opacity: 1, depthWrite: true });
     ballMaterial.onBeforeCompile = shader => {
       this.lighting.apply(shader);
+      shader.uniforms.swirlShape = { value: new THREE.Vector4(...this.layout.slice(23, 27)) };
+      shader.uniforms.swirlEdges = { value: new THREE.Vector3(...this.layout.slice(27, 30)) };
       shader.vertexShader = 'attribute vec3 pigmentA; attribute vec3 pigmentB; attribute vec3 pigmentC; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nobjectPoint = position; paintA = pigmentA; paintB = pigmentB; paintC = pigmentC;');
-      shader.fragmentShader = 'varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'uniform vec4 swirlShape; uniform vec3 swirlEdges; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        // A soft connected field follows the rolling surface. Fixed-tick
-        // pigment diffusion supplies the fill; contacts never swap stripes.
-        float height = clamp(.5 + .5 * objectPoint.y + .08 * sin(3.0 * objectPoint.x + 2.0 * objectPoint.z), 0.0, 1.0);
-        vec3 pigment = mix(mix(paintA, paintB, smoothstep(0.0, .5, height)), paintC, smoothstep(.5, 1.0, height));
+        // The core supplies the contact-local swirl profile and eased colors.
+        // Material coordinates keep its soft curves attached while the ball rolls.
+        vec3 surfacePoint = normalize(objectPoint);
+        float wave = sin(swirlShape.x * surfacePoint.y + swirlShape.y * sin(swirlShape.z * surfacePoint.x) + swirlShape.w * surfacePoint.z);
+        vec3 pigment = mix(mix(paintA, paintB, smoothstep(swirlEdges.x, swirlEdges.y, wave)), paintC, smoothstep(swirlEdges.y, swirlEdges.z, wave));
         diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };
@@ -419,7 +423,17 @@ export class PhysicsView {
     this.renderedTops = new Float32Array(count);
     // The visible post spans the same depth as its physical support surface.
     // Extend the outer ends in the vertex shader, using the physical support span.
-    const geometry = new THREE.BoxGeometry(pitch - gap, 1, 1);
+    const geometry = new THREE.BoxGeometry(pitch, 1, 1, 3);
+    const positions = geometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      if (Math.abs(x) > 0 && Math.abs(x) < pitch / 2) positions.setX(i, Math.sign(x) * (pitch - joinWidth) / 2);
+    }
+    geometry.computeBoundingBox();
+    // Joined bands have a single outer coating. Omit their internal side caps.
+    geometry.setIndex(Array.from(geometry.index.array).slice(geometry.groups[2].start));
+    geometry.clearGroups();
+    geometry.setAttribute('rampHeights', new THREE.InstancedBufferAttribute(new Float32Array(count * 6 * 3), 3));
     geometry.setAttribute('backgroundOffset', new THREE.InstancedBufferAttribute(new Float32Array(count * 6), 1));
     geometry.setAttribute('edge', new THREE.InstancedBufferAttribute(this.meshEdges, 1));
     geometry.setAttribute('pulse', new THREE.InstancedBufferAttribute(this.meshPulses, 1));
@@ -427,9 +441,16 @@ export class PhysicsView {
     const material = new THREE.MeshLambertMaterial({ toneMapped: false });
     material.onBeforeCompile = shader => {
       this.lighting.apply(shader);
-      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barExtension: { value: this.layout[6] }, halfWidth: { value: (pitch - gap) / 2 } });
-      shader.vertexShader = 'attribute float backgroundOffset; uniform float halfWidth; uniform float enclosureHeight; uniform float barExtension; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n' + shader.vertexShader;
+      Object.assign(shader.uniforms, { pixelRatio: this.pixelRatio, enclosureHeight: this.barRoof, barExtension: { value: this.layout[6] } });
+      shader.vertexShader = `attribute vec3 rampHeights; attribute float backgroundOffset;
+        ${BAR_PROFILE}
+        uniform float enclosureHeight; uniform float barExtension; attribute float edge; attribute float pulse; varying float coloredPulse; varying float faceIsFront; varying float barHeight; varying vec3 local; varying vec3 world; varying float glow;\n` + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        float normalHeight, normalSlope; rampAt(position.x, rampHeights, normalHeight, normalSlope);
+        if (normal.y > 0.5) objectNormal = vec3(-normalSlope, rampHeights.y, 0.0);`);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nlocal = position; faceIsFront = abs(normal.z); barHeight = length(instanceMatrix[1].xyz) + barExtension; glow = edge; coloredPulse = pulse; world = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      shader.vertexShader = shader.vertexShader.replace('local = position;', 'float surfaceHeight, surfaceSlope; rampAt(position.x, rampHeights, surfaceHeight, surfaceSlope); transformed.y = (position.y + 0.5) * surfaceHeight / rampHeights.y - 0.5; local = position;');
+      shader.vertexShader = shader.vertexShader.replace('localIllumination((instanceMatrix * vec4(position, 1.0)).xyz', 'localIllumination((instanceMatrix * vec4(transformed, 1.0)).xyz');
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', barProjection);
       // Repeated banks use the source bar's lighting position. Translation
       // changes drawing, but must not create a different light in each bank.
@@ -454,7 +475,7 @@ export class PhysicsView {
     this.renderer.compile(this.scene, this.camera);
   }
   draw(now) {
-    const [count, , , pitch, , , , , stride, barOffset] = this.layout;
+    const [count, , , pitch, joinWidth, , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
     const step = 1000 / this.layout[1];
@@ -502,6 +523,12 @@ export class PhysicsView {
         this.meshPulses[i + copy * count] = pulse;
       }
       const column = (i + phase) % count;
+      const heights = this.bars.geometry.attributes.rampHeights.array;
+      for (let neighbour = -1; neighbour <= 1; neighbour++) {
+        const offset = barOffset + (i + count + neighbour) % count;
+        const value = previous[offset] + (current[offset] - previous[offset]) * alpha;
+        for (let copy = 0; copy < 6; copy++) heights[(i + copy * count) * 3 + neighbour + 1] = value;
+      }
       this.object.scale.set(1, top, depth);
       for (let end = 0; end < 2; end++) {
         this.object.quaternion.set(end, 0, 0, 1 - end);
@@ -513,10 +540,11 @@ export class PhysicsView {
       }
     }
     this.sideBars.update(this.layout, this.camera, depth);
-    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth);
+    this.lighting.update(this, this.renderedTops, 0, phase, pitch, height, depth, joinWidth);
     this.balls.instanceMatrix.needsUpdate = true; this.balls.instanceColor.needsUpdate = true;
     this.bars.instanceMatrix.needsUpdate = true; this.bars.geometry.attributes.edge.needsUpdate = true;
     this.bars.geometry.attributes.pulse.needsUpdate = true;
+    this.bars.geometry.attributes.rampHeights.needsUpdate = true;
     this.renderedEnclosureHeight = height;
     this.coating.update(this.width, height, depth);
     this.renderedAt = performance.timeOrigin + now;
@@ -528,7 +556,7 @@ export class PhysicsView {
   render(camera = this.camera) { this.renderer.render(this.scene, camera); }
   renderedHeight(band, end = 0) {
     const offset = (band + end * this.layout[0] * 3) * 16;
-    // The single rendering contract uses unit-height boxes scaled to travel.
+    // The matrix scale reports the source knot height, at its band centre.
     return Math.abs(this.bars.instanceMatrix.array[offset + 5]);
   }
 

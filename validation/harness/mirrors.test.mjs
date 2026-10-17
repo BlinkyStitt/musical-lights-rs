@@ -4,6 +4,22 @@ import * as THREE from '../../musical-lights-physics/pkg/three.module.js';
 import { SceneLighting } from '../../musical-lights-physics/pkg/lighting.js';
 import { Enclosure, BOX_OFFSETS } from '../../musical-lights-physics/pkg/enclosure.js';
 import { sphereGeometry } from '../../musical-lights-physics/pkg/spheres.js';
+import { rampMaximum } from '../../musical-lights-physics/pkg/side-bars.js';
+
+test('culling bounds contain the flat cap and both straight half-joins', () => {
+  for (const heights of [[1, .01, .1], [.1, .8, 1], [.1, .1, .1]]) {
+    const bound = rampMaximum(heights);
+    for (let i = 0; i <= 1000; i++) {
+      const x = i / 1000 - .5;
+      const blend = Math.max(0, (Math.abs(x) - .48) / .04);
+      const neighbour = x < 0 ? heights[0] : heights[2];
+      assert(heights[1] * (1 - blend) + neighbour * blend <= bound + 1e-14);
+    }
+  }
+  assert.equal(rampMaximum([1, .01, .1]), .505);
+  assert.equal(rampMaximum([.1, .8, 1]), .9);
+  assert.equal(rampMaximum([.1, .1, .1]), .1);
+});
 
 test('sphere meshes have a closed outward surface, unit normals and shared vertices', () => {
   for (const detail of [2, 7]) {

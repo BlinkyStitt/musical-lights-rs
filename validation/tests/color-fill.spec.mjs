@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { physicsReady, normalView } from '../physics-state.mjs';
+import { physicsReady, normalView, syntheticAudio } from '../physics-state.mjs';
 
 test('contact color fills a rolling surface gradually instead of swapping bands', async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -13,6 +13,9 @@ test('contact color fills a rolling surface gradually instead of swapping bands'
     const wasm = await init(), layout = PhysicsSimulation.layout(), config = PhysicsSimulation.defaults();
     // Ball 0 starts red over source 6, then rolls onto blue sources. Audio is off.
     const palette = Float32Array.from({ length: 72 }, (_, i) => Math.floor(i / 3) === 6 ? +(i % 3 === 0) : +(i % 3 === 2));
+    // Leave room above the first contact so its light can finish filling in
+    // free space. Repeated blue contacts must not hide a lost swirl target.
+    config[0] = 5;
     const sim = new PhysicsSimulation(config, palette), input = new Float32Array(layout[22]);
     input[24] = 5; input[32] = config[0]; input[62] = config[5]; sim.input(input);
     const surface = () => new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72).slice(0, 9);
@@ -22,7 +25,11 @@ test('contact color fills a rolling surface gradually instead of swapping bands'
     for (let tick = 1; tick <= 360; tick++) {
       sim.step(); const current = surface();
       maximumJump = Math.max(maximumJump, ...current.map((value, i) => Math.abs(value - previous[i])));
-      if (firstContact === undefined && current[2] > 1e-5) firstContact = tick;
+      if (firstContact === undefined && current.some((value, i) => i % 3 === 2 && value > 1e-5)) {
+        firstContact = tick;
+        // Follow the retained contact light while the ball leaves the bars.
+        input[24] = 0; input[35] = 2; input[37] = 1; sim.input(input);
+      }
       if (firstContact !== undefined && [0, 24, 60, 120].includes(tick - firstContact)) {
         frames.push({ tick, surface: Array.from(current), mean: Array.from(mean()) });
       }
@@ -65,18 +72,49 @@ test('contact color fills a rolling surface gradually instead of swapping bands'
     }
   });
   await info.attach('contact-fill-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.version).toBe(17); expect(result.firstContact).toBeGreaterThan(0);
+  expect(result.version).toBe(19); expect(result.firstContact).toBeGreaterThan(0);
   expect(result.maximumJump).toBeGreaterThan(.001); expect(result.maximumJump).toBeLessThan(.038);
   expect(result.frames).toHaveLength(5);
   const [initial, impact, early, middle, late] = result.frames;
   expect(initial.surface).toEqual([1, 0, 0, 1, 0, 0, 1, 0, 0]);
   expect(Math.max(...impact.blue)).toBeLessThan(.1);
-  for (const frame of [early, middle]) {
-    expect(frame.surface[2]).toBeGreaterThan(frame.surface[5]);
-    expect(frame.surface[5]).toBeGreaterThan(frame.surface[8]);
-    expect(frame.blue[0]).toBeGreaterThan(frame.blue[1]);
-    expect(frame.blue[1]).toBeGreaterThan(frame.blue[2]);
+  // Contact-local light must preserve distinct soft swirl regions rather than
+  // become the former monotone lower/middle/upper gradient.
+  for (const frame of [early, middle, late]) {
+    expect(Math.max(...frame.surface.filter((_, i) => i % 3 === 2))).toBeGreaterThan(0);
+    expect(Math.max(...frame.blue) - Math.min(...frame.blue)).toBeGreaterThan(.01);
   }
-  expect(late.blue[2]).toBeGreaterThan(middle.blue[2]);
-  expect(late.blue[0]).toBeGreaterThan(early.blue[0]);
+  expect(Math.max(...late.blue)).toBeGreaterThan(Math.max(...early.blue));
+  expect(late.mean[2]).toBeGreaterThan(early.mean[2]);
+});
+
+
+test('microphone and digital playback publish attack-only paint while Stop restores idle contacts', async ({ page }) => {
+  await syntheticAudio(page);
+  await page.goto('http://127.0.0.1:8101/advanced/');
+  await physicsReady(page); await normalView(page);
+  const policy = () => page.evaluate(() => document.querySelector('#dancinglights').physics.input[63]);
+  await expect.poll(policy).toBe(0);
+  await page.evaluate(() => { window.paintWorker = document.querySelector('#dancinglights').physics.worker; });
+  const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+  await listening.check();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect.poll(policy).toBe(1);
+  await listening.uncheck();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+  await expect.poll(policy).toBe(0);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await expect.poll(policy).toBe(1);
+  await page.locator('.tone-pause').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'paused');
+  await expect.poll(policy).toBe(0);
+  await page.locator('.tone-pause').click();
+  await expect.poll(policy).toBe(1);
+  await page.locator('.review-stop').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+  await expect.poll(policy).toBe(0);
+  expect(await page.evaluate(() => window.paintWorker === document.querySelector('#dancinglights').physics.worker)).toBe(true);
 });

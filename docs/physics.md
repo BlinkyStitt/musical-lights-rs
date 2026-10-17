@@ -90,7 +90,7 @@ the solver and re-enabled before they can contact a ball. Rendering clips
 copies to the enclosure. The 24 accessible meters keep
 source identity while their pointer regions and keyboard focus follow the bars.
 
-The enclosure uses six half-spaces, including a real downward-facing ceiling. Each rectangular bar extends 20 m beyond its active floor or ceiling base. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each source has a 48 mm flat top with a straight 2 mm join to the next source. The closed prisms extend beyond the active floor or ceiling base. Shared edges have no buried collision walls; the renderer uses the same flat tops and joins, with one outer coating. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Pointer interaction is a radial acceleration field within 0.22 m, with a
 maximum strength of 15 m/s². Device linear acceleration already arrives in
@@ -262,13 +262,18 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 17 starts each ball uniformly in the source color at its actual
+Physics protocol 19 starts each ball uniformly in the source color at its actual
 spawn X coordinate. It rejects replays from previous engines. Physical rolling
-reveals a soft surface field that fills gradually with contacted colors.
+reveals three soft swirl regions. A contact adds its bar color at the ball's
+material contact point, and each visible region fills toward its own target
+with a 180 ms time constant. Other regions retain their colors. The shared core
+supplies the swirl profile for both contact injection and drawing.
 Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
 white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
-intensity. Distinct physical bar contacts blend sphere colors with or without
-audio. Persistent resting pressure cannot keep repainting the ball.
+intensity. In silence, distinct physical bar contacts add color. During microphone
+or digital playback, only attacking bars add color; a new attack can also light
+an existing resting contact. Persistent pressure or a held attack cannot keep
+repainting the ball. The numeric input records this audio paint policy for replay.
 
 Hidden pages and lost WebGL contexts pause both clocks. Return resets the
 frame clock. Route cleanup closes audio, terminates the worker, removes sensor

@@ -238,7 +238,8 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
   await page.locator('.display-controls > summary').click();
-  for (const angle of [-35, 0, 35]) {
+  // The grazing view also covers the equal-depth coating/bar boundary.
+  for (const angle of [-35, 0, 35, 35.021]) {
     const state = await page.evaluate(async angle => {
       const v = document.querySelector('#dancinglights').physics;
       const base = document.querySelector('meta[name="musical-lights-assets"]').content;
@@ -249,9 +250,11 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
       const reflected = render(), passes = v.renderer.info.render.calls;
       v.enclosure.visible = false;
       const plain = render(); v.enclosure.visible = true;
-      let changes = 0, sourcePixels = 0; const differences = [];
+      let changes = 0, coatingPixels = 0, sourcePixels = 0; const differences = [];
       for (let i = 0; i < pixels.length; i += 4) {
-        if (Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]) > 12) {
+        const difference = Math.abs(reflected[i] - plain[i]) + Math.abs(reflected[i + 1] - plain[i + 1]) + Math.abs(reflected[i + 2] - plain[i + 2]);
+        if (difference > 0) coatingPixels++;
+        if (difference > 12) {
           changes++;
           if (differences.length < 32) differences.push({ x: i / 4 % 240, y: Math.floor(i / 4 / 240),
             reflected: Array.from(reflected.slice(i, i + 4)), plain: Array.from(plain.slice(i, i + 4)) });
@@ -259,7 +262,7 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
         if (plain[i] + plain[i + 1] + plain[i + 2] > 60) sourcePixels++;
       }
       const normals = v.enclosure.geometry.groups.map(group => new THREE.Vector3().fromBufferAttribute(v.enclosure.geometry.attributes.normal, v.enclosure.geometry.index.getX(group.start)).negate().toArray());
-      const result = { changes, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
+      const result = { changes, coatingPixels, sourcePixels, normals, walls: v.enclosure.geometry.groups.length,
         passes, targets: v.enclosure.count, pixels: v.canvas.width * v.canvas.height,
         negativeScales: new THREE.Matrix4().fromArray(v.enclosure.instanceMatrix.array).determinant() < 0 };
       if (changes) Object.assign(result, { differences, reflected: Array.from(reflected), plain: Array.from(plain),
@@ -274,6 +277,7 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
       await info.attach(`coating-difference-${angle}.json`, { body: JSON.stringify(state), contentType: 'application/json' });
     }
     expect(state.changes).toBe(0);
+    expect(state.coatingPixels).toBeGreaterThan(0);
     expect(state.sourcePixels).toBeGreaterThan(200);
     expect(state.walls).toBe(6); expect(state.targets).toBe(1); expect(state.negativeScales).toBe(false);
     expect(state.pixels).toBeLessThanOrEqual(200000);
@@ -530,7 +534,7 @@ test('full-size background bands show lit faces and physical depth at oblique an
   for (const result of results) {
     expect(result.fills.length).toBeGreaterThanOrEqual(192);
     for (const brightness of result.fills) expect(brightness, JSON.stringify(result)).toBeGreaterThan(70);
-    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(12);
+    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(24);
     expect(Math.abs(result.depths[0][0] - result.depths[1][0])).toBeGreaterThan(.01);
     expect(Math.abs(result.depths[1][0] - result.depths[2][0])).toBeGreaterThan(.01);
   }
@@ -811,4 +815,49 @@ test('WASD leaves typing and shortcuts intact and clears on blur, hiding and rou
   expect(await page.evaluate(() => window.previousCameraView.cameraPan.keys.size)).toBe(0);
   await page.keyboard.up('s'); await page.keyboard.press('d');
   expect(await page.evaluate(() => window.previousCameraView.cameraPan.keys.size)).toBe(0);
+});
+
+test('flat source tops and narrow straight joins match independent visible heights', async ({ page }, info) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const samples = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const scene = new THREE.Scene(); scene.add(new THREE.AmbientLight(0xffffff, 1));
+    const camera = new THREE.OrthographicCamera(-.028, .028, .4, -.4, .01, 10);
+    camera.position.set(.6, .4, 2); camera.lookAt(.6, .4, 0); camera.updateMatrixWorld();
+    const target = new THREE.WebGLRenderTarget(560, 800), pixels = new Uint8Array(560 * 800 * 4);
+    const bar = v.bars, parent = bar.parent, count = bar.count;
+    const matrix = new THREE.Matrix4().fromArray(bar.instanceMatrix.array, 0);
+    const heights = bar.geometry.attributes.rampHeights, oldHeights = heights.array.slice(0, 3);
+    const oldColor = bar.instanceColor.array.slice(0, 3), oldRoof = v.barRoof.value;
+    try {
+      // This one band has a 0.4 m flat top, with 0.2/0.8 m neighbours.
+      // Its left and right half-joins end at 0.3/0.6 m. Read pixels at known
+      // positions inside those joins and at three positions on the flat top.
+      const object = new THREE.Object3D(); object.position.set(.6, .2, 0); object.scale.set(1, .4, .48); object.updateMatrix();
+      v.barRoof.value = 1; bar.count = 1; bar.setMatrixAt(0, object.matrix); bar.instanceMatrix.needsUpdate = true;
+      heights.array.set([.2, .4, .8]); heights.needsUpdate = true;
+      bar.instanceColor.array.set([1, 1, 1]); bar.instanceColor.needsUpdate = true;
+      scene.add(bar); v.renderer.setRenderTarget(target); v.renderer.render(scene, camera);
+      v.renderer.readRenderTargetPixels(target, 0, 0, 560, 800, pixels);
+      const brightness = (x, y) => { const i = (y * 560 + x) * 4; return pixels[i] + pixels[i + 1] + pixels[i + 2]; };
+      const rows = [[35, .355], [85, .4], [280, .4], [475, .4], [525, .51]].map(([x, height]) => ({
+        x, height, below: brightness(x, Math.round(height * 1000) - 8), above: brightness(x, Math.round(height * 1000) + 8),
+      }));
+      const cuts = [...new Set(Array.from(bar.geometry.attributes.position.array).filter((_, i) => i % 3 === 0).map(x => Number(x.toFixed(6))))].sort((a, b) => a - b);
+      return { rows, cuts, triangles: bar.geometry.index.count / 3 };
+    } finally {
+      v.barRoof.value = oldRoof; parent.add(bar); bar.count = count; bar.setMatrixAt(0, matrix); bar.instanceMatrix.needsUpdate = true;
+      heights.array.set(oldHeights); heights.needsUpdate = true;
+      bar.instanceColor.array.set(oldColor); bar.instanceColor.needsUpdate = true;
+      v.renderer.setRenderTarget(null); target.dispose();
+    }
+  });
+  expect(samples.cuts).toEqual([-.025, -.024, .024, .025]); expect(samples.triangles).toBe(24);
+  for (const sample of samples.rows) {
+    expect(sample.below, JSON.stringify(sample)).toBeGreaterThan(60);
+    expect(sample.above, JSON.stringify(sample)).toBe(0);
+  }
+  await info.attach('joined-top-pixels.json', { body: JSON.stringify(samples), contentType: 'application/json' });
 });

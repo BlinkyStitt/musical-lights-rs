@@ -34,8 +34,10 @@ for (const route of ['/', '/advanced/']) test(`star glints stay visible without 
     };
     try {
       const idle = Array.from({ length: 12 }, (_, i) => read(i * 400));
-      const initial = read(0, 120, 0, quiet, false, true), beat = read(0, 120, 125, quiet, false, true);
-      const slow = read(0, 60, 125, quiet, false, true), samePhase = read(0, 60, 250, quiet, false, true);
+      // Compare half a beat at 120 BPM with a quarter beat at 60 BPM.
+      // Twice the elapsed time at 60 BPM must reproduce the same phase.
+      const initial = read(0, 120, 0, quiet, false, true), beat = read(0, 120, 250, quiet, false, true);
+      const slow = read(0, 60, 250, quiet, false, true), samePhase = read(0, 60, 500, quiet, false, true);
       const quietPixels = read(0), attacked = read(0, 0, 0, attack, false, true);
       const stopped = read(0, 120, 125, attack, false, false);
       const steady = read(0, 0, 0, quiet, true), steadyLater = read(8000, 120, 125, attack, true, true);

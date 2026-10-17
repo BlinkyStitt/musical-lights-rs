@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { openFullscreenSettings, closeFullscreenSettings, syntheticAudio, physicsReady, normalView } from '../physics-state.mjs';
 
 const localBase = 'http://127.0.0.1:8101';
@@ -542,4 +542,24 @@ test('canceled pending microphone cannot replace recognition input after source 
   expect(await page.evaluate(() => recorder.stream.getAudioTracks()[0].readyState)).toBe('live');
   await expect(page.locator('.song-title')).toHaveText(`${song.artist} — ${song.title}`);
   await expect(listening).toBeChecked();
+});
+
+
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus) return;
+  const runtime = await page.evaluate(() => {
+    const card = document.querySelector('.audio-card'), v = document.querySelector('#dancinglights')?.physics;
+    const context = card?.activeAudioContext, gl = v?.renderer.getContext();
+    const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+    return { now: performance.now(), hidden: document.hidden, source: card?.dataset.audioSource,
+      audioState: card?.dataset.audioState, contextState: context?.state, contextTime: context?.currentTime,
+      sceneVisible: v?.sceneVisible, canvas: v?.canvas.getBoundingClientRect().toJSON(),
+      fps: v?.frameRate, snapshotAge: v ? performance.now() - v.received : null, metrics: v?.metrics,
+      protocol: v?.layout?.[18], paintPolicy: v?.input?.[63],
+      renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null,
+      captureStarts: window.captureStarts, phase: card?.querySelector('.recognition-ring')?.dataset.phase };
+  }).catch(error => ({ error: String(error) }));
+  const path = info.outputPath('recognition-runtime.json');
+  await writeFile(path, JSON.stringify(runtime, null, 2));
+  await info.attach('recognition-runtime', { path, contentType: 'application/json' });
 });

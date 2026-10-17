@@ -84,27 +84,27 @@ test('lit geometry and gradual contact pigments use the physical scene with Redu
     u.stripState.value.forEach((s, i) => { s.z = edges[i]; });
     u.lightStrength.value.copy(strength); u.colorEmission.value.copy(emission);
     lights.forEach((n, i) => { n.intensity = intensities[i]; });
-    // Isolate one prescribed bar and sample its physical side face. The old
-    // XY-only outline painted this entire face black, even under fill light.
+    // Sample the real outer front coating. Joined flat tops omit the
+    // internal end faces of the former rectangular bars.
     const count = v.bars.count, matrix = new THREE.Matrix4().fromArray(v.bars.instanceMatrix.array, 0);
     const hidden = [v.balls, v.sideBars.mesh, v.enclosure]; hidden.forEach(n => { n.visible = false; });
-    const object = new THREE.Object3D(); object.position.set(.6, .15, 0); object.scale.set(1, .3, 1); object.updateMatrix();
+    const object = new THREE.Object3D(); object.position.set(.6, .15, 0); object.scale.set(1, .3, v.config[5]); object.updateMatrix();
     v.bars.count = 1; v.bars.setMatrixAt(0, object.matrix); v.bars.instanceMatrix.needsUpdate = true;
-    const point = new THREE.Vector3(.6 + (v.layout[3] - v.layout[4]) / 2, .12, 0).project(v.camera);
+    const point = new THREE.Vector3(.6, .12, v.config[5] / 2).project(v.camera);
     sum();
     const pixel = ((Math.floor((point.y + 1) * 80) * 240) + Math.floor((point.x + 1) * 120)) * 4;
-    const sideBrightness = pixels[pixel] + pixels[pixel + 1] + pixels[pixel + 2];
+    const frontBrightness = pixels[pixel] + pixels[pixel + 1] + pixels[pixel + 2];
     v.bars.count = count; v.bars.setMatrixAt(0, matrix); v.bars.instanceMatrix.needsUpdate = true;
     hidden.forEach(n => { n.visible = true; });
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
-    return { lit, dark, attackOnly, sideBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
+    return { lit, dark, attackOnly, frontBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
       color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
   expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(24); expect(state.pointLights).toBe(0); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);
   expect(state.attackOnly).toBeGreaterThan(state.dark + 100);
-  expect(state.sideBrightness).toBeGreaterThan(30);
+  expect(state.frontBrightness).toBeGreaterThan(30);
   expect(state.pattern).toEqual(state.pigments.slice(0, 3));
   await page.emulateMedia({ reducedMotion: 'reduce' });
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.balls.material.transparent)).toBe(false);
