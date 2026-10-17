@@ -10,7 +10,9 @@ export const barProjection = 'vec4 mvPosition = instanceMatrix * vec4(transforme
 export class Enclosure {
   constructor(scene, lighting) {
     this.scene = scene; this.matrix = new THREE.Matrix4();
-    const material = new THREE.MeshLambertMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false });
+    // Opaque bars own shared depth boundaries; the coating must not blend
+    // over a source surface at the same depth.
+    const material = new THREE.MeshLambertMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false, depthFunc: THREE.LessDepth });
     material.onBeforeCompile = shader => lighting.apply(shader);
     this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1, 120, 16, 1), material, 1);
     this.mesh.frustumCulled = false; scene.add(this.mesh);

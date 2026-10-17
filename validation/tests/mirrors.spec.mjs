@@ -238,7 +238,8 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
   await page.locator('.display-controls > summary').click();
-  for (const angle of [-35, 0, 35]) {
+  // The grazing view also covers the equal-depth coating/bar boundary.
+  for (const angle of [-35, 0, 35, 35.021]) {
     const state = await page.evaluate(async angle => {
       const v = document.querySelector('#dancinglights').physics;
       const base = document.querySelector('meta[name="musical-lights-assets"]').content;
