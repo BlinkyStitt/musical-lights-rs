@@ -87,3 +87,14 @@ test('browser WASM starts balls uniformly in the source band at their spawn X',a
     for(let slot=0;slot<3;slot++)expect(ball.pigments.slice(slot*3,slot*3+3)).toEqual(expected);
   }
 });
+
+test('report config uses the selected depth before its physics receipt', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  const state = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, slider = v.card.querySelector('.depth-slider');
+    const previous = v.config[5]; slider.value = '36'; slider.dispatchEvent(new Event('input', { bubbles: true }));
+    return { previous, actual: v.config[5], requested: v.input[62], report: v.report.readConfig()[5], audio: !!v.card.activeAudioContext };
+  });
+  expect(state.previous).toBeCloseTo(.48, 5); expect(state.actual).toBeCloseTo(.48, 5);
+  expect(state.requested).toBeCloseTo(.36, 5); expect(state.report).toBeCloseTo(.36, 5); expect(state.audio).toBe(false);
+});

@@ -1046,12 +1046,34 @@ record even when playback recovers; recovery is not continuity acceptance.
 
 ## Starfield twinkle
 
-Catalog positions and display tints remain fixed. Independent brightness cycles
-and brief glints continue with audio stopped. Reliable BPM sets an additional
-pulse rate; qualified source-band attacks brighten and slightly enlarge their
-stars. Digital playback can drive both effects with Listening off. Reduced
-Motion holds the sky steady. The renderer still uses one point batch without
-textures, bloom or additional render targets.
+Catalog positions, display tints and point sizes remain fixed. The same 4,328
+stars animate, with brightness proportional to catalog brightness at 75% effect
+strength. Ambient shimmer stays within ±2% before that multiplier. Eight local
+regions follow the rendered balls and increase each star's seeded shimmer.
+Each region spans twenty-four projected ball radii, bounded to 70–150% of scene
+height. Each ball adds four times the previous local response, with a smooth
+circular falloff that stays strong near the ball and becomes weaker farther away.
+All eight contributions add before per-star variation; there is no shared overlap
+cap. Catalog brightness still scales the light, so unclipped stars retain their
+brightness ratios when multiple balls overlap.
+Motion shimmer cycles at 0.76–1.15 Hz; faint ambient shimmer stays slower.
+Rolling uses linear or rotational rim speed, with an 80 ms rise and 300 ms
+release. New contacts can add a 25 ms rise and
+450 ms bounce fade; resting support and duplicate ticks do not retrigger them.
+Qualified attacks affect only balls with an impulse from that source bar.
+Reliable BPM gently modulates an existing local response. Both digital playback
+and microphone audio can drive these accents. Stop clears musical accents while
+motion and ambient shimmer continue. Reduced Motion holds stars at base brightness.
+
+Physics receipts update event history once per new tick. Projection changes do
+not create events. After 250 ms without a fresh tick, local effects fade over
+300 ms. Recreation and pause/resume clear history. The renderer retains one point
+batch without textures, bloom or extra render targets. Harness and controlled GPU
+checks cover contact timing, distance falloff, additive overlaps, brightness ratios
+and fixed point sizes.
+A full-scene pixel check retains the catalog and opaque foreground at the app's
+normal resolution and checks visible light changes during rolling;
+these checks do not prove physical-phone speed.
 
 ## Fullscreen settings
 
@@ -1066,7 +1088,7 @@ Close button. These are browser checks; they do not prove physical-phone speed.
 ## Contact-light swirl
 
 The core owns the soft swirl weights, physical-contact eligibility, regional color
-targets and 180 ms exponential fill. Native regressions check material contact
+targets and 175 ms exponential fill. Native regressions check material contact
 points on rotated balls, attack-only microphone/digital painting, new attacks on
 resting contacts, persistent-pressure suppression and gradual changes. Spawn colors
 still follow X. Core checks cover bounded invalid input and elapsed-time independence.

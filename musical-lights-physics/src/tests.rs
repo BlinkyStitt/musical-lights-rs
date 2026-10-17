@@ -2431,7 +2431,10 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
     let before = sim.pigments;
     sim.step();
     for (old, new) in before.into_iter().zip(sim.pigments) {
-        assert!((old - new).abs() < 0.038);
+        assert!(
+            (old - new).abs() < 0.038,
+            "retargeted surface jumped from {old} to {new}"
+        );
     }
 }
 
