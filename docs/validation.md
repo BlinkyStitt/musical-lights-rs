@@ -1066,7 +1066,7 @@ Close button. These are browser checks; they do not prove physical-phone speed.
 ## Contact-light swirl
 
 The core owns the soft swirl weights, physical-contact eligibility, regional color
-targets and 180 ms exponential fill. Native regressions check material contact
+targets and 175 ms exponential fill. Native regressions check material contact
 points on rotated balls, attack-only microphone/digital painting, new attacks on
 resting contacts, persistent-pressure suppression and gradual changes. Spawn colors
 still follow X. Core checks cover bounded invalid input and elapsed-time independence.

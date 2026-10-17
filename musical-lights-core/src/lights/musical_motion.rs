@@ -200,8 +200,8 @@ pub fn paint_pigment(targets: &mut [f32; 9], color: [f32; 3], point: [f32; 3], b
     }
 }
 
-/// Each visible region reaches 95% of a held target in approximately 0.54 s.
-pub const PIGMENT_FILL_SECONDS: f32 = 0.18;
+/// Each visible region reaches 95% of a held target in approximately 0.525 s.
+pub const PIGMENT_FILL_SECONDS: f32 = 0.175;
 
 /// Ease visible light toward each region's own target. The exact exponential
 /// solution makes fill independent of callbacks, contact substeps and rendering.
