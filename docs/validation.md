@@ -1046,34 +1046,31 @@ record even when playback recovers; recovery is not continuity acceptance.
 
 ## Starfield twinkle
 
-Catalog positions, display tints and point sizes remain fixed. The same 4,328
-stars animate, with brightness proportional to catalog brightness at 75% effect
-strength. Ambient shimmer stays within ±2% before that multiplier. Eight local
-regions follow the rendered balls and increase each star's seeded shimmer.
-Each region spans twenty-four projected ball radii, bounded to 70–150% of scene
-height. Each ball adds four times the previous local response, with a smooth
-circular falloff that stays strong near the ball and becomes weaker farther away.
-All eight contributions add before per-star variation; there is no shared overlap
-cap. Catalog brightness still scales the light, so unclipped stars retain their
-brightness ratios when multiple balls overlap.
-Motion shimmer cycles at 0.76–1.15 Hz; faint ambient shimmer stays slower.
-Rolling uses linear or rotational rim speed, with an 80 ms rise and 300 ms
-release. New contacts can add a 25 ms rise and
-450 ms bounce fade; resting support and duplicate ticks do not retrigger them.
-Qualified attacks affect only balls with an impulse from that source bar.
-Reliable BPM gently modulates an existing local response. Both digital playback
-and microphone audio can drive these accents. Stop clears musical accents while
-motion and ambient shimmer continue. Reduced Motion holds stars at base brightness.
+All 8,920 catalog positions, display tints and point sizes remain fixed. The same
+4,328 stars animate, with brightness proportional to catalog brightness at 75%
+effect strength. Ambient shimmer stays within ±2% before that multiplier.
 
-Physics receipts update event history once per new tick. Projection changes do
-not create events. After 250 ms without a fresh tick, local effects fade over
-300 ms. Recreation and pause/resume clear history. The renderer retains one point
-batch without textures, bloom or extra render targets. Harness and controlled GPU
-checks cover contact timing, distance falloff, additive overlaps, brightness ratios
-and fixed point sizes.
-A full-scene pixel check retains the catalog and opaque foreground at the app's
-normal resolution and checks visible light changes during rolling;
-these checks do not prove physical-phone speed.
+The displayed white bar-flash envelope drives a focused star column between the
+paired bars. Each column has a one-bar-wide core and a half-bar soft edge on each
+side. Full-strength flashes add 300% of a selected star's base brightness at the
+core. Adjacent columns add where they overlap. The renderer uses the actual final
+bar flash, including microphone input, digital playback and idle animation; stars
+add no separate attack timer, BPM pulse or ball-motion response.
+
+A screen-to-room projection follows the bars' front faces, scrolling phase,
+camera, aspect, interpolated enclosure height and depth. All nine banks reuse
+24 source strengths. A periodic lookup samples only the two neighbouring columns,
+so seam copies and repeated banks cannot double-count a flash. Foreground geometry
+continues to occlude the fixed sky. Stop removes the audio flash through the
+existing bar state; subsequent idle flashes drive their own columns. Reduced
+Motion holds all stars at base brightness. Pause and reset clear column light.
+
+The renderer retains one point batch without textures, bloom or extra render
+targets. Harness and GPU checks cover flash timing, focused falloff, additive
+adjacent columns, scrolling seams, background banks, camera/depth alignment,
+brightness ratios, fixed sizes and removal of ball influence. Full-catalog pixel
+checks retain the opaque foreground at normal scene resolution. These checks do
+not establish physical-phone performance.
 
 ## Fullscreen settings
 

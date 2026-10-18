@@ -374,7 +374,6 @@ export class PhysicsView {
       this.previous = this.current;
       this.current = new Float32Array(data.buffer);
       this.received = performance.now(); this.inflight = false;
-      this.starfield.snapshot(this.current, this.layout, this.received);
       this.config[5] = this.current[this.layout[17] + 4];
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
       this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
@@ -514,7 +513,6 @@ export class PhysicsView {
       this.quaternion.fromArray(current, offset + 3); this.object.quaternion.slerp(this.quaternion, alpha);
       this.object.scale.setScalar(current[offset + 7]); this.object.updateMatrix(); this.balls.setMatrixAt(i, this.object.matrix);
       this.color.fromArray(current, offset + 15); this.balls.setColorAt(i, this.color);
-      this.starfield.place(i, this.object.position, current[offset + 7], this.camera);
     }
     for (let i = 0; i < count; i++) {
       const top = this.renderedTops[i] = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
@@ -555,8 +553,7 @@ export class PhysicsView {
     this.coating.update(this.width, height, depth);
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
-    this.starfield.update(now, this.reduced.matches, this.camera.aspect, this.tempo,
-      this.tempoConfidence, this.card.dataset.audioState === 'playing', this.edges);
+    this.starfield.update(now, this.reduced.matches, this.camera, phase, pitch, height, depth, this.meshEdges);
     this.render();
   }
   render(camera = this.camera) { this.renderer.render(this.scene, camera); }

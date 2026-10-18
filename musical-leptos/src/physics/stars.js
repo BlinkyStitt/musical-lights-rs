@@ -1,11 +1,11 @@
 import * as THREE from './three.module.js';
 import { CATALOG } from './stars-catalog.js';
+import { BOX_OFFSETS } from './enclosure.js';
 
 const BACKGROUND = 0x050814;
 export const STAR_COUNT = CATALOG.length;
-const BALL_COUNT = 8;
+const BAND_COUNT = 24;
 const bounded = value => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
-const smooth = value => { const t = bounded(value); return t * t * (3 - 2 * t); };
 
 // A fixed equatorial view centred on Orion (RA 5.6 h, declination 0 degrees).
 // East is left and celestial north is up. These are directions, not distances.
@@ -48,42 +48,40 @@ export class Starfield {
     geometry.setAttribute('star', new THREE.BufferAttribute(properties, 4));
     geometry.setAttribute('tint', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('twinkle', new THREE.BufferAttribute(twinkles, 1));
-    // Eight fixed influence records: screen position in scene-height units,
-    // radius and modulation. No per-frame allocations or extra drawing passes.
-    this.influences = Array.from({ length: BALL_COUNT }, () => new THREE.Vector4(0, 0, .70, 0));
+    // A screen-to-room homography aligns the fixed sky to the bars' front face.
+    // The periodic band lookup visits only two neighbours, including all banks.
+    this.viewProjection = new THREE.Matrix4();
+    this.flashes = new Float32Array(BAND_COUNT);
     this.uniforms = { time: { value: 0 }, pixelRatio, background: { value: this.background },
-      aspect: { value: 1 }, motion: { value: 1 }, balls: { value: this.influences } };
-    this.rolling = new Float32Array(BALL_COUNT);
-    this.speeds = new Float32Array(BALL_COUNT);
-    this.targets = new Float32Array(BALL_COUNT);
-    this.contacts = new Uint8Array(BALL_COUNT);
-    this.bands = new Uint32Array(BALL_COUNT);
-    this.bounces = new Float32Array(BALL_COUNT);
-    this.bounceAt = new Float64Array(BALL_COUNT);
-    this.projection = new THREE.Vector3();
+      aspect: { value: 1 }, motion: { value: 1 }, flashes: { value: this.flashes },
+      starToRoom: { value: new THREE.Matrix3() }, extent: { value: new THREE.Vector4() }, phase: { value: 0 } };
     this.reset();
     const material = new THREE.ShaderMaterial({
       uniforms: this.uniforms, depthTest: false, depthWrite: false, toneMapped: false,
       vertexShader: `attribute vec4 star; attribute vec3 tint; attribute float twinkle;
         uniform float time; uniform float pixelRatio; uniform float aspect;
-        uniform float motion; uniform vec4 balls[8];
+        uniform float motion; uniform float flashes[24];
+        uniform mat3 starToRoom; uniform vec4 extent; uniform float phase;
         varying float brightness; varying vec3 starTint;
         void main() {
           vec2 screen = vec2(position.x, position.y) / (1.4004150764 * max(position.z, .000001));
-          // Motion increases each selected star's own smooth variation. A
-          // rotating ball can shimmer even when its screen centre is still.
-          float variation = sin(time * star.z * 4.0 + star.y);
+          vec3 room = starToRoom * vec3(2.0 * screen.x / aspect, 2.0 * screen.y, 1.0);
           float local = 0.0;
-          for (int i = 0; i < 8; i++) {
-            float distance = length(screen - balls[i].xy) / balls[i].z;
-            local += 4.0 * (1.0 - smoothstep(.15, 1.0, distance)) * balls[i].w;
+          if (extent.y > 0.0 && abs(room.z) > .000001) {
+            vec2 point = room.xy / room.z;
+            if (point.x >= extent.z && point.x <= extent.w && point.y >= 0.0 && point.y <= extent.y) {
+              float column = point.x / extent.x - phase - .5;
+              float left = floor(column), fraction = column - left;
+              // A one-bar core and a half-bar soft edge on each side. Adjacent
+              // flashes add; repeating a bank never adds another copy of a light.
+              local = 4.0 * ((1.0 - smoothstep(.5, 1.0, fraction)) * flashes[int(mod(left, 24.0))]
+                + (1.0 - smoothstep(.5, 1.0, 1.0 - fraction)) * flashes[int(mod(left + 1.0, 24.0))]);
+            }
           }
-          // Each star retains its catalog brightness, tint and fixed point size.
-          // Ambient variation stays faint; each of the eight local responses adds light.
+          // Catalog brightness, tint and point size stay fixed. The local flash
+          // uses the bars' displayed envelope directly; ambient shimmer is +/-2%.
           float ambient = .02 * sin(time * star.z + star.y);
-          // Keep every ball's contribution. An overlap must strengthen the twinkle
-          // instead of hitting an early cap shared by the whole sky.
-          float modulation = ambient + local * (.5 + .5 * variation);
+          float modulation = ambient + local;
           brightness = star.w * (1.0 + .75 * twinkle * motion * modulation);
           starTint = tint;
           gl_PointSize = star.x * max(1.0, pixelRatio);
@@ -106,75 +104,24 @@ export class Starfield {
     scene.add(this.points);
   }
   reset() {
-    this.tick = null; this.received = null; this.lastTime = null;
-    this.phase = 0; this.wasTempo = false;
-    for (const values of [this.rolling, this.speeds, this.targets, this.contacts, this.bands, this.bounces]) values.fill(0);
-    this.bounceAt.fill(-Infinity);
-    for (const influence of this.influences) influence.w = 0;
+    this.flashes.fill(0);
+    this.uniforms.extent.value.y = 0;
   }
-  snapshot(values, layout, now) {
-    const tick = values[2];
-    // Repeated receipts must not refresh stale data or retrigger contact events.
-    if (tick === this.tick) return;
-    if (this.tick != null && tick < this.tick) this.reset();
-    const first = this.tick == null;
-    this.tick = tick; this.received = now;
-    for (let i = 0; i < BALL_COUNT; i++) {
-      const offset = 3 + i * layout[8], radius = values[offset + 7], mass = values[offset + 8];
-      const speed = Math.max(Math.hypot(values[offset + 9], values[offset + 10], values[offset + 11]),
-        radius * Math.hypot(values[offset + 12], values[offset + 13], values[offset + 14]));
-      const impulse = values[layout[11] + i];
-      const touching = Number.isFinite(impulse) && impulse > 0;
-      if (!first && touching && !this.contacts[i] && this.speeds[i] > .04 && mass > 0 && impulse / mass > .15) {
-        this.bounces[i] = bounded((impulse / mass - .15) / .6);
-        this.bounceAt[i] = now;
-      }
-      this.speeds[i] = Number.isFinite(speed) ? speed : 0;
-      this.targets[i] = bounded((speed - .015) / (.6 - .015));
-      this.contacts[i] = touching ? 1 : 0;
-      let bands = 0;
-      for (let band = 0; band < layout[0]; band++) {
-        if (values[layout[10] + i * layout[0] + band] > 0) bands |= 1 << band;
-      }
-      this.bands[i] = bands;
-    }
-  }
-  place(index, position, radius, camera) {
-    // Use the mesh's interpolated position, independently of event history.
-    this.projection.copy(position).applyMatrix4(camera.matrixWorldInverse);
-    const influence = this.influences[index];
-    influence.z = Math.max(.70, Math.min(1.50,
-      24 * radius * camera.projectionMatrix.elements[5] / (2 * Math.max(.001, -this.projection.z))));
-    this.projection.copy(position).project(camera);
-    influence.x = this.projection.x * camera.aspect / 2;
-    influence.y = this.projection.y / 2;
-  }
-  update(now, reducedMotion, aspect, bpm, confidence, playing, attacks) {
-    const elapsed = this.lastTime == null ? 0 : Math.max(0, (now - this.lastTime) / 1000);
-    this.lastTime = now;
-    const musical = playing && !reducedMotion;
-    const tempo = musical && Number.isFinite(bpm) && bpm > 0 && Number.isFinite(confidence) && confidence > 0;
-    if (tempo && this.wasTempo) this.phase = (this.phase + elapsed * bpm / 60) % 1;
-    this.wasTempo = tempo;
+  update(now, reducedMotion, camera, phase, pitch, height, depth, flashes) {
     this.uniforms.time.value = reducedMotion ? 0 : (now / 1000) % 86400;
     this.uniforms.motion.value = reducedMotion ? 0 : 1;
-    if (Number.isFinite(aspect) && aspect > 0) this.uniforms.aspect.value = aspect;
-    const fresh = this.received == null ? 0 : 1 - smooth((now - this.received - 250) / 300);
-    const beat = tempo ? .5 + .5 * Math.cos(2 * Math.PI * this.phase) : 0;
-    for (let i = 0; i < BALL_COUNT; i++) {
-      const target = this.targets[i];
-      const duration = target > this.rolling[i] ? .08 : .3;
-      this.rolling[i] += (target - this.rolling[i]) * (1 - Math.exp(-elapsed / duration));
-      const age = now - this.bounceAt[i];
-      const bounce = this.bounces[i] * smooth(age / 25) * (1 - smooth((age - 25) / 450));
-      let attack = 0;
-      if (musical) for (let band = 0; band < 24; band++) {
-        if (this.bands[i] & (1 << band)) attack = Math.max(attack, bounded(attacks[band]));
-      }
-      const response = Math.max(this.rolling[i], bounce, attack);
-      this.influences[i].w = reducedMotion ? 0 : fresh *
-        (.30 * this.rolling[i] + .20 * bounce + .10 * attack + .05 * beat * response);
-    }
+    this.uniforms.aspect.value = camera.aspect;
+    this.uniforms.phase.value = phase;
+    const width = BAND_COUNT * pitch;
+    this.uniforms.extent.value.set(pitch, height, BOX_OFFSETS[0] * width, (BOX_OFFSETS[BOX_OFFSETS.length - 1] + 1) * width);
+    camera.updateMatrixWorld();
+    const m = this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements;
+    const z = depth / 2;
+    // Restrict the camera projection to the full-depth bars' front plane, then
+    // invert it. This handles yaw, pitch, pan, aspect and depth without moving stars.
+    this.uniforms.starToRoom.value.set(m[0], m[4], m[8] * z + m[12],
+      m[1], m[5], m[9] * z + m[13], m[3], m[7], m[11] * z + m[15]).invert();
+    for (let i = 0; i < BAND_COUNT; i++) this.flashes[i] = reducedMotion ? 0 : bounded(flashes[i]);
   }
   dispose() {
     this.scene.remove(this.points);
