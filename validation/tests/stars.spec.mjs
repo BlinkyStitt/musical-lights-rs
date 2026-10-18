@@ -13,10 +13,11 @@ for (const route of ['/', '/advanced/']) {
       cancelAnimationFrame(v.request); v.stopPreview();
       const target = new THREE.WebGLRenderTarget(512, 256); target.texture.colorSpace = THREE.SRGBColorSpace;
       const pixels = new Uint8Array(512 * 256 * 4);
+      const skyCamera = v.camera.clone(); skyCamera.aspect = 2; skyCamera.updateProjectionMatrix();
       const hidden = v.scene.children.filter(node => node !== v.starfield.points);
       hidden.forEach(node => { node.visible = false; });
       const read = (time, reduced) => {
-        v.starfield.update(time, reduced, 2, 0, 0, false, new Float32Array(24)); v.renderer.setRenderTarget(target); v.render();
+        v.starfield.update(time, reduced, skyCamera, 0, v.layout[3], v.renderedEnclosureHeight, v.renderedDepth, new Float32Array(24)); v.renderer.setRenderTarget(target); v.render();
         v.renderer.readRenderTargetPixels(target, 0, 0, 512, 256, pixels);
         return pixels.slice();
       };
@@ -66,14 +67,13 @@ for (const route of ['/', '/advanced/']) {
   });
 }
 
-for (const source of ['microphone', 'generated']) test(`local star accents follow ${source} audio and clear on Stop`, async ({ page }, info) => {
+for (const source of ['microphone', 'generated']) test(`star columns share the visible ${source} flash and release it on Stop`, async ({ page }, info) => {
   await syntheticAudio(page);
   await page.goto('http://127.0.0.1:8101/' + (source === 'generated' ? 'advanced/' : ''));
   if (source === 'microphone') await startFrozen(page); else { await physicsReady(page); await normalView(page); }
   if (source === 'generated') {
     await openFullscreenSettings(page);
-    await page.locator('.input-source').selectOption('generated');
-    await page.locator('.review-start').click();
+    await page.locator('.input-source').selectOption('generated'); await page.locator('.review-start').click();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     await expect(page.locator('.listening-toggle')).not.toBeChecked();
     await page.evaluate(() => { window.freezeClock = true; window.audioNow = window.testContext.currentTime; });
@@ -81,71 +81,76 @@ for (const source of ['microphone', 'generated']) test(`local star accents follo
   await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(1);
   const result = await page.evaluate(() => {
-    const v = document.querySelector('#dancinglights').physics, sky = v.starfield, now = performance.now();
-    cancelAnimationFrame(v.request); v.stopPreview();
-    const state = v.current.slice(); state.fill(0, v.layout[10], v.layout[11] + 8);
-    for (let i = 0; i < 8; i++) state.fill(0, 3 + i * v.layout[8] + 9, 3 + i * v.layout[8] + 15);
-    state[2] = 1; state[v.layout[10] + 3] = .1; state[v.layout[11]] = .1;
-    sky.reset(); sky.snapshot(state, v.layout, now);
-    const attacks = new Float32Array(24); attacks[3] = v.edges[3];
-    sky.update(now, false, v.camera.aspect, 120, 1, v.card.dataset.audioState === 'playing', attacks);
-    const initial = sky.influences.map(v => v.w);
-    sky.update(now + 125, false, v.camera.aspect, 120, 1, true, attacks);
-    const fast = sky.influences[0].w;
-    sky.reset(); sky.snapshot(state, v.layout, now);
-    sky.update(now, false, v.camera.aspect, 60, 1, true, attacks);
-    sky.update(now + 250, false, v.camera.aspect, 60, 1, true, attacks);
-    const samePhase = sky.influences[0].w;
-    sky.update(now + 250, true, v.camera.aspect, 120, 1, true, attacks);
-    const reduced = sky.influences.every(v => v.w === 0) && sky.uniforms.motion.value === 0;
-    v.request = requestAnimationFrame(v.animate);
-    return { initial, fast, samePhase, reduced };
+    const v = document.querySelector('#dancinglights').physics, now = performance.now();
+    cancelAnimationFrame(v.request); v.stopPreview(); v.draw(now);
+    const flashes = Array.from(v.starfield.flashes), displayed = Array.from(v.meshEdges.slice(0, 24));
+    v.request = requestAnimationFrame(v.animate); return { flashes, displayed, listening: v.listening };
   });
-  await info.attach('local-music.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.initial[0]).toBeCloseTo(.15, 6); expect(result.initial.slice(1)).toEqual(Array(7).fill(0));
-  expect(result.fast).toBeCloseTo(.125, 6); expect(result.samePhase).toBeCloseTo(result.fast, 6); expect(result.reduced).toBe(true);
+  await info.attach('displayed-column-flashes.json', { body: JSON.stringify(result), contentType: 'application/json' });
+  expect(result.flashes).toEqual(result.displayed); expect(result.flashes.some(value => value > 0)).toBe(true);
+  expect(result.listening).toBe(source === 'microphone');
   await openFullscreenSettings(page);
   if (source === 'generated') await page.locator('.review-stop').click(); else await page.locator('.listening-toggle').uncheck();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
   const stopped = await page.evaluate(() => {
-    const v = document.querySelector('#dancinglights').physics, sky = v.starfield, now = performance.now();
-    const state = v.current.slice(), attacks = new Float32Array(24).fill(1);
-    for (let i = 0; i < 8; i++) state.fill(0, 3 + i * v.layout[8] + 9, 3 + i * v.layout[8] + 15);
-    state.fill(0, v.layout[10], v.layout[11] + 8); state[2] = 1;
-    state[v.layout[10] + 3] = .1; state[v.layout[11]] = .1;
-    sky.reset(); sky.snapshot(state, v.layout, now);
-    sky.update(now, false, v.camera.aspect, 120, 1, v.card.dataset.audioState === 'playing', attacks);
-    const quiet = sky.influences.every(v => v.w === 0);
-    state[2]++; state[12] = .6; sky.snapshot(state, v.layout, now);
-    sky.update(now + 80, false, v.camera.aspect, 120, 1, v.card.dataset.audioState === 'playing', attacks);
-    return { quiet, rolling: sky.influences[0].w > 0 };
+    const v = document.querySelector('#dancinglights').physics;
+    cancelAnimationFrame(v.request); v.stopPreview(); v.clearAudio(); v.draw(performance.now());
+    const matching = Array.from(v.starfield.flashes).every((value, i) => value === v.meshEdges[i]);
+    const cleared = v.edges.every(value => value === 0);
+    v.request = requestAnimationFrame(v.animate); return { matching, cleared };
   });
-  expect(stopped).toEqual({ quiet: true, rolling: true });
+  expect(stopped).toEqual({ matching: true, cleared: true });
 });
 
-test('star regions track rendered interpolation without camera impacts and reset on resume', async ({ page }) => {
+test('column projection follows interpolated bars, seams and depth while ball motion has no influence', async ({ page }) => {
   await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page); await normalView(page);
-  const result = await page.evaluate(() => {
+  const result = await page.evaluate(async () => {
     const v = document.querySelector('#dancinglights').physics, now = performance.now();
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     cancelAnimationFrame(v.request); v.stopPreview();
-    const old = v.current.slice(), next = old.slice(), stride = v.layout[8];
-    old[2] = 1; old[0] = 1 / 120; next[2] = 2; next[0] = 2 / 120;
-    old[3] = .4; next[3] = .75;
-    old.fill(0, v.layout[10], v.layout[11] + 8); next.fill(0, v.layout[10], v.layout[11] + 8);
-    for (let i = 0; i < 8; i++) { old[3 + i * stride + 9] = .6; next[3 + i * stride + 9] = .6; }
-    const sky = v.starfield; sky.reset(); sky.snapshot(old, v.layout, now - 10); sky.snapshot(next, v.layout, now);
+    const old = v.current.slice(), next = old.slice();
+    old[0] = 1 / 120; next[0] = 2 / 120;
+    old[v.layout[20]] = 23.9; next[v.layout[20]] = .1;
     v.previous = old; v.current = next; v.received = now;
-    v.draw(now); const first = sky.influences[0].x;
-    v.draw(now + 1000 / 120); const last = sky.influences[0].x;
-    const original = sky.points.geometry.attributes.position.array.slice();
-    v.setCamera(30); v.draw(now + 1000 / 120);
-    const cameraMoved = sky.influences[0].x !== last;
-    v.camera.aspect = 2; v.camera.updateProjectionMatrix(); v.draw(now + 1000 / 120);
-    const bounded = sky.influences.every(v => v.z >= .70 && v.z <= 1.50);
-    const noImpacts = Array.from(sky.bounceAt).every(v => v === -Infinity);
-    const fixedStars = original.every((value, i) => value === sky.points.geometry.attributes.position.array[i]);
-    v.pause(); const reset = sky.tick === null && sky.influences.every(v => v.w === 0);
-    return { interpolated: last > first, cameraMoved, bounded, noImpacts, fixedStars, reset };
+    v.draw(now); const first = v.starfield.uniforms.phase.value;
+    v.draw(now + 1000 / 120); const last = v.starfield.uniforms.phase.value;
+    const original = v.starfield.points.geometry.attributes.position.array.slice();
+    const flashes = Array.from(v.starfield.flashes), projection = v.starfield.uniforms.starToRoom.value.elements.slice();
+    for (let i = 0; i < 8; i++) {
+      next[3 + i * v.layout[8]] += .3;
+      next[3 + i * v.layout[8] + 9] = 5; next[v.layout[11] + i] = 10;
+    }
+    v.draw(now + 1000 / 120);
+    const noBallInfluence = flashes.every((value, i) => value === v.starfield.flashes[i])
+      && projection.every((value, i) => value === v.starfield.uniforms.starToRoom.value.elements[i]);
+    let error = 0;
+    for (const angle of [-30, 0, 30]) for (const depth of [.2, 2]) {
+      old[v.layout[17] + 4] = next[v.layout[17] + 4] = depth; v.config[5] = depth; v.setCamera(angle); v.draw(now + 1000 / 120);
+      for (const x of [-1.2, 0, .6, 1.2, 2.4]) {
+        const pixel = new THREE.Vector3(x, v.renderedEnclosureHeight / 2, depth / 2).project(v.camera);
+        const room = new THREE.Vector3(pixel.x, pixel.y, 1).applyMatrix3(v.starfield.uniforms.starToRoom.value);
+        error = Math.max(error, Math.abs(room.x / room.z - x));
+      }
+    }
+    const fixedStars = original.every((value, i) => value === v.starfield.points.geometry.attributes.position.array[i]);
+    v.pause(); const reset = v.starfield.flashes.every(v => v === 0) && v.starfield.uniforms.extent.value.y === 0;
+    return { first, last, noBallInfluence, error, fixedStars, reset };
   });
-  expect(result).toEqual({ interpolated: true, cameraMoved: true, bounded: true, noImpacts: true, fixedStars: true, reset: true });
+  expect(result.first).toBeCloseTo(23.9, 4); expect(result.last).toBeCloseTo(.1, 4);
+  expect(result.noBallInfluence).toBe(true); expect(result.error).toBeLessThan(1e-5);
+  expect(result.fixedStars).toBe(true); expect(result.reset).toBe(true);
+});
+
+test('idle columns share bar flashes and Reduced Motion keeps stars steady', async ({ page }) => {
+  await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page); await normalView(page);
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.starfield.flashes.some(value => value > 0) && v.starfield.flashes.every((value, i) => value === v.meshEdges[i]);
+  })).toBe(true);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => page.evaluate(() => {
+    const sky = document.querySelector('#dancinglights').physics.starfield;
+    return sky.flashes.every(value => value === 0) && sky.uniforms.motion.value === 0 && sky.uniforms.time.value === 0;
+  })).toBe(true);
 });
