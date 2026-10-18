@@ -2,4 +2,8 @@ sandbox_mode = "workspace-write"
 approval_policy = "on-request"
 
 [sandbox_workspace_write]
+writable_roots = [
+    "/Users/bryan/.cache/uv",
+    "/Volumes/Sabrent4TB/agent-work/musical-lights-rs",
+]
 network_access = true
