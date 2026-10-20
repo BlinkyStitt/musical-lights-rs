@@ -95,6 +95,13 @@ export LIBRARY_PATH="$(brew --prefix sdl2)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
 
 ## Validate
 
+For the shared core and website, install the pinned web tools above, then run
+`just check` from the repository root. It adds `.tools/bin` to `PATH`, validates
+and builds the core, worklet, physics and Leptos packages, and runs the offline
+harness plus the Chromium, permission, WebKit and iPhone-profile browser checks
+through `validation`'s `test:site` script. `just --summary` lists this entry point
+for automated validation discovery.
+
 From the repository root, with the ESP environment loaded:
 
 ```sh
