@@ -95,11 +95,13 @@ export LIBRARY_PATH="$(brew --prefix sdl2)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
 
 ## Validate
 
-For the shared core and website, install the pinned web tools above, then run
+For the shared core and all web apps, install the pinned web tools above, then run
 `just check` from the repository root. It adds `.tools/bin` to `PATH`, validates
-and builds the core, worklet, physics and Leptos packages, and runs the offline
-harness plus the Chromium, permission, WebKit and iPhone-profile browser checks
-through `validation`'s `test:site` script. `just --summary` lists this entry point
+and builds the core, worklet, physics, Leptos, Dioxus and standalone WASM packages,
+and runs the offline harness plus every browser project through
+`python3 validation/validate.py browser`, including the Dioxus and standalone
+WASM rendered checks. Missing tools or failed checks stop the recipe.
+`just --summary` lists this entry point
 for automated validation discovery.
 
 From the repository root, with the ESP environment loaded:
