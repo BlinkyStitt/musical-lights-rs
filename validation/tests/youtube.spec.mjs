@@ -23,8 +23,9 @@ async function setup(page, path = '/') {
     let type = 'auto'; window.audioTypes = [];
     Object.defineProperty(navigator, 'audioSession', { configurable: true, value: { get type() { return type; }, set type(value) { type = value; window.audioTypes.push(value); } } });
     window.YT = { Player: class {
-      constructor(frame, options) { this.frame = frame; this.options = options; window.videoPlayer = this; window.players.push(this); setTimeout(() => options.events.onReady({ target: this }), 0); }
-      state(data) { this.options.events.onStateChange({ target: this, data }); }
+      constructor(frame, options) { this.frame = frame; this.options = options; this.states = []; window.videoPlayer = this; window.players.push(this); setTimeout(() => options.events.onReady({ target: this }), 0); }
+      state(data) { this.states.push(data); this.options.events.onStateChange({ target: this, data }); }
+      getPlayerState() { return this.states.at(-1); }
       playVideo() { this.state(1); }
       pauseVideo() { this.state(2); }
       error(data) { this.options.events.onError({ target: this, data }); }
@@ -436,12 +437,42 @@ for (const resizeLayout of [false, true]) {
       window.rotationKeyboard = height => { viewport.width = innerWidth; viewport.height = height; viewport.dispatchEvent(new Event('resize')); };
     });
     await setup(page); await load(page);
+    await page.evaluate(() => {
+      // Feed a real, non-silent signal through the synthetic microphone stream.
+      // A running context alone would also pass with a disconnected input graph.
+      const destination = AudioContext.prototype.createMediaStreamDestination;
+      AudioContext.prototype.createMediaStreamDestination = function(...args) {
+        const stream = destination.apply(this, args), tone = this.createOscillator(), gain = this.createGain();
+        tone.frequency.value = 1000; gain.gain.value = .02;
+        tone.connect(gain); gain.connect(stream); tone.start();
+        return stream;
+      };
+      const Worklet = AudioWorkletNode;
+      window.rotationAudio = { sample: 0 };
+      window.AudioWorkletNode = class extends Worklet {
+        constructor(context, name, options) {
+          // Home has no diagnostic controls. Enable the real processor's trace
+          // in this fixture; never fabricate frames or advance its sample clock.
+          if (name === 'loudness-processor') options.processorOptions.diagnostics = true;
+          super(context, name, options);
+          if (name === 'loudness-processor') this.port.addEventListener('message', ({ data }) => {
+            if (data.type !== 'frame' || !data.trace?.length) return;
+            window.rotationAudio = { sample: data.trace[data.trace.length - data.traceStride],
+              session: data.sessionId, rms: data.readouts[0], continuity: data.continuity };
+          });
+        }
+      };
+    });
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    await expect.poll(() => page.evaluate(() => rotationAudio.rms ?? -160)).toBeGreaterThan(-45);
     await page.evaluate(() => {
       videoPlayer.playVideo();
-      const v = document.querySelector('#dancinglights').physics;
-      window.playbackIdentity = { player: videoPlayer, frame: videoPlayer.frame, worker: v.worker, renderer: v.renderer, context: testContext, requests: micRequests };
+      const card = document.querySelector('.audio-card'), v = document.querySelector('#dancinglights').physics;
+      window.rotationAudioStates = [];
+      card.addEventListener('audio-session', ({ detail }) => rotationAudioStates.push(detail.state));
+      window.playbackIdentity = { player: videoPlayer, frame: videoPlayer.frame, worker: v.worker, renderer: v.renderer,
+        context: testContext, requests: micRequests, session: Number(card.dataset.audioSession) };
     });
     for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568, height: 320, keyboard: 180 }]) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -479,13 +510,30 @@ for (const resizeLayout of [false, true]) {
         if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.evaluate(height => rotationKeyboard(height), viewport.height);
         await closeFullscreenSettings(page);
+        await page.locator('.rotate-display').click();
+        await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
+        // Require at least 100 ms of newly analyzed samples AFTER every click,
+        // including the fourth turn back to zero. Queued pre-click packets and
+        // an advancing AudioContext clock cannot satisfy this check.
+        const afterClick = await page.evaluate(() => Math.ceil(testContext.currentTime * testContext.sampleRate));
+        await expect.poll(() => page.evaluate(() => rotationAudio.sample)).toBeGreaterThan(afterClick + 4800);
+        const audio = await page.evaluate(() => ({
+          ...rotationAudio, expectedSession: playbackIdentity.session, state: document.querySelector('.audio-card').dataset.audioState,
+          transitions: rotationAudioStates, video: videoPlayer.getPlayerState(), videoTransitions: videoPlayer.states,
+        }));
+        expect(audio.session).toBe(audio.expectedSession);
+        expect(audio.continuity).toMatchObject({ segment: 0, missingSamples: 0, overlapSamples: 0 });
+        expect(audio.rms).toBeGreaterThan(-45);
+        expect(audio.state).toBe('playing');
+        expect(audio.transitions.every(state => state === 'playing')).toBe(true);
+        expect(audio.video).toBe(1);
+        expect(audio.videoTransitions).toEqual([1]);
         expect(await page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics, old = playbackIdentity;
           return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
             && v.worker === old.worker && v.renderer === old.renderer && testContext === old.context
             && testContext.state === 'running' && micRequests === old.requests;
         })).toBe(true);
-        await page.locator('.rotate-display').click();
       }
     }
   });
