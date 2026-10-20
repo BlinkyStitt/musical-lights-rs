@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, devices } from '@playwright/test';
 import { physicsReady, scrollingIntersections } from '../physics-state.mjs';
+import { meterPoint } from '../meter-input.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
@@ -55,3 +56,97 @@ test('phone opens expanded without capture and keeps settings in the top half wi
     }
   } finally { await context.close(); }
 });
+
+for (const route of ['/', '/advanced/']) {
+  test(`manual quarter turns fit the whole view and top-layer Settings on ${route}`, async ({ browser }, info) => {
+    test.setTimeout(120000);
+    const context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 393, height: 852 } });
+    try {
+      const page = await context.newPage();
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.addInitScript(() => {
+        window.micRequests = 0;
+        MediaDevices.prototype.getUserMedia = async () => { window.micRequests++; throw Error('Unexpected capture'); };
+        Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+      });
+      await page.goto(origin + route); await physicsReady(page);
+      await page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics;
+        window.rotationIdentity = { view: v, worker: v.worker, renderer: v.renderer, balls: v.balls, listening: document.querySelector('.listening-toggle') };
+      });
+      for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
+        await page.setViewportSize(viewport);
+        for (const video of [false, true]) {
+          await page.evaluate(video => {
+            const card = document.querySelector('.audio-card');
+            card.classList.toggle('video-active', video);
+            card.querySelector('.video-panel').hidden = !video;
+            card.querySelector('.youtube-frame').innerHTML = video ? '<iframe title="Rotation fixture" src="about:blank"></iframe>' : '';
+          }, video);
+          for (let turn = 0; turn < 4; turn++) {
+            await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
+            await expect.poll(() => page.evaluate(({ turn, video }) => {
+              const card = document.querySelector('.audio-card'), v = card.querySelector('#dancinglights').physics;
+              const box = card.getBoundingClientRect(), identity = window.rotationIdentity;
+              const fits = r => r.left >= -.1 && r.top >= -.1 && r.right <= innerWidth + .1 && r.bottom <= innerHeight + .1;
+              const buttons = [...card.querySelectorAll('.fullscreen-toolbar button, .fullscreen-toolbar label')];
+              const toolbar = buttons.every(n => { const r = n.getBoundingClientRect(); return fits(r) && r.width >= 44 && r.height >= 44 && n.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });
+              const scene = getComputedStyle(v.layer);
+              return { fit: fits(box) && Math.abs(box.width - innerWidth) < 1 && Math.abs(box.height - innerHeight) < 1,
+                dimensions: card.clientWidth === (turn % 2 ? innerHeight : innerWidth) && card.clientHeight === (turn % 2 ? innerWidth : innerHeight),
+                canvas: Math.abs(v.canvasWidth - parseFloat(scene.width)) < .1 && Math.abs(v.canvasHeight - parseFloat(scene.height)) < .1,
+                toolbar, video: !video || fits(card.querySelector('iframe').getBoundingClientRect()),
+                identity: v === identity.view && v.worker === identity.worker && v.renderer === identity.renderer && v.balls === identity.balls && card.querySelector('.listening-toggle') === identity.listening,
+                scrollLocked: getComputedStyle(document.documentElement).overflow === 'hidden',
+                requests: window.micRequests };
+            }, { turn, video })).toEqual({ fit: true, dimensions: true, canvas: true, toolbar: true, video: true, identity: true, scrollLocked: true, requests: 0 });
+            const point = await meterPoint(page, page.getByRole('meter').nth(12));
+            await page.touchscreen.tap(point.x, point.y);
+            await expect(page.locator('.frequency-tooltip')).toBeVisible();
+            await expect(page.getByRole('meter').nth(12)).toHaveAttribute('aria-describedby', 'frequency-readout');
+            await page.getByRole('button', { name: 'Settings', exact: true }).tap();
+            const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+            await expect(dialog).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeFocused();
+            const geometry = await dialog.evaluate((node, turn) => {
+              const r = node.getBoundingClientRect();
+              const fits = r.left >= 0 && r.top >= 0 && r.right <= innerWidth + .1 && r.bottom <= innerHeight + .1;
+              const half = [r.bottom <= innerHeight / 2 + .1, r.left >= innerWidth / 2 - .1, r.top >= innerHeight / 2 - .1, r.right <= innerWidth / 2 + .1][turn];
+              const close = node.querySelector('button').getBoundingClientRect();
+              return { fits, half, hit: document.elementFromPoint(close.x + close.width / 2, close.y + close.height / 2) === node.querySelector('button') };
+            }, turn);
+            expect(geometry).toEqual({ fits: true, half: true, hit: true });
+            await page.locator('.fullscreen-settings [data-help="listening-toggle"]').tap();
+            expect(await page.locator('.control-help').evaluate(n => {
+              const a = n.getBoundingClientRect(), b = n.closest('dialog').getBoundingClientRect();
+              return a.left >= b.left && a.top >= b.top && a.right <= b.right && a.bottom <= b.bottom;
+            })).toBe(true);
+            const slider = page.locator('.camera-rotation');
+            const previousAngle = Number(await slider.inputValue());
+            await page.getByRole('button', { name: 'Increase Camera angle (degrees)', exact: true }).tap();
+            await expect(slider).toHaveValue(String(previousAngle + 1));
+            await page.getByRole('button', { name: 'Close settings', exact: true }).focus();
+            await page.keyboard.press('Shift+Tab');
+            expect(await dialog.evaluate(n => n.contains(document.activeElement))).toBe(true);
+            await page.keyboard.press('Escape');
+            await expect(dialog).not.toBeVisible();
+            await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+            if (route === '/' && video && turn === 1) await info.attach(`rotation-${viewport.width}.png`, { body: await page.screenshot(), contentType: 'image/png' });
+            await page.locator('.rotate-display').tap();
+          }
+        }
+      }
+      await page.locator('.rotate-display').focus();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-display-rotation', '1');
+      const routeBeforeExit = page.url();
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
+      await expect(page).toHaveURL(routeBeforeExit);
+      await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+      expect(await page.locator('.audio-card').evaluate(n => getComputedStyle(n).transform)).toBe('none');
+      await page.getByRole('button', { name: 'Fullscreen', exact: true }).tap();
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName('Rotate view clockwise, current rotation 90 degrees');
+      await page.setViewportSize({ width: 393, height: 852 });
+    } finally { await context.close(); }
+  });
+}

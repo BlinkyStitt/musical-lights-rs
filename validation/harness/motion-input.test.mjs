@@ -182,3 +182,32 @@ for (const [sign, navigator] of [
     });
   }
 }
+
+test('display turns compose once with fixed browser orientation and leave sensor readings unchanged', async () => {
+  const f = await fixture(undefined, { platform: 'iPhone', userAgent: 'iPhone' });
+  f.input.card = { displayQuarterTurn: 0, hasAttribute: () => true };
+  for (const browser of [0, 90, -90, 180]) {
+    f.window.screen.orientation.angle = browser;
+    for (let turn = 0; turn < 4; turn++) {
+      f.input.card.displayQuarterTurn = turn;
+      const size = f.input.measureBounds({ getBoundingClientRect: () => ({
+        width: turn % 2 ? 777.875 : 333.125, height: turn % 2 ? 333.125 : 777.875,
+      }) });
+      assert.equal(size.width, 333.125);
+      assert.equal(size.height, 777.875);
+      f.send({ acceleration: { x: 3, y: -4, z: 7 }, accelerationIncludingGravity: { x: 3, y: -13.81, z: 9 } });
+      assert.deepEqual(f.shakes.at(-1), [3, -4, 7, browser]);
+      const shake = f.input.rotate(...f.shakes.at(-1).slice(0, 2), browser);
+      const gravity = f.input.rotate(...f.tilts.at(-1).slice(0, 2), browser);
+      const a = (browser + turn * 90) * Math.PI / 180;
+      assert.ok(Math.abs(shake[0] - (3 * Math.cos(a) + 4 * Math.sin(a))) < 1e-9);
+      assert.ok(Math.abs(shake[1] - (3 * Math.sin(a) - 4 * Math.cos(a))) < 1e-9);
+      assert.ok(Math.abs(Math.hypot(...shake) - 5) < 1e-9);
+      assert.ok(Math.abs(Math.hypot(...gravity) - 9.81) < 1e-9);
+      assert.equal(f.tilts.at(-1)[2], 2, 'depth stays separate');
+    }
+  }
+  f.input.card.hasAttribute = () => false;
+  assert.equal(f.input.displayAngle, 0, 'the normal page stays upright');
+  f.input.close();
+});

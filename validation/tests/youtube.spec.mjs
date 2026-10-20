@@ -424,3 +424,69 @@ test('camera slider tracks the rendered view and Reduced Motion removes automati
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.rotation)).toBe(0);
   await expect(page.locator('.camera-rotation')).toHaveValue('0');
 });
+
+for (const resizeLayout of [false, true]) {
+  test(`manual rotation preserves playback with a ${resizeLayout ? 'layout' : 'visual'} keyboard viewport`, async ({ page }) => {
+    test.setTimeout(60000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    // Headless browsers have no on-screen keyboard. Model both resize contracts.
+    await page.addInitScript(() => {
+      const viewport = Object.assign(new EventTarget(), { width: innerWidth, height: innerHeight, offsetTop: 0, offsetLeft: 0 });
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+      window.rotationKeyboard = height => { viewport.width = innerWidth; viewport.height = height; viewport.dispatchEvent(new Event('resize')); };
+    });
+    await setup(page); await load(page);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    await page.evaluate(() => {
+      videoPlayer.playVideo();
+      const v = document.querySelector('#dancinglights').physics;
+      window.playbackIdentity = { player: videoPlayer, frame: videoPlayer.frame, worker: v.worker, renderer: v.renderer, context: testContext, requests: micRequests };
+    });
+    for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568, height: 320, keyboard: 180 }]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.evaluate(height => rotationKeyboard(height), viewport.height);
+      for (let turn = 0; turn < 4; turn++) {
+        await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
+        await openFullscreenSettings(page);
+        await page.getByRole('button', { name: 'Video', exact: true }).click();
+        await expect.poll(() => page.evaluate(() => {
+          const v = document.querySelector('#dancinglights').physics, style = getComputedStyle(v.layer);
+          return !v.resizePending && Math.abs(v.canvasWidth - parseFloat(style.width)) < .1 && Math.abs(v.canvasHeight - parseFloat(style.height)) < .1;
+        })).toBe(true);
+        const geometry = () => page.evaluate(() => {
+          const v = document.querySelector('#dancinglights').physics;
+          return [v.canvasWidth, v.canvasHeight, v.input[32]];
+        });
+        const before = await geometry();
+        if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.keyboard });
+        await page.evaluate(height => {
+          rotationKeyboard(height);
+          // Duplicate native notifications must not release frozen editor sizing.
+          const descriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+          Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.querySelector('.visualizer-screen') });
+          try { document.dispatchEvent(new Event('fullscreenchange')); }
+          finally { if (descriptor) Object.defineProperty(document, 'fullscreenElement', descriptor); else delete document.fullscreenElement; }
+        }, viewport.keyboard);
+        await page.locator('.youtube-link').scrollIntoViewIfNeeded();
+        await expect.poll(() => page.evaluate(({ width, keyboard }) => {
+          const fits = node => { const r = node.getBoundingClientRect(); return r.left >= -.1 && r.top >= -.1 && r.right <= width + .1 && r.bottom <= keyboard + .1 && r.width >= 44 && r.height >= 44; };
+          const close = document.querySelector('.close-fullscreen-settings'), box = close.getBoundingClientRect();
+          return { modal: fits(document.querySelector('.fullscreen-settings')), field: fits(document.querySelector('.youtube-link')),
+            close: fits(close) && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === close };
+        }, viewport)).toEqual({ modal: true, field: true, close: true });
+        await expect.poll(geometry).toEqual(before);
+        if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.evaluate(height => rotationKeyboard(height), viewport.height);
+        await closeFullscreenSettings(page);
+        expect(await page.evaluate(() => {
+          const v = document.querySelector('#dancinglights').physics, old = playbackIdentity;
+          return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
+            && v.worker === old.worker && v.renderer === old.renderer && testContext === old.context
+            && testContext.state === 'running' && micRequests === old.requests;
+        })).toBe(true);
+        await page.locator('.rotate-display').click();
+      }
+    }
+  });
+}

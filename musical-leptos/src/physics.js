@@ -1,3 +1,4 @@
+import { displayTurn, localPoint } from './screen.js';
 // Querying permission never opens a prompt. Unsupported descriptors stay unknown;
 // storage and previous visits are deliberately not evidence of browser permission.
 export class PermissionStatus {
@@ -67,6 +68,7 @@ export function orientationGravity(beta, gamma, magnitude = 9.81) {
 export class PhysicsInput {
   constructor(layer, onPointer, onGravity, onShake, onStatus = () => {}, onPermission = () => {}) {
     this.window = layer.ownerDocument.defaultView;
+    this.card = layer.closest?.('.audio-card');
     this.closed = false;
     this.listeners = [];
     this.motion = null;
@@ -87,8 +89,9 @@ export class PhysicsInput {
       if (event.pointerType !== 'mouse') return;
       const box = this.bounds;
       if (!box) return;
-      const x = (event.clientX - box.left) / box.width;
-      const y = 1 - (event.clientY - box.top) / box.height;
+      const point = localPoint(layer, event.clientX, event.clientY);
+      const x = point.x / layer.clientWidth;
+      const y = 1 - point.y / layer.clientHeight;
       onPointer(x, y, x >= 0 && x <= 1 && y >= 0 && y <= 1);
     });
     this.listen('pointerout', event => { if (!event.relatedTarget) clearPointer(); });
@@ -137,6 +140,20 @@ export class PhysicsInput {
       this.motionGravityAt = performance.now();
       onShake(...shake, angle());
     };
+  }
+
+  get displayAngle() { return displayTurn(this.card) * 90; }
+
+  measureBounds(layer) {
+    const box = layer.getBoundingClientRect();
+    // Undo the known quarter turn before using dimensions for camera/physics.
+    // Preserve fractional CSS pixels (clientWidth/clientHeight round to integers).
+    return this.displayAngle % 180 ? { width: box.height, height: box.width } : box;
+  }
+
+  rotate(x, y, browserAngle) {
+    const a = (browserAngle + this.displayAngle) * Math.PI / 180;
+    return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), 0];
   }
 
   startMotion() {

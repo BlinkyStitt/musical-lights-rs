@@ -10,6 +10,13 @@ Invalid replacement links retain the current player. Removal and route exit
 destroy it. Starting a digital audio source pauses the video; starting video
 stops a competing digital source without starting Listening.
 
+In the expanded toolbar, **Rotate** turns the complete video, scene, controls
+and Settings clockwise by 90°. Four taps return to upright. The selection stays
+until another tap, including after Exit and re-entry; the normal page stays
+upright. This works with iPhone system rotation lock enabled and does not request
+motion or microphone access. Physical-iPhone sensor and playback checks remain
+separate from browser emulation.
+
 **Listening** uses the microphone. YouTube does not expose decoded PCM to this
 app, so microphone-driven lights must hear the video through the speakers.
 Recognition remains a separate opt-in microphone upload with the existing
@@ -19,21 +26,18 @@ Where available, the Audio Session API selects `play-and-record` during capture
 and `playback` for video alone, then restores the previous type on route exit.
 This API selection does not prove that an actual iPhone routes both streams.
 
-Fullscreen portrait reserves separate video, visualizer, song ticker, recovery,
-and bottom control regions. Landscape places video and visualizer side by side.
-Balls and bars stay inside the scene, outside the controls. The video and
-scene keep at least 200 pixels of height. Expanded content scrolls vertically
-when the messages, song and controls do not fit. Messages and wrapped titles
-grow below the scene without changing its size. Scroll the footer to reach
-controls; downward swipes on the scene still exit. Mobile opens in this expanded
-layout without microphone capture or a native fullscreen request. Exit returns
-to the normal page; the next viewport resize does not reopen it. Listening and Identify song occupy the first
-two grid cells. Native switches keep 44-pixel touch targets and keyboard focus.
+Expanded portrait stacks video and scene; landscape places them side by side.
+The main view stays fixed. Settings holds the shared controls over the logical
+top half, with a scrolling body and fixed Close button. Mobile opens expanded
+without microphone capture or a native fullscreen request. Exit returns to the
+normal page; a viewport resize does not reopen it. Native switches keep
+44-pixel touch targets and keyboard focus.
 In expanded mode, the video entry floats above the scene. Opening the mobile
 keyboard keeps the scene height and bar enclosure unchanged; the keyboard can
 cover the lower scene. The entry follows the visible viewport and scrolls if
-space is short. Load video and Remove video dismiss the keyboard. Rotation and
-Exit restore the normal layout. No video space is reserved before a video loads.
+space is short. Load video and Remove video dismiss the keyboard. Rotate selects
+new logical layout dimensions; Exit restores the normal page. No video space is
+reserved before a video loads.
 Tap, hover, or focus a label to read help without changing its switch; Escape
 closes the box. Microphone state and routine recognition availability appear
 in this help. Actionable failures remain in visible recovery notices.

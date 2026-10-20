@@ -356,3 +356,52 @@ nav { flex-wrap: wrap; }
   .audio-card[data-expanded].video-active .video-panel { width: 50%; height: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .audio-card[data-expanded] .song-title { animation: none; white-space: normal; } }
+
+/* One fixed logical surface; the native dialog has its own matching transform. */
+.audio-card[data-expanded] {
+  --display-width: 100dvw; --display-height: 100dvh;
+  --safe-top: env(safe-area-inset-top); --safe-right: env(safe-area-inset-right);
+  --safe-bottom: env(safe-area-inset-bottom); --safe-left: env(safe-area-inset-left);
+  inset: 0 auto auto 0;
+  width: var(--expanded-width, var(--display-width)); height: var(--expanded-height, var(--display-height));
+  transform-origin: 0 0; transform: none;
+}
+.audio-card[data-expanded][data-display-rotation="1"] {
+  --display-width: 100dvh; --display-height: 100dvw;
+  --safe-top: env(safe-area-inset-right); --safe-right: env(safe-area-inset-bottom);
+  --safe-bottom: env(safe-area-inset-left); --safe-left: env(safe-area-inset-top);
+  transform: translateX(var(--expanded-height, 100dvw)) rotate(90deg);
+}
+.audio-card[data-expanded][data-display-rotation="2"] {
+  --safe-top: env(safe-area-inset-bottom); --safe-right: env(safe-area-inset-left);
+  --safe-bottom: env(safe-area-inset-top); --safe-left: env(safe-area-inset-right);
+  transform: translate(var(--expanded-width, 100dvw), var(--expanded-height, 100dvh)) rotate(180deg);
+}
+.audio-card[data-expanded][data-display-rotation="3"] {
+  --display-width: 100dvh; --display-height: 100dvw;
+  --safe-top: env(safe-area-inset-left); --safe-right: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-right); --safe-left: env(safe-area-inset-bottom);
+  transform: translateY(var(--expanded-width, 100dvh)) rotate(270deg);
+}
+.audio-card[data-expanded] .fullscreen-toolbar {
+  top: max(.5rem, var(--safe-top)); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right));
+  gap: .25rem;
+}
+.audio-card[data-expanded] .fullscreen-toolbar button { min-width: 44px; padding-inline: .5rem; }
+.audio-card[data-expanded] .fullscreen-toolbar .fullscreen-settings-button { padding: 0; }
+.audio-card[data-expanded] .recognized-song { bottom: max(.5rem, var(--safe-bottom)); }
+.audio-card[data-expanded] .recovery-notices { top: calc(max(.5rem, var(--safe-top)) + 48px); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); }
+.audio-card[data-expanded] .control-help { position: absolute; }
+/* Resolve physical safe areas to pixels for the top-layer dialog. */
+.audio-card[data-expanded]::after { content: ''; position: absolute; visibility: hidden; pointer-events: none; padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
+@container visualizer (max-width: 700px) {
+  .audio-card[data-expanded] .scene-controls { grid-template-columns: minmax(0, 1fr); }
+  .audio-card[data-expanded] .scene-controls .control-row { flex-direction: column; align-items: stretch; gap: 0; }
+  .audio-card[data-expanded] .scene-controls .frame-rate { align-self: end; margin-bottom: .75rem; }
+}
+@container visualizer (min-width: 701px) {
+  .audio-card[data-expanded] .scene-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.visualizer-screen { display: contents; }
+.visualizer-screen:fullscreen { display: block; visibility: visible; background: var(--plot); }
+.visualizer-screen::backdrop { background: var(--plot); }

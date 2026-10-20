@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseYouTube, readSettings, SETTINGS_KEY, validDirectionOdds } from '../../musical-leptos/src/presentation.js';
+import { localPoint, placeDialog, viewportBounds } from '../../musical-leptos/src/screen.js';
 
 test('YouTube links select one video and preserve start times without accepting arbitrary origins', () => {
   for (const url of ['https://youtu.be/abcDEF012_-?t=1m23s', 'https://www.youtube.com/watch?v=abcDEF012_-&t=83', 'https://m.youtube.com/shorts/abcDEF012_-?start=83', 'https://www.youtube.com/embed/abcDEF012_-?start=83']) {
@@ -63,4 +64,26 @@ test('physics preferences accept the same Float32 boundaries as the WASM engine'
     assert.deepEqual(read(physics).physics,physics);
   }
   for(const value of [.3199,4.001]) assert.equal(read([.4,12,8,.72,.12,.48,.02,value]).physics,undefined);
+});
+
+
+test('inverse pointer mapping and top-layer placement agree in all four display turns', () => {
+  for (let turn = 0; turn < 4; turn++) {
+    const width = turn % 2 ? 800 : 400, height = turn % 2 ? 400 : 800;
+    const card = { displayQuarterTurn: turn, hasAttribute: () => true, clientWidth: width, clientHeight: height,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 800 }) };
+    for (const [x, y] of [[0, 0], [width * .2, height * .7], [width, height]]) {
+      const [px, py] = [[x, y], [height - y, x], [width - x, height - y], [y, width - x]][turn];
+      const point = localPoint(card, px, py);
+      assert.ok(Math.abs(point.x - x) < 1e-9);
+      assert.ok(Math.abs(point.y - y) < 1e-9);
+    }
+    const dialog = { style: {} };
+    placeDialog(card, dialog, { left: 8, top: 8, width: width - 16, height: height / 2 - 8 });
+    assert.equal(dialog.style.transform, turn ? `rotate(${turn * 90}deg)` : 'none');
+    const origin = localPoint(card, parseFloat(dialog.style.left), parseFloat(dialog.style.top));
+    assert.ok(Math.abs(origin.x - 8) < 1e-9 && Math.abs(origin.y - 8) < 1e-9);
+    const visible = viewportBounds(card, { offsetLeft: 0, offsetTop: 0, width: 400, height: 500 });
+    assert.ok(visible.left >= 0 && visible.top >= 0 && visible.right <= width && visible.bottom <= height);
+  }
 });

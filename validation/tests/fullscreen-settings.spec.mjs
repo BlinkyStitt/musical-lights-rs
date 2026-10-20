@@ -115,6 +115,11 @@ test('settings close on native browser exit and route cleanup', async ({ page },
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await page.evaluate(() => { window.modalSession = { context: modalContext, id: document.querySelector('#dancinglights').physics.report.audioState.sessionId }; });
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await page.locator('.rotate-display').click();
+  await expect.poll(() => page.locator('.audio-card').evaluate(n => {
+    const r = n.getBoundingClientRect();
+    return n.displayQuarterTurn === 1 && Math.abs(r.width - innerWidth) < 1 && Math.abs(r.height - innerHeight) < 1;
+  })).toBe(true);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
   if (info.project.name === 'chromium') {
@@ -137,6 +142,7 @@ test('settings close on native browser exit and route cleanup', async ({ page },
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
   await page.getByRole('link', { name: 'Home', exact: true }).click(); await physicsReady(page);
   await expect(page.locator('dialog')).toHaveCount(1);
+  expect(await page.locator('.audio-card').evaluate(n => n.displayQuarterTurn)).toBe(0);
 });
 
 
