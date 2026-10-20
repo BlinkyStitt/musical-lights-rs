@@ -6,6 +6,7 @@ async function recoveryPage(page, microphone = false) {
   await page.addInitScript(microphone => {
     const Context = window.AudioContext, Node = window.AudioWorkletNode;
     window.recoveryContexts = []; window.recoveryNodes = []; window.captureCalls = 0; window.recoveryFrames = 0; window.recoveryInjected = 0;
+    window.recoveryTransport = [];
     window.AudioContext = class extends Context {
       constructor(...args) {
         super(...args); recoveryContexts.push(this);
@@ -27,7 +28,13 @@ async function recoveryPage(page, microphone = false) {
       }
     };
     window.AudioWorkletNode = class extends Node {
-      constructor(context, name, options) { super(context, name, options); recoveryNodes.push({ node: this, name, options }); if (name === 'loudness-processor') this.port.addEventListener('message', ({ data }) => { if (data.type === 'frame') recoveryFrames++; }); }
+      constructor(context, name, options) {
+        super(context, name, options); recoveryNodes.push({ node: this, name, options });
+        this.port.addEventListener('message', ({ data }) => {
+          if (name === 'loudness-processor' && data.type === 'frame') recoveryFrames++;
+          if (name === 'pcm-playback' && data.type === 'transport') recoveryTransport.push(data);
+        });
+      }
     };
     if (microphone) {
       const settings = { autoGainControl: false, echoCancellation: false, noiseSuppression: false, deviceId: 'recovery-test-input', sampleRate: 48000 };
@@ -63,15 +70,21 @@ test('a real audio gap preserves playback and monitor controls while exported tr
   await page.locator('.review-start').click();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback?.processingSeconds ?? 0)).toBeGreaterThan(.2);
-  const before = await page.evaluate(() => ({ session: document.querySelector('.audio-card').dataset.audioSession, position: document.querySelector('.audio-card').review.lastPlayback.outputSeconds, nodes: recoveryNodes.length }));
+  // Compare the PCM transport clock, not the device-output estimate. WebKit can
+  // report future output timestamps, making outputSeconds jump back to zero.
+  // Worklet transport acknowledgments also expose any restart or pause command.
+  const before = await page.evaluate(() => ({ session: document.querySelector('.audio-card').dataset.audioSession, position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, nodes: recoveryNodes.length, transport: recoveryTransport }));
+  expect(before.transport).toEqual([expect.objectContaining({ sequence: 0, positionFrame: 0, state: 'playing' })]);
   await dropQuantum(page);
   await expect(page.locator('.analysis-status')).toContainText('Audio recovered');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.tone-repeat')).toBeChecked(); await expect(page.locator('.tone-audible')).toBeChecked();
   await expect(page.getByRole('alert')).toBeEmpty();
-  const after = await page.evaluate(() => ({ session: document.querySelector('.audio-card').dataset.audioSession, position: document.querySelector('.audio-card').review.lastPlayback.outputSeconds, nodes: recoveryNodes.length, contexts: recoveryContexts.length, requests: captureCalls, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity }));
+  await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.processingSeconds)).toBeGreaterThan(before.position);
+  const after = await page.evaluate(() => ({ session: document.querySelector('.audio-card').dataset.audioSession, position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, nodes: recoveryNodes.length, contexts: recoveryContexts.length, requests: captureCalls, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, transport: recoveryTransport }));
   expect(after.session).toBe(before.session); expect(after.nodes).toBe(before.nodes); expect(after.contexts).toBe(1); expect(after.requests).toBe(0);
-  expect(after.position).toBeGreaterThanOrEqual(before.position); expect(after.position - before.position).toBeLessThan(2);
+  expect(after.transport).toEqual(before.transport);
+  expect(after.position).toBeGreaterThan(before.position); expect(after.position - before.position).toBeLessThan(2);
   expect(after.continuity.missingSamples).toBe(128); expect(after.continuity.receivedSample - after.continuity.expectedSample).toBe(128);
   await page.locator('.tone-pause').click();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'paused');
@@ -142,14 +155,17 @@ test('a backward analysis clock keeps the same playback position and declares it
   await page.locator('.input-source').selectOption('generated');
   await page.locator('.tone-trace').check(); await page.locator('.review-start').click();
   await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback?.processingSeconds ?? 0)).toBeGreaterThan(.2);
-  const before = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.outputSeconds, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length }));
+  const before = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, transport: recoveryTransport }));
+  expect(before.transport).toEqual([expect.objectContaining({ sequence: 0, positionFrame: 0, state: 'playing' })]);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await dropQuantum(page, 1, 'validation-clock-backstep');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.analysis-status')).toContainText('Audio recovered'); await expect(page.locator('.audio-error')).toBeEmpty();
-  const after = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.outputSeconds, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, contexts: recoveryContexts.length, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, chunks: document.querySelector('#dancinglights').physics.report.toneChunks.map(c => ({ stride: c.stride, values: Array.from(c.values) })) }));
+  await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.processingSeconds)).toBeGreaterThan(before.position);
+  const after = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, contexts: recoveryContexts.length, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, chunks: document.querySelector('#dancinglights').physics.report.toneChunks.map(c => ({ stride: c.stride, values: Array.from(c.values) })), transport: recoveryTransport }));
   expect(after.session).toBe(before.session); expect(after.nodes).toBe(before.nodes); expect(after.contexts).toBe(1);
-  expect(after.position).toBeGreaterThanOrEqual(before.position); expect(after.position - before.position).toBeLessThan(2);
+  expect(after.transport).toEqual(before.transport);
+  expect(after.position).toBeGreaterThan(before.position); expect(after.position - before.position).toBeLessThan(2);
   expect(after.continuity.missingSamples).toBe(0); expect(after.continuity.overlapSamples).toBe(128);
   expect(after.continuity.expectedSample - after.continuity.receivedSample).toBe(128);
   expect(after.chunks.some(c => c.values.some((value, i) => i % c.stride === 465 && value === 1))).toBe(true);
