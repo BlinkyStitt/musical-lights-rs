@@ -105,32 +105,38 @@ for (const route of ['/', '/advanced/']) {
             await expect(page.locator('.frequency-tooltip')).toBeVisible();
             await expect(page.getByRole('meter').nth(12)).toHaveAttribute('aria-describedby', 'frequency-readout');
             await page.getByRole('button', { name: 'Settings', exact: true }).tap();
+            // Keep the accessible dialog identity and read one coherent layout.
             const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
-            await expect(dialog).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeFocused();
-            const geometry = await dialog.evaluate((node, turn) => {
+            await expect.poll(() => dialog.evaluate((node, turn) => {
               const r = node.getBoundingClientRect();
               const fits = r.left >= 0 && r.top >= 0 && r.right <= innerWidth + .1 && r.bottom <= innerHeight + .1;
               const half = [r.bottom <= innerHeight / 2 + .1, r.left >= innerWidth / 2 - .1, r.top >= innerHeight / 2 - .1, r.right <= innerWidth / 2 + .1][turn];
               const close = node.querySelector('button').getBoundingClientRect();
-              return { fits, half, hit: document.elementFromPoint(close.x + close.width / 2, close.y + close.height / 2) === node.querySelector('button') };
-            }, turn);
-            expect(geometry).toEqual({ fits: true, half: true, hit: true });
+              return { fits, half, hit: document.elementFromPoint(close.x + close.width / 2, close.y + close.height / 2) === node.querySelector('button'),
+                visible: r.width > 0 && r.height > 0 && getComputedStyle(node).visibility === 'visible',
+                focused: document.activeElement === node.querySelector('button') };
+            }, turn)).toEqual({ fits: true, half: true, hit: true, visible: true, focused: true });
             await page.locator('.fullscreen-settings [data-help="listening-toggle"]').tap();
-            expect(await page.locator('.control-help').evaluate(n => {
+            const help = await page.evaluate(() => {
+              const n = document.querySelector('.control-help');
               const a = n.getBoundingClientRect(), b = n.closest('dialog').getBoundingClientRect();
-              return a.left >= b.left && a.top >= b.top && a.right <= b.right && a.bottom <= b.bottom;
-            })).toBe(true);
+              return { fits: a.width > 0 && a.height > 0 && a.left >= b.left && a.top >= b.top && a.right <= b.right && a.bottom <= b.bottom,
+                angle: Number(document.querySelector('.camera-rotation').value) };
+            });
+            expect(help.fits).toBe(true);
             const slider = page.locator('.camera-rotation');
-            const previousAngle = Number(await slider.inputValue());
+            const previousAngle = help.angle;
             await page.getByRole('button', { name: 'Increase Camera angle (degrees)', exact: true }).tap();
             await expect(slider).toHaveValue(String(previousAngle + 1));
             await page.getByRole('button', { name: 'Close settings', exact: true }).focus();
             await page.keyboard.press('Shift+Tab');
-            expect(await dialog.evaluate(n => n.contains(document.activeElement))).toBe(true);
+            expect(await page.evaluate(() => document.querySelector('.fullscreen-settings').contains(document.activeElement))).toBe(true);
             await page.keyboard.press('Escape');
-            await expect(dialog).not.toBeVisible();
-            await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+            await expect.poll(() => page.evaluate(() => {
+              const dialog = document.querySelector('.fullscreen-settings'), r = dialog.getBoundingClientRect();
+              return { closed: !dialog.open && (r.width === 0 || r.height === 0 || getComputedStyle(dialog).visibility === 'hidden'),
+                expanded: document.querySelector('.audio-card').hasAttribute('data-expanded') };
+            })).toEqual({ closed: true, expanded: true });
             if (route === '/' && video && turn === 1) await info.attach(`rotation-${viewport.width}.png`, { body: await page.screenshot(), contentType: 'image/png' });
             await page.locator('.rotate-display').tap();
           }
