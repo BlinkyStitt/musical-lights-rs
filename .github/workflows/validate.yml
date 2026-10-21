@@ -136,7 +136,7 @@ jobs:
       - uses: actions/setup-node@v7.0.0
         if: needs.plan.outputs.reuse != 'true'
         with:
-          node-version: '26.8.2'
+          node-version: '26.12.1'
           cache: npm
           cache-dependency-path: validation/package-lock.json
       - name: Install Rust
@@ -243,7 +243,7 @@ jobs:
       - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
       - uses: actions/setup-node@v7.0.0
         with:
-          node-version: '26.8.2'
+          node-version: '26.12.1'
           cache: npm
           cache-dependency-path: validation/package-lock.json
       - name: Install exact browser
