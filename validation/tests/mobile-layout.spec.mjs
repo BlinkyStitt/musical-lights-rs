@@ -4,6 +4,24 @@ import { meterPoint } from '../meter-input.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
+// The geometry assertion checks these toolbar controls before input. Resolve
+// their native touch points as meterPoint does for the spectrum; Settings
+// controls keep driver taps because their modal body can require scrolling.
+async function tapToolbarAtHitPoint(page, control) {
+  const point = await control.evaluateAll(nodes => {
+    if (nodes.length !== 1) throw new Error('Touch input requires exactly one visible control');
+    const node = nodes[0], box = node.getBoundingClientRect();
+    const x = Math.round(box.x + box.width / 2), y = Math.round(box.y + box.height / 2);
+    if (box.width < 44 || box.height < 44 || getComputedStyle(node).visibility !== 'visible'
+      || node.matches(':disabled') || node.closest('[aria-disabled="true"]')
+      || !node.contains(node.ownerDocument.elementFromPoint(x, y))) {
+      throw new Error('Touch input point must hit the requested enabled control');
+    }
+    return { x, y };
+  });
+  await page.touchscreen.tap(point.x, point.y);
+}
+
 test('phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
   try {
@@ -104,10 +122,10 @@ for (const route of ['/', '/advanced/']) {
             await page.touchscreen.tap(point.x, point.y);
             await expect(page.locator('.frequency-tooltip')).toBeVisible();
             await expect(page.getByRole('meter').nth(12)).toHaveAttribute('aria-describedby', 'frequency-readout');
-            await page.getByRole('button', { name: 'Settings', exact: true }).tap();
+            await tapToolbarAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
             // Keep the accessible dialog identity and read one coherent layout.
             const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
-            await expect.poll(() => dialog.evaluate((node, turn) => {
+            await expect.poll(() => dialog.evaluateAll((nodes, turn) => nodes.map(node => {
               const r = node.getBoundingClientRect();
               const fits = r.left >= 0 && r.top >= 0 && r.right <= innerWidth + .1 && r.bottom <= innerHeight + .1;
               const half = [r.bottom <= innerHeight / 2 + .1, r.left >= innerWidth / 2 - .1, r.top >= innerHeight / 2 - .1, r.right <= innerWidth / 2 + .1][turn];
@@ -115,7 +133,7 @@ for (const route of ['/', '/advanced/']) {
               return { fits, half, hit: document.elementFromPoint(close.x + close.width / 2, close.y + close.height / 2) === node.querySelector('button'),
                 visible: r.width > 0 && r.height > 0 && getComputedStyle(node).visibility === 'visible',
                 focused: document.activeElement === node.querySelector('button') };
-            }, turn)).toEqual({ fits: true, half: true, hit: true, visible: true, focused: true });
+            }), turn)).toEqual([{ fits: true, half: true, hit: true, visible: true, focused: true }]);
             await page.locator('.fullscreen-settings [data-help="listening-toggle"]').tap();
             const help = await page.evaluate(() => {
               const n = document.querySelector('.control-help');
@@ -138,7 +156,7 @@ for (const route of ['/', '/advanced/']) {
                 expanded: document.querySelector('.audio-card').hasAttribute('data-expanded') };
             })).toEqual({ closed: true, expanded: true });
             if (route === '/' && video && turn === 1) await info.attach(`rotation-${viewport.width}.png`, { body: await page.screenshot(), contentType: 'image/png' });
-            await page.locator('.rotate-display').tap();
+            await tapToolbarAtHitPoint(page, page.locator('.rotate-display'));
           }
         }
       }
