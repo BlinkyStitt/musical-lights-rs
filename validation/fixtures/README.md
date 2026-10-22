@@ -7,6 +7,14 @@ the test's 60-second deadline so every rotation can assert an advancing playhead
 and newly presented frames without seeking or looping. It is continuity
 evidence, not a video quality or physical-device performance benchmark.
 
+The test starts playback with an explicit Play button and leaves the video
+element unmuted. The clip remains silent because it has no audio track. In the
+pinned WebKit runner, a muted video inside a rotated iframe stops presenting
+frames and advancing its media clock without emitting a pause; an isolated
+iframe reproduction shows the same behavior without the application. Unmuted,
+gesture-started playback retains visible video and the real frame/clock checks
+across rotation. This fixture does not establish muted-video behavior on Safari.
+
 Generated with FFmpeg 8.0.1 and libx264 from the repository root:
 
 ```sh

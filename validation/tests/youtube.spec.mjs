@@ -36,9 +36,12 @@ async function setup(page, path = '/', progressingVideo = false) {
   const movie = progressingVideo ? await readFile(new URL('../fixtures/rotation-clock.mp4', import.meta.url)) : null;
   // Inline a generated clip longer than the test deadline (fixtures/README.md).
   // Exercise the browser media clock without looping, a live provider or HTTP range mocks.
+  // Start unmuted via the explicit Play gesture, as with normal YouTube playback.
+  // The clip has no audio track. Muting it makes WebKit suspend video rendering
+  // in a rotated iframe, even though the visible player still reports playing.
   await page.route('https://www.youtube-nocookie.com/**', route => {
     return route.fulfill({ contentType: 'text/html', body: progressingVideo ? `<!doctype html>
-      <video muted playsinline src="data:video/mp4;base64,${movie.toString('base64')}" style="width:100%;height:100%;position:fixed;inset:0"></video>
+      <video playsinline src="data:video/mp4;base64,${movie.toString('base64')}" style="width:100%;height:100%;position:fixed;inset:0"></video>
       <button style="position:fixed;bottom:8px;right:8px;min-height:44px">Play test video</button>
       <script>
         const video = document.querySelector('video');
