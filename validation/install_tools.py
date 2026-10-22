@@ -102,10 +102,10 @@ def main():
     else:
         node_system = {"Darwin": "darwin", "Linux": "linux"}[platform.system()]
         node_machine = {"aarch64": "arm64", "x86_64": "x64"}[machine]
-        node_name = f"node-v26.8.2-{node_system}-{node_machine}"
+        node_name = f"node-v26.12.1-{node_system}-{node_machine}"
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "node.tar.gz"
-            download(f"https://nodejs.org/dist/v26.8.2/{node_name}.tar.gz", archive)
+            download(f"https://nodejs.org/dist/v26.12.1/{node_name}.tar.gz", archive)
             subprocess.run(["tar", "-xzf", str(archive), "-C", directory], check=True)
             shutil.copytree(
                 Path(directory) / node_name,
