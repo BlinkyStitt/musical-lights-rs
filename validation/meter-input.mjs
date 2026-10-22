@@ -16,8 +16,11 @@ function hitPoints(meters) {
     throw new Error('Input point must hit the requested spectrum source');
   });
 }
-export async function meterPoint(page, meter) {
-  await page.locator('.spectrum-panel').scrollIntoViewIfNeeded();
+export async function meterPoint(page, meter, { scroll = true } = {}) {
+  // Expanded-layout checks already prove the fixed scene fits the viewport.
+  // Avoid an extra actionability/render round trip there; hitPoints still
+  // requires the real browser hit to identify the requested source.
+  if (scroll) await page.locator('.spectrum-panel').scrollIntoViewIfNeeded();
   return (await meter.evaluateAll(hitPoints))[0];
 }
 export async function meterPoints(page) {

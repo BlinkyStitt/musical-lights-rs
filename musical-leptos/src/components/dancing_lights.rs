@@ -408,6 +408,7 @@ pub fn DancingLights(
         })
     });
     view! {
+        <div class="visualizer-screen">
         <section class="audio-card" data-mode=if advanced { "advanced" } else { "home" } aria-label="Live audio spectrum" node_ref=card>
             <div class="audio-controls">
                 <div class="button-row">
@@ -434,6 +435,7 @@ pub fn DancingLights(
                     </div>
                     <button class="fullscreen-button" tabindex="0"
                         aria-pressed=move || fullscreen.get().to_string()
+                        aria-label=move || if fullscreen.get() { "Exit fullscreen" } else { "Fullscreen" }
                         title=move || if fullscreen.get() { "Exit fullscreen" } else { "Show video and lights" }
                         on:click=move |_| {
                             if !fullscreen.get_untracked() && input_source.get_untracked() == "microphone" { start(); }
@@ -441,7 +443,7 @@ pub fn DancingLights(
                                 if let Some(session) = session { session.toggle_fullscreen(); }
                             });
                         }>
-                        {move || if fullscreen.get() { "Exit fullscreen" } else { "Fullscreen" }}
+                        {move || if fullscreen.get() { "Exit" } else { "Fullscreen" }}
                     </button>
                 </div>
             </div>
@@ -598,5 +600,6 @@ pub fn DancingLights(
             <p class="screen-error" role="status">{move || screen_notice.get()}</p>
             </div>
         </section>
+        </div>
     }
 }

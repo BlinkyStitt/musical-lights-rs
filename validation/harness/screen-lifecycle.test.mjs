@@ -261,3 +261,48 @@ test('history navigation cancels fullscreen entry that finishes after Back', asy
   expect(env.document.fullscreenElement).toBe(null);
   expect(env.attributes.has('data-expanded')).toBe(false);
 });
+
+test('native fullscreen uses a separate view surface so its UA transform rule cannot pin the card upright', async t => {
+  const env = environment(t);
+  // The outer surface is installed after the fixture constructor. Production
+  // captures its per-view wrapper at mount time, distinct from the card.
+  const root = { requestFullscreen: async () => { env.document.fullscreenElement = root; } };
+  env.screen.fullscreenTarget = root;
+  await env.screen.toggleFullscreen();
+  expect(env.document.fullscreenElement).toBe(root);
+  expect(env.screen.expanded).toBe(true);
+  await env.screen.toggleFullscreen();
+  expect(env.document.fullscreenElement).toBe(null);
+  expect(env.screen.expanded).toBe(false);
+});
+
+test('a late fullscreen request cannot exit a replacement view surface', async t => {
+  const env = environment(t);
+  let grant;
+  const oldSurface = { requestFullscreen: () => new Promise(resolve => { grant = resolve; }) };
+  env.screen.fullscreenTarget = oldSurface;
+  const entering = env.screen.toggleFullscreen();
+  env.screen.close();
+  const replacement = {};
+  env.document.fullscreenElement = replacement;
+  grant();
+  await entering;
+  expect(env.document.fullscreenElement).toBe(replacement);
+});
+
+test('duplicate native fullscreen notices do not reset the display or keyboard layout', t => {
+  const env = environment(t);
+  let changes = 0;
+  env.element.addEventListener('display-rotation', () => changes++);
+  env.screen.setExpanded(true);
+  env.document.fullscreenElement = env.screen.fullscreenTarget;
+  env.document.dispatchEvent(new Event('fullscreenchange'));
+  env.screen.setExpanded(true);
+  expect(changes).toBe(1);
+  env.document.fullscreenElement = null;
+  env.document.dispatchEvent(new Event('fullscreenchange'));
+  env.screen.setExpanded(false);
+  expect(changes).toBe(2);
+  env.screen.close();
+  expect(changes).toBe(2);
+});

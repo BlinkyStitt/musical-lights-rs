@@ -101,7 +101,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     const before = await page.locator('#dancinglights').boundingBox();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('visualizer-screen');
     const card = await page.locator('.audio-card').boundingBox();
     expect(card).toEqual({ x: 0, y: 0, ...viewport });
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
@@ -133,7 +133,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('visualizer-screen');
     // Native browser exit emits the same event as Escape or browser controls.
     await page.evaluate(() => document.exitFullscreen());
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
