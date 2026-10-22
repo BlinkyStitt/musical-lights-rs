@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { normalView, physicsReady, physicsState } from '../physics-state.mjs';
+import { closeFullscreenSettings, openFullscreenSettings, normalView, physicsReady, physicsState, syntheticAudio } from '../physics-state.mjs';
 
 // Synthetic readings model each platform's native convention; they do not
 // certify physical sensors or permission prompts on a phone.
@@ -74,7 +74,9 @@ for (const apple of [false, true]) {
   }
 }
 
-test('fixed browser orientation remaps cached gravity, shakes and pointer forces in each display turn', async ({ page }) => {
+for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) {
+test(`fixed browser orientation remaps cached gravity, shakes and pointer forces on ${path} (${reducedMotion})`, async ({ page }) => {
+  await page.emulateMedia({ reducedMotion });
   await page.addInitScript(() => {
     Object.defineProperty(document, 'fullscreenEnabled', { value: false });
     for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
@@ -82,7 +84,7 @@ test('fixed browser orientation remaps cached gravity, shakes and pointer forces
       Object.defineProperty(window[name], 'requestPermission', { configurable: true, value: () => Promise.resolve('granted') });
     }
   });
-  await page.goto('http://127.0.0.1:8101'); await physicsReady(page);
+  await page.goto('http://127.0.0.1:8101' + path); await physicsReady(page);
   // Enter through the screen owner without the separate Listening entry action.
   if (!await page.locator('.audio-card').evaluate(n => n.hasAttribute('data-expanded'))) {
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
@@ -126,5 +128,77 @@ test('fixed browser orientation remaps cached gravity, shakes and pointer forces
       return actual.every((n, i) => Math.abs(n - expected[i]) < .01);
     }, turn)).toBe(true);
     await page.locator('.rotate-display').click();
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(0);
   }
+  // Remapping cached shakes must not refresh their 150 ms lifetime.
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
 });
+}
+
+for (const path of ['/', '/advanced/']) {
+  test(`rotation survives pending, denied and active motion plus visibility on ${path}`, async ({ page }) => {
+    await syntheticAudio(page, 'pending');
+    await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+    await page.goto('http://127.0.0.1:8101' + path); await physicsReady(page); await normalView(page);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    const motion = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
+    const status = page.locator('.motion-status');
+    const rotate = page.locator('.rotate-display');
+    await openFullscreenSettings(page); await motion.check();
+    await expect(status).toHaveAttribute('data-state', 'requesting');
+    await expect(motion).toBeEnabled();
+    await closeFullscreenSettings(page); await rotate.click();
+    await page.evaluate(() => resolveMotion.splice(0).forEach(resolve => resolve('denied')));
+    await expect(status).toHaveAttribute('data-state', 'denied');
+    await expect(status).toContainText('Allow Motion & Orientation for this site');
+    await expect(rotate).toHaveAccessibleName('Rotate view clockwise, current rotation 90 degrees');
+    await openFullscreenSettings(page); await motion.check();
+    await expect(status).toHaveAttribute('data-state', 'requesting');
+    // Listening can stop while motion permission is pending, then motion can
+    // stop too. A late grant must not attach sensor listeners.
+    await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+    await motion.uncheck();
+    await page.evaluate(() => resolveMotion.splice(0).forEach(resolve => resolve('granted')));
+    await expect(status).toHaveAttribute('data-state', 'off');
+    await closeFullscreenSettings(page); await rotate.click();
+    const emit = () => page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), {
+      acceleration: { x: 3, y: -4, z: 7 }, accelerationIncludingGravity: { x: 3, y: 5.81, z: 9 },
+    })));
+    await emit();
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.motion.readings.motionEvents)).toBe(0);
+    await openFullscreenSettings(page); await motion.check();
+    await page.evaluate(() => resolveMotion.splice(0).forEach(resolve => resolve('granted')));
+    await expect(status).toHaveAttribute('data-state', 'waiting');
+    await closeFullscreenSettings(page); await rotate.click(); await emit();
+    await expect(status).toHaveAttribute('data-state', 'active');
+    for (const hidden of [true, false]) {
+      await page.evaluate(hidden => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: hidden ? 'hidden' : 'visible' });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, hidden);
+      await expect(rotate).toHaveAccessibleName('Rotate view clockwise, current rotation 270 degrees');
+    }
+    await emit(); await rotate.click();
+    await expect(rotate).toHaveAccessibleName('Rotate view clockwise, current rotation 0 degrees');
+    await expect(status).toHaveAttribute('data-state', 'active');
+    await openFullscreenSettings(page); await motion.uncheck();
+    await emit();
+    expect(await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return [...v.input.slice(24, 27), ...v.input.slice(34, 38)];
+    })).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    await motion.check(); await expect(status).toHaveAttribute('data-state', 'requesting');
+    await page.evaluate(() => {
+      window.oldMotion = document.querySelector('#dancinglights').physics.motion;
+      document.querySelector('nav a[href="/about"]').click();
+    });
+    await expect(page.locator('.audio-card')).toHaveCount(0);
+    await page.evaluate(() => resolveMotion.splice(0).forEach(resolve => resolve('granted')));
+    const readings = await page.evaluate(() => oldMotion.readings.motionEvents);
+    await emit();
+    expect(await page.evaluate(() => ({ closed: oldMotion.closed, enabled: oldMotion.enabled, events: oldMotion.readings.motionEvents }))).toEqual({ closed: true, enabled: false, events: readings });
+  });
+}

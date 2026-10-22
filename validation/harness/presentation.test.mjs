@@ -1,7 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseYouTube, readSettings, SETTINGS_KEY, validDirectionOdds } from '../../musical-leptos/src/presentation.js';
+import { Presentation, parseYouTube, readSettings, SETTINGS_KEY, validDirectionOdds } from '../../musical-leptos/src/presentation.js';
 import { localPoint, placeDialog, viewportBounds } from '../../musical-leptos/src/screen.js';
+
+test('rotation help responds to touch, hover and keyboard without activating the action, and releases listeners', () => {
+  const anchor = Object.assign(new EventTarget(), { dataset: {}, setAttribute() {} });
+  const shown = [];
+  const presentation = Object.assign(Object.create(Presentation.prototype), {
+    removers: [], showHelp: (node, key) => shown.push({ node, key }), hideHelp: () => shown.push('hidden'),
+  });
+  presentation.mountHelp(anchor, 'rotate-display');
+  const send = (type, fields = {}) => {
+    const event = Object.assign(new Event(type, { cancelable: true }), fields);
+    anchor.dispatchEvent(event);
+    return event;
+  };
+  send('pointerenter', { pointerType: 'touch' });
+  assert.equal(shown.length, 0, 'a touch hover must wait for the tap');
+  send('pointerenter', { pointerType: 'mouse' });
+  send('focus');
+  assert.equal(send('click').defaultPrevented, true);
+  for (const key of ['Enter', ' ']) assert.equal(send('keydown', { key }).defaultPrevented, true);
+  assert.deepEqual(shown, Array.from({ length: 5 }, () => ({ node: anchor, key: 'rotate-display' })));
+  assert.equal(send('keydown', { key: 'Tab' }).defaultPrevented, false);
+  send('blur');
+  assert.equal(shown.at(-1), 'hidden');
+  for (const remove of presentation.removers) remove();
+  send('click'); send('focus'); send('keydown', { key: 'Enter' });
+  assert.equal(shown.length, 6, 'removed toolbar help cannot respond after route cleanup');
+});
 
 test('YouTube links select one video and preserve start times without accepting arbitrary origins', () => {
   for (const url of ['https://youtu.be/abcDEF012_-?t=1m23s', 'https://www.youtube.com/watch?v=abcDEF012_-&t=83', 'https://m.youtube.com/shorts/abcDEF012_-?start=83', 'https://www.youtube.com/embed/abcDEF012_-?start=83']) {

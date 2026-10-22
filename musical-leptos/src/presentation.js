@@ -63,6 +63,7 @@ function youtubeAPI() {
   return playerAPI;
 }
 const explanations = {
+  'rotate-display': 'Leave iPhone Rotation Lock on. Tap Rotate to turn the video, lights, controls and Settings clockwise by 90°. The view stays at your chosen angle until you tap Rotate again. Phone motion and Listening use their own switches; Rotate does not request access.',
   'listening-toggle': 'Listening uses your microphone to drive the lights. It does not play the microphone through your speakers.',
   'identify-song': 'While enabled, Identify song uploads a 10-second microphone recording at most once per minute. Turn it off to cancel. Recognition is separate from YouTube playback.',
   'motion-button': 'Phone motion lets measured tilt and shaking move the balls. It needs a separate sensor permission and works independently of Listening.',
@@ -161,17 +162,11 @@ export class Presentation {
     try { if (navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch { /* Physical mobile acceptance is still required. */ }
   }
   enhanceControls() {
-    for (const [className, text] of Object.entries(explanations)) {
+    for (const className of Object.keys(explanations)) {
       const input = this.row.querySelector('.' + className); const span = input?.closest('.setting-switch')?.querySelector('span');
       if (!span || span.dataset.help) continue;
-      span.dataset.help = className; span.setAttribute('role', 'button'); span.tabIndex = 0; span.setAttribute('aria-expanded', 'false');
-      this.listen(span, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(span, className); });
-      this.listen(span, 'pointerleave', event => { if (event.pointerType === 'mouse' && !this.popup.matches(':hover') && document.activeElement !== span) this.hideHelp(); });
-      this.listen(span, 'focus', () => this.showHelp(span, className));
-      this.listen(span, 'blur', () => this.hideHelp());
-      this.listen(span, 'click', event => { event.preventDefault(); event.stopPropagation(); this.showHelp(span, className); });
-      this.listen(span, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(span, className); } });
-      span.dataset.explanation = text;
+      span.setAttribute('role', 'button'); span.tabIndex = 0;
+      this.mountHelp(span, className);
     }
     for (const button of [this.videoButton, this.fullscreenButton]) {
       if (button.dataset.help) continue;
@@ -182,6 +177,16 @@ export class Presentation {
       this.listen(button, 'pointerleave', () => this.hideHelp());
       this.listen(button, 'click', () => this.hideHelp());
     }
+  }
+  mountHelp(anchor, key) {
+    anchor.dataset.help = key; anchor.dataset.explanation = explanations[key];
+    anchor.setAttribute('aria-expanded', 'false');
+    this.listen(anchor, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(anchor, key); });
+    this.listen(anchor, 'pointerleave', event => { if (event.pointerType === 'mouse' && !this.popup.matches(':hover') && document.activeElement !== anchor) this.hideHelp(); });
+    this.listen(anchor, 'focus', () => this.showHelp(anchor, key));
+    this.listen(anchor, 'blur', () => this.hideHelp());
+    this.listen(anchor, 'click', event => { event.preventDefault(); event.stopPropagation(); this.showHelp(anchor, key); });
+    this.listen(anchor, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(anchor, key); } });
   }
   showHelp(anchor, key) {
     this.hideHelp(); this.anchor = anchor; anchor.setAttribute('aria-describedby', this.popup.id); anchor.setAttribute('aria-expanded', 'true');
@@ -292,7 +297,13 @@ class FullscreenSettings {
     this.rotate.textContent = 'Rotate';
     this.updateRotation();
     presentation.listen(this.rotate, 'click', () => this.card.dispatchEvent(new Event('rotate-display')));
-    this.toolbar.append(this.rotate, this.button);
+    this.rotateHelp = document.createElement('button');
+    this.rotateHelp.type = 'button';
+    this.rotateHelp.className = 'rotate-help';
+    this.rotateHelp.textContent = '?';
+    this.rotateHelp.setAttribute('aria-label', 'About rotating the view');
+    presentation.mountHelp(this.rotateHelp, 'rotate-display');
+    this.toolbar.append(this.rotate, this.rotateHelp, this.button);
     this.dialog = document.createElement('dialog');
     this.dialog.id = 'fullscreen-settings';
     this.dialog.className = 'fullscreen-settings';

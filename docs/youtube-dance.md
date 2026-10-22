@@ -14,8 +14,9 @@ In the expanded toolbar, **Rotate** turns the complete video, scene, controls
 and Settings clockwise by 90°. Four taps return to upright. The selection stays
 until another tap, including after Exit and re-entry; the normal page stays
 upright. This works with iPhone system rotation lock enabled and does not request
-motion or microphone access. Physical-iPhone sensor and playback checks remain
-separate from browser emulation.
+motion or microphone access. Tap, hover or keyboard-focus the **?** beside Rotate
+for Rotation Lock guidance without changing the angle. Physical-iPhone sensor
+and playback checks remain separate from browser emulation.
 
 **Listening** uses the microphone. YouTube does not expose decoded PCM to this
 app, so microphone-driven lights must hear the video through the speakers.

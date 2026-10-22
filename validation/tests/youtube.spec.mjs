@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
-async function setup(page, path = '/') {
+async function setup(page, path = '/', progressingVideo = false) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     Object.defineProperty(document, 'fullscreenEnabled', { value: false });
@@ -26,13 +27,33 @@ async function setup(page, path = '/') {
       constructor(frame, options) { this.frame = frame; this.options = options; this.states = []; window.videoPlayer = this; window.players.push(this); setTimeout(() => options.events.onReady({ target: this }), 0); }
       state(data) { this.states.push(data); this.options.events.onStateChange({ target: this, data }); }
       getPlayerState() { return this.states.at(-1); }
-      playVideo() { this.state(1); }
-      pauseVideo() { this.state(2); }
+      playVideo() { this.state(1); this.frame.contentWindow?.postMessage('play', 'https://www.youtube-nocookie.com'); }
+      pauseVideo() { this.state(2); this.frame.contentWindow?.postMessage('pause', 'https://www.youtube-nocookie.com'); }
       error(data) { this.options.events.onError({ target: this, data }); }
       destroy() { this.destroyed = true; this.frame.remove(); }
     } };
   });
-  await page.route('https://www.youtube-nocookie.com/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><body style="background:#142b40;color:white">Mock YouTube player</body>' }));
+  const movie = progressingVideo ? await readFile(new URL('../fixtures/rotation-clock.mp4', import.meta.url)) : null;
+  // Inline a generated clip longer than the test deadline (fixtures/README.md).
+  // Exercise the browser media clock without looping, a live provider or HTTP range mocks.
+  await page.route('https://www.youtube-nocookie.com/**', route => {
+    return route.fulfill({ contentType: 'text/html', body: progressingVideo ? `<!doctype html>
+      <video muted playsinline src="data:video/mp4;base64,${movie.toString('base64')}" style="width:100%;height:100%;position:fixed;inset:0"></video>
+      <button style="position:fixed;bottom:8px;right:8px;min-height:44px">Play test video</button>
+      <script>
+        const video = document.querySelector('video');
+        window.videoFrames = 0; window.videoPauses = 0; window.mediaEvents = [];
+        for (const type of ['play', 'playing', 'pause', 'waiting', 'seeking', 'seeked', 'ended', 'error']) video.addEventListener(type, () => {
+          mediaEvents.push({ type, time: video.currentTime, ready: video.readyState, wall: performance.now() });
+          if (mediaEvents.length > 64) mediaEvents.shift();
+        });
+        document.querySelector('button').onclick = () => video.play();
+        video.addEventListener('pause', () => videoPauses++);
+        function frame(now, metadata) { videoFrames++; window.mediaTime = metadata.mediaTime; video.requestVideoFrameCallback(frame); }
+        video.requestVideoFrameCallback(frame);
+        addEventListener('message', event => { if (event.data === 'play') video.play(); if (event.data === 'pause') video.pause(); });
+      </script>` : '<!doctype html><body style="background:#142b40;color:white">Mock YouTube player</body>' });
+  });
   await page.route('https://www.youtube.com/**', route => route.abort());
   await page.goto(origin + path); await physicsReady(page); await normalView(page);
 }
@@ -426,8 +447,9 @@ test('camera slider tracks the rendered view and Reduced Motion removes automati
   await expect(page.locator('.camera-rotation')).toHaveValue('0');
 });
 
-for (const resizeLayout of [false, true]) {
-  test(`manual rotation preserves playback with a ${resizeLayout ? 'layout' : 'visual'} keyboard viewport`, async ({ page }) => {
+for (const path of ['/', '/advanced/']) for (const resizeLayout of [false, true])
+for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568, height: 320, keyboard: 180 }]) {
+  test(`manual rotation preserves playback on ${path} with a ${resizeLayout ? 'layout' : 'visual'} keyboard viewport (${viewport.width}px)`, async ({ page }, info) => {
     test.setTimeout(60000);
     await page.setViewportSize({ width: 390, height: 844 });
     // Headless browsers have no on-screen keyboard. Model both resize contracts.
@@ -436,7 +458,12 @@ for (const resizeLayout of [false, true]) {
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
       window.rotationKeyboard = height => { viewport.width = innerWidth; viewport.height = height; viewport.dispatchEvent(new Event('resize')); };
     });
-    await setup(page); await load(page);
+    await setup(page, path, true); await load(page);
+    const video = page.frameLocator('.youtube-frame iframe').locator('video');
+    await video.evaluate(v => { window.rotationVideo = v; });
+    await expect.poll(() => video.evaluate(v => v.readyState)).toBeGreaterThanOrEqual(2);
+    await page.frameLocator('.youtube-frame iframe').getByRole('button', { name: 'Play test video', exact: true }).click();
+    await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(0);
     await page.evaluate(() => {
       // Feed a real, non-silent signal through the synthetic microphone stream.
       // A running context alone would also pass with a disconnected input graph.
@@ -474,67 +501,138 @@ for (const resizeLayout of [false, true]) {
       window.playbackIdentity = { player: videoPlayer, frame: videoPlayer.frame, worker: v.worker, renderer: v.renderer,
         context: testContext, requests: micRequests, session: Number(card.dataset.audioSession) };
     });
-    for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568, height: 320, keyboard: 180 }]) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(0);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.evaluate(height => rotationKeyboard(height), viewport.height);
+    for (let turn = 0; turn < 4; turn++) {
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
+      await openFullscreenSettings(page);
+      await page.getByRole('button', { name: 'Video', exact: true }).click();
+      await expect.poll(() => page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics, style = getComputedStyle(v.layer);
+        return !v.resizePending && Math.abs(v.canvasWidth - parseFloat(style.width)) < .1 && Math.abs(v.canvasHeight - parseFloat(style.height)) < .1;
+      })).toBe(true);
+      const geometry = () => page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics;
+        return [v.canvasWidth, v.canvasHeight, v.input[32]];
+      });
+      const before = await geometry();
+      if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.keyboard });
+      await page.evaluate(height => {
+        rotationKeyboard(height);
+        // Duplicate native notifications must not release frozen editor sizing.
+        const descriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.querySelector('.visualizer-screen') });
+        try { document.dispatchEvent(new Event('fullscreenchange')); }
+        finally { if (descriptor) Object.defineProperty(document, 'fullscreenElement', descriptor); else delete document.fullscreenElement; }
+      }, viewport.keyboard);
+      await page.locator('.youtube-link').scrollIntoViewIfNeeded();
+      await expect.poll(() => page.evaluate(({ width, keyboard }) => {
+        const fits = node => { const r = node.getBoundingClientRect(); return r.left >= -.1 && r.top >= -.1 && r.right <= width + .1 && r.bottom <= keyboard + .1 && r.width >= 44 && r.height >= 44; };
+        const close = document.querySelector('.close-fullscreen-settings'), box = close.getBoundingClientRect();
+        return { modal: fits(document.querySelector('.fullscreen-settings')), field: fits(document.querySelector('.youtube-link')),
+          close: fits(close) && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === close };
+      }, viewport)).toEqual({ modal: true, field: true, close: true });
+      await expect.poll(geometry).toEqual(before);
+      if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.evaluate(height => rotationKeyboard(height), viewport.height);
-      for (let turn = 0; turn < 4; turn++) {
-        await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
+      await closeFullscreenSettings(page);
+      await page.locator('.rotate-display').click();
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
+      // Require at least 100 ms of newly analyzed samples AFTER every click,
+      // including the fourth turn back to zero. Queued pre-click packets and
+      // an advancing AudioContext clock cannot satisfy this check.
+      const [videoAfterClick, afterClick] = await Promise.all([
+        video.evaluate(v => ({ frames: window.videoFrames, time: v.currentTime })),
+        page.evaluate(() => Math.ceil(testContext.currentTime * testContext.sampleRate)),
+      ]);
+      try {
+        await Promise.all([
+          expect.poll(() => video.evaluate(() => window.videoFrames)).toBeGreaterThan(videoAfterClick.frames + 2),
+          expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(videoAfterClick.time + .1),
+          expect.poll(() => page.evaluate(() => rotationAudio.sample)).toBeGreaterThan(afterClick + 4800),
+        ]);
+      } catch (error) {
+        await info.attach('video-progress.json', { contentType: 'application/json', body: JSON.stringify(await video.evaluate(v => ({
+          time: v.currentTime, duration: v.duration, paused: v.paused, ended: v.ended, ready: v.readyState, seeking: v.seeking,
+          frames: window.videoFrames, mediaTime: window.mediaTime, events: window.mediaEvents,
+          decoded: v.getVideoPlaybackQuality().totalVideoFrames, dropped: v.getVideoPlaybackQuality().droppedVideoFrames,
+        }))) });
+        throw error;
+      }
+      expect(await video.evaluate(v => ({ same: v === window.rotationVideo, paused: v.paused, error: v.error, pauses: window.videoPauses }))).toEqual({ same: true, paused: false, error: null, pauses: 0 });
+      const audio = await page.evaluate(() => ({
+        ...rotationAudio, expectedSession: playbackIdentity.session, state: document.querySelector('.audio-card').dataset.audioState,
+        transitions: rotationAudioStates, video: videoPlayer.getPlayerState(), videoTransitions: videoPlayer.states,
+      }));
+      expect(audio.session).toBe(audio.expectedSession);
+      expect(audio.continuity).toMatchObject({ segment: 0, missingSamples: 0, overlapSamples: 0 });
+      expect(audio.rms).toBeGreaterThan(-45);
+      expect(audio.state).toBe('playing');
+      expect(audio.transitions.every(state => state === 'playing')).toBe(true);
+      expect(audio.video).toBe(1);
+      expect(audio.videoTransitions).toEqual([1]);
+      expect(await page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics, old = playbackIdentity;
+        return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
+          && v.worker === old.worker && v.renderer === old.renderer && testContext === old.context
+          && testContext.state === 'running' && micRequests === old.requests;
+      })).toBe(true);
+    }
+  });
+}
+
+for (const path of ['/', '/advanced/']) for (const resizeLayout of [false, true]) {
+  test(`rotated Load and Remove dismiss the ${resizeLayout ? 'layout' : 'visual'} keyboard on ${path}`, async ({ page }) => {
+    test.setTimeout(60000);
+    await page.setViewportSize({ width: 568, height: 320 });
+    await page.addInitScript(() => {
+      const viewport = Object.assign(new EventTarget(), { width: 568, height: 320, offsetTop: 0, offsetLeft: 0 });
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+      window.setEditorHeight = height => { viewport.height = height; viewport.dispatchEvent(new Event('resize')); };
+    });
+    await setup(page, path);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    for (let turn = 0; turn < 4; turn++) {
+      for (const action of ['Load video', 'Remove video']) {
         await openFullscreenSettings(page);
         await page.getByRole('button', { name: 'Video', exact: true }).click();
-        await expect.poll(() => page.evaluate(() => {
-          const v = document.querySelector('#dancinglights').physics, style = getComputedStyle(v.layer);
-          return !v.resizePending && Math.abs(v.canvasWidth - parseFloat(style.width)) < .1 && Math.abs(v.canvasHeight - parseFloat(style.height)) < .1;
-        })).toBe(true);
-        const geometry = () => page.evaluate(() => {
+        await page.locator('.youtube-link').fill('https://youtu.be/abcDEF012_-?t=83');
+        await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.resizePending)).toBe(false);
+        const before = await page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
           return [v.canvasWidth, v.canvasHeight, v.input[32]];
         });
-        const before = await geometry();
-        if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.keyboard });
-        await page.evaluate(height => {
-          rotationKeyboard(height);
-          // Duplicate native notifications must not release frozen editor sizing.
-          const descriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
-          Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.querySelector('.visualizer-screen') });
-          try { document.dispatchEvent(new Event('fullscreenchange')); }
-          finally { if (descriptor) Object.defineProperty(document, 'fullscreenElement', descriptor); else delete document.fullscreenElement; }
-        }, viewport.keyboard);
-        await page.locator('.youtube-link').scrollIntoViewIfNeeded();
-        await expect.poll(() => page.evaluate(({ width, keyboard }) => {
-          const fits = node => { const r = node.getBoundingClientRect(); return r.left >= -.1 && r.top >= -.1 && r.right <= width + .1 && r.bottom <= keyboard + .1 && r.width >= 44 && r.height >= 44; };
-          const close = document.querySelector('.close-fullscreen-settings'), box = close.getBoundingClientRect();
-          return { modal: fits(document.querySelector('.fullscreen-settings')), field: fits(document.querySelector('.youtube-link')),
-            close: fits(close) && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === close };
-        }, viewport)).toEqual({ modal: true, field: true, close: true });
-        await expect.poll(geometry).toEqual(before);
-        if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await page.evaluate(height => rotationKeyboard(height), viewport.height);
-        await closeFullscreenSettings(page);
-        await page.locator('.rotate-display').click();
-        await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
-        // Require at least 100 ms of newly analyzed samples AFTER every click,
-        // including the fourth turn back to zero. Queued pre-click packets and
-        // an advancing AudioContext clock cannot satisfy this check.
-        const afterClick = await page.evaluate(() => Math.ceil(testContext.currentTime * testContext.sampleRate));
-        await expect.poll(() => page.evaluate(() => rotationAudio.sample)).toBeGreaterThan(afterClick + 4800);
-        const audio = await page.evaluate(() => ({
-          ...rotationAudio, expectedSession: playbackIdentity.session, state: document.querySelector('.audio-card').dataset.audioState,
-          transitions: rotationAudioStates, video: videoPlayer.getPlayerState(), videoTransitions: videoPlayer.states,
-        }));
-        expect(audio.session).toBe(audio.expectedSession);
-        expect(audio.continuity).toMatchObject({ segment: 0, missingSamples: 0, overlapSamples: 0 });
-        expect(audio.rms).toBeGreaterThan(-45);
-        expect(audio.state).toBe('playing');
-        expect(audio.transitions.every(state => state === 'playing')).toBe(true);
-        expect(audio.video).toBe(1);
-        expect(audio.videoTransitions).toEqual([1]);
-        expect(await page.evaluate(() => {
-          const v = document.querySelector('#dancinglights').physics, old = playbackIdentity;
-          return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
-            && v.worker === old.worker && v.renderer === old.renderer && testContext === old.context
-            && testContext.state === 'running' && micRequests === old.requests;
+        if (resizeLayout) await page.setViewportSize({ width: 568, height: 180 });
+        await page.evaluate(() => setEditorHeight(180));
+        const button = page.getByRole('button', { name: action, exact: true });
+        await button.scrollIntoViewIfNeeded();
+        expect(await button.evaluate(n => {
+          const r = n.getBoundingClientRect();
+          return r.left >= 0 && r.top >= 0 && r.right <= 568 && r.bottom <= 180 && r.width >= 44 && r.height >= 44
+            && n.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
         })).toBe(true);
+        expect(await page.evaluate(() => {
+          const v = document.querySelector('#dancinglights').physics;
+          return [v.canvasWidth, v.canvasHeight, v.input[32]];
+        })).toEqual(before);
+        await button.click();
+        await expect(page.locator('.fullscreen-settings')).not.toBeVisible();
+        expect(await page.evaluate(() => {
+          const card = document.querySelector('.audio-card');
+          return !document.activeElement.matches('input') && !card.style.getPropertyValue('--expanded-width')
+            && !card.style.getPropertyValue('--expanded-height');
+        })).toBe(true);
+        if (action === 'Load video') await expect(page.locator('.youtube-frame iframe')).toBeVisible();
+        else {
+          await expect(page.locator('.youtube-frame iframe')).toHaveCount(0);
+          expect(await page.evaluate(() => videoPlayer.destroyed)).toBe(true);
+        }
+        if (resizeLayout) await page.setViewportSize({ width: 568, height: 320 });
+        await page.evaluate(() => setEditorHeight(320));
       }
+      await page.locator('.rotate-display').click();
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
     }
   });
 }

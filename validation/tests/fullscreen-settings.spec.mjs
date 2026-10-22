@@ -104,46 +104,89 @@ for (const path of ['/', '/advanced/']) {
   });
 }
 
-test('settings close on native browser exit and route cleanup', async ({ page }, info) => {
+async function startFullscreenAudio(page, path, reducedMotion, info) {
+  await page.emulateMedia({ reducedMotion });
+  await syntheticAudio(page);
   await page.addInitScript(() => {
     const Context = window.AudioContext;
     window.AudioContext = class extends Context { constructor(...args) { super(...args); window.modalContext = this; } };
   });
-  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
-  await page.locator('.input-source').selectOption('generated');
-  await page.locator('.review-start').click();
+  await page.goto(origin + path); await physicsReady(page); await normalView(page);
+  if (path === '/advanced/') {
+    await page.locator('.input-source').selectOption('generated');
+    await page.locator('.review-start').click();
+  } else await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
-  await page.evaluate(() => { window.modalSession = { context: modalContext, id: document.querySelector('#dancinglights').physics.report.audioState.sessionId }; });
+  await page.evaluate(() => { window.modalSession = { context: modalContext, id: document.querySelector('.audio-card').dataset.audioSession }; });
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await page.locator('.rotate-display').click();
-  await expect.poll(() => page.locator('.audio-card').evaluate(n => {
-    const r = n.getBoundingClientRect();
-    return n.displayQuarterTurn === 1 && Math.abs(r.width - innerWidth) < 1 && Math.abs(r.height - innerHeight) < 1;
-  })).toBe(true);
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
-  if (info.project.name === 'chromium') {
-    expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
-    await page.evaluate(() => document.exitFullscreen());
-  } else {
-    // iPhone has page expansion without the native API. Use its screen owner.
-    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
-  }
-  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.locator('.input-source')).toHaveValue('generated');
-  expect(await page.evaluate(() => ({ same: modalContext === modalSession.context, state: modalContext.state, id: document.querySelector('#dancinglights').physics.report.audioState.sessionId }))).toEqual({ same: true, state: 'running', id: await page.evaluate(() => modalSession.id) });
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.evaluate(() => { window.oldModal = document.querySelector('dialog'); document.querySelector('nav a[href="/about"]').click(); });
-  await expect(page.locator('.audio-card')).toHaveCount(0);
-  expect(await page.evaluate(() => oldModal.open || oldModal.isConnected)).toBe(false);
-  expect(await page.evaluate(() => modalSession.context.state)).toBe('closed');
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
-  await page.getByRole('link', { name: 'Home', exact: true }).click(); await physicsReady(page);
-  await expect(page.locator('dialog')).toHaveCount(1);
-  expect(await page.locator('.audio-card').evaluate(n => n.displayQuarterTurn)).toBe(0);
-});
+  if (info.project.name === 'chromium') await expect.poll(() => page.evaluate(() => document.fullscreenElement === document.querySelector('.visualizer-screen'))).toBe(true);
+}
+
+for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) {
+  test(`all turns retain native fullscreen and rotation help on ${path} (${reducedMotion})`, async ({ page }, info) => {
+    await startFullscreenAudio(page, path, reducedMotion, info);
+    for (let turn = 0; turn < 4; turn++) {
+      if (info.project.name === 'chromium') {
+        expect(await page.evaluate(() => document.fullscreenElement === document.querySelector('.visualizer-screen'))).toBe(true);
+      }
+      await expect.poll(() => page.locator('.audio-card').evaluate((n, turn) => {
+        const r = n.getBoundingClientRect();
+        return n.displayQuarterTurn === turn && Math.abs(r.width - innerWidth) < 1 && Math.abs(r.height - innerHeight) < 1;
+      }, turn)).toBe(true);
+      const help = page.getByRole('button', { name: 'About rotating the view', exact: true });
+      await help.hover();
+      await expect(page.locator('.control-help')).toContainText('Leave iPhone Rotation Lock on.');
+      await page.mouse.move(0, 0);
+      await expect(page.locator('.control-help')).toBeHidden();
+      // Tab from Rotate proves keyboard focus opens help without activating Rotate.
+      await page.locator('.rotate-display').focus(); await page.keyboard.press('Tab');
+      await expect(help).toBeFocused();
+      await expect(page.locator('.control-help')).toBeVisible();
+      expect(await help.evaluate(n => getComputedStyle(n).outlineStyle)).not.toBe('none');
+      await page.keyboard.press('Enter'); await page.keyboard.press('Space');
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+      expect(await page.locator('.fullscreen-settings').evaluate((n, turn) => {
+        const r = n.getBoundingClientRect();
+        return [r.bottom <= innerHeight / 2, r.left >= innerWidth / 2, r.top >= innerHeight / 2, r.right <= innerWidth / 2][turn];
+      }, turn)).toBe(true);
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await page.locator('.rotate-display').click();
+    }
+    expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
+      && document.querySelector('.audio-card').dataset.audioSession === modalSession.id)).toBe(true);
+  });
+
+  test(`settings close on native browser exit and route cleanup on ${path} (${reducedMotion})`, async ({ page }, info) => {
+    await startFullscreenAudio(page, path, reducedMotion, info);
+    await page.locator('.rotate-display').click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-display-rotation', '1');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    if (info.project.name === 'chromium') {
+      expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+      await page.evaluate(() => document.exitFullscreen());
+    } else {
+      // iPhone has page expansion without the native API. Use its screen owner.
+      await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    }
+    await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    if (path === '/advanced/') await expect(page.locator('.input-source')).toHaveValue('generated');
+    else await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
+    expect(await page.evaluate(() => ({ same: modalContext === modalSession.context, state: modalContext.state, id: document.querySelector('.audio-card').dataset.audioSession }))).toEqual({ same: true, state: 'running', id: await page.evaluate(() => modalSession.id) });
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.evaluate(() => { window.oldModal = document.querySelector('dialog'); document.querySelector('nav a[href="/about"]').click(); });
+    await expect(page.locator('.audio-card')).toHaveCount(0);
+    expect(await page.evaluate(() => oldModal.open || oldModal.isConnected)).toBe(false);
+    expect(await page.evaluate(() => modalSession.context.state)).toBe('closed');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
+    await page.getByRole('link', { name: 'Home', exact: true }).click(); await physicsReady(page);
+    await expect(page.locator('dialog')).toHaveCount(1);
+    expect(await page.locator('.audio-card').evaluate(n => n.displayQuarterTurn)).toBe(0);
+  });
+}
 
 
 test('Escape respects focused controls, closes Settings, and exits with action help open', async ({ page }) => {

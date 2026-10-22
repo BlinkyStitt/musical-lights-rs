@@ -317,15 +317,25 @@ nav { flex-wrap: wrap; }
 /* Fullscreen has one fixed scene. Only the top-half settings body scrolls. */
 .fullscreen-toolbar { display: none; }
 .fullscreen-settings:not([open]) { display: none; }
-.audio-card[data-expanded] { visibility: visible; container: visualizer / size; position: fixed; inset: 0; z-index: 100; width: 100%; height: var(--expanded-height, 100dvh); margin: 0; padding: 0; border: 0; border-radius: 0; overflow: hidden; display: block; background: var(--plot); touch-action: pinch-zoom; }
+.audio-card[data-expanded] {
+  --display-width: 100dvw; --display-height: 100dvh;
+  --safe-top: env(safe-area-inset-top); --safe-right: env(safe-area-inset-right);
+  --safe-bottom: env(safe-area-inset-bottom); --safe-left: env(safe-area-inset-left);
+  visibility: visible; container: visualizer / size; position: fixed; inset: 0 auto auto 0; z-index: 100;
+  width: var(--expanded-width, var(--display-width)); height: var(--expanded-height, var(--display-height));
+  margin: 0; padding: 0; border: 0; border-radius: 0; overflow: hidden; display: block; background: var(--plot); touch-action: pinch-zoom;
+  transform-origin: 0 0; transform: none;
+}
 .audio-card[data-expanded] > .visual-content { position: absolute; inset: 0; min-height: 0; display: flex; flex-direction: column; }
 .audio-card[data-expanded] .spectrum-panel { position: relative; inset: auto; flex: 1; min-height: 0; height: auto; padding: 0; border: 0; border-radius: 0; display: flex; }
 .audio-card[data-expanded] #dancinglights { flex: 1; height: 100%; min-height: 0; background: none; touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; }
 .audio-card[data-expanded] .spectrum-labels { display: none; }
-.audio-card[data-expanded] .fullscreen-toolbar { position: absolute; top: max(.5rem, env(safe-area-inset-top)); left: max(.5rem, env(safe-area-inset-left)); right: max(.5rem, env(safe-area-inset-right)); z-index: 5; display: flex; align-items: center; gap: .5rem; pointer-events: none; }
-.audio-card[data-expanded] .fullscreen-toolbar button { min-height: 44px; pointer-events: auto; background: var(--surface); color: var(--ink); border-color: var(--line); }
+.audio-card[data-expanded] .fullscreen-toolbar { position: absolute; top: max(.5rem, var(--safe-top)); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); z-index: 5; display: flex; align-items: center; gap: .25rem; pointer-events: none; }
+.audio-card[data-expanded] .fullscreen-toolbar button { min-height: 44px; min-width: 44px; padding-inline: .25rem; flex: none; pointer-events: auto; background: var(--surface); color: var(--ink); border-color: var(--line); }
 .audio-card[data-expanded] .fullscreen-button { margin-right: auto; }
-.fullscreen-toolbar .setting-switch { pointer-events: auto; padding: 0 .35rem; border-radius: 6px; background: var(--surface); }
+.fullscreen-toolbar .setting-switch { pointer-events: auto; flex: none; padding: 0; border-radius: 6px; background: var(--surface); }
+.audio-card[data-expanded] .fullscreen-toolbar :is(.fullscreen-settings-button, .rotate-help) { width: 44px; padding: 0; }
+.rotate-help { cursor: help; }
 .fullscreen-settings-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; flex: none; }
 .audio-card[data-expanded] .fullscreen-settings { position: fixed; inset: calc(var(--video-editor-top, 0px) + max(.5rem, env(safe-area-inset-top))) max(.5rem, env(safe-area-inset-right)) auto max(.5rem, env(safe-area-inset-left)); margin: 0 auto; width: auto; max-width: 70rem; box-sizing: border-box; height: calc(50% - var(--video-editor-top, 0px) - max(.5rem, env(safe-area-inset-top))); max-height: calc(var(--video-editor-height, 100dvh) - max(.5rem, env(safe-area-inset-top))); padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); overflow: hidden; }
 .audio-card[data-expanded] .fullscreen-settings[open] { display: flex; flex-direction: column; }
@@ -344,9 +354,9 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .video-form input { font-size: 16px; }
 .audio-card[data-expanded].video-active .video-panel { flex: none; height: 28%; min-height: 0; padding: 0; }
 .audio-card[data-expanded].video-active :is(.youtube-frame, .youtube-frame iframe) { height: 100%; min-height: 0; aspect-ratio: auto; }
-.audio-card[data-expanded] .recognized-song { position: absolute; bottom: max(.5rem, env(safe-area-inset-bottom)); left: .75rem; right: .75rem; z-index: 2; margin: 0; pointer-events: none; font-size: 1rem; text-shadow: 0 0 4px var(--plot); }
+.audio-card[data-expanded] .recognized-song { position: absolute; bottom: max(.5rem, var(--safe-bottom)); left: .75rem; right: .75rem; z-index: 2; margin: 0; pointer-events: none; font-size: 1rem; text-shadow: 0 0 4px var(--plot); }
 .audio-card[data-expanded] .song-title { animation: song-scroll var(--song-duration) var(--song-delay) linear infinite; }
-.audio-card[data-expanded] .recovery-notices { position: absolute; top: calc(max(.5rem, env(safe-area-inset-top)) + 48px); left: .5rem; right: .5rem; z-index: 4; padding: 2px; max-height: calc(50% - 64px); overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices { position: absolute; top: calc(max(.5rem, var(--safe-top)) + 48px); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); z-index: 4; padding: 2px; max-height: calc(50% - 64px); overflow: auto; background: var(--surface); border-radius: 9px; }
 .audio-card[data-expanded] .recovery-notices:not(:has(> :not(:empty))) { display: none; }
 .audio-card[data-expanded] .recovery-notices > :empty { display: none; }
 .audio-card[data-expanded] .recovery-notices > :not(:empty) { position: static; margin: 0; padding: .5rem .75rem; }
@@ -358,14 +368,6 @@ nav { flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .audio-card[data-expanded] .song-title { animation: none; white-space: normal; } }
 
 /* One fixed logical surface; the native dialog has its own matching transform. */
-.audio-card[data-expanded] {
-  --display-width: 100dvw; --display-height: 100dvh;
-  --safe-top: env(safe-area-inset-top); --safe-right: env(safe-area-inset-right);
-  --safe-bottom: env(safe-area-inset-bottom); --safe-left: env(safe-area-inset-left);
-  inset: 0 auto auto 0;
-  width: var(--expanded-width, var(--display-width)); height: var(--expanded-height, var(--display-height));
-  transform-origin: 0 0; transform: none;
-}
 .audio-card[data-expanded][data-display-rotation="1"] {
   --display-width: 100dvh; --display-height: 100dvw;
   --safe-top: env(safe-area-inset-right); --safe-right: env(safe-area-inset-bottom);
@@ -383,14 +385,6 @@ nav { flex-wrap: wrap; }
   --safe-bottom: env(safe-area-inset-right); --safe-left: env(safe-area-inset-bottom);
   transform: translateY(var(--expanded-width, 100dvh)) rotate(270deg);
 }
-.audio-card[data-expanded] .fullscreen-toolbar {
-  top: max(.5rem, var(--safe-top)); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right));
-  gap: .25rem;
-}
-.audio-card[data-expanded] .fullscreen-toolbar button { min-width: 44px; padding-inline: .5rem; }
-.audio-card[data-expanded] .fullscreen-toolbar .fullscreen-settings-button { padding: 0; }
-.audio-card[data-expanded] .recognized-song { bottom: max(.5rem, var(--safe-bottom)); }
-.audio-card[data-expanded] .recovery-notices { top: calc(max(.5rem, var(--safe-top)) + 48px); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); }
 .audio-card[data-expanded] .control-help { position: absolute; }
 /* Resolve physical safe areas to pixels for the top-layer dialog. */
 .audio-card[data-expanded]::after { content: ''; position: absolute; visibility: hidden; pointer-events: none; padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
