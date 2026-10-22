@@ -4,13 +4,24 @@ import { meterPoint } from '../meter-input.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
-// The geometry assertion checks these toolbar controls before input. Resolve
-// their native touch points as meterPoint does for the spectrum; Settings
-// controls keep driver taps because their modal body can require scrolling.
-async function tapToolbarAtHitPoint(page, control) {
-  const point = await control.evaluateAll(nodes => {
+// Resolve native touch points in one browser call. Settings controls also need
+// scrolling and two stable animation frames before the hit check. Keeping that
+// work together avoids repeated driver/trace round trips on software renderers.
+async function tapControlAtHitPoint(page, control, { scroll = false } = {}) {
+  const point = await control.evaluateAll(async (nodes, scroll) => {
     if (nodes.length !== 1) throw new Error('Touch input requires exactly one visible control');
-    const node = nodes[0], box = node.getBoundingClientRect();
+    const node = nodes[0];
+    if (scroll) {
+      node.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      await new Promise(requestAnimationFrame);
+      const before = node.getBoundingClientRect();
+      await new Promise(requestAnimationFrame);
+      const after = node.getBoundingClientRect();
+      if (['x', 'y', 'width', 'height'].some(key => before[key] !== after[key])) {
+        throw new Error('Touch input requires a stable control after scrolling');
+      }
+    }
+    const box = node.getBoundingClientRect();
     const x = Math.round(box.x + box.width / 2), y = Math.round(box.y + box.height / 2);
     if (box.width < 44 || box.height < 44 || getComputedStyle(node).visibility !== 'visible'
       || node.matches(':disabled') || node.closest('[aria-disabled="true"]')
@@ -18,7 +29,7 @@ async function tapToolbarAtHitPoint(page, control) {
       throw new Error('Touch input point must hit the requested enabled control');
     }
     return { x, y };
-  });
+  }, scroll);
   await page.touchscreen.tap(point.x, point.y);
 }
 
@@ -141,24 +152,25 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
               requests: window.micRequests + window.motionRequests };
           }, { turn, video })).toEqual({ fit: true, dimensions: true, canvas: true, toolbar: true, video: true, identity: true, scrollLocked: true, requests: 0 });
           const rotateHelp = page.getByRole('button', { name: 'About rotating the view', exact: true });
-          await tapToolbarAtHitPoint(page, rotateHelp);
-          await expect(page.locator('.control-help')).toContainText('Leave iPhone Rotation Lock on.');
-          expect(await page.evaluate(turn => {
-            const card = document.querySelector('.audio-card'), help = card.querySelector('.control-help').getBoundingClientRect();
-            return card.hasAttribute('data-expanded') && card.displayQuarterTurn === turn
-              && micRequests === 0 && motionRequests === 0 && help.left >= 0 && help.top >= 0
-              && help.right <= innerWidth && help.bottom <= innerHeight;
-          }, turn)).toBe(true);
-          const point = await meterPoint(page, page.getByRole('meter').nth(12));
+          await tapControlAtHitPoint(page, rotateHelp);
+          await expect.poll(() => page.evaluate(turn => {
+            const card = document.querySelector('.audio-card'), node = card.querySelector('.control-help'), help = node.getBoundingClientRect();
+            return { text: node.textContent.includes('Leave iPhone Rotation Lock on.'),
+              unchanged: card.hasAttribute('data-expanded') && card.displayQuarterTurn === turn && micRequests === 0 && motionRequests === 0,
+              visible: help.width > 0 && help.height > 0 && getComputedStyle(node).visibility === 'visible',
+              fits: help.left >= 0 && help.top >= 0 && help.right <= innerWidth && help.bottom <= innerHeight };
+          }, turn)).toEqual({ text: true, unchanged: true, visible: true, fits: true });
+          const point = await meterPoint(page, page.getByRole('meter').nth(12), { scroll: false });
           await page.touchscreen.tap(point.x, point.y);
-          await expect(page.locator('.frequency-tooltip')).toBeVisible();
           // Scrolling continues under normal motion. The trusted pointer hit
           // supplies the source at tap time, after the point was resolved.
-          const tapped = await page.evaluate(() => window.tappedBand);
-          expect(tapped).toBeGreaterThanOrEqual(0); expect(tapped).toBeLessThan(24);
-          if (reducedMotion === 'reduce') expect(tapped).toBe(12);
-          await expect(page.getByRole('meter').nth(tapped)).toHaveAttribute('aria-describedby', 'frequency-readout');
-          await tapToolbarAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+          await expect.poll(() => page.evaluate(reducedMotion => {
+            const tooltip = document.querySelector('.frequency-tooltip'), box = tooltip.getBoundingClientRect();
+            return { visible: box.width > 0 && box.height > 0 && getComputedStyle(tooltip).visibility === 'visible',
+              band: tappedBand >= 0 && tappedBand < 24 && (reducedMotion !== 'reduce' || tappedBand === 12),
+              described: document.querySelectorAll('[role=meter]')[tappedBand]?.getAttribute('aria-describedby') };
+          }, reducedMotion)).toEqual({ visible: true, band: true, described: 'frequency-readout' });
+          await tapControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
           // Keep the accessible dialog identity and read one coherent layout.
           const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
           await expect.poll(() => dialog.evaluateAll((nodes, turn) => nodes.map(node => {
@@ -177,9 +189,8 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
             return { fits: a.width > 0 && a.height > 0 && a.left >= b.left && a.top >= b.top && a.right <= b.right && a.bottom <= b.bottom };
           });
           expect(help.fits).toBe(true);
-          const slider = page.locator('.camera-rotation');
-          await page.getByRole('button', { name: 'Increase Camera angle (degrees)', exact: true }).tap();
-          await expect(slider).toHaveValue(String(await page.evaluate(() => Math.min(40, angleAtStep + 1))));
+          await tapControlAtHitPoint(page, page.getByRole('button', { name: 'Increase Camera angle (degrees)', exact: true }), { scroll: true });
+          await expect.poll(() => page.evaluate(() => Number(document.querySelector('.camera-rotation').value) === Math.min(40, angleAtStep + 1))).toBe(true);
           await page.getByRole('button', { name: 'Close settings', exact: true }).focus();
           await page.keyboard.press('Shift+Tab');
           expect(await page.evaluate(() => document.querySelector('.fullscreen-settings').contains(document.activeElement))).toBe(true);
@@ -190,7 +201,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
               expanded: document.querySelector('.audio-card').hasAttribute('data-expanded') };
           })).toEqual({ closed: true, expanded: true });
           if (route === '/' && video && turn === 1) await info.attach(`rotation-${viewport.width}.png`, { body: await page.screenshot(), contentType: 'image/png' });
-          await tapToolbarAtHitPoint(page, page.locator('.rotate-display'));
+          await tapControlAtHitPoint(page, page.locator('.rotate-display'));
         }
       }
       expect(await page.evaluate(() => ({ count: rotationContinuity.length, preserved: rotationContinuity.every(Boolean), resets: rotationResets }))).toEqual({ count: 8, preserved: true, resets: 0 });

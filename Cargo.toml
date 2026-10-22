@@ -15,3 +15,10 @@ exclude = [
     "validation/benchmarks",
 ]
 resolver = "2"
+
+# Match the standalone physics tests: exercise DSP workloads without debug-build
+# computation overhead while retaining the checks that catch correctness bugs.
+[profile.test]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
