@@ -240,6 +240,53 @@ test('queued dialog close keeps new action help and Escape usable', async ({ pag
 });
 
 
+for (const path of ['/', '/advanced/']) {
+  test(`narrow rotation toolbar fits fallback fonts and safe areas on ${path}`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true });
+    try {
+      const page = await context.newPage();
+      await page.goto(origin + path); await physicsReady(page);
+      // Font metrics differ across hosts. A wide fallback exercises intrinsic
+      // sizing without relying on the CI host's installed Comic Sans substitute.
+      await page.addStyleTag({ content: '.fullscreen-toolbar { font-family: monospace; }' });
+      await page.evaluate(() => {
+        const card = document.querySelector('.audio-card');
+        for (const side of ['top', 'right', 'bottom', 'left']) card.style.setProperty(`--safe-${side}`, '12px');
+        card.querySelector('#dancinglights').physics.notice.show('Graphics recovery notice.', 'Graphics recovery notice.');
+      });
+      for (const viewport of [{ width: 320, height: 568 }, { width: 568, height: 320 }]) {
+        await page.setViewportSize(viewport);
+        for (let turn = 0; turn < 4; turn++) {
+          await expect.poll(() => page.evaluate(() => {
+            const bar = document.querySelector('.fullscreen-toolbar');
+            const controls = [...bar.querySelectorAll('button, label')];
+            const rects = controls.map(n => n.getBoundingClientRect());
+            const fits = r => r.left >= 12 && r.top >= 12 && r.right <= innerWidth - 12 && r.bottom <= innerHeight - 12;
+            const separate = (a, b) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+            const label = bar.querySelector('label'), gear = bar.querySelector('.fullscreen-settings-button');
+            const notice = document.querySelector('.recovery-notices').getBoundingClientRect();
+            return {
+              overflow: bar.scrollWidth > bar.clientWidth,
+              controls: rects.every((r, i) => fits(r) && r.width >= 44 && r.height >= 44
+                && controls[i].contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))),
+              separate: rects.every((a, i) => rects.slice(i + 1).every(b => separate(a, b))),
+              textFits: label.scrollWidth <= label.clientWidth,
+              listeningLeft: label.offsetLeft + label.offsetWidth <= gear.offsetLeft,
+              notice: fits(notice) && rects.every(r => separate(r, notice)),
+            };
+          })).toEqual({ overflow: false, controls: true, separate: true, textFits: true, listeningLeft: true, notice: true });
+          await page.getByRole('button', { name: 'Settings', exact: true }).tap();
+          await page.getByRole('button', { name: 'Close settings', exact: true }).tap();
+          await page.locator('.rotate-display').tap();
+          await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
+        }
+      }
+      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
+      await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+    } finally { await context.close(); }
+  });
+}
+
 test('toolbar Listening keeps one microphone session through Settings and restores on exit', async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await syntheticAudio(page);

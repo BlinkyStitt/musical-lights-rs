@@ -361,6 +361,18 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .recovery-notices > :empty { display: none; }
 .audio-card[data-expanded] .recovery-notices > :not(:empty) { position: static; margin: 0; padding: .5rem .75rem; }
 .audio-card[data-expanded] .frequency-tooltip { top: 64px; }
+/* Use logical width so a short landscape screen also fits after a quarter turn.
+   Keep complete labels and 44px targets when font metrics or safe areas grow. */
+@container visualizer (max-width: 360px) {
+  .audio-card[data-expanded] .fullscreen-toolbar { display: grid; grid-template-columns: max-content minmax(0, 1fr) 44px; justify-items: end; }
+  .audio-card[data-expanded] .fullscreen-button { grid-column: 1; grid-row: 1 / 3; align-self: start; }
+  .audio-card[data-expanded] .rotate-display { grid-column: 2; grid-row: 1; }
+  .audio-card[data-expanded] .rotate-help { grid-column: 3; grid-row: 1; }
+  .audio-card[data-expanded] .fullscreen-toolbar .setting-switch { grid-column: 2; grid-row: 2; }
+  .audio-card[data-expanded] .fullscreen-settings-button { grid-column: 3; grid-row: 2; }
+  .audio-card[data-expanded] .recovery-notices { top: calc(max(.5rem, var(--safe-top)) + 96px); max-height: calc(50% - 112px); }
+  .audio-card[data-expanded] .frequency-tooltip { top: 112px; }
+}
 @container visualizer (orientation: landscape) {
   .audio-card[data-expanded].video-active > .visual-content { flex-direction: row; }
   .audio-card[data-expanded].video-active .video-panel { width: 50%; height: 100%; }

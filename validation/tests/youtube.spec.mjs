@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
-async function setup(page, path = '/', progressingVideo = false) {
+async function setup(page, path = '/', progressingVideo = false, nativeFullscreen = false) {
   await syntheticAudio(page);
-  await page.addInitScript(() => {
-    Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+  await page.addInitScript(nativeFullscreen => {
+    if (!nativeFullscreen) Object.defineProperty(document, 'fullscreenEnabled', { value: false });
     window.micRequests = 0; window.microphones = []; window.players = [];
     const acquire = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async (...args) => {
@@ -32,7 +32,7 @@ async function setup(page, path = '/', progressingVideo = false) {
       error(data) { this.options.events.onError({ target: this, data }); }
       destroy() { this.destroyed = true; this.frame.remove(); }
     } };
-  });
+  }, nativeFullscreen);
   const movie = progressingVideo ? await readFile(new URL('../fixtures/rotation-clock.mp4', import.meta.url)) : null;
   // Inline a generated clip longer than the test deadline (fixtures/README.md).
   // Exercise the browser media clock without looping, a live provider or HTTP range mocks.
@@ -450,10 +450,43 @@ test('camera slider tracks the rendered view and Reduced Motion removes automati
   await expect(page.locator('.camera-rotation')).toHaveValue('0');
 });
 
-for (const path of ['/', '/advanced/']) for (const resizeLayout of [false, true])
+for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) {
+  test(`native fullscreen rotation preserves video on ${path} (${reducedMotion})`, async ({ page }, info) => {
+    await page.emulateMedia({ reducedMotion });
+    await setup(page, path, true, true); await load(page);
+    const video = page.frameLocator('.youtube-frame iframe').locator('video');
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    await page.frameLocator('.youtube-frame iframe').getByRole('button', { name: 'Play test video', exact: true }).click();
+    await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      window.nativeVideoIdentity = { player: videoPlayer, frame: videoPlayer.frame, worker: v.worker,
+        renderer: v.renderer, balls: v.balls, context: testContext, session: document.querySelector('.audio-card').dataset.audioSession };
+    });
+    for (let turn = 0; turn < 4; turn++) {
+      if (info.project.name === 'chromium') await expect.poll(() => page.evaluate(() => document.fullscreenElement === document.querySelector('.visualizer-screen'))).toBe(true);
+      await openFullscreenSettings(page); await closeFullscreenSettings(page);
+      await page.locator('.rotate-display').click();
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
+      const before = await video.evaluate(v => ({ time: v.currentTime, frames: videoFrames }));
+      await expect.poll(() => video.evaluate((v, before) => !v.paused && !v.error
+        && v.currentTime > before.time + .1 && videoFrames > before.frames + 2, before)).toBe(true);
+      expect(await page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics, old = nativeVideoIdentity;
+        return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
+          && v.worker === old.worker && v.renderer === old.renderer && v.balls === old.balls
+          && testContext === old.context && testContext.state === 'running'
+          && document.querySelector('.audio-card').dataset.audioSession === old.session;
+      })).toBe(true);
+    }
+  });
+}
+
+for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) for (const resizeLayout of [false, true])
 for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568, height: 320, keyboard: 180 }]) {
-  test(`manual rotation preserves playback on ${path} with a ${resizeLayout ? 'layout' : 'visual'} keyboard viewport (${viewport.width}px)`, async ({ page }, info) => {
+  test(`manual rotation preserves playback on ${path} with a ${resizeLayout ? 'layout' : 'visual'} keyboard viewport (${viewport.width}px, ${reducedMotion})`, async ({ page }, info) => {
     test.setTimeout(60000);
+    await page.emulateMedia({ reducedMotion });
     await page.setViewportSize({ width: 390, height: 844 });
     // Headless browsers have no on-screen keyboard. Model both resize contracts.
     await page.addInitScript(() => {
@@ -585,9 +618,10 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
   });
 }
 
-for (const path of ['/', '/advanced/']) for (const resizeLayout of [false, true]) {
-  test(`rotated Load and Remove dismiss the ${resizeLayout ? 'layout' : 'visual'} keyboard on ${path}`, async ({ page }) => {
+for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) for (const resizeLayout of [false, true]) {
+  test(`rotated Load and Remove dismiss the ${resizeLayout ? 'layout' : 'visual'} keyboard on ${path} (${reducedMotion})`, async ({ page }) => {
     test.setTimeout(60000);
+    await page.emulateMedia({ reducedMotion });
     await page.setViewportSize({ width: 568, height: 320 });
     await page.addInitScript(() => {
       const viewport = Object.assign(new EventTarget(), { width: 568, height: 320, offsetTop: 0, offsetLeft: 0 });
