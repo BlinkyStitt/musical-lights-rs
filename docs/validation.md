@@ -1094,3 +1094,17 @@ its physical states must remain identical across the three paint-policy cases.
 Browser pixel checks retain the existing per-tick color-jump limit and verify
 visible color variation after contact. Reduced Motion keeps the material swirl
 attached to physical rolling and adds no automatic pigment motion.
+
+
+## Draft checkpoints and CI
+
+Push unfinished checkpoints to draft pull requests. The site, other-apps,
+firmware, and recognition workflows skip their root jobs for draft PRs, which
+also skips their dependent jobs. Pushes to `main` and manual runs retain their
+existing validation and deployment rules.
+
+After local validation and agent reviews pass for the current commit, mark the
+PR ready. Each validation workflow listens for `ready_for_review` as well as
+new commits on ready PRs. Return a PR to draft before pushing a repair. Draft
+checks that were skipped do not establish acceptance; wait for the completed
+current-head CI run before merging.

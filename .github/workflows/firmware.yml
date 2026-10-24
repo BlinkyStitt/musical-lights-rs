@@ -20,6 +20,7 @@ on:
       - 'musical-adafruit-sparkle-idf/**'
       - 'tools/firmware/**'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -45,6 +46,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   firmware-tools:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Wired provisioning and calibration tools
     runs-on: ubuntu-24.04
     steps:
@@ -55,6 +57,7 @@ jobs:
       - run: python3 -m pip install uv==0.10.5
       - run: python3 validation/validate.py firmware-tools
   changes:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Affected firmware
     runs-on: ubuntu-24.04
     outputs:
