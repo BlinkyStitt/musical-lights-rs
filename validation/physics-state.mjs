@@ -38,22 +38,40 @@ export async function scrollingIntersections(page, selectors) {
 export async function physicsReady(page) {
   // One browser call waits for both initial and advancing state. Separate
   // protocol/trace snapshots can stall a busy software renderer between waits.
-  await page.waitForFunction(() => new Promise(resolve => {
-    let received;
-    const sample = () => {
-      const view = document.querySelector('#dancinglights')?.physics;
-      if (view?.current) {
-        // A reset restarts the tick. Compare fresh receipts on the host clock.
-        received ??= view.received;
-        if (view.ready && !view.closed && !view.lost && !view.notice.persistent
-          && view.current[2] > 0 && view.received > received) {
-          resolve(true); return;
+  try {
+    await page.waitForFunction(() => new Promise(resolve => {
+      let received;
+      const sample = () => {
+        const view = document.querySelector('#dancinglights')?.physics;
+        if (view?.current) {
+          // A reset restarts the tick. Compare fresh receipts on the host clock.
+          received ??= view.received;
+          if (view.ready && !view.closed && !view.lost && !view.notice.persistent
+            && view.current[2] > 0 && view.received > received) {
+            resolve(true); return;
+          }
         }
-      }
-      requestAnimationFrame(sample);
-    };
-    sample();
-  }), null, { timeout: 5000 });
+        requestAnimationFrame(sample);
+      };
+      sample();
+    }), null, { timeout: 5000 });
+  } catch (error) {
+    const state = await page.evaluate(() => {
+      const view = document.querySelector('#dancinglights')?.physics;
+      return {
+        visibility: document.visibilityState, view: !!view,
+        ready: view?.ready, closed: view?.closed, lost: view?.lost,
+        notice: view?.notice?.persistent, tick: view?.current?.[2],
+        receiptAge: view?.received == null ? null : performance.now() - view.received,
+        inflight: view?.inflight, metrics: view?.metrics,
+        resources: performance.getEntriesByType('resource').slice(-8).map(entry => ({
+          path: new URL(entry.name).pathname, duration: entry.duration,
+          responseEnd: entry.responseEnd,
+        })),
+      };
+    }).catch(failure => ({ diagnosticError: failure.message }));
+    throw new Error(error.message + '\nPhysics readiness state: ' + JSON.stringify(state), { cause: error });
+  }
 }
 export async function physicsState(page) {
   return page.evaluate(() => {
