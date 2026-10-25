@@ -674,11 +674,12 @@ ordered input, tempo and accent events for exact replay. Historical recordings
 need their matching historical engine. Raw loudness, filtered targets and the
 fixed-window reference audit retain their existing contracts.
 
-Browser traces retain DOM snapshots and source code. They omit the continuous
-screenshot filmstrip because GPU readbacks compete with realtime audio on
-software renderers. Failure screenshots and explicit GPU pixel comparisons,
-layout screenshots and preview images remain enabled. This reduces diagnostic
-recording work without changing browser assertions, deadlines or retries.
+Browser traces retain action timings, errors and source code. They omit
+continuous DOM snapshots and the screenshot filmstrip because recording each
+protocol call stalls software renderers. Failure screenshots, browser process
+logs, explicit GPU pixel comparisons, layout screenshots and preview images
+remain enabled. The tests keep all assertions, deadlines, one worker, zero
+retries and the serial startup/crash guard.
 
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and
