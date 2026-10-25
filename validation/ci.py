@@ -16,14 +16,28 @@ PAYLOAD = (
     "musical-lights-physics/pkg",
     "musical-lights-worklet/pkg",
 )
+# Each host keeps one worker. Round-robin cases spread long files across hosts.
+BROWSER_PROJECTS = {
+    "chromium": ("chromium", "chromium-permissions"),
+    "webkit": ("webkit-spectrum", "iphone-webkit"),
+}
+BROWSER_GROUPS = tuple(
+    {
+        "name": f"{browser}-{shard}",
+        "browser": browser,
+        "projects": " ".join(
+            f"--project {project}" for project in BROWSER_PROJECTS[browser]
+        ),
+    }
+    for browser in BROWSER_PROJECTS
+    for shard in range(1, 5)
+)
 VALIDATORS = {
+    *(f"Browser ({group['name']})" for group in BROWSER_GROUPS),
     "Site plan",
     "rust (core)",
     "loudness-reference",
     "Build website",
-    "Browser (chromium-1)",
-    "Browser (chromium-2)",
-    "Browser (webkit)",
     "Validated website",
 }
 
@@ -125,19 +139,64 @@ def unpack(bundle, run_id, root=ROOT):
         shutil.copytree(bundle / name, destination)
 
 
-def test_cases(report):
-    result = []
+def test_specs(report):
+    """Retain nested describe titles for Playwright's exact test-list format."""
 
-    def walk(suite):
+    def walk(suite, titles):
         for spec in suite.get("specs", []):
-            for test in spec["tests"]:
-                result.append((spec["id"], test["projectName"], test))
+            yield spec, titles
         for child in suite.get("suites", []):
-            walk(child)
+            yield from walk(child, (*titles, child["title"]))
 
     for suite in report["suites"]:
-        walk(suite)
-    return result
+        yield from walk(suite, ())
+
+
+def test_cases(report):
+    return [
+        (spec["id"], test["projectName"], test)
+        for spec, _ in test_specs(report)
+        for test in spec["tests"]
+    ]
+
+
+def browser_groups(report):
+    """Partition the canonical inventory, never a manually maintained test list."""
+    families = {browser: [] for browser in BROWSER_PROJECTS}
+    seen = set()
+    for spec, titles in test_specs(report):
+        for test in spec["tests"]:
+            project = test["projectName"]
+            family = next(
+                (
+                    name
+                    for name, projects in BROWSER_PROJECTS.items()
+                    if project in projects
+                ),
+                None,
+            )
+            if family is None:
+                raise ValueError(
+                    f"Browser inventory has an unmapped project: {project}"
+                )
+            identity = (spec["id"], project)
+            if identity in seen:
+                raise ValueError("Browser inventory contains a duplicate test")
+            seen.add(identity)
+            parts = (f"[{project}]", spec["file"], *titles, spec["title"])
+            if any("\n" in part or "\r" in part or "›" in part for part in parts):
+                raise ValueError("Browser test cannot be represented in a test list")
+            families[family].append(" › ".join(parts))
+    groups = {}
+    for browser, cases in families.items():
+        names = [
+            group["name"] for group in BROWSER_GROUPS if group["browser"] == browser
+        ]
+        for index, name in enumerate(names):
+            groups[name] = sorted(cases)[index :: len(names)]
+            if not groups[name]:
+                raise ValueError(f"Browser group is empty: {name}")
+    return groups
 
 
 def coverage(inventory, reports):
@@ -317,6 +376,10 @@ def main():
         p = sub.add_parser(command)
         p.add_argument("bundle", type=Path)
         p.add_argument("run_id")
+    p = sub.add_parser("browser-list")
+    p.add_argument("inventory", type=Path)
+    p.add_argument("group", choices=[group["name"] for group in BROWSER_GROUPS])
+    p.add_argument("destination", type=Path)
     p = sub.add_parser("coverage")
     p.add_argument("inventory", type=Path)
     p.add_argument("reports", type=Path)
@@ -333,6 +396,7 @@ def main():
                 "run_id": run_id,
                 "artifact_id": artifact,
                 "tree": inputs()["source_tree"],
+                "browser_matrix": json.dumps({"include": BROWSER_GROUPS}),
             }
         )
         summary = (
@@ -382,10 +446,13 @@ def main():
         unpack(args.bundle, args.run_id)
     elif args.command == "verify":
         verify(args.bundle, inputs(), args.run_id)
+    elif args.command == "browser-list":
+        groups = browser_groups(json.loads(args.inventory.read_text()))
+        args.destination.write_text("\n".join(groups[args.group]) + "\n")
     else:
         reports = sorted(args.reports.rglob("report.json"))
-        if len(reports) != 3:
-            raise ValueError("Expected all three browser reports")
+        if len(reports) != len(BROWSER_GROUPS):
+            raise ValueError("Expected every browser group report")
         coverage(args.inventory, reports)
 
 

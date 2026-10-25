@@ -47,6 +47,7 @@ jobs:
       run_id: ${{ steps.plan.outputs.run_id }}
       artifact_id: ${{ steps.plan.outputs.artifact_id }}
       tree: ${{ steps.plan.outputs.tree }}
+      browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/cache@v6.1.0
@@ -216,24 +217,7 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: chromium-1
-            projects: --project chromium --project chromium-permissions
-            # Group by measured file cost. Count-based sharding left one
-            # Chromium runner at 16.7 minutes and the other at 8.1 minutes.
-            files: 'tests/(balloons|capture-startup|edges|mirrors|spectrum-keyboard|touch-screen|youtube)\.spec\.mjs$'
-            browsers: chromium
-          - name: chromium-2
-            projects: --project chromium --project chromium-permissions
-            # New files enter this group; the coverage barrier still requires
-            # every collected test exactly once across all three runners.
-            files: 'tests/(?!(balloons|capture-startup|edges|mirrors|spectrum-keyboard|touch-screen|youtube)\.spec\.mjs$).*\.spec\.mjs$'
-            browsers: chromium
-          - name: webkit
-            projects: --project webkit-spectrum --project iphone-webkit
-            files: 'tests/.*\.spec\.mjs$'
-            browsers: webkit
+      matrix: ${{ fromJSON(needs.plan.outputs.browser_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
@@ -249,20 +233,21 @@ jobs:
       - name: Install exact browser
         working-directory: validation
         env:
-          BROWSERS: ${{ matrix.browsers }}
+          BROWSERS: ${{ matrix.browser }}
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps "$BROWSERS"
       - name: Run isolated browser group
-        working-directory: validation
         env:
+          BROWSER_GROUP: ${{ matrix.name }}
           PROJECTS: ${{ matrix.projects }}
-          TEST_FILES: ${{ matrix.files }}
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
           DEBUG: pw:browser
         run: |
+          python3 validation/ci.py browser-list .ci/site/inventory.json "$BROWSER_GROUP" .ci/browser-tests.txt
+          cd validation
           read -r -a projects <<< "$PROJECTS"
-          npx playwright test "$TEST_FILES" "${projects[@]}" --reporter=list,./browser-process-reporter.mjs,json
+          npx playwright test --test-list ../.ci/browser-tests.txt "${projects[@]}" --reporter=list,./browser-process-reporter.mjs,json
       - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:

@@ -232,5 +232,74 @@ class ChangeTests(unittest.TestCase):
         )
 
 
+class BrowserGroupTests(unittest.TestCase):
+    def inventory(self):
+        return {
+            "suites": [
+                {
+                    "title": "large.spec.mjs",
+                    "specs": [],
+                    "suites": [
+                        {
+                            "title": "rotation",
+                            "specs": [
+                                {
+                                    "id": str(index),
+                                    "file": "large.spec.mjs",
+                                    "title": f"turn {index}",
+                                    "tests": [
+                                        {"projectName": project}
+                                        for projects in ci.BROWSER_PROJECTS.values()
+                                        for project in projects
+                                    ],
+                                }
+                                for index in range(12)
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+    def test_every_case_runs_once_with_nested_titles_and_balanced_families(self):
+        inventory = self.inventory()
+        groups = ci.browser_groups(inventory)
+        cases = [case for group in groups.values() for case in group]
+        self.assertEqual(len(cases), 48)
+        self.assertEqual(len(set(cases)), 48)
+        self.assertEqual(set(groups), {group["name"] for group in ci.BROWSER_GROUPS})
+        for group in ci.BROWSER_GROUPS:
+            selected = groups[group["name"]]
+            self.assertEqual(len(selected), 6)
+            for case in selected:
+                self.assertIn("large.spec.mjs › rotation › turn ", case)
+                self.assertTrue(
+                    any(
+                        case.startswith(f"[{project}]")
+                        for project in ci.BROWSER_PROJECTS[group["browser"]]
+                    )
+                )
+        inventory["suites"][0]["suites"][0]["specs"].reverse()
+        self.assertEqual(ci.browser_groups(inventory), groups)
+
+    def test_unknown_duplicate_empty_and_unrepresentable_cases_fail_closed(self):
+        for failure in ("unknown", "duplicate", "empty", "delimiter", "newline"):
+            with self.subTest(failure=failure):
+                inventory = self.inventory()
+                specs = inventory["suites"][0]["suites"][0]["specs"]
+                if failure == "unknown":
+                    specs[0]["tests"][0]["projectName"] = "new-browser"
+                elif failure == "duplicate":
+                    specs.append(specs[0])
+                elif failure == "empty":
+                    specs.clear()
+                else:
+                    specs[0]["title"] = "bad" + (
+                        "›" if failure == "delimiter" else "\n"
+                    )
+                with self.assertRaises(ValueError):
+                    ci.browser_groups(inventory)
+
+
 if __name__ == "__main__":
     unittest.main()
