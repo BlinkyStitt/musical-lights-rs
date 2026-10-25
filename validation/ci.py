@@ -8,6 +8,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,21 +17,27 @@ PAYLOAD = (
     "musical-lights-physics/pkg",
     "musical-lights-worklet/pkg",
 )
-# Each host keeps one worker. Round-robin cases spread long files across hosts.
-BROWSER_PROJECTS = {
-    "chromium": ("chromium", "chromium-permissions"),
-    "webkit": ("webkit-spectrum", "iphone-webkit"),
+
+
+@dataclass(frozen=True)
+class BrowserFamily:
+    projects: tuple[str, ...]
+    groups: int
+
+
+# Measured CI cost: Chromium needs more groups than WebKit on software rendering.
+BROWSER_FAMILIES = {
+    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 7),
+    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 5),
 }
 BROWSER_GROUPS = tuple(
     {
         "name": f"{browser}-{shard}",
         "browser": browser,
-        "projects": " ".join(
-            f"--project {project}" for project in BROWSER_PROJECTS[browser]
-        ),
+        "projects": " ".join(f"--project {project}" for project in family.projects),
     }
-    for browser in BROWSER_PROJECTS
-    for shard in range(1, 5)
+    for browser, family in BROWSER_FAMILIES.items()
+    for shard in range(1, family.groups + 1)
 )
 VALIDATORS = {
     *(f"Browser ({group['name']})" for group in BROWSER_GROUPS),
@@ -162,7 +169,7 @@ def test_cases(report):
 
 def browser_groups(report):
     """Partition the canonical inventory, never a manually maintained test list."""
-    families = {browser: [] for browser in BROWSER_PROJECTS}
+    families = {browser: [] for browser in BROWSER_FAMILIES}
     seen = set()
     for spec, titles in test_specs(report):
         for test in spec["tests"]:
@@ -170,8 +177,8 @@ def browser_groups(report):
             family = next(
                 (
                     name
-                    for name, projects in BROWSER_PROJECTS.items()
-                    if project in projects
+                    for name, family in BROWSER_FAMILIES.items()
+                    if project in family.projects
                 ),
                 None,
             )

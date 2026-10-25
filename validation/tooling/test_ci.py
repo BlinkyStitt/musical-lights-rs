@@ -249,8 +249,8 @@ class BrowserGroupTests(unittest.TestCase):
                                     "title": f"turn {index}",
                                     "tests": [
                                         {"projectName": project}
-                                        for projects in ci.BROWSER_PROJECTS.values()
-                                        for project in projects
+                                        for family in ci.BROWSER_FAMILIES.values()
+                                        for project in family.projects
                                     ],
                                 }
                                 for index in range(12)
@@ -270,15 +270,22 @@ class BrowserGroupTests(unittest.TestCase):
         self.assertEqual(set(groups), {group["name"] for group in ci.BROWSER_GROUPS})
         for group in ci.BROWSER_GROUPS:
             selected = groups[group["name"]]
-            self.assertEqual(len(selected), 6)
+            self.assertTrue(selected)
             for case in selected:
                 self.assertIn("large.spec.mjs › rotation › turn ", case)
                 self.assertTrue(
                     any(
                         case.startswith(f"[{project}]")
-                        for project in ci.BROWSER_PROJECTS[group["browser"]]
+                        for project in ci.BROWSER_FAMILIES[group["browser"]].projects
                     )
                 )
+        for browser in ci.BROWSER_FAMILIES:
+            sizes = [
+                len(groups[group["name"]])
+                for group in ci.BROWSER_GROUPS
+                if group["browser"] == browser
+            ]
+            self.assertLessEqual(max(sizes) - min(sizes), 1)
         inventory["suites"][0]["suites"][0]["specs"].reverse()
         self.assertEqual(ci.browser_groups(inventory), groups)
 
