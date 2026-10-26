@@ -26,11 +26,12 @@ class BrowserFamily:
 
 
 # Run 40411870070 measured 2,606 Chromium and 2,019 WebKit test-seconds.
-# Eleven/nine groups reduce its largest recorded test load from 410 to 270
-# seconds without sharing audio/rendering workers or exceeding 20 runner slots.
+# Ten/eight groups reduce its largest recorded test load from 410 to 293 seconds.
+# Leave two of the account's 20 runner slots for other checks; filling all slots
+# delayed the last browser group by 217 seconds in run 40413428570.
 BROWSER_FAMILIES = {
-    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 11),
-    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 9),
+    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 10),
+    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 8),
 }
 BROWSER_GROUPS = tuple(
     {
