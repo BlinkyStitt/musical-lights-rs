@@ -123,13 +123,19 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await closeFullscreenSettings(page);
     // Keep the real exit button available to touch users in the fullscreen view.
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    // Start on the graph below the toolbar. Its center now contains Motion.
+    // Recovery notices can appear below the toolbar while audio is running.
+    // Keep that real overlay present so the drag cannot depend on its absence.
+    await page.locator('.analysis-status').evaluate(node => {
+      node.textContent = 'Audio recovered after a timing change. Measurements restarted.';
+    });
+    await expect(page.locator('.analysis-status')).toBeVisible();
+    // Start in the clear center of the graph, below controls and notices.
     const dragStart = await page.locator('#dancinglights').evaluate(scene => {
       const bounds = scene.getBoundingClientRect();
-      const toolbar = scene.closest('.audio-card').querySelector('.fullscreen-toolbar').getBoundingClientRect();
-      const point = { x: bounds.x + bounds.width / 2, y: Math.max(bounds.y + 80, toolbar.bottom + 16) };
+      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
       const target = document.elementFromPoint(point.x, point.y);
-      if (!scene.contains(target) || target.closest('button, input, label, summary, [role=button]')) {
+      if (point.y + 120 > bounds.bottom || !scene.contains(target)
+        || target.closest('button, input, label, summary, [role=button]')) {
         throw new Error('Fullscreen exit drag must start on the graph, outside controls');
       }
       return point;
