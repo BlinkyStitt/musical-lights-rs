@@ -264,7 +264,9 @@ test('fullscreen frequency labels expire below the toolbar and keyboard users ca
   await page.getByRole('meter').first().focus();
   for (const control of [page.getByRole('button', { name: 'Settings', exact: true }),
     page.getByRole('button', { name: 'Listening', exact: true }),
-    page.getByRole('checkbox', { name: 'Listening', exact: true })]) {
+    page.getByRole('checkbox', { name: 'Listening', exact: true }),
+    page.getByRole('button', { name: 'About rotating the view', exact: true }),
+    page.locator('.rotate-display')]) {
     await page.keyboard.press('Shift+Tab');
     await expect(control).toBeFocused();
   }

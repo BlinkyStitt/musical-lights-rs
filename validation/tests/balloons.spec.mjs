@@ -600,7 +600,7 @@ test('small balls, paired bar tips and light sources share the same interpolated
           snapshot[4] = ceiling ? height - top - radius : top + radius;
         }
         v.received = performance.now();
-        v.draw(v.received + step * alpha);
+        v.updateScene(v.received + step * alpha);
         const y = v.balls.instanceMatrix.array[13], top = v.renderedHeight(0);
         samples.push({ ceiling, rising, alpha, interval, step,
           lagMs: (1 - v.renderAlpha) * (v.current[0] - v.previous[0]) * 1000,
@@ -609,7 +609,7 @@ test('small balls, paired bar tips and light sources share the same interpolated
           roof: v.barRoof.value, height: v.renderedEnclosureHeight });
       }
       return samples;
-    } finally { v.previous = previous; v.current = current; v.received = received; v.draw(performance.now()); }
+    } finally { v.previous = previous; v.current = current; v.received = received; v.updateScene(performance.now()); }
   });
   for (const sample of samples) {
     expect(Math.abs(sample.clearance), JSON.stringify(sample)).toBeLessThan(.00001);
@@ -623,7 +623,7 @@ test('leftward scrolling interpolates through the seam without sweeping the patt
   await page.goto(url); await physicsReady(page);
   const samples = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    cancelAnimationFrame(v.raf);
+    cancelAnimationFrame(v.request);
     const previous = v.previous, current = v.current, received = v.received;
     try {
       return [[.1, .08, .5], [.01, 23.99, .75], [23.99, .01, .75]].map(([from, to, alpha]) => {
@@ -631,10 +631,10 @@ test('leftward scrolling interpolates through the seam without sweeping the patt
         const step = 1000 / v.layout[1];
         v.previous[0] = 1; v.current[0] = 1 + step / 1000;
         v.previous[v.layout[20]] = from; v.current[v.layout[20]] = to;
-        v.received = performance.now(); v.draw(v.received + step * alpha);
+        v.received = performance.now(); v.updateScene(v.received + step * alpha);
         return v.renderedPhase;
       });
-    } finally { v.previous = previous; v.current = current; v.received = received; v.raf = requestAnimationFrame(v.animate); }
+    } finally { v.previous = previous; v.current = current; v.received = received; v.request = requestAnimationFrame(v.animate); }
   });
   expect(samples[0]).toBeCloseTo(.09, 4);
   expect(samples[1]).toBeCloseTo(23.995, 4);

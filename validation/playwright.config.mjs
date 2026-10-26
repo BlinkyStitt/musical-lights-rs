@@ -9,11 +9,11 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [['list'], ['./browser-process-reporter.mjs']],
-  // Continuous GPU readbacks for the trace filmstrip compete with realtime
-  // audio on software renderers. Keep DOM/source traces, failure screenshots
-  // and the explicit pixel/image assertions without recording that filmstrip.
+  // Recording the live DOM on every protocol call stalls software renderers.
+  // Keep action/source traces, failure screenshots and explicit pixel/image
+  // assertions without continuous DOM snapshots or a screenshot filmstrip.
   use: { headless: true, screenshot: 'only-on-failure',
-    trace: { mode: 'retain-on-failure', screenshots: false, snapshots: true, sources: true } },
+    trace: { mode: 'retain-on-failure', screenshots: false, snapshots: false, sources: true } },
   projects: [
     { name: 'chromium', testIgnore: ['**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: { browserName: 'chromium' } },
     { name: 'other-apps', testMatch: '**/other-apps.spec.mjs', use: { browserName: 'chromium' } },
@@ -24,8 +24,8 @@ export default defineConfig({
         '--no-proxy-server',
       ] },
     } },
-    { name: 'webkit-spectrum', testMatch: ['**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/advanced.spec.mjs', '**/musical-motion.spec.mjs', '**/mirrors.spec.mjs', '**/box-depth.spec.mjs', '**/antialias.spec.mjs', '**/color-fill.spec.mjs', '**/audio-recovery.spec.mjs', '**/lighting-auto.spec.mjs', '**/stars.spec.mjs', '**/star-twinkle.spec.mjs', '**/capture-startup.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs', '**/recognition.spec.mjs', '**/youtube.spec.mjs', '**/fullscreen-settings.spec.mjs'], use: { browserName: 'webkit' } },
-    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/mobile-layout.spec.mjs', '**/stars.spec.mjs', '**/star-twinkle.spec.mjs', '**/mirrors.spec.mjs', '**/box-depth.spec.mjs', '**/antialias.spec.mjs', '**/color-fill.spec.mjs', '**/audio-recovery.spec.mjs', '**/permissions.spec.mjs', '**/capture-startup.spec.mjs', '**/youtube.spec.mjs', '**/fullscreen-settings.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
+    { name: 'webkit-spectrum', testMatch: ['**/mobile-layout.spec.mjs', '**/spectrum-keyboard.spec.mjs', '**/spectrum.spec.mjs', '**/edges.spec.mjs', '**/balloons.spec.mjs', '**/motion-gravity.spec.mjs', '**/routes.spec.mjs', '**/deployment.spec.mjs', '**/tones.spec.mjs', '**/notices.spec.mjs', '**/advanced.spec.mjs', '**/musical-motion.spec.mjs', '**/mirrors.spec.mjs', '**/box-depth.spec.mjs', '**/antialias.spec.mjs', '**/color-fill.spec.mjs', '**/audio-recovery.spec.mjs', '**/lighting-auto.spec.mjs', '**/stars.spec.mjs', '**/star-twinkle.spec.mjs', '**/capture-startup.spec.mjs', '**/listening-review.spec.mjs', '**/permissions.spec.mjs', '**/recognition.spec.mjs', '**/youtube.spec.mjs', '**/fullscreen-settings.spec.mjs'], use: { browserName: 'webkit' } },
+    { name: 'iphone-webkit', testMatch: ['**/mobile-screen.spec.mjs', '**/mobile-layout.spec.mjs', '**/motion-gravity.spec.mjs', '**/stars.spec.mjs', '**/star-twinkle.spec.mjs', '**/mirrors.spec.mjs', '**/box-depth.spec.mjs', '**/antialias.spec.mjs', '**/color-fill.spec.mjs', '**/audio-recovery.spec.mjs', '**/permissions.spec.mjs', '**/capture-startup.spec.mjs', '**/youtube.spec.mjs', '**/fullscreen-settings.spec.mjs'], use: { ...devices['iPhone 13'], browserName: 'webkit' } },
   ],
   webServer: {
     command: 'node server.mjs',

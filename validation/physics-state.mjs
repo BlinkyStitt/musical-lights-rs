@@ -38,22 +38,57 @@ export async function scrollingIntersections(page, selectors) {
 export async function physicsReady(page) {
   // One browser call waits for both initial and advancing state. Separate
   // protocol/trace snapshots can stall a busy software renderer between waits.
-  await page.waitForFunction(() => new Promise(resolve => {
-    let received;
-    const sample = () => {
-      const view = document.querySelector('#dancinglights')?.physics;
-      if (view?.current) {
-        // A reset restarts the tick. Compare fresh receipts on the host clock.
-        received ??= view.received;
-        if (view.ready && !view.closed && !view.lost && !view.notice.persistent
-          && view.current[2] > 0 && view.received > received) {
-          resolve(true); return;
+  const pageErrors = [];
+  const collectError = error => { if (pageErrors.length < 4) pageErrors.push({ message: error.message.slice(0, 1000), stack: error.stack?.slice(0, 1500) }); };
+  page.on('pageerror', collectError);
+  try {
+    await page.waitForFunction(() => new Promise(resolve => {
+      let received;
+      const sample = () => {
+        const view = document.querySelector('#dancinglights')?.physics;
+        if (view?.current) {
+          // A reset restarts the tick. Compare fresh receipts on the host clock.
+          received ??= view.received;
+          if (view.ready && !view.closed && !view.lost && !view.notice.persistent
+            && view.current[2] > 0 && view.received > received) {
+            resolve(true); return;
+          }
         }
-      }
-      requestAnimationFrame(sample);
-    };
-    sample();
-  }), null, { timeout: 5000 });
+        requestAnimationFrame(sample);
+      };
+      sample();
+    }), null, { timeout: 5000 });
+  } catch (error) {
+    const state = await page.evaluate(() => {
+      const view = document.querySelector('#dancinglights')?.physics;
+      return {
+        visibility: document.visibilityState, view: !!view,
+        ready: view?.ready, closed: view?.closed, lost: view?.lost, layoutLength: view?.layout?.length,
+        notice: view?.notice?.persistent, tick: view?.current?.[2],
+        receiptAge: view?.received == null ? null : performance.now() - view.received,
+        inflight: view?.inflight, metrics: view?.metrics,
+        resources: performance.getEntriesByType('resource').slice(-8).map(entry => ({
+          path: new URL(entry.name).pathname, duration: entry.duration,
+          responseEnd: entry.responseEnd,
+        })),
+      };
+    }).catch(failure => ({ diagnosticError: failure.message }));
+    const workers = await Promise.all(page.workers().map(async worker => {
+      let timer;
+      try {
+        const state = await Promise.race([
+          worker.evaluate(() => ({
+            resources: performance.getEntriesByType('resource').slice(-4).map(entry => ({
+              path: new URL(entry.name).pathname, duration: entry.duration, responseEnd: entry.responseEnd,
+            })),
+          })).catch(error => ({ diagnosticError: error.message })),
+          new Promise(resolve => { timer = setTimeout(() => resolve({ diagnosticError: 'Worker diagnostic did not respond within 1s' }), 1000); }),
+        ]);
+        return { path: new URL(worker.url()).pathname, ...state };
+      } finally { clearTimeout(timer); }
+    }));
+    throw new Error(error.message + '\nPhysics readiness state: ' + JSON.stringify({ ...state, pageErrors, workers }), { cause: error });
+  } finally { page.off('pageerror', collectError); }
 }
 export async function physicsState(page) {
   return page.evaluate(() => {

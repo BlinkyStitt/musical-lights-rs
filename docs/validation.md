@@ -3,16 +3,22 @@
 ## Website deployment
 
 Website validation builds physics, the worklet and Leptos once. The build job
-runs the offline harness and records the complete browser test inventory. Two
-isolated Chromium groups and one WebKit/iPhone-profile job download that same
-compiled bundle. Each retains the serial startup/crash guard, one worker, zero
-retries. The final job compares the reports with
+runs the offline harness and records the complete browser test inventory. Seven
+isolated Chromium groups and five WebKit/iPhone-profile groups download that same
+compiled bundle. The planner distributes cases from each browser family in
+round-robin order, so one large file cannot occupy a whole runner. Each group
+retains the serial startup/crash guard, one worker and zero retries. The ten-minute
+browser target includes all cases; it is not permission to omit slow tests.
+The final job compares all twelve reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
 Core and loudness-reference checks run alongside the build and browser jobs.
 
 The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
 test inventory, and file digests. Its provenance records the Git source tree,
-workflow digest, runner platform/image, producer run/attempt and source commit.
+workflow digest, runner platform, producer image, run/attempt and source commit.
+Consumers verify the same source, workflow recipe and OS/architecture. The workflow
+pins the build runner; its ambient image label remains a producer receipt rather
+than an input taken from the browser container.
 PRs always perform fresh validation. After a merge or manual dispatch, the plan
 can reuse an unexpired artifact only from a successful same-repository PR run
 of this workflow with all required validation jobs passed. It verifies the
@@ -54,8 +60,11 @@ Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
 Standard GitHub-hosted runners remain free for this public repository; these
 changes do not require larger runners, paid images or increased cache storage.
-Docker image pulls and browser downloads are not used as substitutes for the
-isolated test jobs: the measured dominant cost is test execution.
+Website browser groups use the official Playwright 1.64.1 Noble image, pinned
+by manifest digest in the workflow, with the matching locked SDK. Its bundled
+browsers and system libraries avoid per-run OS dependency installation. Keep the
+SDK and image versions synchronized when updating them. The groups retain every
+scheduled test and the final complete-coverage barrier.
 
 On macOS, the native crash guard reads each new browser IPS report. Actual crashes
 and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots
@@ -83,6 +92,11 @@ standalone Criterion benchmarks, not a wall-clock assertion on a shared CI runne
 
 Browser tests cover actual rendering, native input, audio output and lifecycle
 integration. All viewport/theme combinations retain geometry and audio checks.
+Synthetic-clock tests of scene matrices and lighting uniforms call
+`PhysicsView.updateScene`, which prepares state without submitting GPU work.
+Production `draw` still prepares and renders a frame. Pixel probes retain real
+draws and readback. Do not flood the GPU with synchronous synthetic draws outside
+the animation loop's two-frame queue: that work can stall the next test's renderer.
 The complete 24-band hover sequence and common-control keyboard order run once;
 other layouts check edge and center readouts. The existing keyboard tests still
 visit every band. Route tests own route content checks. The short-landscape test
@@ -674,11 +688,12 @@ ordered input, tempo and accent events for exact replay. Historical recordings
 need their matching historical engine. Raw loudness, filtered targets and the
 fixed-window reference audit retain their existing contracts.
 
-Browser traces retain DOM snapshots and source code. They omit the continuous
-screenshot filmstrip because GPU readbacks compete with realtime audio on
-software renderers. Failure screenshots and explicit GPU pixel comparisons,
-layout screenshots and preview images remain enabled. This reduces diagnostic
-recording work without changing browser assertions, deadlines or retries.
+Browser traces retain action timings, errors and source code. They omit
+continuous DOM snapshots and the screenshot filmstrip because recording each
+protocol call stalls software renderers. Failure screenshots, browser process
+logs, explicit GPU pixel comparisons, layout screenshots and preview images
+remain enabled. The tests keep all assertions, deadlines, one worker, zero
+retries and the serial startup/crash guard.
 
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and

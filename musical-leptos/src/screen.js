@@ -5,6 +5,9 @@ export class VisualizerScreen {
     this.element = element;
     this.document = element.ownerDocument;
     this.window = this.document.defaultView;
+    // Fullscreen UA rules force its target upright. A per-view outer surface
+    // leaves the card rotatable and keeps pending requests owned by this view.
+    this.fullscreenTarget = element.closest?.('.visualizer-screen') ?? element;
     this.navigator = this.window.navigator;
     this.orientation = this.window.screen?.orientation;
     this.onChange = onChange;
@@ -16,6 +19,7 @@ export class VisualizerScreen {
     this.changingFullscreen = false;
     this.pendingFullscreenState = null;
     this.expanded = false;
+    this.element.displayQuarterTurn = 0;
     this.pageScrollY = 0;
     this.swipe = null;
     this.suppressedFullscreenPointer = null;
@@ -36,7 +40,7 @@ export class VisualizerScreen {
     this.onFullscreen = () => {
       // Native events can arrive after their promise and during the next
       // transition. Only idle events represent an external browser change.
-      if (!this.changingFullscreen) this.setExpanded(this.document.fullscreenElement === this.element);
+      if (!this.changingFullscreen) this.setExpanded(this.document.fullscreenElement === this.fullscreenTarget);
     };
     this.onViewportChange = () => this.clearGesture();
     // End the expanded view while it still belongs to the document, before
@@ -69,7 +73,7 @@ export class VisualizerScreen {
       if (this.expanded && event.isPrimary && event.button === 0
           && !this.element.classList.contains('video-active')
           && !this.element.classList.contains('video-editing')
-          && event.clientY <= this.topTapHeight
+          && this.point(event).y <= this.topTapHeight
           && event.target?.closest?.('#dancinglights')
           && !event.target?.closest?.('button, input, label, summary')) {
         // iOS may not deliver a complete captured drag after a viewport
@@ -85,7 +89,7 @@ export class VisualizerScreen {
         const band = event.target.closest('[data-source-band], [role="meter"]');
         if (!this.expanded && !band) return;
         const index = band ? Number(band.dataset.sourceBand ?? [...this.element.querySelectorAll('[role="meter"]')].indexOf(band)) : -1;
-        this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY, touch, band: index, moved: false };
+        this.swipe = { id: event.pointerId, ...this.point(event), touch, band: index, moved: false };
         if (touch) this.onBand(null);
         // Retain the gesture when the finger crosses a band or its animated fill.
         this.element.setPointerCapture(event.pointerId);
@@ -94,11 +98,12 @@ export class VisualizerScreen {
     this.onClick = event => {
       const pointer = this.suppressedFullscreenPointer;
       this.suppressedFullscreenPointer = null;
-      // Safari may send a MouseEvent without a pointer ID. In either case,
-      // never consume a click on another control when its pointer stream is absent.
+      // A touch click can be retargeted onto the revealed page after Exit.
+      // Consume that same pointer stream even when it now hits a link. Safari
+      // MouseEvents without an ID can only be matched to the original button.
       const suppress = pointer && event.detail !== 0
-        && event.target?.closest?.('.fullscreen-button') === pointer.button
-        && (!(event.pointerId > 0) || event.pointerId === pointer.id);
+        && (event.pointerId > 0 ? event.pointerId === pointer.id
+          : event.target?.closest?.('.fullscreen-button') === pointer.button);
       if (suppress) {
         // Pointer-down already exited. The compact bar keeps the restored
         // entry button under the pointer; consuming this click prevents re-entry.
@@ -108,8 +113,9 @@ export class VisualizerScreen {
     this.onPointerMove = event => {
       const swipe = this.swipe;
       if (!swipe || event.pointerId !== swipe.id) return;
-      const down = event.clientY - swipe.y;
-      const across = Math.abs(event.clientX - swipe.x);
+      const point = this.point(event);
+      const down = point.y - swipe.y;
+      const across = Math.abs(point.x - swipe.x);
       if (Math.hypot(across, down) > 10) swipe.moved = true;
       if (this.expanded && down >= 80 && down > across * 1.5) {
         this.clearGesture();
@@ -137,7 +143,7 @@ export class VisualizerScreen {
       if (event.target?.closest?.('button, input, label, summary')
           && !event.target.closest('.fullscreen-button')) return;
       const touch = event.touches[0];
-      if (!this.element.classList.contains('video-active') && !this.element.classList.contains('video-editing') && touch.clientY <= this.topTapHeight && event.target?.closest?.('#dancinglights')) {
+      if (!this.element.classList.contains('video-active') && !this.element.classList.contains('video-editing') && this.point(touch).y <= this.topTapHeight && event.target?.closest?.('#dancinglights')) {
         // Safari can omit the matching pointer stream during viewport changes.
         // Capture the native touch before closing, so it cannot activate the
         // page underneath the fullscreen view.
@@ -154,6 +160,15 @@ export class VisualizerScreen {
       event.stopPropagation();
       if (!this.changingFullscreen) this.toggleFullscreen();
     };
+    this.onRotate = () => {
+      if (!this.expanded || this.closed) return;
+      this.clearGesture();
+      this.suppressedFullscreenPointer = null;
+      this.element.displayQuarterTurn = (this.element.displayQuarterTurn + 1) % 4;
+      this.element.setAttribute('data-display-rotation', this.element.displayQuarterTurn);
+      this.rotationChanged();
+    };
+    this.element.addEventListener('rotate-display', this.onRotate);
     this.document.addEventListener('visibilitychange', this.onVisibility);
     this.document.addEventListener('fullscreenchange', this.onFullscreen);
     this.document.addEventListener('keydown', this.onKey);
@@ -175,6 +190,15 @@ export class VisualizerScreen {
     this.acquireLock();
   }
 
+  point(event) {
+    return this.expanded && this.element.getBoundingClientRect
+      ? localPoint(this.element, event.clientX, event.clientY) : { x: event.clientX, y: event.clientY };
+  }
+
+  rotationChanged() {
+    this.element.dispatchEvent(new Event('display-rotation'));
+  }
+
   clearGesture() {
     const swipe = this.swipe;
     this.swipe = null;
@@ -191,10 +215,12 @@ export class VisualizerScreen {
   }
 
   setExpanded(expanded) {
+    const changed = expanded !== this.expanded;
     const entering = expanded && !this.expanded;
     this.expanded = expanded;
     this.clearGesture();
     this.element.toggleAttribute('data-expanded', expanded);
+    if (changed) this.rotationChanged();
     if (entering) this.element.scrollTop = 0;
     this.emit();
   }
@@ -275,7 +301,7 @@ export class VisualizerScreen {
         if (deferExit && typeof this.window.setTimeout === 'function') {
           await new Promise(resolve => this.window.setTimeout(resolve, 300));
         }
-        const nativeExit = this.document.fullscreenElement === this.element
+        const nativeExit = this.document.fullscreenElement === this.fullscreenTarget
           ? this.document.exitFullscreen()
           : null;
         // Publish the page state before waiting for Safari's native fullscreen
@@ -288,12 +314,12 @@ export class VisualizerScreen {
         // fullscreen additionally hides browser chrome where supported.
         this.pageScrollY = this.window.scrollY;
         this.setExpanded(true);
-        if (this.document.fullscreenEnabled && typeof this.element.requestFullscreen === 'function') {
+        if (this.document.fullscreenEnabled && typeof this.fullscreenTarget.requestFullscreen === 'function') {
           // Keep the request within the button's user gesture.
-          await this.element.requestFullscreen().catch(() => {});
+          await this.fullscreenTarget.requestFullscreen().catch(() => {});
         }
       }
-      if (this.closed && this.document.fullscreenElement === this.element) {
+      if (this.closed && this.document.fullscreenElement === this.fullscreenTarget) {
         await this.document.exitFullscreen();
       }
     } catch {
@@ -304,7 +330,7 @@ export class VisualizerScreen {
       if (!this.closed && this.pendingFullscreenState !== null) {
         const requested = this.pendingFullscreenState;
         this.pendingFullscreenState = null;
-        if (requested !== this.expanded || (!requested && this.document.fullscreenElement === this.element)) {
+        if (requested !== this.expanded || (!requested && this.document.fullscreenElement === this.fullscreenTarget)) {
           this.toggleFullscreen(false, requested);
         }
       }
@@ -314,6 +340,7 @@ export class VisualizerScreen {
   close() {
     if (this.closed) return;
     this.closed = true;
+    this.element.removeEventListener('rotate-display', this.onRotate);
     this.document.removeEventListener('visibilitychange', this.onVisibility);
     this.document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.document.removeEventListener('keydown', this.onKey);
@@ -334,10 +361,46 @@ export class VisualizerScreen {
     this.orientation?.removeEventListener?.('change', this.onViewportChange);
     this.setExpanded(false);
     this.releaseLock();
-    if (this.document.fullscreenElement === this.element) {
+    delete this.element.displayQuarterTurn;
+    this.element.removeAttribute?.('data-display-rotation');
+    if (this.document.fullscreenElement === this.fullscreenTarget) {
       this.document.exitFullscreen().catch(() => {});
     }
     this.onChange = null;
     this.onBand = null;
   }
+}
+
+// Browser-only display coordinates. CSS turns clockwise; scene Y points up.
+export function displayTurn(card) {
+  return card?.hasAttribute?.('data-expanded') ? (card.displayQuarterTurn ?? 0) : 0;
+}
+
+// Invert a quarter-turned element's physical bounds into its logical layout.
+// Never use the transformed width/height as the renderer's layout dimensions.
+export function localPoint(element, x, y, turn = displayTurn(element.closest?.('.audio-card') ?? element)) {
+  const box = element.getBoundingClientRect();
+  const u = (x - box.left) / box.width, v = (y - box.top) / box.height;
+  const [a, b] = [[u, v], [v, 1 - u], [1 - u, 1 - v], [1 - v, u]][turn];
+  return { x: a * element.clientWidth, y: b * element.clientHeight };
+}
+
+export function viewportBounds(card, viewport) {
+  const x = viewport?.offsetLeft ?? 0, y = viewport?.offsetTop ?? 0;
+  const width = viewport?.width ?? card.ownerDocument.defaultView.innerWidth;
+  const height = viewport?.height ?? card.ownerDocument.defaultView.innerHeight;
+  const points = [localPoint(card, x, y), localPoint(card, x + width, y + height)];
+  return { left: Math.min(...points.map(p => p.x)), top: Math.min(...points.map(p => p.y)),
+    right: Math.max(...points.map(p => p.x)), bottom: Math.max(...points.map(p => p.y)) };
+}
+
+// Top-layer dialogs need their own transform and physical origin.
+export function placeDialog(card, dialog, bounds) {
+  const turn = displayTurn(card), w = card.clientWidth, h = card.clientHeight;
+  const rect = card.getBoundingClientRect();
+  const { left: x, top: y, width, height } = bounds;
+  const [px, py] = [[x, y], [h - y, x], [w - x, h - y], [y, w - x]][turn];
+  Object.assign(dialog.style, { inset: 'auto', margin: '0', left: `${rect.left + px}px`, top: `${rect.top + py}px`,
+    width: `${width}px`, height: `${height}px`, maxWidth: 'none', maxHeight: 'none',
+    transformOrigin: '0 0', transform: turn ? `rotate(${turn * 90}deg)` : 'none' });
 }

@@ -224,10 +224,11 @@ test('keyboard can exit fullscreen from the last sample and route re-entry start
   await page.keyboard.press('Enter');
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
   await expect(exit).toBeFocused();
-  const toolbar = [page.getByRole('checkbox', { name: 'Listening', exact: true }),
+  const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+  const toolbar = [page.locator('.rotate-display'), page.getByRole('button', { name: 'About rotating the view', exact: true }), listening,
     page.getByRole('button', { name: 'Listening', exact: true }),
     page.getByRole('button', { name: 'Settings', exact: true })];
-  await expect(toolbar[0]).toBeEnabled();
+  await expect(listening).toBeEnabled();
   for (const control of toolbar) {
     await page.keyboard.press('Tab');
     await expect(control).toBeFocused();

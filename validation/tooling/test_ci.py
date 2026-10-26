@@ -23,6 +23,7 @@ class ArtifactTests(unittest.TestCase):
             "source_tree": "tree",
             "workflow": "workflow",
             "runner_os": "Linux",
+            "runner_arch": "X64",
         }
         for name in ci.PAYLOAD:
             path = self.root / name / "sample.wasm"
@@ -83,6 +84,50 @@ class ArtifactTests(unittest.TestCase):
                 (self.root / name / "sample.wasm").read_bytes(),
                 b"actual compiled bytes",
             )
+
+    def test_container_consumer_verifies_same_source_recipe_and_platform(self):
+        workflow = self.root / ".github/workflows/validate.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text("jobs: pinned build and browser container")
+        common = {
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_REPOSITORY": "owner/lights",
+            "RUNNER_OS": "Linux",
+            "RUNNER_ARCH": "X64",
+        }
+        bundle = self.root / "container-bundle"
+        with patch.object(
+            ci,
+            "git",
+            side_effect=lambda *args, **kwargs: "" if args[0] == "status" else "c" * 40,
+        ):
+            with patch.dict(os.environ, {**common, "ImageOS": "ubuntu24"}, clear=True):
+                ci.pack(bundle, self.inventory, self.root)
+            with patch.dict(os.environ, common, clear=True):
+                ci.unpack(bundle, "123", self.root)
+                manifest = ci.verify(bundle, ci.inputs(self.root), "123")
+                self.assertEqual(manifest["producer_image"], "ubuntu24")
+                for key in ("RUNNER_OS", "RUNNER_ARCH"):
+                    with (
+                        patch.dict(os.environ, {key: "different"}),
+                        self.assertRaises(ValueError),
+                    ):
+                        ci.unpack(bundle, "123", self.root)
+                workflow.write_text("jobs: different build recipe")
+                with self.assertRaises(ValueError):
+                    ci.unpack(bundle, "123", self.root)
+
+    def test_superseded_schema_and_missing_producer_receipt_fail_closed(self):
+        path = self.bundle / "provenance.json"
+        original = json.loads(path.read_text())
+        for replacement in (
+            {**original, "schema": 1},
+            {**original, "producer_image": None},
+        ):
+            path.write_text(json.dumps(replacement))
+            with self.assertRaises(ValueError):
+                ci.verify(self.bundle, self.expected, "123")
 
     def test_refuses_different_tree_tools_runner_or_producer(self):
         for key in self.expected:
@@ -230,6 +275,82 @@ class ChangeTests(unittest.TestCase):
                 "other-apps",
             )
         )
+
+
+class BrowserGroupTests(unittest.TestCase):
+    def inventory(self):
+        return {
+            "suites": [
+                {
+                    "title": "large.spec.mjs",
+                    "specs": [],
+                    "suites": [
+                        {
+                            "title": "rotation",
+                            "specs": [
+                                {
+                                    "id": str(index),
+                                    "file": "large.spec.mjs",
+                                    "title": f"turn {index}",
+                                    "tests": [
+                                        {"projectName": project}
+                                        for family in ci.BROWSER_FAMILIES.values()
+                                        for project in family.projects
+                                    ],
+                                }
+                                for index in range(12)
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+    def test_every_case_runs_once_with_nested_titles_and_balanced_families(self):
+        inventory = self.inventory()
+        groups = ci.browser_groups(inventory)
+        cases = [case for group in groups.values() for case in group]
+        self.assertEqual(len(cases), 48)
+        self.assertEqual(len(set(cases)), 48)
+        self.assertEqual(set(groups), {group["name"] for group in ci.BROWSER_GROUPS})
+        for group in ci.BROWSER_GROUPS:
+            selected = groups[group["name"]]
+            self.assertTrue(selected)
+            for case in selected:
+                self.assertIn("large.spec.mjs › rotation › turn ", case)
+                self.assertTrue(
+                    any(
+                        case.startswith(f"[{project}]")
+                        for project in ci.BROWSER_FAMILIES[group["browser"]].projects
+                    )
+                )
+        for browser in ci.BROWSER_FAMILIES:
+            sizes = [
+                len(groups[group["name"]])
+                for group in ci.BROWSER_GROUPS
+                if group["browser"] == browser
+            ]
+            self.assertLessEqual(max(sizes) - min(sizes), 1)
+        inventory["suites"][0]["suites"][0]["specs"].reverse()
+        self.assertEqual(ci.browser_groups(inventory), groups)
+
+    def test_unknown_duplicate_empty_and_unrepresentable_cases_fail_closed(self):
+        for failure in ("unknown", "duplicate", "empty", "delimiter", "newline"):
+            with self.subTest(failure=failure):
+                inventory = self.inventory()
+                specs = inventory["suites"][0]["suites"][0]["specs"]
+                if failure == "unknown":
+                    specs[0]["tests"][0]["projectName"] = "new-browser"
+                elif failure == "duplicate":
+                    specs.append(specs[0])
+                elif failure == "empty":
+                    specs.clear()
+                else:
+                    specs[0]["title"] = "bad" + (
+                        "›" if failure == "delimiter" else "\n"
+                    )
+                with self.assertRaises(ValueError):
+                    ci.browser_groups(inventory)
 
 
 if __name__ == "__main__":

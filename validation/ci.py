@@ -8,6 +8,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,14 +17,34 @@ PAYLOAD = (
     "musical-lights-physics/pkg",
     "musical-lights-worklet/pkg",
 )
+
+
+@dataclass(frozen=True)
+class BrowserFamily:
+    projects: tuple[str, ...]
+    groups: int
+
+
+# Measured CI cost: Chromium needs more groups than WebKit on software rendering.
+BROWSER_FAMILIES = {
+    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 7),
+    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 5),
+}
+BROWSER_GROUPS = tuple(
+    {
+        "name": f"{browser}-{shard}",
+        "browser": browser,
+        "projects": " ".join(f"--project {project}" for project in family.projects),
+    }
+    for browser, family in BROWSER_FAMILIES.items()
+    for shard in range(1, family.groups + 1)
+)
 VALIDATORS = {
+    *(f"Browser ({group['name']})" for group in BROWSER_GROUPS),
     "Site plan",
     "rust (core)",
     "loudness-reference",
     "Build website",
-    "Browser (chromium-1)",
-    "Browser (chromium-2)",
-    "Browser (webkit)",
     "Validated website",
 }
 
@@ -43,12 +64,12 @@ def sha(path):
 
 
 def inputs(root=ROOT):
+    """Bind artifacts to source, build recipe and platform across test containers."""
     return {
         "source_tree": git("rev-parse", "HEAD^{tree}", root=root),
         "workflow": sha(root / ".github/workflows/validate.yml"),
         "runner_os": os.environ.get("RUNNER_OS", platform.system()),
         "runner_arch": os.environ.get("RUNNER_ARCH", platform.machine()),
-        "runner_image": os.environ.get("ImageOS", "local"),
     }
 
 
@@ -66,8 +87,10 @@ def verify(bundle, expected, run_id):
     manifest = json.loads((bundle / "provenance.json").read_text())
     if (
         not isinstance(manifest, dict)
-        or manifest.get("schema") != 1
+        or manifest.get("schema") != 2
         or manifest.get("inputs") != expected
+        or not isinstance(manifest.get("producer_image"), str)
+        or not manifest["producer_image"]
     ):
         raise ValueError("Artifact source tree or build inputs do not match")
     if str(manifest.get("run_id")) != str(run_id):
@@ -104,8 +127,9 @@ def pack(bundle, inventory, root=ROOT):
         .get("full_name", repository)
     )
     manifest = {
-        "schema": 1,
+        "schema": 2,
         "inputs": inputs(root),
+        "producer_image": os.environ.get("ImageOS", "local"),
         "run_id": os.environ["GITHUB_RUN_ID"],
         "run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "1")),
         "repository": repository,
@@ -125,19 +149,64 @@ def unpack(bundle, run_id, root=ROOT):
         shutil.copytree(bundle / name, destination)
 
 
-def test_cases(report):
-    result = []
+def test_specs(report):
+    """Retain nested describe titles for Playwright's exact test-list format."""
 
-    def walk(suite):
+    def walk(suite, titles):
         for spec in suite.get("specs", []):
-            for test in spec["tests"]:
-                result.append((spec["id"], test["projectName"], test))
+            yield spec, titles
         for child in suite.get("suites", []):
-            walk(child)
+            yield from walk(child, (*titles, child["title"]))
 
     for suite in report["suites"]:
-        walk(suite)
-    return result
+        yield from walk(suite, ())
+
+
+def test_cases(report):
+    return [
+        (spec["id"], test["projectName"], test)
+        for spec, _ in test_specs(report)
+        for test in spec["tests"]
+    ]
+
+
+def browser_groups(report):
+    """Partition the canonical inventory, never a manually maintained test list."""
+    families = {browser: [] for browser in BROWSER_FAMILIES}
+    seen = set()
+    for spec, titles in test_specs(report):
+        for test in spec["tests"]:
+            project = test["projectName"]
+            family = next(
+                (
+                    name
+                    for name, family in BROWSER_FAMILIES.items()
+                    if project in family.projects
+                ),
+                None,
+            )
+            if family is None:
+                raise ValueError(
+                    f"Browser inventory has an unmapped project: {project}"
+                )
+            identity = (spec["id"], project)
+            if identity in seen:
+                raise ValueError("Browser inventory contains a duplicate test")
+            seen.add(identity)
+            parts = (f"[{project}]", spec["file"], *titles, spec["title"])
+            if any("\n" in part or "\r" in part or "›" in part for part in parts):
+                raise ValueError("Browser test cannot be represented in a test list")
+            families[family].append(" › ".join(parts))
+    groups = {}
+    for browser, cases in families.items():
+        names = [
+            group["name"] for group in BROWSER_GROUPS if group["browser"] == browser
+        ]
+        for index, name in enumerate(names):
+            groups[name] = sorted(cases)[index :: len(names)]
+            if not groups[name]:
+                raise ValueError(f"Browser group is empty: {name}")
+    return groups
 
 
 def coverage(inventory, reports):
@@ -317,6 +386,10 @@ def main():
         p = sub.add_parser(command)
         p.add_argument("bundle", type=Path)
         p.add_argument("run_id")
+    p = sub.add_parser("browser-list")
+    p.add_argument("inventory", type=Path)
+    p.add_argument("group", choices=[group["name"] for group in BROWSER_GROUPS])
+    p.add_argument("destination", type=Path)
     p = sub.add_parser("coverage")
     p.add_argument("inventory", type=Path)
     p.add_argument("reports", type=Path)
@@ -333,6 +406,7 @@ def main():
                 "run_id": run_id,
                 "artifact_id": artifact,
                 "tree": inputs()["source_tree"],
+                "browser_matrix": json.dumps({"include": BROWSER_GROUPS}),
             }
         )
         summary = (
@@ -382,10 +456,13 @@ def main():
         unpack(args.bundle, args.run_id)
     elif args.command == "verify":
         verify(args.bundle, inputs(), args.run_id)
+    elif args.command == "browser-list":
+        groups = browser_groups(json.loads(args.inventory.read_text()))
+        args.destination.write_text("\n".join(groups[args.group]) + "\n")
     else:
         reports = sorted(args.reports.rglob("report.json"))
-        if len(reports) != 3:
-            raise ValueError("Expected all three browser reports")
+        if len(reports) != len(BROWSER_GROUPS):
+            raise ValueError("Expected every browser group report")
         coverage(args.inventory, reports)
 
 
