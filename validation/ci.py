@@ -25,10 +25,12 @@ class BrowserFamily:
     groups: int
 
 
-# Measured CI cost: Chromium needs more groups than WebKit on software rendering.
+# Run 40392395036 measured 2,565 Chromium and 1,990 WebKit test-seconds.
+# Nine/seven groups bound the recorded largest load to 314 seconds instead of
+# 466 with seven/five, without sharing audio/rendering workers on a runner.
 BROWSER_FAMILIES = {
-    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 7),
-    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 5),
+    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 9),
+    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 7),
 }
 BROWSER_GROUPS = tuple(
     {

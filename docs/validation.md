@@ -3,13 +3,13 @@
 ## Website deployment
 
 Website validation builds physics, the worklet and Leptos once. The build job
-runs the offline harness and records the complete browser test inventory. Seven
-isolated Chromium groups and five WebKit/iPhone-profile groups download that same
+runs the offline harness and records the complete browser test inventory. Nine
+isolated Chromium groups and seven WebKit/iPhone-profile groups download that same
 compiled bundle. The planner distributes cases from each browser family in
 round-robin order, so one large file cannot occupy a whole runner. Each group
 retains the serial startup/crash guard, one worker and zero retries. The ten-minute
 browser target includes all cases; it is not permission to omit slow tests.
-The final job compares all twelve reports with
+The final job compares all sixteen reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
 Core, native physics tests/Clippy and the Criterion correctness smoke checks run
 in the existing native job alongside the build and browser jobs. That job remains
