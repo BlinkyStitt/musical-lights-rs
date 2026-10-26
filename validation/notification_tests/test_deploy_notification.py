@@ -1,4 +1,6 @@
 import importlib.util
+from contextlib import redirect_stdout
+from io import StringIO
 import json
 import os
 from pathlib import Path
@@ -92,7 +94,9 @@ class NotificationTests(unittest.TestCase):
                 "NTFY_TOPIC": "deploy",
                 "NTFY_TOKEN": "synthetic",
             }
+            output = StringIO()
             with (
+                redirect_stdout(output),
                 patch.dict(os.environ, env),
                 patch.object(
                     module.urllib.request,
@@ -101,6 +105,10 @@ class NotificationTests(unittest.TestCase):
                 ) as send,
             ):
                 module.main()
+            self.assertEqual(
+                output.getvalue(),
+                "::warning::Deployment notification failed; deployment results are unchanged.\n",
+            )
             self.assertEqual(send.call_args.kwargs["timeout"], 15)
             self.assertEqual(
                 send.call_args.args[0].get_header("Authorization"), "Bearer synthetic"
