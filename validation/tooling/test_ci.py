@@ -23,6 +23,7 @@ class ArtifactTests(unittest.TestCase):
             "source_tree": "tree",
             "workflow": "workflow",
             "runner_os": "Linux",
+            "runner_arch": "X64",
         }
         for name in ci.PAYLOAD:
             path = self.root / name / "sample.wasm"
@@ -83,6 +84,50 @@ class ArtifactTests(unittest.TestCase):
                 (self.root / name / "sample.wasm").read_bytes(),
                 b"actual compiled bytes",
             )
+
+    def test_container_consumer_verifies_same_source_recipe_and_platform(self):
+        workflow = self.root / ".github/workflows/validate.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text("jobs: pinned build and browser container")
+        common = {
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_REPOSITORY": "owner/lights",
+            "RUNNER_OS": "Linux",
+            "RUNNER_ARCH": "X64",
+        }
+        bundle = self.root / "container-bundle"
+        with patch.object(
+            ci,
+            "git",
+            side_effect=lambda *args, **kwargs: "" if args[0] == "status" else "c" * 40,
+        ):
+            with patch.dict(os.environ, {**common, "ImageOS": "ubuntu24"}, clear=True):
+                ci.pack(bundle, self.inventory, self.root)
+            with patch.dict(os.environ, common, clear=True):
+                ci.unpack(bundle, "123", self.root)
+                manifest = ci.verify(bundle, ci.inputs(self.root), "123")
+                self.assertEqual(manifest["producer_image"], "ubuntu24")
+                for key in ("RUNNER_OS", "RUNNER_ARCH"):
+                    with (
+                        patch.dict(os.environ, {key: "different"}),
+                        self.assertRaises(ValueError),
+                    ):
+                        ci.unpack(bundle, "123", self.root)
+                workflow.write_text("jobs: different build recipe")
+                with self.assertRaises(ValueError):
+                    ci.unpack(bundle, "123", self.root)
+
+    def test_superseded_schema_and_missing_producer_receipt_fail_closed(self):
+        path = self.bundle / "provenance.json"
+        original = json.loads(path.read_text())
+        for replacement in (
+            {**original, "schema": 1},
+            {**original, "producer_image": None},
+        ):
+            path.write_text(json.dumps(replacement))
+            with self.assertRaises(ValueError):
+                ci.verify(self.bundle, self.expected, "123")
 
     def test_refuses_different_tree_tools_runner_or_producer(self):
         for key in self.expected:

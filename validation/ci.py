@@ -64,12 +64,12 @@ def sha(path):
 
 
 def inputs(root=ROOT):
+    """Bind artifacts to source, build recipe and platform across test containers."""
     return {
         "source_tree": git("rev-parse", "HEAD^{tree}", root=root),
         "workflow": sha(root / ".github/workflows/validate.yml"),
         "runner_os": os.environ.get("RUNNER_OS", platform.system()),
         "runner_arch": os.environ.get("RUNNER_ARCH", platform.machine()),
-        "runner_image": os.environ.get("ImageOS", "local"),
     }
 
 
@@ -87,8 +87,10 @@ def verify(bundle, expected, run_id):
     manifest = json.loads((bundle / "provenance.json").read_text())
     if (
         not isinstance(manifest, dict)
-        or manifest.get("schema") != 1
+        or manifest.get("schema") != 2
         or manifest.get("inputs") != expected
+        or not isinstance(manifest.get("producer_image"), str)
+        or not manifest["producer_image"]
     ):
         raise ValueError("Artifact source tree or build inputs do not match")
     if str(manifest.get("run_id")) != str(run_id):
@@ -125,8 +127,9 @@ def pack(bundle, inventory, root=ROOT):
         .get("full_name", repository)
     )
     manifest = {
-        "schema": 1,
+        "schema": 2,
         "inputs": inputs(root),
+        "producer_image": os.environ.get("ImageOS", "local"),
         "run_id": os.environ["GITHUB_RUN_ID"],
         "run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "1")),
         "repository": repository,

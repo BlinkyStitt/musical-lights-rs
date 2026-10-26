@@ -15,7 +15,10 @@ Core and loudness-reference checks run alongside the build and browser jobs.
 
 The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
 test inventory, and file digests. Its provenance records the Git source tree,
-workflow digest, runner platform/image, producer run/attempt and source commit.
+workflow digest, runner platform, producer image, run/attempt and source commit.
+Consumers verify the same source, workflow recipe and OS/architecture. The workflow
+pins the build runner; its ambient image label remains a producer receipt rather
+than an input taken from the browser container.
 PRs always perform fresh validation. After a merge or manual dispatch, the plan
 can reuse an unexpired artifact only from a successful same-repository PR run
 of this workflow with all required validation jobs passed. It verifies the
