@@ -75,6 +75,8 @@ jobs:
     concurrency:
       group: site-core-${{ github.ref }}
       cancel-in-progress: true
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache workspace dependencies and builds
@@ -84,12 +86,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', '**/.cargo/**', '**/rust-toolchain*') }}
+          key: core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'validation/benchmarks/**/*.rs', 'validation/benchmarks/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-
+            core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
-      - run: python3 validation/validate.py core
+      - run: python3 validation/validate.py core physics-native benchmarks
   web:
     name: Build website
     needs: plan
@@ -125,10 +127,8 @@ jobs:
             musical-lights-physics/target
             musical-lights-worklet/target
             musical-leptos/target
-            validation/benchmarks/target
-          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', 'validation/benchmarks/**/*.rs', 'validation/benchmarks/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
+          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-
             site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-
       - name: Cache renderer package downloads
         if: needs.plan.outputs.reuse != 'true'
@@ -156,7 +156,7 @@ jobs:
         if: needs.plan.outputs.reuse != 'true' && steps.web-tools.outputs.cache-hit != 'true'
       - name: Validate and build compiled packages once
         if: needs.plan.outputs.reuse != 'true'
-        run: python3 validation/validate.py physics worklet leptos benchmarks
+        run: python3 validation/validate.py physics-wasm worklet leptos
       - name: Run offline checks and collect full browser inventory
         if: needs.plan.outputs.reuse != 'true'
         working-directory: validation

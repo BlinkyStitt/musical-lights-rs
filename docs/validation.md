@@ -11,7 +11,13 @@ retains the serial startup/crash guard, one worker and zero retries. The ten-min
 browser target includes all cases; it is not permission to omit slow tests.
 The final job compares all twelve reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
-Core and loudness-reference checks run alongside the build and browser jobs.
+Core, native physics tests/Clippy and the Criterion correctness smoke checks run
+in the existing native job alongside the build and browser jobs. That job remains
+required by the final validation barrier. The build job runs physics WASM checks,
+the worklet and Leptos; native physics and benchmarks do not delay its artifact.
+The local `physics` target still runs both phases. CI uses `physics-native` and
+`physics-wasm` to schedule the same checks once each. Loudness-reference checks
+retain their independent job.
 
 The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
 test inventory, and file digests. Its provenance records the Git source tree,
@@ -45,8 +51,10 @@ validation/build tooling and pinned Cargo configuration changes reach all
 consumers. Manual dispatch includes every target. Browser-only test changes do
 not rebuild unrelated firmware or terminal applications.
 
-Rust caches use the actual workspace `target` and root `Cargo.lock` for core
-and reference jobs. Standalone packages cache their own target directories.
+The native job uses the workspace `target` for core, physics and benchmarks,
+with all three lockfiles and Rust inputs in its cache key. The reference job
+retains the workspace target and root lockfile. The site job caches only its
+standalone physics, worklet and Leptos target directories.
 Keys include platform, pinned toolchain, lockfiles and Rust/build inputs, so
 JavaScript/test-only commits do not create new copies of identical Rust caches.
 Cargo still validates/rebuilds restored inputs. Tool caches remain separated
