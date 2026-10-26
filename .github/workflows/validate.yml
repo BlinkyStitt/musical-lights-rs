@@ -89,6 +89,7 @@ jobs:
           key: core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'validation/benchmarks/**/*.rs', 'validation/benchmarks/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-
+            core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
       - run: python3 validation/validate.py core physics-native benchmarks
@@ -130,6 +131,7 @@ jobs:
           key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-
+            site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-
       - name: Cache renderer package downloads
         if: needs.plan.outputs.reuse != 'true'
         uses: actions/cache@v6.1.0
