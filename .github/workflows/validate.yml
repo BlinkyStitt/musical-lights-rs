@@ -212,6 +212,12 @@ jobs:
     needs: [plan, web]
     if: needs.plan.outputs.reuse != 'true'
     runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+      options: --init --ipc=host
+    defaults:
+      run:
+        shell: bash
     concurrency:
       group: site-browser-${{ matrix.name }}-${{ github.ref }}
       cancel-in-progress: true
@@ -224,19 +230,18 @@ jobs:
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14.7'
       - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '26.8.2'
           cache: npm
           cache-dependency-path: validation/package-lock.json
-      - name: Install exact browser
+      - name: Install locked browser SDK
         working-directory: validation
-        env:
-          BROWSERS: ${{ matrix.browser }}
-        run: |
-          npm ci --ignore-scripts
-          npx playwright install --with-deps "$BROWSERS"
+        run: npm ci --ignore-scripts
       - name: Run isolated browser group
         env:
           BROWSER_GROUP: ${{ matrix.name }}

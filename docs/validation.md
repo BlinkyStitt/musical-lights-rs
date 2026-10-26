@@ -57,8 +57,11 @@ Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
 Standard GitHub-hosted runners remain free for this public repository; these
 changes do not require larger runners, paid images or increased cache storage.
-Docker image pulls and browser downloads are not used as substitutes for the
-isolated test jobs: the measured dominant cost is test execution.
+Website browser groups use the official Playwright 1.64.1 Noble image, pinned
+by manifest digest in the workflow, with the matching locked SDK. Its bundled
+browsers and system libraries avoid per-run OS dependency installation. Keep the
+SDK and image versions synchronized when updating them. The groups retain every
+scheduled test and the final complete-coverage barrier.
 
 On macOS, the native crash guard reads each new browser IPS report. Actual crashes
 and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots
