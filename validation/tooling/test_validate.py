@@ -1,8 +1,9 @@
-"""Full browser validation must retain demos and propagate missing tools/failures."""
+"""Pinned validation phases retain every required check and propagate failures."""
 
 import subprocess
 import sys
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest.mock import call, patch
 
@@ -62,6 +63,78 @@ class BrowserValidationTests(unittest.TestCase):
             ):
                 validate.validate("dioxus")
             self.assertFalse(any(args[0][0][0] == "dx" for args in run.call_args_list))
+
+
+class PhysicsValidationTests(unittest.TestCase):
+    def commands(self, name):
+        with patch.object(validate, "run") as run:
+            validate.validate(name)
+        return [call.args for call in run.call_args_list]
+
+    def test_full_physics_retains_native_and_wasm_checks(self):
+        cargo = ["cargo", f"+{validate.NIGHTLY}"]
+        directory = validate.ROOT / "musical-lights-physics"
+        self.assertEqual(
+            self.commands("physics"),
+            [
+                (
+                    ["rustc", f"+{validate.NIGHTLY}", "--version", "--verbose"],
+                    directory,
+                ),
+                (cargo + ["fmt", "--all", "--", "--check"], directory),
+                (cargo + ["test", "--locked"], directory),
+                (
+                    cargo
+                    + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
+                    directory,
+                ),
+                (
+                    cargo
+                    + [
+                        "clippy",
+                        "--locked",
+                        "--target",
+                        "wasm32-unknown-unknown",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ],
+                    directory,
+                ),
+                (["python3", "build.py"], directory),
+            ],
+        )
+
+    def test_native_and_wasm_phases_partition_the_complete_workload(self):
+        full = self.commands("physics")
+        native = self.commands("physics-native")
+        wasm = self.commands("physics-wasm")
+
+        # Both runners still check the compiler and formatting. Each semantic
+        # check and the compiled package producer must otherwise run once.
+        def counts(commands):
+            return Counter((tuple(args), directory) for args, directory in commands)
+
+        self.assertEqual(counts(native[:2]), counts(full[:2]))
+        self.assertEqual(counts(wasm[:2]), counts(full[:2]))
+        self.assertEqual(counts(native[2:] + wasm[2:]), counts(full[2:]))
+        self.assertNotIn(
+            (["python3", "build.py"], validate.ROOT / "musical-lights-physics"), native
+        )
+
+    def test_each_phase_stops_at_a_failed_required_check(self):
+        for name in ("physics-native", "physics-wasm"):
+            for step in range(len(self.commands(name))):
+                error = subprocess.CalledProcessError(1, "required physics check")
+                with (
+                    self.subTest(phase=name, step=step),
+                    patch.object(
+                        validate, "run", side_effect=[None] * step + [error]
+                    ) as run,
+                    self.assertRaises(subprocess.CalledProcessError),
+                ):
+                    validate.validate(name)
+                self.assertEqual(run.call_count, step + 1)
 
 
 if __name__ == "__main__":

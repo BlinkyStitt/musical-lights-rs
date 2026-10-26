@@ -3,15 +3,21 @@
 ## Website deployment
 
 Website validation builds physics, the worklet and Leptos once. The build job
-runs the offline harness and records the complete browser test inventory. Seven
-isolated Chromium groups and five WebKit/iPhone-profile groups download that same
+runs the offline harness and records the complete browser test inventory. Ten
+isolated Chromium groups and eight WebKit/iPhone-profile groups download that same
 compiled bundle. The planner distributes cases from each browser family in
 round-robin order, so one large file cannot occupy a whole runner. Each group
 retains the serial startup/crash guard, one worker and zero retries. The ten-minute
 browser target includes all cases; it is not permission to omit slow tests.
-The final job compares all twelve reports with
+The final job compares all eighteen reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
-Core and loudness-reference checks run alongside the build and browser jobs.
+Core, native physics tests/Clippy and the Criterion correctness smoke checks run
+in the existing native job alongside the build and browser jobs. That job remains
+required by the final validation barrier. The build job runs physics WASM checks,
+the worklet and Leptos; native physics and benchmarks do not delay its artifact.
+The local `physics` target still runs both phases. CI uses `physics-native` and
+`physics-wasm` to schedule the same checks once each. Loudness-reference checks
+retain their independent job.
 
 The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
 test inventory, and file digests. Its provenance records the Git source tree,
@@ -45,12 +51,15 @@ validation/build tooling and pinned Cargo configuration changes reach all
 consumers. Manual dispatch includes every target. Browser-only test changes do
 not rebuild unrelated firmware or terminal applications.
 
-Rust caches use the actual workspace `target` and root `Cargo.lock` for core
-and reference jobs. Standalone packages cache their own target directories.
+The native job uses the workspace `target` for core, physics and benchmarks,
+with all three lockfiles and Rust inputs in its cache key. The reference job
+retains the workspace target and root lockfile. The site job caches only its
+standalone physics, worklet and Leptos target directories.
 Keys include platform, pinned toolchain, lockfiles and Rust/build inputs, so
 JavaScript/test-only commits do not create new copies of identical Rust caches.
-Cargo still validates/rebuilds restored inputs. Tool caches remain separated
-by site, demos, ESP installers and the pinned actionlint checker. Locked Python
+Restores prefer matching lockfiles, then the same platform and pinned toolchain.
+Cargo rebuilds changed inputs and keeps locked dependency checks. Tool caches
+remain separated by site, demos, ESP installers and the pinned actionlint checker. Locked Python
 reference downloads and npm downloads are also cached. Missing caches take the
 normal pinned installation/build path; test failures are never retried or ignored.
 Closed same-repository PRs remove only their `refs/pull/<number>/merge` caches.
@@ -58,8 +67,8 @@ They do not remove default-branch caches.
 
 Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
-Standard GitHub-hosted runners remain free for this public repository; these
-changes do not require larger runners, paid images or increased cache storage.
+Standard GitHub-hosted runners remain free for this public repository.
+The workflow keeps the existing runner sizes and cache quota.
 Website browser groups use the official Playwright 1.64.1 Noble image, pinned
 by manifest digest in the workflow, with the matching locked SDK. Its bundled
 browsers and system libraries avoid per-run OS dependency installation. Keep the

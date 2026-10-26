@@ -5,6 +5,7 @@ import argparse
 import os
 import subprocess
 from pathlib import Path
+from types import MappingProxyType
 
 ROOT = Path(__file__).resolve().parents[1]
 NIGHTLY = "nightly-2026-09-10"
@@ -28,6 +29,36 @@ PACKAGES = {
 def run(args, directory):
     print(f"[{directory.name}] {' '.join(args)}", flush=True)
     subprocess.run(args, cwd=directory, check=True)
+
+
+def physics_native(cargo, directory):
+    run(cargo + ["test", "--locked"], directory)
+    run(
+        cargo + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
+        directory,
+    )
+
+
+def physics_wasm(cargo, directory):
+    run(
+        cargo
+        + [
+            "clippy",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        directory,
+    )
+    run(["python3", "build.py"], directory)
+
+
+PHYSICS_PHASES = MappingProxyType(
+    {"physics-native": physics_native, "physics-wasm": physics_wasm}
+)
 
 
 def cli_version(binary, version):
@@ -131,7 +162,8 @@ def validate(name):
             ROOT,
         )
         return
-    directory = ROOT / PACKAGES[name]
+    package = "physics" if name in PHYSICS_PHASES else name
+    directory = ROOT / PACKAGES[package]
     toolchain = ESP if name.startswith("esp-") else NIGHTLY
     cargo = ["cargo", f"+{toolchain}"]
     run(["rustc", f"+{toolchain}", "--version", "--verbose"], directory)
@@ -204,26 +236,12 @@ def validate(name):
             cargo + ["bench", "--locked", "--bench", "production", "--", "--test"],
             directory,
         )
-    elif name == "physics":
-        run(cargo + ["test", "--locked"], directory)
-        run(
-            cargo + ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
-            directory,
+    elif name == "physics" or name in PHYSICS_PHASES:
+        phases = (
+            PHYSICS_PHASES.values() if name == "physics" else (PHYSICS_PHASES[name],)
         )
-        run(
-            cargo
-            + [
-                "clippy",
-                "--locked",
-                "--target",
-                "wasm32-unknown-unknown",
-                "--",
-                "-D",
-                "warnings",
-            ],
-            directory,
-        )
-        run(["python3", "build.py"], directory)
+        for phase in phases:
+            phase(cargo, directory)
     elif name == "worklet":
         run(
             cargo
@@ -302,7 +320,14 @@ def main():
     parser.add_argument(
         "packages",
         nargs="+",
-        choices=[*PACKAGES, "firmware-tools", "reference", "browser", "all"],
+        choices=[
+            *PACKAGES,
+            *PHYSICS_PHASES,
+            "firmware-tools",
+            "reference",
+            "browser",
+            "all",
+        ],
     )
     args = parser.parse_args()
     os.environ["PATH"] = str(ROOT / ".tools/bin") + os.pathsep + os.environ["PATH"]

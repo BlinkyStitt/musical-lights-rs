@@ -223,13 +223,14 @@ class ArtifactTests(unittest.TestCase):
         run["head_repository"]["full_name"] = "fork/lights"
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
         run["head_repository"]["full_name"] = repo
-        responses["actions/runs/123/attempts/1/jobs?per_page=100"]["jobs"][0][
-            "conclusion"
-        ] = "failure"
+        jobs = responses["actions/runs/123/attempts/1/jobs?per_page=100"]["jobs"]
+        native = next(job for job in jobs if job["name"] == "rust (core)")
+        native["conclusion"] = "failure"
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
-        responses["actions/runs/123/attempts/1/jobs?per_page=100"]["jobs"][0][
-            "conclusion"
-        ] = "success"
+        native["conclusion"] = "success"
+        jobs.remove(native)
+        self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+        jobs.append(native)
         (self.bundle / ci.PAYLOAD[0] / "sample.wasm").write_bytes(b"tampered")
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
 
