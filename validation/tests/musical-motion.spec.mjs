@@ -67,6 +67,7 @@ test('lit geometry and gradual contact pigments use the physical scene with Redu
     const v = document.querySelector('#dancinglights').physics;
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const { linearToHsluv } = await import(new URL(`${base}physics/pigment.js`, document.baseURI));
     // A worker receipt may precede the next animation frame. Render this
     // snapshot before comparing its contact history with mesh attributes.
     v.draw(performance.now());
@@ -99,13 +100,14 @@ test('lit geometry and gradual contact pigments use the physical scene with Redu
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
     return { lit, dark, attackOnly, frontBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
-      color: Array.from(v.current.slice(18, 21)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
+      color: Array.from(v.current.slice(18, 21)), lightColor: v.lighting.uniforms.glowBallColor.value[0].toArray(), expectedPattern: Array.from(new Float32Array(linearToHsluv(v.pigments.slice(0, 3)))), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
   expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(24); expect(state.pointLights).toBe(0); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);
   expect(state.attackOnly).toBeGreaterThan(state.dark + 100);
   expect(state.frontBrightness).toBeGreaterThan(30);
-  expect(state.pattern).toEqual(state.pigments.slice(0, 3));
+  expect(state.pattern).toEqual(state.expectedPattern);
+  expect(state.lightColor).toEqual(state.color);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.balls.material.transparent)).toBe(false);
   expect(errors).toEqual([]);

@@ -164,7 +164,8 @@ self.onmessage = async ({ data }) => {
       case 'report':
         postMessage({ type: 'report', inputs: recording, initialTempo, danceOptions, initialAccent, physicsCosts: Array.from(costs.subarray(0, costCount)),
           recordingOverflow, substepTotal, maxSubsteps, overloadTicks, substepCosts, config: Array.from(config), initialTick, finalTick: simulation.tick(),
-          elapsedMs: absoluteNow() - recordingStart, debt, maxDebt, discardedSimulationMs: 0, finalSnapshot: Array.from(snapshot()) });
+          elapsedMs: absoluteNow() - recordingStart, debt, maxDebt, discardedSimulationMs: 0, finalSnapshot: Array.from(snapshot()),
+          finalPigments: Array.from(new Float32Array(wasm.memory.buffer, simulation.pigments_ptr(), layout[21] * 9)) });
         recording = null; costs = null; substepCosts = []; break;
       default: throw new Error('Unknown physics worker message');
     }

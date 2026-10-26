@@ -77,7 +77,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
       'The decorative listening floor must not create audio attacks');
     assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
     assert(values.slice(0, 24).every(value => value === 0));
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v5',
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v6',
       palette: Array(72).fill(.5), layout: w.ready.layout })).every(result => result.matches));
   } finally { w.close(); }
 });
@@ -101,7 +101,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
       assert.deepEqual(recorded.inputs.map(e => e.accent), [1, 2, 3]);
       assert.deepEqual(recorded.inputs.map(e => e.tempo), [160, 80, 120]);
       assert.equal(recorded.motionEvents, undefined); assert.equal(recorded.tempoEvents, undefined);
-      const report = { ...recorded, type: 'musical-lights-phone-report-v5', palette: Array(72).fill(.5), layout: w.ready.layout };
+      const report = { ...recorded, type: 'musical-lights-phone-report-v6', palette: Array(72).fill(.5), layout: w.ready.layout };
       assert((await replayReport(report)).every(result => result.matches));
       // Losing the first eligible draw reproduces the old split-list ordering result.
       const reordered = structuredClone(report);

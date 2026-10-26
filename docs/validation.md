@@ -64,6 +64,8 @@ precede a process quit, so it does not replace Playwright's startup and page-cra
 checks. See [Apple's report fields](https://developer.apple.com/documentation/xcode/examining-the-fields-in-a-crash-report).
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
+`just validate` runs the core feature matrix, native physics, worklet, Leptos,
+benchmark smoke checks, demo builds and full browser suite with pinned tools.
 `npm run test:site` and `npm run test:demos` retain their complete local subsets.
 Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
@@ -1091,6 +1093,57 @@ resting contacts, persistent-pressure suppression and gradual changes. Spawn col
 still follow X. Core checks cover bounded invalid input and elapsed-time independence.
 The WASM harness records the paint policy and rejects replays with a missing policy;
 its physical states must remain identical across the three paint-policy cases.
-Browser pixel checks retain the existing per-tick color-jump limit and verify
-visible color variation after contact. Reduced Motion keeps the material swirl
+Browser pixel checks bound each tick in the HSLuv interpolation space (at most
+`1-exp(-1/(120*.175))`, with numerical tolerance), rather than assuming monotone
+RGB channels. Home/Advanced and both motion modes check gradual visible variation.
+Controlled fixed-light ball renders compare shader pixels against reference math,
+verify saturation through both joins, and retain RGB-reference/HSLuv PNG pairs.
+Protocol 20/report v6 replay verifies all regional pigments as well as motion;
+old protocols, old reports, missing pigments and altered pigments fail explicitly. Reduced Motion keeps the material swirl
 attached to physical rolling and adds no automatic pigment motion.
+
+
+The SKI-1250 local CPU comparison used Rust nightly-2026-09-10 on Linux x86_64,
+AMD EPYC 7643, with 20 Criterion samples and the same production chromatic
+palette before/after. Each case covers 240 fixed ticks; browsers were stopped.
+
+| Physics workload | RGB before | HSLuv after | Statistical result |
+| --- | ---: | ---: | --- |
+| Music portrait | 285.70 ms | 286.27 ms | No significant change |
+| Music landscape | 133.96 ms | 137.35 ms | 2.53% slower |
+| Full attack portrait | 170.64 ms | 169.01 ms | No significant change |
+
+The produced protocol-20 WASM on Node 26.8.2 used a median 1,994 ms CPU for
+12 seconds of generated music (three runs, 1,440 ticks each). Both full-height
+attack fixtures recorded zero overload ticks. These are host CPU measurements,
+not physical-phone FPS or appearance acceptance. Commands are in
+[the benchmark guide](../validation/benchmarks/README.md); the generated WASM
+cost report also records module, palette and PCM digests.
+
+An isolated frozen-scene comparison measured 60 frames per variant after ten
+warmups, counterbalanced RGB/HSLuv/HSLuv/RGB, with eight chromatic balls at
+589×339 pixels. It used the original RGB attributes/shader as the reference and
+`gl.finish()` after every render, on the same Linux host after other checks ended.
+Mean complete-render time was 0.130→0.139 ms in Chromium (+0.009 ms, 6.9%) and
+10.090→10.319 ms in WebKit (+0.229 ms, 2.3%). These are observational wall-clock
+CPU/GPU completion costs, without a significance claim or physical-device FPS.
+Both reports were written; the command's final exit status was lost during an
+interruption.
+
+Local browser validation completed with 158 Node harness tests and 647 browser
+tests passing. Two existing explicit opt-ins (review-artifact refresh and live
+YouTube) were skipped. Home/Advanced and both motion modes passed on Chromium,
+WebKit and iPhone-profile WebKit. Twelve official conversion patches had zero
+framebuffer error; curved joins had at most six levels of error and about 100%
+HSLuv saturation. RGB/HSLuv comparison PNGs and pixel JSON are retained in the
+browser test output directories for appearance review.
+
+The initial full native physics run passed 66/67 tests; its obsolete RGB jump
+bound failed. After replacing that bound with the 175 ms HSLuv step bound, all
+12 contact and two pigment focused tests passed. The core feature matrix and
+native/WASM lint passed. Worklet, Leptos, benchmark smoke and demo validation
+commands exited successfully. Pinned Dioxus nevertheless logged a
+`wasm-opt` SIGABRT (unsupported DWARF) before reporting a successful bundle;
+the produced demo passed browser checks. This optimizer error remains separate
+from the pigment checks. Human appearance review, physical-device performance,
+Linux CI, live-provider acceptance and deployment verification remain pending.

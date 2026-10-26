@@ -1,6 +1,7 @@
 //! Native production paths. Browser profiles measure rendering separately.
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use musical_lights_core::audio::{presentation::LoudnessSnapshot, tempo::TempoEstimator};
+use musical_lights_core::lights::Gradient;
 use musical_lights_physics::{COST_OFFSET, HZ, Simulation, SimulationConfig, SimulationInput};
 use musical_lights_worklet as worklet;
 use std::{ffi::c_void, hint::black_box, time::Duration};
@@ -137,7 +138,14 @@ fn simulation(height: f32) -> Simulation {
             height,
             ..Default::default()
         },
-        [[0.5; 3]; 24],
+        {
+            let colors = Gradient::<24>::new_rainbow(100.0, 58.0).colors;
+            std::array::from_fn(|i| {
+                let c = colors[i];
+                let peak = c.red.max(c.green).max(c.blue);
+                [c.red / peak, c.green / peak, c.blue / peak]
+            })
+        },
     )
     .unwrap();
     sim.set_tempo(120.0);
