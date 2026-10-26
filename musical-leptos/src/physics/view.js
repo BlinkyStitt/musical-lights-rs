@@ -491,6 +491,13 @@ export class PhysicsView {
     this.renderer.compile(this.scene, this.camera);
   }
   draw(now) {
+    this.updateScene(now);
+    this.render();
+  }
+  // Prepare geometry and lighting separately from submitting a GPU frame.
+  // Synthetic-clock fixtures can inspect this state without bypassing the
+  // animation loop's bounded GPU queue with hundreds of immediate draws.
+  updateScene(now) {
     const [count, , , pitch, joinWidth, , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
@@ -566,7 +573,6 @@ export class PhysicsView {
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.starfield.update(now, this.reduced.matches, this.camera, phase, pitch, height, depth, this.meshEdges);
-    this.render();
   }
   render(camera = this.camera) { this.renderer.render(this.scene, camera); }
   renderedHeight(band, end = 0) {

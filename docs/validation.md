@@ -92,6 +92,11 @@ standalone Criterion benchmarks, not a wall-clock assertion on a shared CI runne
 
 Browser tests cover actual rendering, native input, audio output and lifecycle
 integration. All viewport/theme combinations retain geometry and audio checks.
+Synthetic-clock tests of scene matrices and lighting uniforms call
+`PhysicsView.updateScene`, which prepares state without submitting GPU work.
+Production `draw` still prepares and renders a frame. Pixel probes retain real
+draws and readback. Do not flood the GPU with synchronous synthetic draws outside
+the animation loop's two-frame queue: that work can stall the next test's renderer.
 The complete 24-band hover sequence and common-control keyboard order run once;
 other layouts check edge and center readouts. The existing keyboard tests still
 visit every band. Route tests own route content checks. The short-landscape test

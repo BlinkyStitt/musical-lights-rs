@@ -113,20 +113,20 @@ test('column projection follows interpolated bars, seams and depth while ball mo
     old[0] = 1 / 120; next[0] = 2 / 120;
     old[v.layout[20]] = 23.9; next[v.layout[20]] = .1;
     v.previous = old; v.current = next; v.received = now;
-    v.draw(now); const first = v.starfield.uniforms.phase.value;
-    v.draw(now + 1000 / 120); const last = v.starfield.uniforms.phase.value;
+    v.updateScene(now); const first = v.starfield.uniforms.phase.value;
+    v.updateScene(now + 1000 / 120); const last = v.starfield.uniforms.phase.value;
     const original = v.starfield.points.geometry.attributes.position.array.slice();
     const flashes = Array.from(v.starfield.flashes), projection = v.starfield.uniforms.starToRoom.value.elements.slice();
     for (let i = 0; i < 8; i++) {
       next[3 + i * v.layout[8]] += .3;
       next[3 + i * v.layout[8] + 9] = 5; next[v.layout[11] + i] = 10;
     }
-    v.draw(now + 1000 / 120);
+    v.updateScene(now + 1000 / 120);
     const noBallInfluence = flashes.every((value, i) => value === v.starfield.flashes[i])
       && projection.every((value, i) => value === v.starfield.uniforms.starToRoom.value.elements[i]);
     let error = 0;
     for (const angle of [-30, 0, 30]) for (const depth of [.2, 2]) {
-      old[v.layout[17] + 4] = next[v.layout[17] + 4] = depth; v.config[5] = depth; v.setCamera(angle); v.draw(now + 1000 / 120);
+      old[v.layout[17] + 4] = next[v.layout[17] + 4] = depth; v.config[5] = depth; v.setCamera(angle); v.updateScene(now + 1000 / 120);
       for (const x of [-1.2, 0, .6, 1.2, 2.4]) {
         const pixel = new THREE.Vector3(x, v.renderedEnclosureHeight / 2, depth / 2).project(v.camera);
         const room = new THREE.Vector3(pixel.x, pixel.y, 1).applyMatrix3(v.starfield.uniforms.starToRoom.value);
