@@ -63,7 +63,6 @@ function youtubeAPI() {
   return playerAPI;
 }
 const explanations = {
-  'rotate-display': 'Leave iPhone Rotation Lock on. Tap Rotate to turn the video, lights, controls and Settings clockwise by 90°. The view stays at your chosen angle until you tap Rotate again. Phone motion and Listening use their own switches; Rotate does not request access.',
   'listening-toggle': 'Listening uses your microphone to drive the lights. It does not play the microphone through your speakers.',
   'identify-song': 'While enabled, Identify song uploads a 10-second microphone recording at most once per minute. Turn it off to cancel. Recognition is separate from YouTube playback.',
   'motion-button': 'Phone motion lets measured tilt and shaking move the balls. It needs a separate sensor permission and works independently of Listening.',
@@ -279,6 +278,7 @@ class FullscreenSettings {
     this.moves = [];
     this.exit = this.card.querySelector('.fullscreen-button');
     this.listening = this.card.querySelector('.listening-toggle').closest('label');
+    this.motion = this.card.querySelector('.motion-button').closest('label');
     this.toolbar = document.createElement('div');
     this.toolbar.className = 'fullscreen-toolbar';
     this.button = document.createElement('button');
@@ -293,17 +293,12 @@ class FullscreenSettings {
     this.button.setAttribute('aria-expanded', 'false');
     this.rotate = document.createElement('button');
     this.rotate.type = 'button';
+    this.rotate.tabIndex = 0;
     this.rotate.className = 'rotate-display';
-    this.rotate.textContent = 'Rotate';
+    this.rotate.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></svg>`;
     this.updateRotation();
     presentation.listen(this.rotate, 'click', () => this.card.dispatchEvent(new Event('rotate-display')));
-    this.rotateHelp = document.createElement('button');
-    this.rotateHelp.type = 'button';
-    this.rotateHelp.className = 'rotate-help';
-    this.rotateHelp.textContent = '?';
-    this.rotateHelp.setAttribute('aria-label', 'About rotating the view');
-    presentation.mountHelp(this.rotateHelp, 'rotate-display');
-    this.toolbar.append(this.rotate, this.rotateHelp, this.button);
+    this.toolbar.append(this.rotate, this.button);
     this.dialog = document.createElement('dialog');
     this.dialog.id = 'fullscreen-settings';
     this.dialog.className = 'fullscreen-settings';
@@ -359,6 +354,8 @@ class FullscreenSettings {
       const active = document.activeElement;
       this.move(this.exit, this.toolbar);
       this.toolbar.prepend(this.exit);
+      this.motionMarker = this.move(this.motion, this.toolbar);
+      this.toolbar.insertBefore(this.motion, this.button);
       this.listeningMarker = this.move(this.listening, this.toolbar);
       this.toolbar.insertBefore(this.listening, this.button);
       const controls = '.audio-controls, .scene-controls, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
@@ -373,6 +370,7 @@ class FullscreenSettings {
     if (!this.card.hasAttribute('data-expanded') || this.dialog.open) return;
     this.presentation.hideHelp();
     this.dialog.append(this.presentation.popup);
+    this.motionMarker.before(this.motion);
     this.listeningMarker.before(this.listening);
     this.dialog.showModal();
     this.layout();
@@ -383,6 +381,7 @@ class FullscreenSettings {
   hide() {
     if (this.dialog.open) this.dialog.close();
     if (this.listeningMarker) this.toolbar.insertBefore(this.listening, this.button);
+    if (this.motionMarker) this.toolbar.insertBefore(this.motion, this.listening);
     this.presentation.hideHelp();
     this.card.append(this.presentation.popup);
     this.button.setAttribute('aria-expanded', 'false');
@@ -395,6 +394,7 @@ class FullscreenSettings {
     for (const { node, marker } of this.moves) { marker.replaceWith(node); }
     this.moves.length = 0;
     this.listeningMarker = null;
+    this.motionMarker = null;
     if (!this.presentation.closed && active === this.exit) this.exit.focus({ preventScroll: true });
     this.presentation.hideHelp();
   }

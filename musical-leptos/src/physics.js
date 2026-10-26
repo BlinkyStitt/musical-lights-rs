@@ -223,11 +223,8 @@ export class Scene {
     palette = new Float32Array(palette);
     this.closed = false;
     const card = layer.closest('.audio-card');
-    this.motionControls = document.createElement('div');
-    this.motionControls.className = 'motion-controls';
+    this.motionControls = card.querySelector('.motion-controls');
     this.motionButton = card.querySelector('.motion-button');
-    this.motionControls.append(this.motionButton.closest('label'));
-    card.querySelector('.mic-status').after(this.motionControls);
     this.motionStatus = document.createElement('p');
     this.motionStatus.className = 'motion-status';
     this.motionStatus.setAttribute('role', 'status');

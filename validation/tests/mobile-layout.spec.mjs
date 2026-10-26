@@ -52,6 +52,21 @@ test('phone opens expanded without capture and keeps settings in the top half wi
         return initial;
       });
       expect(initial).toEqual({ expanded: true, requests: 0, native: null });
+      for (const width of [320, 393, 568]) {
+        await page.setViewportSize({ width, height: 852 });
+        expect(await page.locator('.fullscreen-toolbar').evaluate(toolbar => {
+          const controls = [...toolbar.children], centers = controls.map(node => {
+            const r = node.getBoundingClientRect(); return r.x + r.width / 2;
+          });
+          const gaps = centers.slice(1).map((x, i) => x - centers[i]);
+          return { order: controls.map(node => node.matches('label') ? node.querySelector('input').className : node.className),
+            evenlySpaced: Math.max(...gaps) - Math.min(...gaps) < 1,
+            icons: controls.every(node => node.querySelector('svg[aria-hidden="true"]')?.checkVisibility()),
+            text: toolbar.innerText.trim(), rotationHelp: !!toolbar.querySelector('.rotate-help'),
+            switches: toolbar.querySelectorAll('input[type="checkbox"]').length };
+        })).toEqual({ order: ['fullscreen-button', 'rotate-display', 'motion-button', 'listening-toggle', 'fullscreen-settings-button'],
+          evenlySpaced: true, icons: true, text: '', rotationHelp: false, switches: 2 });
+      }
       for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
         await page.setViewportSize(viewport);
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -151,11 +166,11 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
               scrollLocked: getComputedStyle(document.documentElement).overflow === 'hidden',
               requests: window.micRequests + window.motionRequests };
           }, { turn, video })).toEqual({ fit: true, dimensions: true, canvas: true, toolbar: true, video: true, identity: true, scrollLocked: true, requests: 0 });
-          const rotateHelp = page.getByRole('button', { name: 'About rotating the view', exact: true });
-          await tapControlAtHitPoint(page, rotateHelp);
+          const motionHelp = page.getByRole('button', { name: 'Phone motion', exact: true });
+          await tapControlAtHitPoint(page, motionHelp);
           await expect.poll(() => page.evaluate(turn => {
             const card = document.querySelector('.audio-card'), node = card.querySelector('.control-help'), help = node.getBoundingClientRect();
-            return { text: node.textContent.includes('Leave iPhone Rotation Lock on.'),
+            return { text: node.textContent.includes('Phone motion lets measured tilt'),
               unchanged: card.hasAttribute('data-expanded') && card.displayQuarterTurn === turn && micRequests === 0 && motionRequests === 0,
               visible: help.width > 0 && help.height > 0 && getComputedStyle(node).visibility === 'visible',
               fits: help.left >= 0 && help.top >= 0 && help.right <= innerWidth && help.bottom <= innerHeight };

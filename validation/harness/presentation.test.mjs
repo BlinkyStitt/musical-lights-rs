@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { Presentation, parseYouTube, readSettings, SETTINGS_KEY, validDirectionOdds } from '../../musical-leptos/src/presentation.js';
 import { localPoint, placeDialog, viewportBounds } from '../../musical-leptos/src/screen.js';
 
-test('rotation help responds to touch, hover and keyboard without activating the action, and releases listeners', () => {
+test('switch help responds to touch, hover and keyboard without activating the action, and releases listeners', () => {
   const anchor = Object.assign(new EventTarget(), { dataset: {}, setAttribute() {} });
   const shown = [];
   const presentation = Object.assign(Object.create(Presentation.prototype), {
     removers: [], showHelp: (node, key) => shown.push({ node, key }), hideHelp: () => shown.push('hidden'),
   });
-  presentation.mountHelp(anchor, 'rotate-display');
+  presentation.mountHelp(anchor, 'listening-toggle');
   const send = (type, fields = {}) => {
     const event = Object.assign(new Event(type, { cancelable: true }), fields);
     anchor.dispatchEvent(event);
@@ -21,7 +21,7 @@ test('rotation help responds to touch, hover and keyboard without activating the
   send('focus');
   assert.equal(send('click').defaultPrevented, true);
   for (const key of ['Enter', ' ']) assert.equal(send('keydown', { key }).defaultPrevented, true);
-  assert.deepEqual(shown, Array.from({ length: 5 }, () => ({ node: anchor, key: 'rotate-display' })));
+  assert.deepEqual(shown, Array.from({ length: 5 }, () => ({ node: anchor, key: 'listening-toggle' })));
   assert.equal(send('keydown', { key: 'Tab' }).defaultPrevented, false);
   send('blur');
   assert.equal(shown.at(-1), 'hidden');

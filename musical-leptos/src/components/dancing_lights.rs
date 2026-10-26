@@ -90,16 +90,26 @@ pub enum VisualizationMode {
 fn SettingSwitch(
     label: &'static str,
     class: &'static str,
+    #[prop(default = "")] icon: &'static str,
     checked: Signal<bool>,
     #[prop(default = Signal::derive(|| false))] disabled: Signal<bool>,
     on_change: Callback<bool>,
 ) -> impl IntoView {
     view! {
         <label class="setting-switch">
-            <input type="checkbox" tabindex="0" class=class prop:checked=move || checked.get()
+            <input type="checkbox" tabindex="0" class=class aria-label=label prop:checked=move || checked.get()
                 disabled=move || disabled.get()
                 on:change=move |event| on_change.run(event_target_checked(&event))/>
-            <span>{label}</span>
+            <span aria-label=label>
+                <span class="switch-label-text">{label}</span>
+                <Show when=move || !icon.is_empty()>
+                    <svg class="toolbar-icon" viewBox="0 0 24 24" width="24" height="24"
+                        fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                        <path d=icon/>
+                    </svg>
+                </Show>
+            </span>
         </label>
     }
 }
@@ -414,6 +424,7 @@ pub fn DancingLights(
                 <div class="button-row">
                     <div class="listening-controls">
                     <SettingSwitch label="Listening" class="listening-toggle"
+                        icon="M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"
                         checked=Signal::derive(move || listening.get() || starting.get() && input_source.get() == "microphone")
                         disabled=Signal::derive(move || input_source.get() != "microphone")
                         on_change=Callback::new(move |enabled| {
@@ -427,8 +438,11 @@ pub fn DancingLights(
                             "Microphone unavailable."
                         } else { "" }}</span>
                     </p>
+                    <div class="motion-controls">
                     <SettingSwitch label="Phone motion" class="motion-button"
+                        icon="M8 2h8v20H8V2ZM11 18h2M4 7 2 10l2 3M20 11l2 3-2 3"
                         checked=Signal::derive(|| false) on_change=Callback::new(|_| {})/>
+                    </div>
                     <div class="scroll-controls">
                     <SettingSwitch label="Scroll lights" class="scroll-lights"
                         checked=scrolling.into() on_change=Callback::new(move |value| set_scrolling.set(value))/>
@@ -443,7 +457,12 @@ pub fn DancingLights(
                                 if let Some(session) = session { session.toggle_fullscreen(); }
                             });
                         }>
-                        {move || if fullscreen.get() { "Exit" } else { "Fullscreen" }}
+                        <svg class="toolbar-icon" viewBox="0 0 24 24" width="24" height="24"
+                            fill="none" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" aria-hidden="true" focusable="false">
+                            <path d="m6 6 12 12M6 18 18 6"/>
+                        </svg>
+                        <span class="fullscreen-label">{move || if fullscreen.get() { "Exit" } else { "Fullscreen" }}</span>
                     </button>
                 </div>
             </div>

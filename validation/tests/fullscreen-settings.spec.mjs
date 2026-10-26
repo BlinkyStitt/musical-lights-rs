@@ -123,7 +123,7 @@ async function startFullscreenAudio(page, path, reducedMotion, info) {
 }
 
 for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) {
-  test(`all turns retain native fullscreen and rotation help on ${path} (${reducedMotion})`, async ({ page }, info) => {
+  test(`all turns retain native fullscreen and switch help on ${path} (${reducedMotion})`, async ({ page }, info) => {
     await startFullscreenAudio(page, path, reducedMotion, info);
     for (let turn = 0; turn < 4; turn++) {
       if (info.project.name === 'chromium') {
@@ -133,13 +133,13 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         const r = n.getBoundingClientRect();
         return n.displayQuarterTurn === turn && Math.abs(r.width - innerWidth) < 1 && Math.abs(r.height - innerHeight) < 1;
       }, turn)).toBe(true);
-      const help = page.getByRole('button', { name: 'About rotating the view', exact: true });
+      const help = page.getByRole('button', { name: 'Phone motion', exact: true });
       await help.hover();
-      await expect(page.locator('.control-help')).toContainText('Leave iPhone Rotation Lock on.');
+      await expect(page.locator('.control-help')).toContainText('Phone motion lets measured tilt');
       await page.mouse.move(0, 0);
       await expect(page.locator('.control-help')).toBeHidden();
-      // Tab from Rotate proves keyboard focus opens help without activating Rotate.
-      await page.locator('.rotate-display').focus(); await page.keyboard.press('Tab');
+      // Tab from Motion proves keyboard focus opens help without enabling sensors.
+      await page.locator('.motion-button').focus(); await page.keyboard.press('Tab');
       await expect(help).toBeFocused();
       await expect(page.locator('.control-help')).toBeVisible();
       expect(await help.evaluate(n => getComputedStyle(n).outlineStyle)).not.toBe('none');

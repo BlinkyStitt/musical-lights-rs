@@ -9,7 +9,7 @@ for (const theme of ['light', 'dark']) {
     await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
     await page.setViewportSize({ width: 320, height: 720 });
     await page.goto(`${origin}/advanced/`); await physicsReady(page);
-    const labels = await page.locator('.button-row .setting-switch span').allTextContents();
+    const labels = await page.locator('.button-row .setting-switch > span').allTextContents();
     expect(labels).toEqual(['Listening', 'Identify song', 'Phone motion', 'Scroll lights']);
     for (const section of ['display', 'calibration', 'physics', 'diagnostics']) expect(await page.locator(`.${section}-controls`).evaluate(n => n.open)).toBe(false);
     expect(await page.locator('.song-history').evaluate(n => n.open)).toBe(false);
