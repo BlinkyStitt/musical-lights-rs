@@ -109,7 +109,10 @@ async function startFullscreenAudio(page, path, reducedMotion, info) {
   await syntheticAudio(page);
   await page.addInitScript(() => {
     const Context = window.AudioContext;
-    window.AudioContext = class extends Context { constructor(...args) { super(...args); window.modalContext = this; } };
+    window.AudioContext = class extends Context {
+      constructor(...args) { super(...args); window.modalContext = this; this.closeCalls = 0; }
+      close() { this.closeCalls++; return super.close(); }
+    };
   });
   await page.goto(origin + path); await physicsReady(page); await normalView(page);
   if (path === '/advanced/') {
@@ -180,7 +183,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     await page.evaluate(() => { window.oldModal = document.querySelector('dialog'); document.querySelector('nav a[href="/about"]').click(); });
     await expect(page.locator('.audio-card')).toHaveCount(0);
     expect(await page.evaluate(() => oldModal.open || oldModal.isConnected)).toBe(false);
-    expect(await page.evaluate(() => modalSession.context.state)).toBe('closed');
+    expect(await page.evaluate(() => ({ retired: modalSession.context.audioRetired, closeCalls: modalSession.context.closeCalls }))).toEqual({ retired: true, closeCalls: 1 });
+    await expect.poll(() => page.evaluate(() => modalSession.context.state)).toBe('closed');
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
     await page.getByRole('link', { name: 'Home', exact: true }).click(); await physicsReady(page);
     await expect(page.locator('dialog')).toHaveCount(1);
