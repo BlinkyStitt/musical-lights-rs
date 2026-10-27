@@ -491,3 +491,61 @@ test('a backward clock rejects first, starts a declared overlapping segment and 
   expect(after[0][0]).toBe(received); expect(after[0][0]).toBeLessThan(before.at(-1)[0]);
   for (let i = 1; i < after.length; i++) expect(after[i][0]).toBeGreaterThan(after[i - 1][0]);
 });
+
+test('tempo crosses acknowledged production WASM packets and reacquires at a real sample gap', async () => {
+  const { tempoPCM } = await import('../tempo-input.mjs');
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const options = { sessionId: 1232, pascalsPerUnit: 1.5, microphone: true,
+    settings: [...DEFAULT_AUDIO], visual: [0, -60, 0, 2] };
+  const p = processor(0, false, options);
+  p.scope.currentFrame = 997;
+  const initialMemory = p.value.wasm.memory.buffer.byteLength;
+  const packets = [];
+  function drive(instance, pcm, receive = () => {}) {
+    for (let at = 0; at < pcm.length; at += 128) {
+      assert(instance.push(pcm.subarray(at, at + 128)));
+      for (const { data } of instance.messages.splice(0)) {
+        if (data.type !== 'frame') continue;
+        assert.equal(data.sessionId, options.sessionId);
+        assert.equal(data.tempo, instance.value.wasm.processor_tempo(instance.value.processor));
+        assert.equal(data.tempoConfidence, instance.value.wasm.processor_tempo_confidence(instance.value.processor));
+        receive(data);
+        instance.value.port.onmessage({ data: { type: 'ack' } });
+      }
+    }
+  }
+  const receive = data => { if (!packets.length || data.state[0] - packets.at(-1).state[0] >= .5) packets.push(data); };
+  drive(p, tempoPCM(24, 100), receive);
+  assert(packets.at(-1).tempo > 90);
+  const first = packets.at(-1).tempo;
+  drive(p, tempoPCM(24, 150), receive);
+  assert(packets.at(-1).tempo > first + 40);
+  assert(packets.at(-1).tempoConfidence >= .45);
+  assert(packets.some(packet => packet.tempo > 70 && packet.tempo < 100), 'smoothing updates must be delivered');
+  const expected = p.scope.currentFrame;
+  p.scope.currentFrame += 997;
+  const fresh = processor(0, false, options);
+  fresh.scope.currentFrame = p.scope.currentFrame;
+  const input = tempoPCM(24, 100), actual = [], reference = [];
+  drive(p, input, data => actual.push(data));
+  drive(fresh, input, data => reference.push(data));
+  // Both sessions use the same real starting clock. Resetting history must not
+  // remove the accepted calibration or visual configuration.
+  assert.equal(actual.length, reference.length);
+  for (let i = 0; i < actual.length; i++) {
+    assert.equal(actual[i].tempo, reference[i].tempo);
+    assert.equal(actual[i].tempoConfidence, reference[i].tempoConfidence);
+    assert.deepEqual(actual[i].state, reference[i].state);
+  }
+  assert.deepEqual(p.snapshot(), fresh.snapshot());
+  assert.equal(p.value.wasm.processor_tempo(p.value.processor), fresh.value.wasm.processor_tempo(fresh.value.processor));
+  assert.equal(p.value.wasm.processor_tempo_confidence(p.value.processor), fresh.value.wasm.processor_tempo_confidence(fresh.value.processor));
+  assert.equal(actual[0].tempo, 60);
+  assert.equal(actual[0].tempoConfidence, 0);
+  assert(actual.at(-1).tempo > 90);
+  assert.deepEqual(actual.at(-1).continuity, { segment: 1, missingSamples: 997,
+    overlapSamples: 0, expectedSample: expected, receivedSample: expected + 997, calibrationCancellations: 0 });
+  assert.equal(p.value.wasm.memory.buffer.byteLength, initialMemory);
+  p.value.wasm.processor_destroy(p.value.processor);
+  fresh.value.wasm.processor_destroy(fresh.value.processor);
+});

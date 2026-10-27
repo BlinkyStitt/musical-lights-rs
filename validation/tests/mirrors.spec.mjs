@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { openFullscreenSettings, closeFullscreenSettings, scrollingIntersections, physicsReady, syntheticAudio, startFrozen, normalView } from '../physics-state.mjs';
 
+import { tempoMicrophone } from '../tempo-input.mjs';
+
 const origin = 'http://127.0.0.1:8101';
 async function normal(page) { await physicsReady(page); await normalView(page); }
 
@@ -1047,4 +1049,59 @@ test('camera setters invalidate active measurements and zoom survives sweep, res
     const v = document.querySelector('#dancinglights').physics;
     return { zoom: v.cameraParameters.get('cameraZoom'), stopped: v.rotation === v.cameraBase, finite: v.camera.projectionMatrix.elements.every(Number.isFinite) };
   })).toEqual({ zoom: 30, stopped: true, finite: true });
+});
+
+test('active microphone PCM reaches the BPM counter, rejects stale packets and reacquires after Stop', async ({ page }, info) => {
+  test.setTimeout(100000);
+  await tempoMicrophone(page);
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  await page.evaluate(() => {
+    window.tempoDelivery = { count: 0, mismatch: 0, values: [] };
+    document.querySelector('.audio-card').addEventListener('audio-tempo', ({ detail }) => {
+      const packet = tempoCapture.last;
+      tempoDelivery.count++;
+      if (detail.bpm !== packet.tempo || detail.confidence !== packet.tempoConfidence) tempoDelivery.mismatch++;
+      if (!tempoDelivery.values.length || Math.abs(detail.bpm - tempoDelivery.values.at(-1)) >= 1) tempoDelivery.values.push(detail.bpm);
+    });
+  });
+  const readout = page.locator('.tempo-readout');
+  const listening = page.locator('.listening-toggle');
+  await expect(readout).toHaveAttribute('aria-live', 'off');
+  await expect(readout).toBeHidden();
+  try {
+    await listening.check();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    await expect(readout).toBeVisible();
+    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 18000 }).toBeGreaterThan(90);
+    await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(85);
+    const first = await readout.textContent();
+    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 30000 }).toBeGreaterThan(140);
+    await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(135);
+    expect(await readout.textContent()).not.toBe(first);
+    expect(await page.evaluate(() => tempoDelivery.mismatch)).toBe(0);
+    expect(await page.evaluate(() => tempoDelivery.values.length)).toBeGreaterThan(20);
+    await expect(page.getByRole('alert')).toBeEmpty();
+    await page.evaluate(() => { tempoCapture.retired = structuredClone(tempoCapture.last); });
+    await listening.uncheck();
+    await expect(readout).toBeHidden(); await expect(readout).toHaveText('');
+    expect(await page.evaluate(() => [tempoCapture.contexts[0].state, tempoCapture.tracks[0].readyState])).toEqual(['closed', 'ended']);
+    await listening.check();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    await expect.poll(() => page.evaluate(() => tempoCapture.last?.sessionId !== tempoCapture.retired.sessionId)).toBe(true);
+    // Deliver at the production port boundary. No DOM tempo events are injected.
+    const stale = await page.evaluate(() => {
+      const before = tempoDelivery.count, packet = { ...tempoCapture.retired, tempo: 199, tempoConfidence: 1 };
+      tempoCapture.nodes[0].port.dispatchEvent(new MessageEvent('message', { data: packet }));
+      tempoCapture.nodes.at(-1).port.dispatchEvent(new MessageEvent('message', { data: packet }));
+      return { before, after: tempoDelivery.count, bpm: document.querySelector('#dancinglights').physics.tempo };
+    });
+    expect(stale.after).toBe(stale.before); expect(stale.bpm).toBeLessThan(90);
+    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 18000 }).toBeGreaterThan(90);
+    await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(85);
+    await listening.uncheck(); await expect(readout).toBeHidden(); await expect(readout).toHaveText('');
+  } finally {
+    await info.attach('tempo-delivery.json', { body: JSON.stringify(await page.evaluate(() => ({
+      ...tempoDelivery, packets: tempoCapture.packets, sessions: tempoCapture.nodes.length,
+    }))), contentType: 'application/json' });
+  }
 });
