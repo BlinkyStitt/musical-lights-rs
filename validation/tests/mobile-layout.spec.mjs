@@ -33,75 +33,76 @@ async function tapControlAtHitPoint(page, control, { scroll = false } = {}) {
   await page.touchscreen.tap(point.x, point.y);
 }
 
-test('phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape', async ({ browser }) => {
+// Each route retains the complete portrait-to-landscape workflow within its own
+// deadline. CI traces showed the second route exhausting the shared 30 seconds.
+for (const route of ['/', '/advanced/'])
+test(`phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape on ${route}`, async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();
     await page.addInitScript(() => { window.micRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.micRequests++; throw Error('Unexpected automatic capture'); }; });
-    for (const route of ['/', '/advanced/']) {
-      await page.goto(origin + route); await physicsReady(page);
-      const initial = await page.evaluate(() => {
-        const card = document.querySelector('.audio-card');
-        const initial = { expanded: card.hasAttribute('data-expanded'), requests: window.micRequests, native: document.fullscreenElement };
-        card.classList.add('video-active');
-        const panel = card.querySelector('.video-panel'); panel.hidden = false;
-        panel.querySelector('.youtube-frame').innerHTML = '<iframe title="Layout fixture" src="about:blank"></iframe>';
-        card.querySelector('#dancinglights').physics.notice.show('Graphics recovery notice.', 'Graphics recovery notice.');
-        const title = card.querySelector('.recognized-song'); title.hidden = false;
-        title.querySelector('.song-title').textContent = 'An artist with a long name — A long song title '.repeat(4);
-        return initial;
-      });
-      expect(initial).toEqual({ expanded: true, requests: 0, native: null });
-      for (const width of [320, 393, 568]) {
-        await page.setViewportSize({ width, height: 852 });
-        expect(await page.locator('.fullscreen-toolbar').evaluate(toolbar => {
-          const controls = [...toolbar.children], centers = controls.map(node => {
-            const r = node.getBoundingClientRect(); return r.x + r.width / 2;
-          });
-          const gaps = centers.slice(1).map((x, i) => x - centers[i]);
-          return { order: controls.map(node => node.matches('label') ? node.querySelector('input').className : node.className),
-            evenlySpaced: Math.max(...gaps) - Math.min(...gaps) < 1,
-            icons: controls.every(node => node.querySelector('svg[aria-hidden="true"]')?.checkVisibility()),
-            text: toolbar.innerText.trim(), rotationHelp: !!toolbar.querySelector('.rotate-help'),
-            switches: toolbar.querySelectorAll('input[type="checkbox"]').length,
-            compact: controls.every(node => Math.abs(node.getBoundingClientRect().height - 44) < 1) };
-        })).toEqual({ order: ['fullscreen-button', 'rotate-display', 'motion-button', 'listening-toggle', 'fullscreen-settings-button'],
-          evenlySpaced: true, icons: true, text: '', rotationHelp: false, switches: 2, compact: true });
-      }
-      for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
-        await page.setViewportSize(viewport);
-        await page.getByRole('button', { name: 'Settings', exact: true }).click();
-        const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
-          'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y'];
-        expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
-        await page.locator('.camera-zoom').fill('25');
-        await page.locator('.camera-x').fill('35'); await page.locator('.camera-y').fill('65');
-        await expect(page.getByRole('button', { name: 'Edit Zoom', exact: true })).toHaveText('25%');
-        await page.locator('.camera-rotation').fill('30');
-        await expect.poll(() => page.evaluate(() => {
-          const camera = document.querySelector('.camera-controls').getBoundingClientRect();
-          const controls = document.querySelector('.audio-controls').getBoundingClientRect();
-          const slider = document.querySelector('.camera-rotation'), box = slider.getBoundingClientRect();
-          const row = slider.closest('.slider-control').getBoundingClientRect();
-          const dialog = document.querySelector('.fullscreen-settings'), modal = dialog.getBoundingClientRect();
-          return { dialogVisible: modal.width > 0 && modal.height > 0 && getComputedStyle(dialog).visibility === 'visible', angle: document.querySelector('#dancinglights').physics.cameraBase, separate: controls.bottom <= camera.top, touchSize: box.height >= 44,
-            aligned: Math.abs(box.y + box.height / 2 - row.y - row.height / 2) < 1,
-            touchable: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === slider };
-        })).toEqual({ dialogVisible: true, angle: 30, separate: true, touchSize: true, aligned: true, touchable: true });
-        await page.keyboard.press('ArrowLeft');
-        await expect.poll(() => page.evaluate(() => ({
-          angle: document.querySelector('#dancinglights').physics.cameraBase,
-          sceneLarge: document.querySelector('#dancinglights').getBoundingClientRect().height >= 200,
-          fps: /^\d+ FPS$/.test(document.querySelector('.frame-rate').textContent),
-        }))).toEqual({ angle: 29, sceneLarge: true, fps: true });
-        await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-        await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
-        expect(await scrollingIntersections(page, ['.physics-status', '.fullscreen-button'])).toEqual({ '.physics-status': 1, '.fullscreen-button': 1 });
-      }
-      await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
-      await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
-      await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto(origin + route); await physicsReady(page);
+    const initial = await page.evaluate(() => {
+      const card = document.querySelector('.audio-card');
+      const initial = { expanded: card.hasAttribute('data-expanded'), requests: window.micRequests, native: document.fullscreenElement };
+      card.classList.add('video-active');
+      const panel = card.querySelector('.video-panel'); panel.hidden = false;
+      panel.querySelector('.youtube-frame').innerHTML = '<iframe title="Layout fixture" src="about:blank"></iframe>';
+      card.querySelector('#dancinglights').physics.notice.show('Graphics recovery notice.', 'Graphics recovery notice.');
+      const title = card.querySelector('.recognized-song'); title.hidden = false;
+      title.querySelector('.song-title').textContent = 'An artist with a long name — A long song title '.repeat(4);
+      return initial;
+    });
+    expect(initial).toEqual({ expanded: true, requests: 0, native: null });
+    for (const width of [320, 393, 568]) {
+      await page.setViewportSize({ width, height: 852 });
+      expect(await page.locator('.fullscreen-toolbar').evaluate(toolbar => {
+        const controls = [...toolbar.children], centers = controls.map(node => {
+          const r = node.getBoundingClientRect(); return r.x + r.width / 2;
+        });
+        const gaps = centers.slice(1).map((x, i) => x - centers[i]);
+        return { order: controls.map(node => node.matches('label') ? node.querySelector('input').className : node.className),
+          evenlySpaced: Math.max(...gaps) - Math.min(...gaps) < 1,
+          icons: controls.every(node => node.querySelector('svg[aria-hidden="true"]')?.checkVisibility()),
+          text: toolbar.innerText.trim(), rotationHelp: !!toolbar.querySelector('.rotate-help'),
+          switches: toolbar.querySelectorAll('input[type="checkbox"]').length,
+          compact: controls.every(node => Math.abs(node.getBoundingClientRect().height - 44) < 1) };
+      })).toEqual({ order: ['fullscreen-button', 'rotate-display', 'motion-button', 'listening-toggle', 'fullscreen-settings-button'],
+        evenlySpaced: true, icons: true, text: '', rotationHelp: false, switches: 2, compact: true });
     }
+    for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
+      await page.setViewportSize(viewport);
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
+        'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y'];
+      expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
+      await page.locator('.camera-zoom').fill('25');
+      await page.locator('.camera-x').fill('35'); await page.locator('.camera-y').fill('65');
+      await expect(page.getByRole('button', { name: 'Edit Zoom', exact: true })).toHaveText('25%');
+      await page.locator('.camera-rotation').fill('30');
+      await expect.poll(() => page.evaluate(() => {
+        const camera = document.querySelector('.camera-controls').getBoundingClientRect();
+        const controls = document.querySelector('.audio-controls').getBoundingClientRect();
+        const slider = document.querySelector('.camera-rotation'), box = slider.getBoundingClientRect();
+        const row = slider.closest('.slider-control').getBoundingClientRect();
+        const dialog = document.querySelector('.fullscreen-settings'), modal = dialog.getBoundingClientRect();
+        return { dialogVisible: modal.width > 0 && modal.height > 0 && getComputedStyle(dialog).visibility === 'visible', angle: document.querySelector('#dancinglights').physics.cameraBase, separate: controls.bottom <= camera.top, touchSize: box.height >= 44,
+          aligned: Math.abs(box.y + box.height / 2 - row.y - row.height / 2) < 1,
+          touchable: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === slider };
+      })).toEqual({ dialogVisible: true, angle: 30, separate: true, touchSize: true, aligned: true, touchable: true });
+      await page.keyboard.press('ArrowLeft');
+      await expect.poll(() => page.evaluate(() => ({
+        angle: document.querySelector('#dancinglights').physics.cameraBase,
+        sceneLarge: document.querySelector('#dancinglights').getBoundingClientRect().height >= 200,
+        fps: /^\d+ FPS$/.test(document.querySelector('.frame-rate').textContent),
+      }))).toEqual({ angle: 29, sceneLarge: true, fps: true });
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
+      expect(await scrollingIntersections(page, ['.physics-status', '.fullscreen-button'])).toEqual({ '.physics-status': 1, '.fullscreen-button': 1 });
+    }
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
+    await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+    await page.setViewportSize({ width: 393, height: 852 });
   } finally { await context.close(); }
 });
 
