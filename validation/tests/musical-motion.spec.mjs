@@ -202,6 +202,9 @@ test('slider buttons step once and value editors validate, cancel and save', asy
   await page.keyboard.press('Escape'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
   for (const [selector, name, value, next] of [
     ['.camera-rotation', 'Camera angle (degrees)', '12', '13'],
+    ['.camera-zoom', 'Zoom', '25', '26'],
+    ['.camera-x', 'Horizontal position', '20', '21'],
+    ['.camera-y', 'Vertical position', '70', '71'],
     ['.depth-slider', 'Box depth (cm)', '199', '200'],
     ['.flight-height', 'Flight height (% of available space)', '35', '36'],
   ]) {
@@ -237,6 +240,7 @@ test('slider buttons step once and value editors validate, cancel and save', asy
   }
   const { saved, audio } = await page.evaluate(() => ({ saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')),
     audio: !!document.querySelector('.audio-card').activeAudioContext }));
+  expect(saved.cameraZoom).toBe(25); expect(saved.cameraX).toBe(20); expect(saved.cameraY).toBe(70);
   expect(saved.cameraAngle).toBe(12); expect(saved.physics[5]).toBeCloseTo(1.99,5); expect(saved.flight).toBe(35);
   expect(audio).toBe(false);
   await page.reload(); await physicsReady(page);

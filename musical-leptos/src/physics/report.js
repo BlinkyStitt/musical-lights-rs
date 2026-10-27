@@ -181,6 +181,7 @@ export class PhoneReport {
     this.metadata = { build, sessionId: this.audioState.sessionId, workload: { ...this.audioState }, userAgent: navigator.userAgent, ios: this.query('.ios-version').value.trim(),
       device: this.query('.phone-device').value.trim(), browser: this.query('.phone-browser').value.trim(), lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
+      cameraParameters: { ...this.view.cameraParameters.values },
       cameraDegrees: this.view.cameraBase, cameraMotion: this.view.settings.cameraMotion, scrolling: this.view.card.querySelector('.scroll-lights').checked, warmupSeconds: 15, measurementSeconds: 300,
       audioSource: 'generated PCM → AudioWorklet → loudness WASM', continuity: { ...this.audioState.continuity },
       startedAt: new Date().toISOString(), config, layout: this.view.layout, palette: Array.from(this.view.palette) };

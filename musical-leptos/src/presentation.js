@@ -1,18 +1,20 @@
 import { localPoint, viewportBounds, placeDialog } from './screen.js';
+import { CAMERA_PARAMETERS, CAMERA_DEFAULTS, CameraParameters, validCameraParameter } from './physics/camera-pan.js';
 import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
-  cameraMotion: true, cameraAngle: 0, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
+  cameraMotion: true, ...CAMERA_DEFAULTS, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
   ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL] };
   try {
     const saved = JSON.parse(storage.getItem(SETTINGS_KEY));
     if (saved?.version !== 1) return defaults;
-    for (const [key, min, max] of [['flight', 0, 50], ['cameraAngle', -40, 40]]) {
+    for (const [key, min, max] of [['flight', 0, 50]]) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
+    for (const id of Object.keys(CAMERA_PARAMETERS)) if (validCameraParameter(id, saved[id])) defaults[id] = saved[id];
     if (validVisual(saved.visual)) defaults.visual = [...saved.visual];
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
@@ -69,10 +71,12 @@ const explanations = {
   'scroll-lights': 'Scroll lights moves the bands at two columns per beat. Only a new attack above the recent loudness peak can change direction. The default chance rises from 5% at 60 BPM to 50% at 200 BPM; Advanced Display settings control the thresholds, odds and curve. Reduced Motion disables automatic movement.',
 };
 export class Presentation {
-  constructor(card) {
+  constructor(card, cameraParameters = new CameraParameters()) {
     this.card = card; this.closed = false; this.generation = 0; this.removers = [];
     try { this.storage = localStorage; } catch { /* Session-only settings. */ }
     this.settings = card.preferences = readSettings(this.storage);
+    this.cameraParameters = cameraParameters;
+    for (const id of Object.keys(CAMERA_PARAMETERS)) this.cameraParameters.set(id, this.settings[id]);
     this.originalAudioType = navigator.audioSession?.type;
     this.microphoneActive = false; this.videoPlaying = false;
     this.fullscreenButton = card.querySelector('.fullscreen-button');
@@ -145,15 +149,46 @@ export class Presentation {
       card.querySelector('.direction-error').textContent = valid ? '' : 'Use increasing BPM thresholds from 60 to 200, increasing odds from 0 to 100%, and a curve from 0.25 to 4.';
       if (valid) { this.settings.directionOdds = odds; this.save(); }
     });
-    card.querySelector('.camera-rotation').value = this.settings.cameraAngle;
-    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, cameraAngle: 0, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    for (const range of card.querySelectorAll('[data-camera-parameter]')) {
+      const id = range.dataset.cameraParameter, p = CAMERA_PARAMETERS[id];
+      Object.assign(range, { min: p.min, max: p.max, step: p.step, value: this.cameraParameters.get(id) });
+      this.listen(range, 'input', () => this.setCameraParameter(id, Number(range.value), false));
+      this.listen(range, 'change', () => this.persist());
+      // Preserve the established first camera Tab stop after the meters.
+      if (id === 'cameraAngle') continue;
+      const label = card.querySelector(`label[for="${range.id}"]`);
+      label.dataset.help = id; label.dataset.explanation = range.title;
+      label.tabIndex = 0; label.setAttribute('role', 'button'); label.setAttribute('aria-expanded', 'false');
+      this.listen(label, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(label, id); });
+      this.listen(label, 'pointerleave', () => this.hideHelp());
+      this.listen(label, 'focus', () => this.showHelp(label, id));
+      this.listen(label, 'blur', () => this.hideHelp());
+      this.listen(label, 'click', event => { event.preventDefault(); this.showHelp(label, id); });
+      this.listen(label, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(label, id); } });
+    }
+    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, ...CAMERA_DEFAULTS, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.cameraParameters.reset(); this.syncCamera(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
     mountSliderControls(this);
     this.save(false);
     card.presentation = this;
     this.fullscreenSettings = new FullscreenSettings(this);
   }
   listen(target, type, callback, options) { target.addEventListener(type, callback, options); this.removers.push(() => target.removeEventListener(type, callback, options)); }
-  save(persist = true) { this.syncDepth?.(); if (persist) { try { this.storage?.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Session settings remain usable. */ } } this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
+  // Camera updates synchronize controls without reconfiguring lighting, layout,
+  // audio or the worker. Persist manual edits at completion, never per frame.
+  persist() { try { this.storage?.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch { /* Session settings remain usable. */ } }
+  syncCamera() {
+    Object.assign(this.settings, this.cameraParameters.values);
+    for (const range of this.card.querySelectorAll('[data-camera-parameter]')) range.value = this.cameraParameters.get(range.dataset.cameraParameter);
+    this.card.dispatchEvent(new CustomEvent('camera-readout'));
+  }
+  setCameraParameter(id, value, persist = true) {
+    if (!this.cameraParameters.set(id, value)) return false;
+    this.syncCamera();
+    this.card.dispatchEvent(new CustomEvent('camera-settings', { detail: { id } }));
+    if (persist) this.persist();
+    return true;
+  }
+  save(persist = true) { this.syncDepth?.(); if (persist) this.persist(); this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
   updateAudioType() {
     if (!navigator.audioSession) return;
     const type = this.microphoneActive ? 'play-and-record' : this.videoPlaying ? 'playback' : this.originalAudioType ?? 'auto';
@@ -200,7 +235,7 @@ export class Presentation {
     this.hideHelp(); this.anchor = anchor; anchor.setAttribute('aria-describedby', this.popup.id);
     if (anchor.tagName !== 'INPUT') anchor.setAttribute('aria-expanded', 'true');
     const state = this.card.dataset.audioState ?? 'off';
-    this.popup.textContent = key === 'listening-toggle' ? `${explanations[key]} Microphone: ${this.microphoneActive ? state : 'off'}. Permission: ${this.permission ?? this.card.querySelector('.microphone-permission')?.dataset.state ?? 'not requested'}. ${this.card.querySelector('.mic-session-status')?.textContent ?? ''}` : (explanations[key] ? explanations[key] + (key === 'identify-song' ? ' ' + this.card.querySelector('.recognition-status').textContent : '') : null) ?? (key === 'video' ? 'Paste a YouTube link to play a video. Listening must hear the speakers for the lights to follow its audio.' : 'Show video, lights, and controls together. Use Exit fullscreen or Escape to return.');
+    this.popup.textContent = key === 'listening-toggle' ? `${explanations[key]} Microphone: ${this.microphoneActive ? state : 'off'}. Permission: ${this.permission ?? this.card.querySelector('.microphone-permission')?.dataset.state ?? 'not requested'}. ${this.card.querySelector('.mic-session-status')?.textContent ?? ''}` : anchor.dataset.explanation ?? (explanations[key] ? explanations[key] + (key === 'identify-song' ? ' ' + this.card.querySelector('.recognition-status').textContent : '') : null) ?? (key === 'video' ? 'Paste a YouTube link to play a video. Listening must hear the speakers for the lights to follow its audio.' : 'Show video, lights, and controls together. Use Exit fullscreen or Escape to return.');
     this.popup.hidden = false; this.positionHelp();
   }
   positionHelp() {
@@ -436,7 +471,15 @@ function mountSliderControls(presentation) {
     Object.assign(editor, { type: 'number', min: range.min, max: range.max, step: range.step || '1', className: 'slider-editor', hidden: true });
     editor.setAttribute('aria-label', `${name} value`);
     group.append(minus, range, plus, value, editor);
-    const sync = () => { for (const node of [minus, plus, value, editor]) node.disabled = range.disabled; if (!existing) value.textContent = `${range.value}%`; };
+    const sync = () => {
+      for (const node of [minus, plus, value, editor]) node.disabled = range.disabled;
+      if (!existing) {
+        const id = range.dataset.cameraParameter;
+        const text = `${id ? Number(presentation.cameraParameters.get(id).toFixed(1)) : range.value}%`;
+        // Preserve the native click target during keyboard-driven updates too.
+        if (value.firstChild) value.firstChild.nodeValue = text; else value.textContent = text;
+      }
+    };
     const apply = () => {
       range.dispatchEvent(new Event('input', { bubbles: true }));
       range.dispatchEvent(new Event('change', { bubbles: true }));
@@ -459,6 +502,7 @@ function mountSliderControls(presentation) {
     presentation.listen(editor, 'blur', () => { if (!editor.hidden) { if (editor.value !== '' && editor.validity.valid) commit(); else close(); } });
     presentation.listen(range, 'input', sync);
     presentation.listen(card, 'display-settings', sync);
+    presentation.listen(card, 'camera-readout', sync);
     sync();
   }
 }

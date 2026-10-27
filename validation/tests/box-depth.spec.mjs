@@ -8,6 +8,9 @@ test('box depth updates physical boundaries and all nine banks without resetting
   for(const cm of [20,200,48]) {
     await page.getByRole('slider',{name:'Box depth (cm)',exact:true}).fill(String(cm));
     await expect.poll(()=>page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;return Math.round(v.current[v.layout[17]+4]*100);})).toBe(cm);
+    // The expanded camera controls can put Depth below the viewport. Resume
+    // visible drawing before checking rendered geometry, not just worker state.
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
     await expect.poll(()=>page.evaluate(cm=>Math.abs(document.querySelector('#dancinglights').physics.renderedDepth-cm/100)<1e-5,cm)).toBe(true);
     const state=await page.evaluate(()=>{
       const v=document.querySelector('#dancinglights').physics;v.draw(performance.now());v.sideBars.update(v.layout);

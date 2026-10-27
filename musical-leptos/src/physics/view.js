@@ -6,7 +6,7 @@ import { Enclosure, barProjection, BAR_PROFILE } from './enclosure.js';
 import { SideBars } from './side-bars.js';
 import { sphereGeometry } from './spheres.js';
 import { Starfield } from './stars.js';
-import { CameraPan, cameraEditing } from './camera-pan.js';
+import { CameraPan, CameraParameters, cameraEditing } from './camera-pan.js';
 import { GpuFrames } from './gpu-frames.js';
 
 const CAMERA_DISTANCE = 1.8;
@@ -64,7 +64,12 @@ export class PhysicsView {
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
     this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0 };
-    this.cameraPan = new CameraPan();
+    this.cameraParameters = this.card.presentation?.cameraParameters ?? new CameraParameters(this.settings);
+    this.cameraPan = new CameraPan(this.cameraParameters);
+    const presentation = this.card.presentation;
+    this.cameraPan.onStop = () => {
+      if (this.cameraDirty) { presentation?.persist(); this.cameraDirty = false; }
+    };
     this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
@@ -206,8 +211,13 @@ export class PhysicsView {
     this.listen(window, 'keyup', event => this.cameraPan.release(event));
     this.listen(window, 'blur', () => this.cameraPan.clear());
     this.listen(document, 'focusin', event => { if (cameraEditing(event.target)) this.cameraPan.clear(); });
-    this.listen(camera, 'input', () => { this.cameraBase = Number(camera.value); this.settings.cameraAngle = this.cameraBase; this.setCamera(this.cameraBase); this.card.presentation?.save(); });
-    this.listen(this.card, 'camera-reset', () => { this.cameraPan.reset(); this.cameraBase = 0; this.setCamera(0); });
+    this.listen(this.card, 'camera-settings', ({ detail }) => {
+      this.report?.invalidate('Camera changed during test');
+      if (detail.id === 'cameraAngle') this.cameraTime = 0;
+      this.setCamera(detail.id === 'cameraAngle' ? this.cameraBase : this.rotation ?? this.cameraBase);
+      this.positionMeters(this.renderedPhase ?? 0);
+    });
+    this.listen(this.card, 'camera-reset', () => { this.cameraPan.clear(); this.cameraParameters.reset(); this.cameraBase = 0; this.setCamera(0); });
     this.listen(this.card, 'display-settings', ({ detail }) => {
       this.settings = detail;
       this.lighting.configure(detail); this.resizePending = true;
@@ -328,10 +338,13 @@ export class PhysicsView {
         i & 4 ? depth / 2 : -depth / 2).applyMatrix4(this.camera.matrixWorldInverse);
       tangent = Math.max(tangent, Math.abs(point.y) / (-point.z * vertical), Math.abs(point.x) / (-point.z * this.aspect * horizontal));
     }
-    const fov = 2 * Math.atan(tangent * 1.015) * 180 / Math.PI;
+    const fov = 2 * Math.atan(tangent * 1.015 / (this.cameraParameters.get('cameraZoom') / 100)) * 180 / Math.PI;
     if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   }
+  get cameraBase() { return this.cameraParameters.get('cameraAngle'); }
+  set cameraBase(value) { this.cameraParameters.set('cameraAngle', value); }
   setCamera(degrees, verticalOffset = 0) {
+    degrees = this.cameraParameters.effective('cameraAngle', degrees);
     if (degrees !== this.rotation && !this.automaticCamera) this.report?.invalidate('Camera changed during test');
     this.rotation = degrees;
     const angle = degrees * Math.PI / 180;
@@ -348,6 +361,7 @@ export class PhysicsView {
     this.cameraAt = now;
     if (this.cameraPan.step(elapsed / 1000)) {
       this.report?.invalidate('Camera moved during test');
+      this.card.presentation?.syncCamera(); this.cameraDirty = true;
     }
     this.cameraTime = moving ? this.cameraTime + elapsed : 0;
     // Move the sweep center inward at the limits. Start at the selected angle

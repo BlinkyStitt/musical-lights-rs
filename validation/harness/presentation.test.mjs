@@ -140,3 +140,18 @@ test('inverse pointer mapping and top-layer placement agree in all four display 
     assert.ok(visible.left >= 0 && visible.top >= 0 && visible.right <= width && visible.bottom <= height);
   }
 });
+
+test('camera preferences tolerate legacy, malformed and unavailable storage independently', () => {
+  const read = saved => readSettings({ getItem: () => JSON.stringify(saved) });
+  const defaults = { cameraAngle: 0, cameraZoom: 100, cameraX: 50, cameraY: 50 };
+  for (const settings of [read({ version: 1 }), read({ version: 2, cameraZoom: 25 }), readSettings(), readSettings({ getItem: () => '{' })]) {
+    for (const [id, value] of Object.entries(defaults)) assert.equal(settings[id], value);
+  }
+  for (const [id, min, max] of [['cameraAngle', -40, 40], ['cameraZoom', 25, 200], ['cameraX', 0, 100], ['cameraY', 0, 100]]) {
+    for (const value of [min, max, (min + max) / 2]) assert.equal(read({ version: 1, [id]: value })[id], value);
+    for (const value of [min - 1, max + 1, null, '50']) assert.equal(read({ version: 1, [id]: value })[id], defaults[id]);
+  }
+  const mixed = read({ version: 1, cameraAngle: 17, cameraZoom: 24, cameraX: 12.345, cameraY: 90 });
+  assert.equal(mixed.cameraAngle, 17); assert.equal(mixed.cameraZoom, 100);
+  assert.equal(mixed.cameraX, 12.345); assert.equal(mixed.cameraY, 90);
+});

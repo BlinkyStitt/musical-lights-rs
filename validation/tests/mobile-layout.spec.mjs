@@ -72,8 +72,11 @@ test('phone opens expanded without capture and keeps settings in the top half wi
         await page.setViewportSize(viewport);
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
-          'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation'];
+          'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y'];
         expect(await scrollingIntersections(page, selectors)).toEqual(Object.fromEntries(selectors.map(selector => [selector, 1])));
+        await page.locator('.camera-zoom').fill('25');
+        await page.locator('.camera-x').fill('35'); await page.locator('.camera-y').fill('65');
+        await expect(page.getByRole('button', { name: 'Edit Zoom', exact: true })).toHaveText('25%');
         await page.locator('.camera-rotation').fill('30');
         await expect.poll(() => page.evaluate(() => {
           const camera = document.querySelector('.camera-controls').getBoundingClientRect();

@@ -45,20 +45,21 @@ test('off-screen bar culling preserves visible pixels across angles and depth se
     const current=v.current, previous=v.previous;
     v.current=current.slice(); v.previous=(previous??current).slice();
     try {
-      for (const depth of [.2, .35, .48, .8, 1.2, 2]) for (const angle of [-40, -10, 0, 10, 40]) {
-        v.current[v.layout[17]+4] = depth; v.previous[v.layout[17]+4] = depth; v.setCamera(angle); v.renderer.setRenderTarget(target);
+      for (const depth of [.2, .35, .48, .8, 1.2, 2]) for (const [angle, zoom, x, y] of [[-40, 25, 0, 0], [-10, 100, 50, 50], [0, 25, 50, 50], [10, 200, 100, 0], [40, 200, 100, 100]]) {
+        v.current[v.layout[17]+4] = depth; v.previous[v.layout[17]+4] = depth;
+        v.config[5] = depth; v.cameraParameters.set('cameraZoom', zoom); v.cameraParameters.set('cameraX', x); v.cameraParameters.set('cameraY', y); v.setCamera(angle); v.renderer.setRenderTarget(target);
         // Compare the production draw itself; an extra draw has no assertion.
         v.draw(performance.now());
         const visible = v.sideBars.mesh.count, actual = read();
         v.sideBars.update(v.layout); const all = v.sideBars.mesh.count, expected = render();
         let changed = 0;
         for (let i = 0; i < actual.length; i += 4) if (Math.abs(actual[i] - expected[i]) + Math.abs(actual[i + 1] - expected[i + 1]) + Math.abs(actual[i + 2] - expected[i + 2]) > 3) changed++;
-        evidence.push({ angle, depth, visible, all, changed });
+        evidence.push({ angle, depth, zoom, x, y, visible, all, changed, validProjection: v.camera.projectionMatrix.elements.every(Number.isFinite) });
       }
     } finally { v.current=current; v.previous=previous; v.renderer.setRenderTarget(null); target.dispose(); }
     return evidence;
   });
-  for (const sample of evidence) { expect(sample.changed, JSON.stringify(sample)).toBe(0); expect(sample.visible).toBeLessThanOrEqual(sample.all); }
+  for (const sample of evidence) { expect(sample.changed, JSON.stringify(sample)).toBe(0); expect(sample.visible).toBeLessThanOrEqual(sample.all); expect(sample.validProjection).toBe(true); }
   expect(evidence.some(sample => sample.visible < sample.all)).toBe(true);
   await expect(page.getByRole('meter')).toHaveCount(24);
   await info.attach('bar-culling.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
@@ -384,6 +385,7 @@ test('physical depth changes preserve active audio and reset to the default with
     v.card.addEventListener('audio-tempo',()=>window.depthAudioFrames++); });
   for (const cm of [20,48,100,200]) {
     await page.locator('.depth-slider').fill(String(cm));
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
     await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(cm/100,5);
     expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;
       return {balls:v.balls.count,capacity:v.sideBars.capacity,same:[v.balls,v.bars,v.sideBars.mesh,v.enclosure].every((mesh,i)=>mesh===window.depthMeshes[i])};
@@ -911,4 +913,138 @@ test('flat source tops and narrow straight joins match independent visible heigh
     expect(sample.above, JSON.stringify(sample)).toBe(0);
   }
   await info.attach('joined-top-pixels.json', { body: JSON.stringify(samples), contentType: 'application/json' });
+});
+
+for (const route of ['/', '/advanced/']) test(`shared camera sliders persist, synchronize WASD and reset on ${route}`, async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + route); await normal(page);
+  // Mobile starts expanded. Finish that intentional layout transition before
+  // asserting that camera edits themselves preserve physical dimensions.
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, box = v.layer.getBoundingClientRect();
+    return !v.resizePending && v.canvasWidth === box.width && v.canvasHeight === box.height;
+  })).toBe(true);
+  await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    window.sliderIdentity = { worker: v.worker, renderer: v.renderer, inputHeight: v.input[32], balls: v.balls, zoom: document.querySelector('.camera-zoom') };
+    window.cameraBroadcasts = 0; v.card.addEventListener('display-settings', () => window.cameraBroadcasts++);
+  });
+  await page.locator('.camera-zoom').fill('35');
+  await page.getByRole('button', { name: 'Increase Zoom', exact: true }).click();
+  await expect(page.locator('.camera-zoom')).toHaveValue('36');
+  await page.getByRole('button', { name: 'Edit Zoom', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Zoom value', exact: true }).fill('25');
+  await page.getByRole('spinbutton', { name: 'Zoom value', exact: true }).press('Enter');
+  await page.locator('.camera-x').fill('20'); await page.locator('.camera-y').fill('70');
+  await expect(page.getByRole('button', { name: 'Edit Horizontal position', exact: true })).toHaveText('20%');
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sceneVisible)).toBe(true);
+  await page.keyboard.down('d');
+  await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').preferences.cameraX)).toBeGreaterThan(25);
+  await page.keyboard.up('d');
+  const manual = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, p = v.card.preferences;
+    return { zoom: p.cameraZoom, x: p.cameraX, y: p.cameraY,
+      saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')).cameraX,
+      readout: document.querySelector('.camera-x').closest('.slider-control').querySelector('.slider-value').textContent,
+      stable: v.worker === sliderIdentity.worker && v.renderer === sliderIdentity.renderer && v.balls === sliderIdentity.balls && v.input[32] === sliderIdentity.inputHeight,
+      inputHeightBefore: sliderIdentity.inputHeight, inputHeightAfter: v.input[32],
+      broadcasts: cameraBroadcasts, angle: v.rotation, listening: v.card.dataset.audioSession ?? null };
+  });
+  expect(manual.zoom).toBe(25); expect(manual.y).toBe(70); expect(manual.saved).toBe(manual.x);
+  expect(manual.readout).toBe(`${Number(manual.x.toFixed(1))}%`);
+  expect(manual.stable, JSON.stringify(manual)).toBe(true); expect(manual.broadcasts).toBe(0); expect(manual.angle).toBe(0); expect(manual.listening).toBe(null);
+  await page.reload(); await normal(page);
+  expect(await page.evaluate(() => { const p = document.querySelector('.audio-card').preferences; return [p.cameraZoom, p.cameraX, p.cameraY]; })).toEqual([25, manual.x, 70]);
+  // Client routing restores the same stored manual camera parameters.
+  await page.getByRole('link', { name: 'About', exact: true }).click();
+  await page.goto(origin + (route === '/' ? '/advanced/' : '/')); await normal(page);
+  expect(await page.evaluate(() => document.querySelector('.audio-card').preferences.cameraX)).toBe(manual.x);
+  await page.locator('.display-controls > summary').click(); await page.getByRole('button', { name: 'Reset display', exact: true }).click();
+  expect(await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return v.cameraParameters.values; })).toEqual({ cameraAngle: 0, cameraZoom: 100, cameraX: 50, cameraY: 50 });
+  await expect(page.locator('.camera-zoom')).toHaveValue('100'); await expect(page.locator('.camera-x')).toHaveValue('50'); await expect(page.locator('.camera-y')).toHaveValue('50');
+});
+
+test('zoomed-out production projection visibly includes three banks and aligns meter hit regions', async ({ page }, info) => {
+  await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
+  await page.locator('.camera-zoom').fill('25');
+  await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
+  await expect.poll(() => page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return v.renderedHeight(0) / v.current[v.layout[17] + 1]; })).toBeGreaterThan(.39);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const size = 480, target = new THREE.WebGLRenderTarget(size, size), pixels = new Uint8Array(size * size * 4);
+    try {
+      v.setCamera(0); v.draw(performance.now()); v.positionMeters(v.renderedPhase ?? 0);
+      v.renderer.setRenderTarget(target); v.render(); v.renderer.readRenderTargetPixels(target, 0, 0, size, size, pixels);
+      const banks = [-1, 0, 1].map(bank => {
+        const point = new THREE.Vector3(v.width * (.52 + bank), v.renderedHeight(12) * .3, v.renderedDepth / 2).project(v.camera);
+        const x = Math.floor((point.x + 1) * size / 2), y = Math.floor((point.y + 1) * size / 2);
+        const i = (y * size + x) * 4;
+        return { bank, x, y, rgb: Array.from(pixels.slice(i, i + 3)) };
+      });
+      const phase = v.renderedPhase ?? 0, pitch = v.layout[3], band = 12;
+      const front = new THREE.Vector3(((band + phase) % 24) * pitch, v.current[v.layout[17]] / 2, v.config[5] / 2).project(v.camera);
+      const left = parseFloat(v.groups[band].style.left);
+      // The inverse pointer ray must land on the same source at z=0.
+      const world = new THREE.Vector3(v.width * .52, v.visibleHeight * .5, 0), projected = world.clone().project(v.camera);
+      v.pointer((projected.x + 1) / 2, (1 - projected.y) / 2, true);
+      return { banks, meterError: Math.abs(left - (front.x + 1) * 50), pointerError: Math.hypot(v.input[28] - world.x, v.input[29] - world.y), zoom: v.cameraParameters.get('cameraZoom') };
+    } finally { v.renderer.setRenderTarget(null); target.dispose(); }
+  });
+  for (const bank of evidence.banks) {
+    expect(bank.x, JSON.stringify(bank)).toBeGreaterThan(0); expect(bank.x).toBeLessThan(480);
+    expect(bank.y).toBeGreaterThan(0); expect(bank.y).toBeLessThan(480);
+    expect(Math.max(...bank.rgb), JSON.stringify(bank)).toBeGreaterThan(100);
+  }
+  expect(evidence.meterError).toBeLessThan(.001); expect(evidence.pointerError).toBeLessThan(.0001);
+  await info.attach('three-bank-pixels.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+  await page.locator('#dancinglights').screenshot({ path: info.outputPath('three-banks.png') });
+});
+
+
+test('camera setters invalidate active measurements and zoom survives sweep, resizing and depth changes', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await normal(page);
+  const invalidations = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, p = v.card.presentation;
+    const saved = { ...p.cameraParameters.values }, result = [];
+    try {
+      v.report.active = true;
+      for (const [id, value] of [['cameraZoom', 30], ['cameraX', 20], ['cameraY', 80]]) {
+        v.report.invalid = []; p.setCameraParameter(id, value, false);
+        result.push([...v.report.invalid]);
+      }
+      // Keep invalid public setter calls side-effect free.
+      const before = JSON.stringify(p.cameraParameters.values);
+      result.push([p.setCameraParameter('cameraZoom', Infinity), p.setCameraParameter('cameraX', -1), before === JSON.stringify(p.cameraParameters.values)]);
+    } finally {
+      v.report.active = false; v.report.invalid = [];
+      for (const [id, value] of Object.entries(saved)) p.setCameraParameter(id, value, false);
+    }
+    return result;
+  });
+  expect(invalidations.slice(0, 3)).toEqual(Array(3).fill(['Camera changed during test']));
+  expect(invalidations[3]).toEqual([false, false, true]);
+  await page.locator('.camera-zoom').fill('30');
+  const evidence = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    const manual = { ...v.cameraParameters.values };
+    v.updateCamera(performance.now()); v.updateCamera(performance.now() + 6000);
+    return { angle: v.rotation, manual, after: { ...v.cameraParameters.values }, zoom: v.card.preferences.cameraZoom };
+  });
+  expect(evidence.after).toEqual(evidence.manual); expect(evidence.zoom).toBe(30);
+  expect(Math.abs(evidence.angle)).toBeGreaterThan(1);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.locator('.depth-slider').fill('200');
+  await page.setViewportSize({ width: 568, height: 320 });
+  await openFullscreenSettings(page);
+  await expect(page.locator('.camera-zoom')).toHaveValue('30');
+  await closeFullscreenSettings(page);
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return { zoom: v.cameraParameters.get('cameraZoom'), stopped: v.rotation === v.cameraBase, finite: v.camera.projectionMatrix.elements.every(Number.isFinite) };
+  })).toEqual({ zoom: 30, stopped: true, finite: true });
 });

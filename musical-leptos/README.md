@@ -9,11 +9,15 @@ export PATH="$PWD/.tools/bin:$PATH"
 python3 validation/validate.py leptos
 ```
 
+For the complete local acceptance checks, install the pinned web CLIs with `python3 validation/install_tools.py web`, then run `just validate` from the repository root. This builds the native/WASM packages and all apps exercised by the full browser suite, then runs the Node harness and rendered checks.
+
 Listening controls microphone capture. Digital playback and phone motion have independent lifetimes. Local audio files stay in browser memory. Song identification remains opt-in.
 
 Current and background readouts show sones and RMS dBFS. Uncalibrated sones are estimates. Background tracking does not subtract noise or change calibration. Advanced settings change presentation and scheduling; ISO coefficients stay fixed. Audio settings apply at the next explicit audio start. The actual audio block size appears below the scene.
 
-New preferences use startup Auto depth selection. Saved manual counts remain unchanged. The depth slider permits 0–2048 images; select Auto again to repeat the measurement. Bar and ball colors emit faint light, and white attacks illuminate nearby surfaces along the depth. Copies reuse eight physical balls and a bounded lighting field. Distant surfaces fade gradually in opacity so the catalog stars remain visible behind them. W/A/S/D pans the view within the main box; the angle control still sets the horizontal sweep. Typing in fields does not move the camera. Reset display centers the view.
+The scene has eight physical balls, eight full-size background banks repeating the source bands, and one outer coating. Depth changes the physical enclosure from 20–200 cm (48 cm by default). Zoom changes only camera projection: 25–200% in 1% steps, with 100% preserving enclosure-fit framing. Use 25% to see the center and neighboring banks together. Horizontal position and Vertical position place the camera anchor within the main box, from 0–100% in 1% steps, centered at 50%. W/A/S/D adjusts the same position values continuously; typing and shortcuts do not move the camera. Angle retains its horizontal sweep and adjacent FPS readout.
+
+Camera controls are shared by Home, Advanced and expanded Settings, with step buttons and numeric editors. Tap a camera label for help. Manual angle, zoom and position survive reload and route changes. Reset display restores 100% zoom, centered position and the existing display defaults. Reduced Motion stops the automatic sweep while allowing manual camera adjustment. Zoom and position preserve audio ownership, simulation dimensions, balls and colors.
 
 Browser evidence does not establish physical-phone frame rate or hardware acceptance. Keep diagnostic recording off during frame-rate acceptance workloads.
 
