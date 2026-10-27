@@ -93,6 +93,23 @@ Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`; the reference
 target includes their lint/type checks.
 
+## Investigating intermittent browser failures
+
+The manual `Browser stability investigation` workflow repeats a native case on
+one worker with zero retries and the normal serial startup guard. Select an
+immutable source ref that already has a successful website validation artifact.
+The workflow resolves the ref once, requires the existing trusted producer and
+checks its exact source inputs and file digests before it runs. It does not build
+or publish a replacement site. The default cases target the native rotation
+sample clock and the iPhone-profile WebKit startup failure.
+
+For example, dispatch the workflow from an investigation branch with
+`gh workflow run browser-stability.yml --ref <investigation-branch> -f source_ref=<validated-commit> -f scenario=rotation-clock -f repetitions=50`.
+Each repetition must pass its original assertions. This diagnostic result does
+not replace the normal complete, unique browser-coverage gate. Keep the failed
+run, source commit, native trace and before/after repetition results when reporting
+a repair. A successful rerun alone does not identify or fix the cause.
+
 ## CI test ownership and scheduling
 
 Pure fullscreen lifecycle and compiled-WASM worklet checks run in the Node offline
