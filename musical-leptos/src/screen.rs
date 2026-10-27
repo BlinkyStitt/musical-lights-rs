@@ -29,11 +29,19 @@ extern "C" {
     fn close(this: &SongRecognition);
 }
 
+// Explicitly bundle the parameter module used by Presentation's relative import.
+#[wasm_bindgen(module = "/src/physics/camera-pan.js")]
+extern "C" {
+    type CameraParameters;
+    #[wasm_bindgen(constructor)]
+    fn new() -> CameraParameters;
+}
+
 #[wasm_bindgen(module = "/src/presentation.js")]
 extern "C" {
     type Presentation;
     #[wasm_bindgen(constructor)]
-    fn new(element: &web_sys::HtmlElement) -> Presentation;
+    fn new(element: &web_sys::HtmlElement, camera: &CameraParameters) -> Presentation;
     #[wasm_bindgen(method)]
     fn close(this: &Presentation);
 }
@@ -63,7 +71,7 @@ impl ScreenSession {
         Self {
             screen,
             songs: SongRecognition::new(element),
-            presentation: Presentation::new(element),
+            presentation: Presentation::new(element, &CameraParameters::new()),
             _on_change: callback,
             _on_band: on_band,
         }

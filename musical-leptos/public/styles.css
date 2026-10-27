@@ -229,9 +229,9 @@ nav { flex-wrap: wrap; }
 .audio-card:not([data-expanded]) > .visual-content { order: 0; }
 .audio-card:not([data-expanded]) > .recovery-notices { order: 1; }
 .audio-card:not([data-expanded]) > .recognized-song { order: 2; }
-.audio-card:not([data-expanded]) > .scene-controls { order: 3; }
+.audio-card:not([data-expanded]) > .scene-controls { order: 4; }
 .audio-card:not([data-expanded]) > .loudness-readouts { order: 5; }
-.audio-card:not([data-expanded]) > .audio-controls { order: 4; padding: .25rem; }
+.audio-card:not([data-expanded]) > .audio-controls { order: 3; padding: .25rem; }
 .audio-card:not([data-expanded]) > .input-source-controls { order: 6; }
 .audio-card:not([data-expanded]) > .playback-controls { order: 7; }
 @media (min-width: 1000px) {
@@ -290,6 +290,7 @@ nav { flex-wrap: wrap; }
 .scene-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; min-width: 0; }
 .scene-controls .camera-controls { min-width: 0; margin: 0; }
 .scene-controls .control-row { flex-direction: row; flex-wrap: nowrap; align-items: center; min-width: 0; gap: .5rem; }
+.scene-controls .position-controls .control-row { flex-direction: column; align-items: stretch; gap: 0; }
 .depth-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .25rem .5rem; }
 .depth-controls .control-row { grid-column: 1; }
 .depth-controls .control-row > label { white-space: nowrap; }
@@ -307,6 +308,7 @@ nav { flex-wrap: wrap; }
 .slider-control .slider-editor { flex: 0 0 7ch; }
 .slider-control [hidden] { display: none; }
 .scene-controls .control-row > label { font-size: .8rem; }
+.scene-controls label[data-help] { min-height: 44px; display: flex; align-items: center; cursor: help; }
 
 @container visualizer (orientation: landscape) and (min-width: 500px) and (max-width: 700px) {
   .audio-card[data-expanded] .scene-controls .control-row { flex-direction: column; align-items: stretch; gap: 0; }

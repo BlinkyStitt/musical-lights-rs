@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CameraPan } from '../../musical-leptos/src/physics/camera-pan.js';
+import { CameraPan, CameraParameters, CAMERA_PARAMETERS, CAMERA_DEFAULTS } from '../../musical-leptos/src/physics/camera-pan.js';
 const key = (key, rest = {}) => ({ key, ...rest });
 test('WASD moves only within the main box and has frame-independent speed', () => {
   const a = new CameraPan(), b = new CameraPan();
@@ -30,4 +30,31 @@ test('typing, composition, modifiers and browser shortcuts do not move the camer
     assert.equal(pan.press(key('w', props)), false);
   }
   assert.equal(pan.press(key('ArrowUp')), false); assert.equal(pan.keys.size, 0);
+});
+
+test('shared camera parameters reject invalid values and keep effective overrides separate', () => {
+  const camera = new CameraParameters({ cameraZoom: 25, cameraX: 0, cameraY: 100, cameraAngle: -40 });
+  for (const p of Object.values(CAMERA_PARAMETERS)) {
+    assert(camera.set(p.id, p.min)); assert(camera.set(p.id, p.max));
+    for (const invalid of [NaN, Infinity, -Infinity, null, '50', p.min - .001, p.max + .001]) {
+      assert.equal(camera.set(p.id, invalid), false); assert.equal(camera.get(p.id), p.max);
+    }
+    assert.equal(camera.effective(p.id, p.min), p.min);
+    assert.equal(camera.get(p.id), p.max);
+    assert.equal(camera.effective(p.id, NaN), p.max);
+  }
+  assert.equal(camera.set('__proto__', 1), false);
+  assert.equal(camera.set('unknown', 1), false);
+  camera.reset(); assert.deepEqual(camera.values, CAMERA_DEFAULTS);
+  const pan = new CameraPan(camera); pan.press(key('d')); pan.step(.5);
+  assert.equal(camera.get('cameraX'), 67.5);
+  camera.set('cameraY', 25); assert.equal(pan.y, .25);
+  pan.reset(); assert.equal(camera.get('cameraX'), 50); assert.equal(camera.get('cameraY'), 50);
+});
+test('keyboard completion and interruptions flush once movement has stopped', () => {
+  const pan = new CameraPan(); let stops = 0; pan.onStop = () => stops++;
+  pan.press(key('w')); pan.press(key('d')); pan.step(.2);
+  assert.equal(stops, 0); pan.release(key('w')); assert.equal(stops, 0);
+  pan.release(key('d')); assert.equal(stops, 1);
+  pan.press(key('a')); pan.clear(); assert.equal(stops, 2); assert.equal(pan.keys.size, 0);
 });

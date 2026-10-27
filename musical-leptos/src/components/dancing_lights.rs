@@ -533,10 +533,19 @@ pub fn DancingLights(
             </div>
             <div class="scene-controls">
             <div class="camera-controls">
-                <div class="control-row"><label for="camera-angle-slider">"Angle"</label><input id="camera-angle-slider" class="camera-rotation" aria-label="Camera angle (degrees)" title="W/S moves the view up/down. A/D moves it left/right within the main box." type="range" tabindex="0" min="-40" max="40" step="1" value="0"/></div>
+                <div class="control-row"><label for="camera-angle-slider">"Angle"</label><input id="camera-angle-slider" class="camera-rotation" data-camera-parameter="cameraAngle" aria-label="Camera angle (degrees)" title="W/S moves the view up/down. A/D moves it left/right within the main box." type="range" tabindex="0" min="-40" max="40" step="1" value="0"/></div>
                 <button class="camera-angle slider-value" type="button" aria-label="Edit camera angle">"0°"</button>
                 <output class="tempo-readout" aria-label="Estimated tempo" aria-live="off" hidden title="Estimated musical tempo"></output>
                 <output class="frame-rate" aria-label="Rendered frame rate" aria-live="off" title="Rendered frames per second">"— FPS"</output>
+            </div>
+            <div class="camera-controls position-controls">
+                <div class="control-row"><label for="camera-zoom-slider">"Zoom"</label><input id="camera-zoom-slider" class="camera-zoom" data-camera-parameter="cameraZoom" aria-label="Zoom" title="100% fits the main box. Zoom out to see neighboring boxes; Depth changes the physical enclosure." type="range" min="25" max="200" step="1" value="100"/></div>
+            </div>
+            <div class="camera-controls position-controls">
+                <div class="control-row"><label for="camera-x-slider">"Horizontal position"</label><input id="camera-x-slider" class="camera-x" data-camera-parameter="cameraX" aria-label="Horizontal position" title="Move the camera anchor left or right within the main box. A/D also adjusts this value." type="range" min="0" max="100" step="1" value="50"/></div>
+            </div>
+            <div class="camera-controls position-controls">
+                <div class="control-row"><label for="camera-y-slider">"Vertical position"</label><input id="camera-y-slider" class="camera-y" data-camera-parameter="cameraY" aria-label="Vertical position" title="Move the camera anchor down or up within the main box. W/S also adjusts this value." type="range" min="0" max="100" step="1" value="50"/></div>
             </div>
             <div class="camera-controls depth-controls">
                 <div class="control-row"><label for="box-depth-slider">"Depth"</label><input id="box-depth-slider" class="depth-slider" aria-label="Box depth (cm)" type="range" min="20" max="200" step="1" value="48" disabled/></div>
