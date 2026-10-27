@@ -391,7 +391,7 @@ test('toolbar Listening keeps one microphone session through Settings and restor
     session: document.querySelector('.audio-card').dataset.audioSession === toolbarAudio.session, state: testContext.state, captures: toolbarCaptures }))).toEqual({ same: true, session: true, state: 'running', captures: 1 });
   await listening.uncheck();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
-  expect(await page.evaluate(() => toolbarAudio.context.state)).toBe('closed');
+  await expect.poll(() => page.evaluate(() => toolbarAudio.context.state)).toBe('closed');
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   expect(await listening.evaluate(n => !!n.closest('.audio-controls') && !n.closest('.fullscreen-toolbar'))).toBe(true);
   await expect(listening).not.toBeChecked();
