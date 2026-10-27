@@ -96,7 +96,7 @@ jobs:
             *) exit 1 ;;
           esac
           cd validation
-          npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --list --reporter=json > ../.ci/stability-inventory.json
+          PLAYWRIGHT_JSON_OUTPUT_NAME=../.ci/stability-inventory.json npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --list --reporter=json
           python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == 1'
           npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --repeat-each "$REPETITIONS" --workers 1 --retries 0 --reporter=list,./browser-process-reporter.mjs,json
       - uses: actions/upload-artifact@v7.0.1
