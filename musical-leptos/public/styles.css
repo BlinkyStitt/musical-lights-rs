@@ -333,8 +333,15 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded] .spectrum-labels { display: none; }
 .audio-card[data-expanded] .fullscreen-toolbar { position: absolute; top: max(.5rem, var(--safe-top)); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); z-index: 5; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; justify-items: center; pointer-events: none; }
 .audio-card[data-expanded] .fullscreen-toolbar button { min-height: 44px; min-width: 44px; padding-inline: .25rem; flex: none; pointer-events: auto; background: var(--surface); color: var(--ink); border-color: var(--line); }
-.fullscreen-toolbar .setting-switch { pointer-events: auto; flex-direction: column-reverse; gap: 0; padding: 0; border-radius: 6px; background: var(--surface); }
-.fullscreen-toolbar .setting-switch > span[role="button"] { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; box-sizing: border-box; padding: 0; }
+.fullscreen-toolbar .setting-switch { position: relative; display: block; width: 44px; height: 44px; min-height: 44px; pointer-events: auto; gap: 0; padding: 0; }
+.fullscreen-toolbar .setting-switch > span[role="button"] { display: none; }
+.fullscreen-toolbar .setting-switch input { box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 2px 0 #0003; }
+.fullscreen-toolbar .setting-switch input::before, .fullscreen-toolbar .setting-switch input::after { display: none; }
+.fullscreen-toolbar .setting-switch input:checked { background: var(--primary); border-color: var(--primary); box-shadow: inset 0 2px 5px #0006; }
+.fullscreen-toolbar .setting-switch input:checked::after { display: block; content: '✓'; top: auto; left: auto; right: 2px; bottom: 1px; width: 12px; height: 12px; border-radius: 0; background: transparent; color: white; font: bold 12px/12px system-ui; }
+.fullscreen-toolbar .setting-switch input:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.fullscreen-toolbar .setting-switch > .toolbar-icon { position: absolute; top: 10px; left: 10px; pointer-events: none; color: var(--ink); }
+.fullscreen-toolbar .setting-switch:has(input:checked) > .toolbar-icon { color: white; }
 .fullscreen-toolbar .toolbar-icon { display: block; }
 .fullscreen-toolbar :is(.switch-label-text, .fullscreen-label) { display: none; }
 .audio-card[data-expanded] .fullscreen-toolbar > button { display: flex; align-items: center; justify-content: center; width: 44px; padding: 0; margin: 0; }
@@ -358,11 +365,11 @@ nav { flex-wrap: wrap; }
 .audio-card[data-expanded].video-active :is(.youtube-frame, .youtube-frame iframe) { height: 100%; min-height: 0; aspect-ratio: auto; }
 .audio-card[data-expanded] .recognized-song { position: absolute; bottom: max(.5rem, var(--safe-bottom)); left: .75rem; right: .75rem; z-index: 2; margin: 0; pointer-events: none; font-size: 1rem; text-shadow: 0 0 4px var(--plot); }
 .audio-card[data-expanded] .song-title { animation: song-scroll var(--song-duration) var(--song-delay) linear infinite; }
-.audio-card[data-expanded] .recovery-notices { position: absolute; top: calc(max(.5rem, var(--safe-top)) + 92px); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); z-index: 4; padding: 2px; max-height: calc(50% - 108px); overflow: auto; background: var(--surface); border-radius: 9px; }
+.audio-card[data-expanded] .recovery-notices { position: absolute; top: calc(max(.5rem, var(--safe-top)) + 52px); left: max(.5rem, var(--safe-left)); right: max(.5rem, var(--safe-right)); z-index: 4; padding: 2px; max-height: calc(50% - 68px); overflow: auto; background: var(--surface); border-radius: 9px; }
 .audio-card[data-expanded] .recovery-notices:not(:has(> :not(:empty))) { display: none; }
 .audio-card[data-expanded] .recovery-notices > :empty { display: none; }
 .audio-card[data-expanded] .recovery-notices > :not(:empty) { position: static; margin: 0; padding: .5rem .75rem; }
-.audio-card[data-expanded] .frequency-tooltip { top: 108px; }
+.audio-card[data-expanded] .frequency-tooltip { top: calc(max(.5rem, var(--safe-top)) + 60px); }
 @container visualizer (orientation: landscape) {
   .audio-card[data-expanded].video-active > .visual-content { flex-direction: row; }
   .audio-card[data-expanded].video-active .video-panel { width: 50%; height: 100%; }

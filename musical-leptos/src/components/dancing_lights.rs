@@ -100,16 +100,14 @@ fn SettingSwitch(
             <input type="checkbox" tabindex="0" class=class aria-label=label prop:checked=move || checked.get()
                 disabled=move || disabled.get()
                 on:change=move |event| on_change.run(event_target_checked(&event))/>
-            <span aria-label=label>
-                <span class="switch-label-text">{label}</span>
-                <Show when=move || !icon.is_empty()>
-                    <svg class="toolbar-icon" viewBox="0 0 24 24" width="24" height="24"
-                        fill="none" stroke="currentColor" stroke-width="1.8"
-                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                        <path d=icon/>
-                    </svg>
-                </Show>
-            </span>
+            <Show when=move || !icon.is_empty()>
+                <svg class="toolbar-icon" viewBox="0 0 24 24" width="24" height="24"
+                    fill="none" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                    <path d=icon/>
+                </svg>
+            </Show>
+            <span aria-label=label><span class="switch-label-text">{label}</span></span>
         </label>
     }
 }

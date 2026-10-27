@@ -63,9 +63,10 @@ test('phone opens expanded without capture and keeps settings in the top half wi
             evenlySpaced: Math.max(...gaps) - Math.min(...gaps) < 1,
             icons: controls.every(node => node.querySelector('svg[aria-hidden="true"]')?.checkVisibility()),
             text: toolbar.innerText.trim(), rotationHelp: !!toolbar.querySelector('.rotate-help'),
-            switches: toolbar.querySelectorAll('input[type="checkbox"]').length };
+            switches: toolbar.querySelectorAll('input[type="checkbox"]').length,
+            compact: controls.every(node => Math.abs(node.getBoundingClientRect().height - 44) < 1) };
         })).toEqual({ order: ['fullscreen-button', 'rotate-display', 'motion-button', 'listening-toggle', 'fullscreen-settings-button'],
-          evenlySpaced: true, icons: true, text: '', rotationHelp: false, switches: 2 });
+          evenlySpaced: true, icons: true, text: '', rotationHelp: false, switches: 2, compact: true });
       }
       for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
         await page.setViewportSize(viewport);
@@ -166,8 +167,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
               scrollLocked: getComputedStyle(document.documentElement).overflow === 'hidden',
               requests: window.micRequests + window.motionRequests };
           }, { turn, video })).toEqual({ fit: true, dimensions: true, canvas: true, toolbar: true, video: true, identity: true, scrollLocked: true, requests: 0 });
-          const motionHelp = page.getByRole('button', { name: 'Phone motion', exact: true });
-          await tapControlAtHitPoint(page, motionHelp);
+          await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).focus();
           await expect.poll(() => page.evaluate(turn => {
             const card = document.querySelector('.audio-card'), node = card.querySelector('.control-help'), help = node.getBoundingClientRect();
             return { text: node.textContent.includes('Phone motion lets measured tilt'),
@@ -197,6 +197,8 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
               visible: r.width > 0 && r.height > 0 && getComputedStyle(node).visibility === 'visible',
               focused: document.activeElement === node.querySelector('button') };
           }), turn)).toEqual([{ fits: true, half: true, hit: true, visible: true, focused: true }]);
+          await page.locator('.fullscreen-settings [data-help="motion-button"]').tap();
+          await expect(page.locator('.control-help')).toContainText('Phone motion lets measured tilt');
           await page.locator('.fullscreen-settings [data-help="listening-toggle"]').tap();
           const help = await page.evaluate(() => {
             const n = document.querySelector('.control-help');
