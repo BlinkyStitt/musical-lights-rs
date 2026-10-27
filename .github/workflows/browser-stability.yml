@@ -12,13 +12,13 @@ on:
         required: true
         default: rotation-clock
         type: choice
-        options: [rotation-clock, webkit-startup]
+        options: [rotation-clock, webkit-startup, rotation-group, webkit-group]
       repetitions:
         description: Independent executions, with zero retries
         required: true
         default: '20'
         type: choice
-        options: ['10', '20', '50']
+        options: ['1', '5', '10', '20', '50']
 permissions:
   contents: read
   actions: read
@@ -83,7 +83,8 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
           DEBUG: pw:browser
         run: |
-          python3 -c 'import os; assert int(os.environ["REPETITIONS"]) in (10, 20, 50)'
+          python3 -c 'import os; assert int(os.environ["REPETITIONS"]) in (1, 5, 10, 20, 50)'
+          selection=()
           case "$SCENARIO" in
             rotation-clock)
               project=chromium
@@ -93,12 +94,23 @@ jobs:
               project=iphone-webkit
               pattern='Fullscreen starts one live microphone session and captured bursts replace idle motion on /advanced/$'
               ;;
+            rotation-group|webkit-group)
+              test "$REPETITIONS" -le 10
+              if [ "$SCENARIO" = rotation-group ]; then group=chromium-5; else group=webkit-2; fi
+              python3 validation/ci.py browser-list .ci/site/inventory.json "$group" .ci/browser-tests.txt
+              selection=(--test-list ../.ci/browser-tests.txt)
+              ;;
             *) exit 1 ;;
           esac
+          if [ "${#selection[@]}" -eq 0 ]; then selection=(--project "$project" --grep "$pattern"); fi
           cd validation
-          PLAYWRIGHT_JSON_OUTPUT_NAME=../.ci/stability-inventory.json npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --list --reporter=json
-          python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == 1'
-          npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --repeat-each "$REPETITIONS" --workers 1 --retries 0 --reporter=list,./browser-process-reporter.mjs,json
+          PLAYWRIGHT_JSON_OUTPUT_NAME=../.ci/stability-inventory.json npx playwright test --config playwright.config.mjs "${selection[@]}" --list --reporter=json
+          if [ "$SCENARIO" = rotation-clock ] || [ "$SCENARIO" = webkit-startup ]; then
+            python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == 1'
+          else
+            python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == len(Path("../.ci/browser-tests.txt").read_text().splitlines())'
+          fi
+          npx playwright test --config playwright.config.mjs "${selection[@]}" --repeat-each "$REPETITIONS" --workers 1 --retries 0 --reporter=list,./browser-process-reporter.mjs,json
       - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:

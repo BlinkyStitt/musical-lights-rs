@@ -105,6 +105,10 @@ sample clock and the iPhone-profile WebKit startup failure.
 
 For example, dispatch the workflow from an investigation branch with
 `gh workflow run browser-stability.yml --ref <investigation-branch> -f source_ref=<validated-commit> -f scenario=rotation-clock -f repetitions=50`.
+The `rotation-group` and `webkit-group` scenarios run the complete canonical
+`chromium-5` and `webkit-2` groups from the selected artifact, including their
+normal browser reuse and test order. Use 1, 5 or 10 repetitions for groups. An
+isolated case does not check resources left by preceding cases in the same group.
 Each repetition must pass its original assertions. This diagnostic result does
 not replace the normal complete, unique browser-coverage gate. Keep the failed
 run, source commit, native trace and before/after repetition results when reporting
