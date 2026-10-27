@@ -311,11 +311,22 @@ test('Listening cancels a pending microphone and late capture cannot change vide
   await listen.click();
   await expect.poll(() => page.evaluate(() => microphones.length)).toBe(1);
   await expect(listen).toBeChecked(); await expect(listen).toBeEnabled();
+  // Hold the native operation, not its reported state. Ownership must retire
+  // before asynchronous close completes, while capture is still pending.
+  await page.evaluate(() => {
+    const close = testContext.close.bind(testContext);
+    testContext.close = () => new Promise((resolve, reject) => {
+      window.completeAudioClose = () => close().then(resolve, reject);
+    });
+  });
   await listen.uncheck();
+  expect(await page.evaluate(() => ({ retired: testContext.audioRetired, closeRequested: !!window.completeAudioClose }))).toEqual({ retired: true, closeRequested: true });
   await expect.poll(() => page.evaluate(() => navigator.audioSession.type)).toBe('playback');
-  expect(await page.evaluate(() => testContext.state)).toBe('closed');
+  expect(await page.evaluate(() => testContext.state)).not.toBe('closed');
   await page.evaluate(() => { microphones[0].resolve(); window.deferMicrophone = false; });
   await expect.poll(() => page.evaluate(() => microphones[0].stream.getTracks()[0].readyState)).toBe('ended');
+  await page.evaluate(() => completeAudioClose());
+  await expect.poll(() => page.evaluate(() => testContext.state)).toBe('closed');
   await listen.check(); await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   expect(await page.evaluate(() => [micRequests, navigator.audioSession.type])).toEqual([2, 'play-and-record']);
   await listen.uncheck();
