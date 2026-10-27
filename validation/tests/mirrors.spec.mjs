@@ -1096,7 +1096,12 @@ test('active microphone PCM reaches the BPM counter, rejects stale packets and r
       return { before, after: tempoDelivery.count, bpm: document.querySelector('#dancinglights').physics.tempo };
     });
     expect(stale.after).toBe(stale.before); expect(stale.bpm).toBeLessThan(90);
-    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 18000 }).toBeGreaterThan(90);
+    // The capture observer also sees the rejected 199 BPM packet. Reacquisition
+    // must come from the active session before starting the display deadline.
+    await expect.poll(() => page.evaluate(() => {
+      const packet = tempoCapture.last;
+      return String(packet?.sessionId) === document.querySelector('.audio-card').dataset.audioSession ? packet.tempo : 0;
+    }), { timeout: 18000 }).toBeGreaterThan(90);
     await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(85);
     await listening.uncheck(); await expect(readout).toBeHidden(); await expect(readout).toHaveText('');
   } finally {
