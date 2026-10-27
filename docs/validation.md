@@ -1231,3 +1231,39 @@ branch. It requires no reviewer approvals. Administrators retain an explicit
 emergency bypass. Enable auto-merge on an individual pull request to let GitHub
 merge it after these requirements pass. The repository auto-merge setting alone
 does not enable auto-merge on every pull request.
+
+## Tempo regression acceptance
+
+From the repository root, install the pinned web tools with
+`python3 validation/install_tools.py web`, add `.tools/bin` to `PATH`, then run
+`just validate` (an alias for `just check`). The recipe runs the core feature
+matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
+cases, and the two demo builds required by the full browser suite. It then runs
+`python3 validation/validate.py browser`, whose npm pretest runs the Node harness
+against produced WASM before the browser suite.
+Missing apps and tools fail validation. The existing serial startup/crash guard,
+one browser worker and zero retries remain authoritative.
+
+`musical-lights-core/tests/tempo_pcm.rs` uses frozen continuous music PCM,
+explicit sample origins and callbacks split at identical half-second input
+checkpoints. No samples are appended to flush the meter delay. It requires ±5 BPM
+and confidence ≥0.45 from seconds 24–32 for each clip and after the declared
+splice. It compares all raw specific loudness bins, targets and filtered targets
+with the pre-tempo measurement pipeline and compares tempo/confidence exactly
+across callback partitions. The reference runs in the active std/libm feature
+configuration; cross-feature floating-point hashes are not assumed equal.
+Silence, microphone gating/reopening, digital bypass, invalid PCM rejection and
+reset/reacquisition retain their distinct semantics.
+
+The worklet harness checks acknowledged BPM/confidence fields from built WASM,
+continuous analysis and calibrated gap recovery at real input indices. The
+mirrors browser suite connects deterministic PCM to a media-stream destination
+used as microphone capture, with the production analysis worklet and ordinary
+frame acknowledgements. It observes numeric packets and rendered counter changes,
+Stop/restart, stale-session rejection and `aria-live=off`, alongside existing
+digital pause/end and actionable input-recovery checks. It does not inject DOM
+`audio-tempo` events to establish delivery.
+
+These automated checks do not establish live-microphone, human-listening,
+physical-device or deployment acceptance. Statistical DSP comparisons use the
+standalone Criterion package on an idle host, separately from browser validation.

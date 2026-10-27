@@ -32,3 +32,19 @@ followed immediately by Monkeys' excerpt start, without resetting analysis.
 Accuracy is required at every aligned half-second checkpoint from 24 through
 32 seconds of each excerpt, including after that splice. Source labels and
 excerpt selection were frozen before estimator experiments.
+
+
+Before the repair, Linux x86_64 / nightly-2026-09-10 default-feature analysis
+reported Carefree at 187.275–187.950 BPM during the acceptance window; Monkeys
+reported 134.025 BPM at 24 seconds and reached ±5 BPM only after 26 seconds.
+The default-feature pre-change SHA-256 measurements below matched after the
+repair. Each digest concatenates the real frame sample index (u64 LE), all 240
+specific loudness values (f64 LE), then all 24 targets and 24 filtered targets
+(f32 LE), for all 16,000 emitted frames. These historical hashes are host/math
+configuration specific; portable regressions compare the independent original
+measurement path within each feature configuration.
+
+| Clip | Pre/post raw-loudness and target SHA-256 |
+| --- | --- |
+| Carefree | `416b87f894173490f9287191410add9d5f5135456db412b004ecb3605dd1cbed` |
+| Monkeys | `4b7addbcc4fc3c77405e60e3e5f5f6a2342237903d4ce155f20b6e797a8999db` |
