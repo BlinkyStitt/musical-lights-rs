@@ -87,15 +87,17 @@ jobs:
           case "$SCENARIO" in
             rotation-clock)
               project=chromium
-              pattern='^manual rotation preserves playback on / with a layout keyboard viewport \(568px, reduce\)$'
+              pattern='manual rotation preserves playback on / with a layout keyboard viewport \(568px, reduce\)$'
               ;;
             webkit-startup)
               project=iphone-webkit
-              pattern='^Fullscreen starts one live microphone session and captured bursts replace idle motion on /advanced/$'
+              pattern='Fullscreen starts one live microphone session and captured bursts replace idle motion on /advanced/$'
               ;;
             *) exit 1 ;;
           esac
           cd validation
+          npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --list --reporter=json > ../.ci/stability-inventory.json
+          python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == 1'
           npx playwright test --config playwright.config.mjs --project "$project" --grep "$pattern" --repeat-each "$REPETITIONS" --workers 1 --retries 0 --reporter=list,./browser-process-reporter.mjs,json
       - uses: actions/upload-artifact@v7.0.1
         if: always()
