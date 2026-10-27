@@ -304,6 +304,57 @@ test('one faint outer coating preserves source pixels and bounded rendering at o
   expect(errors).toEqual([]);
 });
 
+test('opaque bars own the coating boundary across depth, scroll and grazing views', async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
+  await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
+  const evidence = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const current = v.current, previous = v.previous, receive = v.worker.onmessage;
+    const hidden = v.scene.children.filter(node => !node.isLight && ![v.bars, v.sideBars.mesh, v.enclosure].includes(node));
+    const visibility = hidden.map(node => node.visible);
+    cancelAnimationFrame(v.request); v.request = null; v.worker.onmessage = null;
+    v.current = current.slice(); v.previous = current.slice();
+    hidden.forEach(node => { node.visible = false; });
+    const target = new THREE.WebGLRenderTarget(240, 160), pixels = new Uint8Array(240 * 160 * 4), rows = [];
+    const render = () => { v.renderer.setRenderTarget(target); v.render(); v.renderer.readRenderTargetPixels(target, 0, 0, 240, 160, pixels); return pixels.slice(); };
+    try {
+      for (const depth of [.2, .48, 2]) for (const phase of [0, .03, .6]) for (const angle of [-35, 0, 35, 35.021]) {
+        // Fixed snapshots retain real source geometry and shader lighting. Each
+        // pair differs only in the outer coating; no moving balls or stars.
+        for (const state of [v.current, v.previous]) {
+          state[v.layout[17]] = 1.3011903762817383;
+          state[v.layout[17] + 4] = depth; state[v.layout[20]] = phase;
+          for (let i = 0; i < 24; i++) state[v.layout[9] + i] = .08 + .007 * (i % 5);
+        }
+        v.setCamera(angle); v.updateScene(performance.now());
+        const coated = render(); v.enclosure.visible = false;
+        const plain = render(); v.enclosure.visible = true;
+        let sources = 0, changed = 0, maximum = 0;
+        for (let i = 0; i < plain.length; i += 4) if (plain[i + 3] === 255 && Math.max(plain[i], plain[i + 1], plain[i + 2]) > 60) {
+          sources++;
+          const delta = Math.abs(coated[i] - plain[i]) + Math.abs(coated[i + 1] - plain[i + 1]) + Math.abs(coated[i + 2] - plain[i + 2]);
+          if (delta) changed++; maximum = Math.max(maximum, delta);
+        }
+        rows.push({ depth, phase, angle, sources, changed, maximum });
+        v.renderer.setRenderTarget(null); await new Promise(requestAnimationFrame);
+      }
+    } finally {
+      v.enclosure.visible = true; v.renderer.setRenderTarget(null); target.dispose();
+      hidden.forEach((node, i) => { node.visible = visibility[i]; });
+      v.current = current; v.previous = previous; v.worker.onmessage = receive;
+      v.request = requestAnimationFrame(v.animate);
+    }
+    return rows;
+  });
+  await info.attach('coating-source-boundary.json', { body: JSON.stringify(evidence), contentType: 'application/json' });
+  for (const row of evidence) {
+    expect(row.sources, JSON.stringify(row)).toBeGreaterThan(200);
+    expect(row.changed, JSON.stringify(row)).toBe(0);
+  }
+});
+
 test('Advanced saves bounded direction endpoints and curve without starting audio', async ({ page }) => {
   await page.goto(`${origin}/advanced/`); await physicsReady(page); await normal(page);
   await page.locator('.display-controls > summary').click();
