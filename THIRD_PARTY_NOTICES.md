@@ -71,6 +71,14 @@ The versioned assets reuse those exact audit PCM bytes. Source and PCM hashes
 are in `musical-leptos/public/review/clips.json`. License:
 [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
 
+Test-only tempo excerpts: “Carefree” (USUAN1400037) and “Monkeys Spinning
+Monkeys” (USUAN1400011), Kevin MacLeod (incompetech.com),
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Continuous seconds
+16–48 were downmixed to mono 48 kHz float32, without gain or tempo changes.
+The Monkeys archive was previously transcoded from YouTube. Source notices,
+independent tempo labels, revisions, verified hashes and decoder commands are in
+[musical-lights-core/tests/fixtures/tempo](musical-lights-core/tests/fixtures/tempo/README.md).
+
 # Navigation and radio
 
 The firmware uses lora-phy 3.0.1 (MIT OR Apache-2.0), nmea 0.8.0 (Apache-2.0),
