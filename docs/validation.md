@@ -1176,8 +1176,10 @@ Linux CI, live-provider acceptance and deployment verification remain pending.
 
 Push unfinished checkpoints to draft pull requests. The site, other-apps,
 firmware, and recognition workflows skip their root jobs for draft PRs, which
-also skips their dependent jobs. Pushes to `main` and manual runs retain their
-existing validation and deployment rules.
+also skips their build and test jobs. Their final required checks fail because
+validation has not run; a skipped required check would otherwise count as passing
+for GitHub auto-merge. Marking the PR ready starts fresh validation. Pushes to
+`main` and manual runs retain their existing validation and deployment rules.
 
 After local validation and agent reviews pass for the current commit, mark the
 PR ready. Each validation workflow listens for `ready_for_review` as well as

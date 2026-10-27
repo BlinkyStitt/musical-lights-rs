@@ -63,7 +63,7 @@ jobs:
   required:
     name: Required recognition checks
     needs: [changes, worker]
-    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
