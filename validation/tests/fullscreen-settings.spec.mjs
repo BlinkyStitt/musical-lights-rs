@@ -228,18 +228,50 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         const r = n.getBoundingClientRect();
         return [r.bottom <= innerHeight / 2, r.left >= innerWidth / 2, r.top >= innerHeight / 2, r.right <= innerWidth / 2][turn];
       }, turn)).toBe(true);
-      // Camera controls share the rotated modal without replacing live resources.
-      await page.getByRole('button', { name: 'Increase Zoom', exact: true }).click();
-      await page.getByRole('button', { name: 'Increase Horizontal position', exact: true }).click();
-      await page.getByRole('button', { name: 'Decrease Vertical position', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Edit Zoom', exact: true })).toHaveText(`${101 + turn}%`);
-      expect(await page.evaluate(() => {
-        const v = document.querySelector('#dancinglights').physics;
-        return [v.cameraParameters.get('cameraZoom'), v.cameraPan.x * 100, v.cameraPan.y * 100];
-      })).toEqual([101 + turn, 51 + turn, 49 - turn]);
       await page.getByRole('button', { name: 'Close settings', exact: true }).click();
       await page.locator('.rotate-display').click();
     }
+    expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
+      && document.querySelector('.audio-card').dataset.audioSession === modalSession.id)).toBe(true);
+  });
+
+  test(`camera sliders preserve one live fullscreen session through all turns on ${path} (${reducedMotion})`, async ({ page }, info) => {
+    await startFullscreenAudio(page, path, reducedMotion, info);
+    await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      window.rotatingCameraResources = [v.worker, v.renderer, v.balls];
+    });
+    // Keep the complete four-turn camera workflow separate from the complete
+    // help/keyboard workflow above. Each retains the normal 30-second deadline.
+    for (let turn = 0; turn < 4; turn++) {
+      await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+      // Camera clicks must work while the existing switch help is open too.
+      await page.getByRole('button', { name: 'Phone motion', exact: true }).focus();
+      await expect(page.locator('.control-help')).toBeVisible();
+      await page.getByRole('button', { name: 'Increase Zoom', exact: true }).click();
+      await page.getByRole('button', { name: 'Increase Horizontal position', exact: true }).click();
+      await page.getByRole('button', { name: 'Decrease Vertical position', exact: true }).click();
+      // Sample readout, shared parameters, geometry and resource ownership in
+      // one browser call; separate traced reads needlessly stall CI rendering.
+      await expect.poll(() => page.evaluate(turn => {
+        const card = document.querySelector('.audio-card'), v = card.querySelector('#dancinglights').physics;
+        const r = document.querySelector('.fullscreen-settings').getBoundingClientRect();
+        return { values: [v.cameraParameters.get('cameraZoom'), v.cameraPan.x * 100, v.cameraPan.y * 100],
+          readout: card.querySelector('.camera-zoom').closest('.slider-control').querySelector('.slider-value').textContent,
+          same: [v.worker, v.renderer, v.balls].every((value, i) => value === rotatingCameraResources[i])
+            && modalContext === modalSession.context && modalContext.state === 'running'
+            && card.dataset.audioSession === modalSession.id && modalContext.closeCalls === 0,
+          motion: card.querySelector('.motion-button').checked,
+          topHalf: [r.bottom <= innerHeight / 2, r.left >= innerWidth / 2, r.top >= innerHeight / 2, r.right <= innerWidth / 2][turn],
+          native: document.fullscreenElement === document.querySelector('.visualizer-screen') };
+      }, turn)).toMatchObject({ values: [101 + turn, 51 + turn, 49 - turn], readout: `${101 + turn}%`,
+        same: true, motion: false, topHalf: true, ...(info.project.name === 'chromium' ? { native: true } : {}) });
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await page.locator('.rotate-display').click();
+    }
+    await expect(page.locator('.rotate-display')).toHaveAccessibleName('Rotate view clockwise, current rotation 0 degrees');
     expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
       && document.querySelector('.audio-card').dataset.audioSession === modalSession.id)).toBe(true);
   });
