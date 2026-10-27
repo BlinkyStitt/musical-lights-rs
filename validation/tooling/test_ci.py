@@ -236,6 +236,78 @@ class ArtifactTests(unittest.TestCase):
 
 
 class ChangeTests(unittest.TestCase):
+    def test_changes_command_selects_provisioning_without_unrelated_builds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory) / "event.json"
+            event.write_text("{}")
+            for paths, flags in (
+                (["docs/validation.md"], (False, False, False, False)),
+                (["tools/firmware/provision.py"], (True, False, False, False)),
+                (["musical-stm32/src/main.rs"], (True, True, False, False)),
+                (
+                    ["musical-recognition-worker/src/lib.rs"],
+                    (False, False, False, True),
+                ),
+                (None, (True, True, True, True)),
+            ):
+                with (
+                    self.subTest(paths=paths),
+                    patch.dict(os.environ, GITHUB_EVENT_PATH=str(event)),
+                    patch.object(sys, "argv", ["ci.py", "changes"]),
+                    patch.object(ci, "changed_paths", return_value=paths),
+                    patch.object(ci, "output") as publish,
+                ):
+                    ci.main()
+                outputs = publish.call_args.args[0]
+                self.assertEqual(
+                    tuple(
+                        outputs[key]
+                        for key in ("firmware_tools", "rust", "esp", "recognition")
+                    ),
+                    flags,
+                )
+
+    def test_site_selects_shared_and_web_paths_but_not_docs_or_other_apps(self):
+        for path in (
+            "musical-lights-core/src/lib.rs",
+            "musical-leptos/public/styles.css",
+            "musical-lights-physics/build.py",
+            "musical-lights-worklet/src/lib.rs",
+            "validation/tests/color-fill.spec.mjs",
+            "validation/tooling/test_ci.py",
+            "docs/audio-audit-results/report.json",
+            ".github/workflows/validate.yml",
+            "musical-leptos/.cargo/config.toml",
+            "rust-toolchain.toml",
+            "Cargo.lock",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(ci.site_affected([path]))
+        for path in (
+            "README.md",
+            "docs/validation.md",
+            "validation/demos.config.mjs",
+            "validation/tests/other-apps.spec.mjs",
+            "musical-terminal/src/main.rs",
+            "musical-recognition-worker/src/lib.rs",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(ci.site_affected([path]))
+        self.assertTrue(ci.site_affected(None))
+        self.assertFalse(ci.site_affected([]))
+        self.assertTrue(ci.site_affected(["README.md", "musical-leptos/src/app.rs"]))
+
+    def test_recognition_selects_its_code_workflow_and_toolchain(self):
+        for path in (
+            "musical-recognition-worker/src/lib.rs",
+            ".github/workflows/recognition.yml",
+            "rust-toolchain.toml",
+        ):
+            self.assertTrue(ci.recognition_affected([path]))
+        for paths in ([], ["docs/validation.md"], ["musical-leptos/src/app.rs"]):
+            self.assertFalse(ci.recognition_affected(paths))
+        self.assertTrue(ci.recognition_affected(None))
+
     def test_shared_core_and_pinned_build_changes_reach_all_consumers(self):
         for path in (
             "musical-lights-core/src/audio/mod.rs",
@@ -276,6 +348,103 @@ class ChangeTests(unittest.TestCase):
                 "other-apps",
             )
         )
+
+
+class RequiredChecksTests(unittest.TestCase):
+    def cases(self):
+        # GitHub's toJSON(needs) exposes matrix aggregate results, not one
+        # dependency per matrix child. A failed child must fail that aggregate.
+        return (
+            ("website", "plan", {"validated": "site_required"}),
+            ("other-apps", "changes", {"terminal": "terminal", "demos": "demos"}),
+            (
+                "firmware",
+                "changes",
+                {"firmware-tools": "firmware_tools", "rust": "rust", "esp": "esp"},
+            ),
+            ("recognition", "changes", {"worker": "recognition"}),
+        )
+
+    def needs(self, selector, jobs, selected):
+        return {
+            selector: {
+                "result": "success",
+                "outputs": {flag: selected for flag in jobs.values()},
+            },
+            **{name: {"result": "success"} for name in jobs},
+        }
+
+    def test_success_and_explicitly_unselected_skips_pass(self):
+        for group, selector, jobs in self.cases():
+            with self.subTest(group=group):
+                ci.require_checks(group, self.needs(selector, jobs, "true"))
+                needs = self.needs(selector, jobs, "false")
+                for job in jobs:
+                    needs[job]["result"] = "skipped"
+                ci.require_checks(group, needs)
+                # A workflow can run extra checks. Their success is valid.
+                ci.require_checks(group, self.needs(selector, jobs, "false"))
+
+    def test_selected_skips_fail_and_all_failures_or_cancellations_fail(self):
+        for group, selector, jobs in self.cases():
+            for job in jobs:
+                for selected, result in (
+                    ("true", "skipped"),
+                    ("true", "failure"),
+                    ("true", "cancelled"),
+                    ("false", "failure"),
+                    ("false", "cancelled"),
+                ):
+                    needs = self.needs(selector, jobs, selected)
+                    needs[job]["result"] = result
+                    with (
+                        self.subTest(
+                            group=group, job=job, flag=selected, result=result
+                        ),
+                        self.assertRaises(ValueError),
+                    ):
+                        ci.require_checks(group, needs)
+
+    def test_failed_skipped_cancelled_and_missing_selectors_never_pass(self):
+        for group, selector, jobs in self.cases():
+            for result in ("failure", "skipped", "cancelled"):
+                needs = self.needs(selector, jobs, "false")
+                needs[selector]["result"] = result
+                with (
+                    self.subTest(group=group, result=result),
+                    self.assertRaises(ValueError),
+                ):
+                    ci.require_checks(group, needs)
+            for missing in (selector, *jobs):
+                needs = self.needs(selector, jobs, "true")
+                del needs[missing]
+                with (
+                    self.subTest(group=group, missing=missing),
+                    self.assertRaises(ValueError),
+                ):
+                    ci.require_checks(group, needs)
+            for invalid in (None, "", "TRUE", "unknown"):
+                for flag in jobs.values():
+                    needs = self.needs(selector, jobs, "true")
+                    needs[selector]["outputs"][flag] = invalid
+                    with (
+                        self.subTest(group=group, flag=flag, invalid=invalid),
+                        self.assertRaises(ValueError),
+                    ):
+                        ci.require_checks(group, needs)
+
+    def test_one_failed_firmware_matrix_cannot_hide_behind_unselected_matrix(self):
+        needs = self.needs(
+            "changes",
+            {"firmware-tools": "firmware_tools", "rust": "rust", "esp": "esp"},
+            "false",
+        )
+        needs["changes"]["outputs"].update(firmware_tools="true", rust="true")
+        needs["firmware-tools"]["result"] = "success"
+        needs["rust"]["result"] = "failure"
+        needs["esp"]["result"] = "skipped"
+        with self.assertRaisesRegex(ValueError, "rust"):
+            ci.require_checks("firmware", needs)
 
 
 class BrowserGroupTests(unittest.TestCase):

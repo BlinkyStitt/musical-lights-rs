@@ -23,25 +23,6 @@ on:
       - 'musical-wasm/**'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'musical-lights-core/**'
-      - 'validation/ci.py'
-      - 'validation/validate.py'
-      - 'validation/install_tools.py'
-      - 'validation/tooling/**'
-      - 'validation/demos.config.mjs'
-      - 'validation/tests/other-apps.spec.mjs'
-      - 'validation/browser-*'
-      - 'validation/server.mjs'
-      - 'validation/package*.json'
-      - '.github/workflows/other-apps.yml'
-      - '**/.cargo/**'
-      - '**/rust-toolchain*'
-      - 'musical-terminal/**'
-      - 'musical-dioxus/**'
-      - 'musical-wasm/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -124,3 +105,13 @@ jobs:
           path: validation/test-results/
           if-no-files-found: ignore
           retention-days: ${{ job.status == 'failure' && 7 || 2 }}
+  required:
+    name: Required other-application checks
+    needs: [changes, terminal, demos]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 validation/ci.py required-checks other-apps
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}

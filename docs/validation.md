@@ -93,6 +93,27 @@ Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`; the reference
 target includes their lint/type checks.
 
+## Investigating intermittent browser failures
+
+The manual `Browser stability investigation` workflow repeats a native case on
+one worker with zero retries and the normal serial startup guard. Select an
+immutable source ref that already has a successful website validation artifact.
+The workflow resolves the ref once, requires the existing trusted producer and
+checks its exact source inputs and file digests before it runs. It does not build
+or publish a replacement site. The default cases target the native rotation
+sample clock and the iPhone-profile WebKit startup failure.
+
+For example, dispatch the workflow from an investigation branch with
+`gh workflow run browser-stability.yml --ref <investigation-branch> -f source_ref=<validated-commit> -f scenario=rotation-clock -f repetitions=50`.
+The `rotation-group` and `webkit-group` scenarios run the complete canonical
+`chromium-5` and `webkit-2` groups from the selected artifact, including their
+normal browser reuse and test order. Use 1, 5 or 10 repetitions for groups. An
+isolated case does not check resources left by preceding cases in the same group.
+Each repetition must pass its original assertions. This diagnostic result does
+not replace the normal complete, unique browser-coverage gate. Keep the failed
+run, source commit, native trace and before/after repetition results when reporting
+a repair. A successful rerun alone does not identify or fix the cause.
+
 ## CI test ownership and scheduling
 
 Pure fullscreen lifecycle and compiled-WASM worklet checks run in the Node offline
@@ -1176,11 +1197,37 @@ Linux CI, live-provider acceptance and deployment verification remain pending.
 
 Push unfinished checkpoints to draft pull requests. The site, other-apps,
 firmware, and recognition workflows skip their root jobs for draft PRs, which
-also skips their dependent jobs. Pushes to `main` and manual runs retain their
-existing validation and deployment rules.
+also skips their build and test jobs. Their final required checks fail because
+validation has not run; a skipped required check would otherwise count as passing
+for GitHub auto-merge. Marking the PR ready starts fresh validation. Pushes to
+`main` and manual runs retain their existing validation and deployment rules.
 
 After local validation and agent reviews pass for the current commit, mark the
 PR ready. Each validation workflow listens for `ready_for_review` as well as
 new commits on ready PRs. Return a PR to draft before pushing a repair. Draft
 checks that were skipped do not establish acceptance; wait for the completed
 current-head CI run before merging.
+
+## Required checks on main
+
+Every ready pull request starts the four validation workflows. Change selectors
+skip builds and tests for unaffected applications; they do not skip the workflow.
+Each workflow reports one final check:
+
+- `Required website checks`
+- `Required firmware checks`
+- `Required other-application checks`
+- `Required recognition checks`
+
+These checks require successful change selection and every selected validation
+job. A selected job that fails, is canceled or is skipped fails its final check.
+Missing selection outputs also fail. Documentation-only changes still receive
+all four final checks without unrelated builds. Website validation retains the
+complete browser-coverage and artifact-digest barrier before its final check;
+Pages also waits for that final check.
+
+The main ruleset requires all four checks from GitHub Actions and an up-to-date
+branch. It requires no reviewer approvals. Administrators retain an explicit
+emergency bypass. Enable auto-merge on an individual pull request to let GitHub
+merge it after these requirements pass. The repository auto-merge setting alone
+does not enable auto-merge on every pull request.

@@ -24,8 +24,9 @@ export class Enclosure {
   constructor(scene, lighting) {
     this.scene = scene; this.matrix = new THREE.Matrix4();
     // Opaque bars own shared depth boundaries; the coating must not blend
-    // over a source surface at the same depth.
-    const material = new THREE.MeshLambertMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false, depthFunc: THREE.LessDepth });
+    // over a source surface at the same depth. A positive raster depth offset
+    // also orders coplanar fragments when their triangulations round differently.
+    const material = new THREE.MeshLambertMaterial({ color: 0xaab5c0, side: THREE.BackSide, transparent: true, opacity: .035, depthWrite: false, depthFunc: THREE.LessDepth, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     material.onBeforeCompile = shader => {
       lighting.apply(shader);
       shader.vertexShader = 'varying vec3 coatingPoint;\n' + shader.vertexShader;

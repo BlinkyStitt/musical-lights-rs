@@ -114,7 +114,7 @@ test('a real audio gap preserves playback and monitor controls while exported tr
   for (const row of rows) if (row[465] === 1) expect(row[0]).toBeGreaterThanOrEqual(after.continuity.receivedSample);
   await page.locator('.review-stop').click();
   await expect(page.locator('.analysis-status')).toBeEmpty();
-  expect(await page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
+  await expect.poll(() => page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
 });
 
 test('a microphone gap cancels incomplete calibration and preserves capture and the accepted profile', async ({ page }) => {
@@ -136,7 +136,8 @@ test('a microphone gap cancels incomplete calibration and preserves capture and 
   expect(current.profile.pascalsPerUnit).toBe(1.5); expect(current.continuity.calibrationCancellations).toBe(1);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
   await expect(page.locator('.analysis-status')).toBeEmpty();
-  expect(await page.evaluate(() => [recoveryContexts[0].state, recoveryTrack.readyState])).toEqual(['closed', 'ended']);
+  expect(await page.evaluate(() => recoveryTrack.readyState)).toBe('ended');
+  await expect.poll(() => page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
   await page.getByRole('link', { name: 'About', exact: true }).click();
   await expect(page.locator('[data-expanded]')).toHaveCount(0);
 });
@@ -191,5 +192,5 @@ test('a backward analysis clock keeps the same playback position and declares it
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport();
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await page.locator('.review-stop').click(); await expect(page.locator('.analysis-status')).toBeEmpty();
-  expect(await page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
+  await expect.poll(() => page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
 });

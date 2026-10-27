@@ -1,0 +1,120 @@
+name: Browser stability investigation
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact source ref with a successful validated website artifact
+        required: true
+        default: main
+        type: string
+      scenario:
+        description: Native browser case to repeat
+        required: true
+        default: rotation-clock
+        type: choice
+        options: [rotation-clock, webkit-startup, rotation-group, webkit-group]
+      repetitions:
+        description: Independent executions, with zero retries
+        required: true
+        default: '20'
+        type: choice
+        options: ['1', '5', '10', '20', '50']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      run_id: ${{ steps.plan.outputs.run_id }}
+      artifact_id: ${{ steps.plan.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.source_ref }}
+      - id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 validation/ci.py plan
+      - name: Require an exact trusted producer
+        env:
+          REUSE: ${{ steps.plan.outputs.reuse }}
+        run: test "$REUSE" = true
+  stability:
+    needs: source
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+      options: --init --ipc=host --user 1001
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          artifact-ids: ${{ needs.source.outputs.artifact_id }}
+          run-id: ${{ needs.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: .ci/site
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14.7'
+      - name: Verify the exact source and compiled bytes
+        env:
+          PRODUCER_RUN: ${{ needs.source.outputs.run_id }}
+        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '26.12.1'
+          cache: npm
+          cache-dependency-path: validation/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: validation
+      - name: Repeat the unchanged native case
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          REPETITIONS: ${{ inputs.repetitions }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
+          DEBUG: pw:browser
+        run: |
+          python3 -c 'import os; assert int(os.environ["REPETITIONS"]) in (1, 5, 10, 20, 50)'
+          selection=()
+          case "$SCENARIO" in
+            rotation-clock)
+              project=chromium
+              pattern='manual rotation preserves playback on / with a layout keyboard viewport \(568px, reduce\)$'
+              ;;
+            webkit-startup)
+              project=iphone-webkit
+              pattern='Fullscreen starts one live microphone session and captured bursts replace idle motion on /advanced/$'
+              ;;
+            rotation-group|webkit-group)
+              test "$REPETITIONS" -le 10
+              if [ "$SCENARIO" = rotation-group ]; then group=chromium-5; else group=webkit-2; fi
+              python3 validation/ci.py browser-list .ci/site/inventory.json "$group" .ci/browser-tests.txt
+              selection=(--test-list ../.ci/browser-tests.txt)
+              ;;
+            *) exit 1 ;;
+          esac
+          if [ "${#selection[@]}" -eq 0 ]; then selection=(--project "$project" --grep "$pattern"); fi
+          cd validation
+          PLAYWRIGHT_JSON_OUTPUT_NAME=../.ci/stability-inventory.json npx playwright test --config playwright.config.mjs "${selection[@]}" --list --reporter=json
+          if [ "$SCENARIO" = rotation-clock ] || [ "$SCENARIO" = webkit-startup ]; then
+            python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == 1'
+          else
+            python3 -c 'import json; from pathlib import Path; from ci import test_cases; assert len(test_cases(json.loads(Path("../.ci/stability-inventory.json").read_text()))) == len(Path("../.ci/browser-tests.txt").read_text().splitlines())'
+          fi
+          npx playwright test --config playwright.config.mjs "${selection[@]}" --repeat-each "$REPETITIONS" --workers 1 --retries 0 --reporter=list,./browser-process-reporter.mjs,json
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: browser-stability-${{ inputs.scenario }}-${{ inputs.repetitions }}
+          path: validation/test-results/
+          retention-days: 7
+          if-no-files-found: error

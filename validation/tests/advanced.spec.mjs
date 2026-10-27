@@ -182,7 +182,8 @@ test('audio and motion switches stop independently and route exit closes both pl
   expect(force).toEqual([-5, -6, -7]);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
   await page.getByRole('link', { name: 'About', exact: true }).click();
-  expect(await page.evaluate(() => [savedView.closed, savedView.motion.closed, savedView.preview, testContext.state])).toEqual([true, true, null, 'closed']);
+  expect(await page.evaluate(() => [savedView.closed, savedView.motion.closed, savedView.preview])).toEqual([true, true, null]);
+  await expect.poll(() => page.evaluate(() => testContext.state)).toBe('closed');
 });
 
 for (const clip of ['trumpet', 'music', 'local']) {
@@ -268,13 +269,13 @@ test('file picker shares the source row; selecting and replacing files starts au
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.mic-status')).toBeEmpty();
   await expect(listening(page)).not.toBeChecked(); await expect(page.locator('.input-source')).toHaveValue('local');
-  expect(await page.evaluate(() => previousContext.state)).toBe('closed');
+  await expect.poll(() => page.evaluate(() => previousContext.state)).toBe('closed');
   await page.evaluate(() => { window.previousContext = testContext; });
   await page.locator('.review-file').setInputFiles({ name: 'second.wav', mimeType: 'audio/wav', buffer: stereoWave() });
   await expect(page.locator('.review-status')).toContainText('second.wav:');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.mic-status')).toBeEmpty();
-  expect(await page.evaluate(() => previousContext.state)).toBe('closed');
+  await expect.poll(() => page.evaluate(() => previousContext.state)).toBe('closed');
   await page.locator('.input-source').selectOption('microphone');
   await expect(listening(page)).toBeEnabled(); await expect(listening(page)).not.toBeChecked();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-preview', 'true');
