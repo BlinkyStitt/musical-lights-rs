@@ -1348,7 +1348,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            19.0, // localized swirl fill, recorded audio paint policy and straight joins
+            20.0, // HSLuv contact/fill and spatial joins; linear-RGB transport retained
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             BALL_COUNT as f32,

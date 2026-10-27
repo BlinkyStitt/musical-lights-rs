@@ -5,9 +5,9 @@ import init, { PhysicsSimulation } from '../../musical-lights-physics/pkg/physic
 import { replayReport } from '../replay-physics.mjs';
 const wasm = await init({ module_or_path: await readFile(new URL('../../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
 
-test('the built WASM accepts protocol 19 scrolling and stops at its published phase', () => {
+test('the built WASM accepts protocol 20 scrolling and stops at its published phase', () => {
   const layout = PhysicsSimulation.layout();
-  assert.equal(layout[18], 19, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
+  assert.equal(layout[18], 20, 'Rebuild the release WASM; native checks cannot validate a stale browser artifact');
   assert.equal(layout[0], 24);
   assert(Math.abs(layout[4] - .002) < 1e-8, 'Straight joins fill the former 2 mm gap');
   assert.equal(layout[5], 0, 'Flat tips have no seam trough');
@@ -60,9 +60,16 @@ test('built WASM paints from physical contacts independently of audio and replay
       const colors = state => Array.from({ length: 8 }, (_, i) => state.slice(3 + i * layout[8] + 15, 3 + i * layout[8] + 18));
       assert.notDeepEqual(colors(finalSnapshot), colors(initial));
       assert.notDeepEqual(pigments(), initialPigments);
-      const report = { type: 'musical-lights-phone-report-v5', config, palette, layout, initialTempo: 120,
-        inputs, finalTick: sim.tick(), finalSnapshot };
+      const report = { type: 'musical-lights-phone-report-v6', config, palette, layout, initialTempo: 120,
+        inputs, finalTick: sim.tick(), finalSnapshot, finalPigments: Array.from(new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72)) };
       assert((await replayReport(report)).every(result => result.matches));
+      await assert.rejects(replayReport({ ...report, finalPigments: undefined }), /complete regional pigment/);
+      const corrupted = structuredClone(report); corrupted.finalPigments[0] += .01;
+      await assert.rejects(replayReport(corrupted), /Physics replay differs|complete regional pigment/);
+      await assert.rejects(replayReport({ ...report, type: 'musical-lights-phone-report-v5' }), /historical replay/);
+      const historical = structuredClone(report); historical.layout[18] = 19;
+      await assert.rejects(replayReport(historical), /historical engine/);
+
       const quiet = structuredClone(report); quiet.inputs[0].values.fill(0, 38, 62);
       assert((await replayReport(quiet)).every(result => result.matches));
       // Audio changes neither the physical response nor contact painting.
@@ -89,9 +96,10 @@ test('ordered input tempo changes reproduce complete physical snapshots across r
       }
       sim.step();
     }
-    const report = { type: 'musical-lights-phone-report-v5', initialTempo: 120,
+    const report = { type: 'musical-lights-phone-report-v6', initialTempo: 120,
       config, palette, layout, inputs, finalTick: sim.tick(),
-      finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
+      finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])),
+      finalPigments: Array.from(new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72)) };
     assert((await replayReport(report)).every(result => result.matches));
     const missing = { ...report, inputs: inputs.map(({ tempo, ...event }) => event) };
     await assert.rejects(replayReport(missing), /Physics replay differs/);
@@ -121,9 +129,10 @@ test('seeded loud-attack accents reproduce paired bar motion at every render rat
       }
       sim.step();
     }
-    const report = { type: 'musical-lights-phone-report-v5', initialTempo: 120,
+    const report = { type: 'musical-lights-phone-report-v6', initialTempo: 120,
       config, palette, layout, danceOptions, initialAccent, inputs, finalTick: sim.tick(),
-      finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])) };
+      finalSnapshot: Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])),
+      finalPigments: Array.from(new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72)) };
     assert((await replayReport(report)).every(result => result.matches));
     const missing = { ...report, inputs: inputs.map(({ accent, ...event }) => event) };
     await assert.rejects(replayReport(missing), /Physics replay differs/);
@@ -141,7 +150,7 @@ test('built WASM records live enclosure depth and replays shrink and expansion',
     }
     const finalSnapshot=Array.from(new Float32Array(wasm.memory.buffer,sim.snapshot_ptr(),layout[12]));
     assert(Math.abs(finalSnapshot[layout[17]+4]-.2)<1e-6);
-    const report={type:'musical-lights-phone-report-v5',initialTempo:120,config,palette,layout,inputs,finalTick:sim.tick(),finalSnapshot};
+    const report={type:'musical-lights-phone-report-v6',initialTempo:120,config,palette,layout,inputs,finalTick:sim.tick(),finalSnapshot,finalPigments:Array.from(new Float32Array(wasm.memory.buffer,sim.pigments_ptr(),72))};
     assert((await replayReport(report)).every(result=>result.matches));
     await assert.rejects(replayReport({...report,layout:layout.map((v,i)=>i===18?13:v)}), /engine|layout|matching|version/i);
   } finally {sim.free();}
@@ -180,8 +189,8 @@ test('built WASM records attack-only paint policy and preserves physical replay'
       const colors = state => Array.from({ length: 8 }, (_, i) => state.slice(3 + i * layout[8] + 15, 3 + i * layout[8] + 18));
       if (required && !attacking) assert.deepEqual(colors(finalSnapshot), colors(initial));
       else assert.notDeepEqual(colors(finalSnapshot), colors(initial));
-      const report = { type: 'musical-lights-phone-report-v5', config, palette, layout, initialTempo: 120,
-        inputs: [{ tick: 0, values: [...values] }], finalTick: sim.tick(), finalSnapshot };
+      const report = { type: 'musical-lights-phone-report-v6', config, palette, layout, initialTempo: 120,
+        inputs: [{ tick: 0, values: [...values] }], finalTick: sim.tick(), finalSnapshot, finalPigments: Array.from(new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72)) };
       assert((await replayReport(report)).every(result => result.matches));
       if (required && !attacking) {
         const missing = structuredClone(report); missing.inputs[0].values[63] = 0;

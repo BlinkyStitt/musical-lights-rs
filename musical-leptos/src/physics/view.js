@@ -1,3 +1,4 @@
+import { linearToHsluv, pigmentGLSL } from './pigment.js';
 import { SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
@@ -370,7 +371,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout.length !== 30 || data.layout[18] !== 19 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 30 || data.layout[18] !== 20 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];
@@ -425,14 +426,14 @@ export class PhysicsView {
       shader.uniforms.swirlEdges = { value: new THREE.Vector3(...this.layout.slice(27, 30)) };
       shader.vertexShader = 'attribute vec3 pigmentA; attribute vec3 pigmentB; attribute vec3 pigmentC; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nobjectPoint = position; paintA = pigmentA; paintB = pigmentB; paintC = pigmentC;');
-      shader.fragmentShader = 'uniform vec4 swirlShape; uniform vec3 swirlEdges; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
+      shader.fragmentShader = pigmentGLSL + 'uniform vec4 swirlShape; uniform vec3 swirlEdges; varying vec3 objectPoint; varying vec3 paintA; varying vec3 paintB; varying vec3 paintC;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         // The core supplies the contact-local swirl profile and eased colors.
         // Material coordinates keep its soft curves attached while the ball rolls.
         vec3 surfacePoint = normalize(objectPoint);
         float wave = sin(swirlShape.x * surfacePoint.y + swirlShape.y * sin(swirlShape.z * surfacePoint.x) + swirlShape.w * surfacePoint.z);
-        vec3 pigment = mix(mix(paintA, paintB, smoothstep(swirlEdges.x, swirlEdges.y, wave)), paintC, smoothstep(swirlEdges.y, swirlEdges.z, wave));
-        diffuseColor.rgb = mix(diffuseColor.rgb, pigment, .78);`);
+        vec3 pigment = hsluvToLinear(blendHsluv(blendHsluv(paintA, paintB, smoothstep(swirlEdges.x, swirlEdges.y, wave)), paintC, smoothstep(swirlEdges.y, swirlEdges.z, wave)));
+        diffuseColor.rgb = pigment;`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
@@ -512,8 +513,8 @@ export class PhysicsView {
     for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
       const attr = this.balls.geometry.attributes[name];
       for (let i = 0; i < this.layout[21]; i++) {
-        if (this.pigments) attr.array.set(this.pigments.subarray(i * 9 + k * 3, i * 9 + k * 3 + 3), i * 3);
-        else attr.array.set(current.subarray(3 + i * stride + 15, 3 + i * stride + 18), i * 3);
+        if (this.pigments) attr.array.set(linearToHsluv(this.pigments.subarray(i * 9 + k * 3, i * 9 + k * 3 + 3)), i * 3);
+        else attr.array.set(linearToHsluv(current.subarray(3 + i * stride + 15, 3 + i * stride + 18)), i * 3);
       }
       attr.needsUpdate = true;
     }

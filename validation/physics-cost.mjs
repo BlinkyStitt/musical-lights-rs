@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
 import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.js';
 import { tonePCM } from '../musical-leptos/src/tones.js';
+import { hsluvToLinear } from '../musical-leptos/src/physics/pigment.js';
 import { flashTrace } from './partial/flash-fixtures.mjs';
 const [path, output] = process.argv.slice(2);
 if (!path || !output) throw new Error('Usage: node validation/physics-cost.mjs PHYSICS_WASM OUTPUT_JSON');
@@ -18,8 +19,15 @@ const schema = traceLayout(rows[0].length);
 const bytes = await readFile(path);
 const wasm = await init({ module_or_path: bytes });
 const layout = PhysicsSimulation.layout(), runs = [];
+const anchors = [12, 38, 85, 127, 192, 258, 285], stops = [0, 1/6, 2/6, 3/6, 4/6, 5/6, 1];
+const palette = Float32Array.from(Array.from({ length: 24 }, (_, i) => {
+  const t = i/23, k = Math.min(5, stops.findIndex((v,j) => j < 6 && t <= stops[j+1]));
+  const h = anchors[k] + (anchors[k+1]-anchors[k])*(t-stops[k])/(stops[k+1]-stops[k]);
+  const rgb = hsluvToLinear([h,100,58]), peak = Math.max(...rgb);
+  return rgb.map(v => v/peak);
+}).flat());
 for (let run = 0; run < 3; run++) {
-  const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), new Float32Array(72).fill(.5));
+  const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), palette);
   const input = new Float32Array(layout[22]); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5];
   let totalMs = 0, maxTickMs = 0, substeps = 0;
   for (let tick = 0; tick < 1440; tick++) {
@@ -36,6 +44,8 @@ for (let run = 0; run < 3; run++) {
   runs.push({ totalMs, maxTickMs, substeps, ticks: sim.tick() }); sim.free();
 }
 const result = { node: process.version, platform: process.platform, cpu: cpus()[0].model,
+  paletteSha256: createHash('sha256').update(new Uint8Array(palette.buffer)).digest('hex'),
+  palette: 'production peak-scaled HSLuv rainbow (100, 58)',
   physicsSha256: createHash('sha256').update(bytes).digest('hex'),
   pcmSha256: createHash('sha256').update(new Uint8Array(pcm.buffer)).digest('hex'),
   protocol: layout[18], bands: layout[0], balls: layout[21] ?? layout[0],
@@ -47,7 +57,7 @@ const result = { node: process.version, platform: process.platform, cpu: cpus()[
 result.fullAttacks = [];
 for (const height of [.927803, 2.596923]) {
   const config = PhysicsSimulation.defaults(); config[0] = height;
-  const sim = new PhysicsSimulation(config, new Float32Array(72).fill(.5));
+  const sim = new PhysicsSimulation(config, palette);
   const input = new Float32Array(layout[22] ?? 34); input[32] = height; input[62] = config[5];
   sim.input(input);
   for (let tick = 0; tick < 120; tick++) sim.step();

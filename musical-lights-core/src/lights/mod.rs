@@ -17,7 +17,9 @@ mod pattern;
 mod visualizer;
 
 pub use bands::Bands;
-pub use color_correction::{LedResponse, convert_color, screen_color};
+pub use color_correction::{
+    LedResponse, blend_hsluv, blend_linear_hsluv, convert_color, linear_to_hsluv, screen_color,
+};
 pub use flag::{flag_pattern, flag_stars_pattern, flag_stripes_pattern};
 pub use gradient::Gradient;
 pub use matrix::{Layout, SimpleXY, SnakeXY};

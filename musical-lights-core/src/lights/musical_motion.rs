@@ -1,5 +1,6 @@
 //! Hardware-neutral visual prototype calculations. SI inputs for drag, column
 //! units for scrolling, linear RGB for pigments; no engine, heap, or browser APIs.
+use super::blend_linear_hsluv;
 use num::Float;
 
 /// Average absolute travel at 120 BPM: two columns per beat.
@@ -193,10 +194,10 @@ pub fn paint_pigment(targets: &mut [f32; 9], color: [f32; 3], point: [f32; 3], b
         return;
     }
     for (region, weight) in pigment_weights(point).into_iter().enumerate() {
-        for c in 0..3 {
-            let target = &mut targets[region * 3 + c];
-            *target += (color[c] - *target) * blend * weight;
-        }
+        let target: &mut [f32; 3] = (&mut targets[region * 3..region * 3 + 3])
+            .try_into()
+            .expect("fixed region");
+        *target = blend_linear_hsluv(*target, color, blend * weight).expect("validated pigment");
     }
 }
 
@@ -216,8 +217,13 @@ pub fn advance_pigment(surface: &mut [f32; 9], targets: &[f32; 9], dt: f32) {
         return;
     }
     let blend = 1.0 - Float::exp(-(dt / PIGMENT_FILL_SECONDS).min(60.0));
-    for (value, target) in surface.iter_mut().zip(targets) {
-        *value += (*target - *value) * blend;
+    for (region, target) in surface
+        .as_chunks_mut::<3>()
+        .0
+        .iter_mut()
+        .zip(targets.as_chunks::<3>().0)
+    {
+        *region = blend_linear_hsluv(*region, *target, blend).expect("validated pigment");
     }
 }
 
@@ -358,18 +364,24 @@ mod tests {
         let mut targets = surface;
         paint_pigment(&mut targets, [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], 0.5);
         assert_eq!(surface, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-        assert!(targets[2] > 0.45 && targets[5] > 0.0);
+        assert!(targets[2] > 0.0 && targets[5] > 0.0);
         assert_eq!(&targets[6..9], &[1.0, 0.0, 0.0]);
         advance_pigment(&mut surface, &targets, 1.0 / 120.0);
         assert!(surface[2] > 0.0 && surface[2] < 0.05);
         assert!(pigment_color(&surface)[2] < 0.015);
         surface = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
         advance_pigment(&mut surface, &targets, PIGMENT_FILL_SECONDS);
-        assert!((surface[2] / targets[2] - 0.63212055).abs() < 1e-6);
+        let start = super::super::linear_to_hsluv([1.0, 0.0, 0.0]).unwrap();
+        let target = super::super::linear_to_hsluv(targets[..3].try_into().unwrap()).unwrap();
+        let expected = super::super::blend_hsluv(start, target, 0.63212055).unwrap();
+        let actual = super::super::linear_to_hsluv(surface[..3].try_into().unwrap()).unwrap();
+        for (a, b) in actual.into_iter().zip(expected) {
+            assert!((a - b).abs() < 0.0001);
+        }
         advance_pigment(&mut surface, &targets, 2.0);
         assert!((surface[2] - targets[2]).abs() < 1e-5);
         assert!(
-            surface[2] - surface[8] > 0.45,
+            surface[2] - surface[8] > 0.1,
             "the held swirl collapsed to one color"
         );
     }
@@ -394,7 +406,7 @@ mod tests {
         let expected = run(120);
         for hz in [30, 60, 240] {
             for (a, b) in run(hz).into_iter().zip(expected) {
-                assert!((a - b).abs() < 3e-6);
+                assert!((a - b).abs() < 0.0003, "{a} != {b}");
             }
         }
         let mut surface = [0.2; 9];

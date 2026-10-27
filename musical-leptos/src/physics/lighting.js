@@ -82,12 +82,9 @@ export class SceneLighting {
     const matrices = view.balls.instanceMatrix.array, colors = view.balls.instanceColor.array;
     for (let i = 0; i < 8; i++) {
       this.uniforms.glowBallPosition.value[i].set(matrices[i * 16 + 12], matrices[i * 16 + 13], matrices[i * 16 + 14]);
-      const color = this.uniforms.glowBallColor.value[i].fromArray(colors, i * 3);
-      if (view.pigments) {
-        color.setRGB((view.pigments[i * 9] + view.pigments[i * 9 + 3] + view.pigments[i * 9 + 6]) / 3,
-          (view.pigments[i * 9 + 1] + view.pigments[i * 9 + 4] + view.pigments[i * 9 + 7]) / 3,
-          (view.pigments[i * 9 + 2] + view.pigments[i * 9 + 5] + view.pigments[i * 9 + 8]) / 3);
-      }
+      this.uniforms.glowBallColor.value[i].fromArray(colors, i * 3);
+      // Snapshot instance colors are the core's 1/4–1/2–1/4 visible linear
+      // pigment summary. Use that same color for lighting, never future targets.
     }
   }
 }
