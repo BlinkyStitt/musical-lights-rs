@@ -86,8 +86,9 @@ level 2 even when a user-wide profile sets level 0. The test profiles retain deb
 assertions and overflow checks.
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
-`just check` runs the core feature matrix, native physics, worklet, Leptos,
-benchmark smoke checks, demo builds and full browser suite with pinned tools.
+`just check` runs workflow lint and tooling regressions, then the core feature
+matrix, native physics, worklet, Leptos, benchmark smoke checks, demo builds and
+full browser suite with pinned tools.
 `npm run test:site` and `npm run test:demos` retain their complete local subsets.
 Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
@@ -1199,23 +1200,21 @@ Linux CI, live-provider acceptance and deployment verification remain pending.
 
 ## Draft checkpoints and CI
 
-Push unfinished checkpoints to draft pull requests. The site, other-apps,
-firmware, and recognition workflows skip their root jobs for draft PRs, which
-also skips their build and test jobs. Their final required checks fail because
-validation has not run; a skipped required check would otherwise count as passing
-for GitHub auto-merge. Marking the PR ready starts fresh validation. Pushes to
-`main` and manual runs retain their existing validation and deployment rules.
+Draft and ready pull requests run the same change selection and affected
+validation jobs. A draft checkpoint must produce CI evidence before it is ready
+for review; draft status does not substitute for validation or force required
+checks to fail. Each workflow listens for `opened`, `synchronize`, `reopened`
+and `ready_for_review`. Change selection always runs, and its outputs alone
+exclude unaffected applications.
 
-After local validation and agent reviews pass for the current commit, mark the
-PR ready. Each validation workflow listens for `ready_for_review` as well as
-new commits on ready PRs. Return a PR to draft before pushing a repair. Draft
-checks that were skipped do not establish acceptance; wait for the completed
-current-head CI run before merging.
+Required checks still fail for missing, failed, canceled or unexpectedly skipped
+validation. Wait for the completed current-head CI run before merging. Pushes to
+`main` and manual runs retain their existing validation and deployment rules.
 
 ## Required checks on main
 
-Every ready pull request starts the four validation workflows. Change selectors
-skip builds and tests for unaffected applications; they do not skip the workflow.
+Every draft or ready pull request starts the four validation workflows. Change
+selectors skip builds and tests for unaffected applications; they do not skip the workflow.
 Each workflow reports one final check:
 
 - `Required website checks`
@@ -1239,8 +1238,9 @@ does not enable auto-merge on every pull request.
 ## Tempo regression acceptance
 
 From the repository root, install the pinned web tools with
-`python3 validation/install_tools.py web`, add `.tools/bin` to `PATH`, then run
-`just validate` (an alias for `just check`). The recipe runs the core feature
+`python3 validation/install_tools.py web` and `python3 validation/install_tools.py ci`,
+add `.tools/bin` to `PATH`, then run `just validate` (an alias for `just check`).
+The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
 cases, and the two demo builds required by the full browser suite. It then runs
 `python3 validation/validate.py browser`, whose npm pretest runs the Node harness
