@@ -2,6 +2,70 @@ import { test, expect } from '@playwright/test';
 import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
+test.describe('compact mobile controls', () => {
+  test.use({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
+  for (const path of ['/', '/advanced/']) {
+    test(`compact toolbar toggles show pressed state and preserve native controls on ${path}`, async ({ page }, info) => {
+      await page.setViewportSize({ width: 393, height: 852 });
+      await page.addInitScript(() => {
+        window.compactCaptures = 0;
+        MediaDevices.prototype.getUserMedia = () => { compactCaptures++; return new Promise(() => {}); };
+        for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
+          if (!window[name]) window[name] = class {};
+          Object.defineProperty(window[name], 'requestPermission', { configurable: true, value: () => Promise.resolve('granted') });
+        }
+      });
+      await page.goto(origin + path); await physicsReady(page);
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+      const motion = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
+      const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+      const face = control => control.evaluate(input => ({
+        color: getComputedStyle(input).backgroundColor, shadow: getComputedStyle(input).boxShadow,
+        mark: getComputedStyle(input, '::after').content, markVisible: getComputedStyle(input, '::after').display !== 'none',
+      }));
+      for (const colorScheme of ['light', 'dark']) {
+        await page.emulateMedia({ colorScheme });
+        for (const width of [320, 393, 568]) {
+          await page.setViewportSize({ width, height: 852 });
+          expect(await page.locator('.fullscreen-toolbar').evaluate(toolbar => [...toolbar.children].every(node => {
+            const r = node.getBoundingClientRect();
+            return Math.abs(r.height - 44) < 1 && r.width >= 44
+              && node.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+          }))).toBe(true);
+        }
+        await page.setViewportSize({ width: 393, height: 852 });
+        const off = await face(motion);
+        expect(off.markVisible).toBe(false);
+        await motion.focus(); await page.keyboard.press('Space');
+        await expect(motion).toBeChecked();
+        const on = await face(motion);
+        expect(on.color).not.toBe(off.color); expect(on.shadow).toContain('inset');
+        expect(on.mark).toContain('✓'); expect(on.markVisible).toBe(true);
+        expect(await page.evaluate(() => compactCaptures)).toBe(0);
+        await page.mouse.move(0, 0); await motion.blur();
+        await page.locator('.fullscreen-toolbar').screenshot({ path: info.outputPath(`compact-motion-on-${colorScheme}.png`) });
+        await motion.focus(); await page.keyboard.press('Space');
+        await expect(motion).not.toBeChecked(); expect(await face(motion)).toEqual(off);
+      }
+      await listening.tap();
+      await expect(listening).toBeChecked();
+      await expect.poll(() => page.evaluate(() => compactCaptures)).toBe(1);
+      expect((await face(listening)).shadow).toContain('inset');
+      await page.locator('.fullscreen-toolbar').screenshot({ path: info.outputPath('compact-listening-on.png') });
+      await page.evaluate(() => { window.compactInputs = [document.querySelector('.motion-button'), document.querySelector('.listening-toggle')]; });
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      expect(await page.evaluate(() => compactInputs.every(n => n.closest('dialog[open]')))).toBe(true);
+      await expect(page.getByRole('button', { name: 'Phone motion', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      expect(await page.evaluate(() => compactInputs.every(n => n.closest('.fullscreen-toolbar')))).toBe(true);
+      await expect(listening).toBeChecked();
+      await listening.uncheck(); await expect(listening).not.toBeChecked();
+      expect((await face(listening)).markVisible).toBe(false);
+      expect(await page.evaluate(() => compactCaptures)).toBe(1);
+    });
+  }
+});
+
 for (const path of ['/', '/advanced/']) {
   test(`fullscreen settings cover only the top half and preserve the scene on ${path}`, async ({ page }, info) => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -136,20 +200,24 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         const r = n.getBoundingClientRect();
         return n.displayQuarterTurn === turn && Math.abs(r.width - innerWidth) < 1 && Math.abs(r.height - innerHeight) < 1;
       }, turn)).toBe(true);
-      const help = page.getByRole('button', { name: 'Phone motion', exact: true });
-      await help.hover();
+      const motion = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
+      await motion.hover();
       await expect(page.locator('.control-help')).toContainText('Phone motion lets measured tilt');
       await page.mouse.move(0, 0);
       await expect(page.locator('.control-help')).toBeHidden();
-      // Tab from Motion proves keyboard focus opens help without enabling sensors.
-      await page.locator('.motion-button').focus(); await page.keyboard.press('Tab');
-      await expect(help).toBeFocused();
+      // The single toolbar control receives focus without enabling sensors.
+      await page.locator('.rotate-display').focus(); await page.keyboard.press('Tab');
+      await expect(motion).toBeFocused();
       await expect(page.locator('.control-help')).toBeVisible();
-      expect(await help.evaluate(n => getComputedStyle(n).outlineStyle)).not.toBe('none');
-      await page.keyboard.press('Enter'); await page.keyboard.press('Space');
+      await expect(motion).not.toBeChecked();
+      expect(await motion.evaluate(n => getComputedStyle(n).outlineStyle)).not.toBe('none');
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+      const help = page.getByRole('button', { name: 'Phone motion', exact: true });
+      await help.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Space');
+      await expect(page.locator('.control-help')).toBeVisible();
+      await expect(motion).not.toBeChecked();
       expect(await page.locator('.fullscreen-settings').evaluate((n, turn) => {
         const r = n.getBoundingClientRect();
         return [r.bottom <= innerHeight / 2, r.left >= innerWidth / 2, r.top >= innerHeight / 2, r.right <= innerWidth / 2][turn];

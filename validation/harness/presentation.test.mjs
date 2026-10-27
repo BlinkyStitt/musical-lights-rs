@@ -30,6 +30,32 @@ test('switch help responds to touch, hover and keyboard without activating the a
   assert.equal(shown.length, 6, 'removed toolbar help cannot respond after route cleanup');
 });
 
+test('compact toolbar help preserves native toggle gestures and releases listeners', () => {
+  let toolbar = true;
+  const input = Object.assign(new EventTarget(), { closest: () => toolbar ? {} : null });
+  const shown = [];
+  const presentation = Object.assign(Object.create(Presentation.prototype), {
+    removers: [], showHelp(node, key) { this.anchor = node; shown.push(key); }, hideHelp() { this.anchor = null; shown.push('hidden'); },
+  });
+  presentation.mountToolbarHelp(input, 'motion-button');
+  const send = (type, fields = {}) => {
+    const event = Object.assign(new Event(type, { cancelable: true }), fields);
+    input.dispatchEvent(event); return event;
+  };
+  send('pointerenter', { pointerType: 'touch' });
+  assert.deepEqual(shown, []);
+  send('focus'); send('pointerenter', { pointerType: 'mouse' });
+  assert.deepEqual(shown, ['motion-button', 'motion-button']);
+  assert.equal(send('click').defaultPrevented, false);
+  assert.equal(send('keydown', { key: ' ' }).defaultPrevented, false);
+  send('blur'); assert.equal(shown.at(-1), 'hidden');
+  toolbar = false; send('focus'); send('pointerenter', { pointerType: 'mouse' });
+  assert.equal(shown.length, 3, 'Settings retains its separate text help');
+  for (const remove of presentation.removers) remove();
+  toolbar = true; send('focus'); send('pointerenter', { pointerType: 'mouse' });
+  assert.equal(shown.length, 3);
+});
+
 test('YouTube links select one video and preserve start times without accepting arbitrary origins', () => {
   for (const url of ['https://youtu.be/abcDEF012_-?t=1m23s', 'https://www.youtube.com/watch?v=abcDEF012_-&t=83', 'https://m.youtube.com/shorts/abcDEF012_-?start=83', 'https://www.youtube.com/embed/abcDEF012_-?start=83']) {
     assert.deepEqual(parseYouTube(url), { id: 'abcDEF012_-', start: 83 });

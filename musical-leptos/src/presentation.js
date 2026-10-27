@@ -115,7 +115,7 @@ export class Presentation {
     this.listen(document, 'keydown', event => { if (event.key === 'Escape' && !this.popup.hidden) this.hideHelp(); }, true);
     this.listen(window, 'scroll', () => this.positionHelp(), { passive: true });
     this.listen(window, 'resize', () => this.positionHelp());
-    this.listen(card, 'audio-session', ({ detail }) => { this.microphoneActive = detail.source === 'microphone' && !['stopped', 'ended'].includes(detail.state); this.updateAudioType(); if (this.anchor?.dataset.help === 'listening-toggle') this.showHelp(this.anchor, 'listening-toggle'); });
+    this.listen(card, 'audio-session', ({ detail }) => { this.microphoneActive = detail.source === 'microphone' && !['stopped', 'ended'].includes(detail.state); this.updateAudioType(); if (this.anchor?.dataset.help === 'listening-toggle' || this.anchor?.matches('.listening-toggle')) this.showHelp(this.anchor, 'listening-toggle'); });
     this.listen(card, 'microphone-access', ({ detail }) => { this.permission = detail; });
     for (const [selector, key, checkbox] of [['.flight-height', 'flight'], ['.camera-motion', 'cameraMotion', true], ['.scroll-lights', 'scrolling', true]]) {
       const node = card.querySelector(selector); if (!node) continue;
@@ -166,6 +166,7 @@ export class Presentation {
       if (!span || span.dataset.help) continue;
       span.setAttribute('role', 'button'); span.tabIndex = 0;
       this.mountHelp(span, className);
+      if (input.closest('label').querySelector('.toolbar-icon')) this.mountToolbarHelp(input, className);
     }
     for (const button of [this.videoButton, this.fullscreenButton]) {
       if (button.dataset.help) continue;
@@ -176,6 +177,14 @@ export class Presentation {
       this.listen(button, 'pointerleave', () => this.hideHelp());
       this.listen(button, 'click', () => this.hideHelp());
     }
+  }
+  mountToolbarHelp(input, key) {
+    const show = () => { if (input.closest('.fullscreen-toolbar')) this.showHelp(input, key); };
+    const hide = () => { if (this.anchor === input) this.hideHelp(); };
+    this.listen(input, 'pointerenter', event => { if (event.pointerType === 'mouse') show(); });
+    this.listen(input, 'pointerleave', event => { if (event.pointerType === 'mouse') hide(); });
+    this.listen(input, 'focus', show);
+    this.listen(input, 'blur', hide);
   }
   mountHelp(anchor, key) {
     anchor.dataset.help = key; anchor.dataset.explanation = explanations[key];
@@ -188,7 +197,8 @@ export class Presentation {
     this.listen(anchor, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(anchor, key); } });
   }
   showHelp(anchor, key) {
-    this.hideHelp(); this.anchor = anchor; anchor.setAttribute('aria-describedby', this.popup.id); anchor.setAttribute('aria-expanded', 'true');
+    this.hideHelp(); this.anchor = anchor; anchor.setAttribute('aria-describedby', this.popup.id);
+    if (anchor.tagName !== 'INPUT') anchor.setAttribute('aria-expanded', 'true');
     const state = this.card.dataset.audioState ?? 'off';
     this.popup.textContent = key === 'listening-toggle' ? `${explanations[key]} Microphone: ${this.microphoneActive ? state : 'off'}. Permission: ${this.permission ?? this.card.querySelector('.microphone-permission')?.dataset.state ?? 'not requested'}. ${this.card.querySelector('.mic-session-status')?.textContent ?? ''}` : (explanations[key] ? explanations[key] + (key === 'identify-song' ? ' ' + this.card.querySelector('.recognition-status').textContent : '') : null) ?? (key === 'video' ? 'Paste a YouTube link to play a video. Listening must hear the speakers for the lights to follow its audio.' : 'Show video, lights, and controls together. Use Exit fullscreen or Escape to return.');
     this.popup.hidden = false; this.positionHelp();
@@ -211,7 +221,7 @@ export class Presentation {
     this.popup.style.top = Math.max(12, Math.min(availableHeight - height - 12, top > height + 20 ? top - height - 8 : bottom + 8)) + 'px';
   }
 
-  hideHelp() { this.popup.hidden = true; this.anchor?.removeAttribute('aria-describedby'); this.anchor?.setAttribute('aria-expanded', 'false'); this.anchor = null; }
+  hideHelp() { this.popup.hidden = true; this.anchor?.removeAttribute('aria-describedby'); if (this.anchor && this.anchor.tagName !== 'INPUT') this.anchor.setAttribute('aria-expanded', 'false'); this.anchor = null; }
   updateVideoEditor() {
     const expanded = this.card.hasAttribute('data-expanded');
     if (!expanded || (!this.card.classList.contains('video-editing') && !this.fullscreenSettings?.dialog.open)) {
