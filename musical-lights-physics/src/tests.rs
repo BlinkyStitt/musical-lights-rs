@@ -76,17 +76,45 @@ fn target_color(sim: &Simulation, ball: usize) -> [f32; 3] {
     )
 }
 
+// Bound the exact exponential step in the space actually being interpolated.
+// RGB channels can change faster along a saturated hue path near gamut corners.
+fn assert_gradual_pigment(before: &[f32], after: &[f32]) {
+    let bound = 1.0
+        - (-DT / musical_lights_core::lights::musical_motion::PIGMENT_FILL_SECONDS).exp()
+        + 0.00002;
+    for (a, b) in before
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(after.as_chunks::<3>().0)
+    {
+        let a = musical_lights_core::lights::linear_to_hsluv(*a).unwrap();
+        let b = musical_lights_core::lights::linear_to_hsluv(*b).unwrap();
+        for c in 1..3 {
+            assert!((b[c] - a[c]).abs() / 100.0 <= bound);
+        }
+        if a[1] > 0.0001 && b[1] > 0.0001 && a[2] > 0.00001 && a[2] < 99.99999 {
+            let delta = ((b[0] - a[0] + 540.0) % 360.0) - 180.0;
+            assert!(delta.abs() / 180.0 <= bound, "hue jumped: {a:?} to {b:?}");
+        }
+    }
+}
+
 // Ball 0 starts at source 6. Contact lights its local swirl regions gradually;
 // it must not replace a visible pigment slot or add an unrelated source color.
 fn assert_first_ball_fills_toward_source(sim: &Simulation, source: usize) {
     let initial = sim.palette[6];
     let target = target_color(sim, 0);
     assert!(target[0] > initial[0] && target[0] < sim.palette[source][0]);
-    for (c, &start) in initial.iter().enumerate() {
-        for region in 0..3 {
-            let value = sim.pigments[region * 3 + c];
-            assert!(value >= start.min(sim.palette[source][c]) - 1e-6);
-            assert!(value <= start.max(sim.palette[source][c]) + 1e-6);
+    let hsl = musical_lights_core::lights::linear_to_hsluv;
+    let start = hsl(initial).unwrap();
+    let source = hsl(sim.palette[source]).unwrap();
+    for region in sim.pigments[..9].as_chunks::<3>().0 {
+        assert!(region.iter().all(|v| (0.0..=1.0).contains(v)));
+        let value = hsl(*region).unwrap();
+        for c in 1..3 {
+            assert!(value[c] >= start[c].min(source[c]) - 0.001);
+            assert!(value[c] <= start[c].max(source[c]) + 0.001);
         }
     }
     assert_eq!(
@@ -2410,12 +2438,10 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
     );
     let initial = target_color(&sim, 0);
     let mut contacted = false;
-    for tick in 0..HZ * 2 {
+    for _ in 0..HZ * 2 {
         let before = sim.pigments;
         sim.step();
-        for (old, new) in before.into_iter().zip(sim.pigments) {
-            assert!((old - new).abs() < 0.038, "tick {tick}: surface jumped");
-        }
+        assert_gradual_pigment(&before, &sim.pigments);
         if !contacted && target_color(&sim, 0) != initial {
             contacted = true;
             let delta = |region: usize| sim.pigments[region * 3] - before[region * 3];
@@ -2430,12 +2456,7 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
     sim.color_targets[..9].copy_from_slice(&[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]);
     let before = sim.pigments;
     sim.step();
-    for (old, new) in before.into_iter().zip(sim.pigments) {
-        assert!(
-            (old - new).abs() < 0.038,
-            "retargeted surface jumped from {old} to {new}"
-        );
-    }
+    assert_gradual_pigment(&before, &sim.pigments);
 }
 
 #[test]
@@ -2540,9 +2561,7 @@ fn active_audio_requires_attacking_contacts_and_a_new_attack_can_light_resting_b
         sim.color_targets, initial,
         "a new attack did not light the resting contact"
     );
-    for (old, new) in before.into_iter().zip(sim.pigments) {
-        assert!((old - new).abs() < 0.038);
-    }
+    assert_gradual_pigment(&before, &sim.pigments);
     let held = sim.color_targets;
     for _ in 0..HZ {
         sim.step();
@@ -2603,4 +2622,43 @@ fn physical_contact_injects_color_at_the_rolling_balls_material_point() {
     );
     assert!(upright[0] > upright[6]);
     assert!(turned[6] > turned[0]);
+}
+
+#[test]
+fn pigment_palette_does_not_change_any_physical_field() {
+    use musical_lights_core::lights::Gradient;
+    let rainbow = Gradient::<COUNT>::new_rainbow(100.0, 58.0).colors.map(|c| {
+        let peak = c.red.max(c.green).max(c.blue);
+        [c.red / peak, c.green / peak, c.blue / peak]
+    });
+    let mut vivid = Simulation::new(SimulationConfig::default(), rainbow).unwrap();
+    let mut grey = Simulation::new(SimulationConfig::default(), [[0.5; 3]; COUNT]).unwrap();
+    for tick in 0..240 {
+        let input = SimulationInput {
+            tick,
+            scrolling: true,
+            levels: std::array::from_fn(|i| {
+                if (tick / 30 + i as u64).is_multiple_of(4) {
+                    0.6
+                } else {
+                    0.0
+                }
+            }),
+            ..Default::default()
+        };
+        vivid.apply(input).unwrap();
+        grey.apply(input).unwrap();
+        vivid.step();
+        grey.step();
+        for i in 0..SNAPSHOT_LEN {
+            if (3..BAR_OFFSET).contains(&i) && (i - 3) % BODY_STRIDE >= 15 {
+                continue;
+            }
+            assert_eq!(
+                vivid.snapshot.values[i], grey.snapshot.values[i],
+                "tick {tick}, field {i}"
+            );
+        }
+    }
+    assert_ne!(vivid.pigments, grey.pigments);
 }

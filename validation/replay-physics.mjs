@@ -4,11 +4,14 @@ import { pathToFileURL } from 'node:url';
 import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.js';
 
 export async function replayReport(report) {
-  if (report.type !== 'musical-lights-phone-report-v5')
+  if (report.type !== 'musical-lights-phone-report-v6')
     throw new Error('Physics report needs the matching historical replay; recording format differs');
   const wasm = await init({ module_or_path: await readFile(new URL('../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
   if (JSON.stringify(report.layout) !== JSON.stringify(Array.from(PhysicsSimulation.layout())))
     throw new Error('Physics report needs the matching historical engine; geometry layout differs');
+  if (!Array.isArray(report.finalPigments) || report.finalPigments.length !== report.layout[21] * 9
+      || !report.finalPigments.every(v => Number.isFinite(v) && v >= 0 && v <= 1))
+    throw new Error('Physics report lacks complete regional pigment state');
   const results = [];
   for (const fps of [30, 60, 120]) {
     const sim = new PhysicsSimulation(new Float32Array(report.config), new Float32Array(report.palette));
@@ -28,7 +31,9 @@ export async function replayReport(report) {
       }
     }
     const actual = Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), report.layout[12]));
-    const matches = actual.every((value, i) => value === report.finalSnapshot[i]);
+    const pigments = Array.from(new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), report.layout[21] * 9));
+    const matches = actual.length === report.finalSnapshot.length && actual.every((value, i) => value === report.finalSnapshot[i])
+      && pigments.every((value, i) => value === report.finalPigments[i]);
     results.push({ fps, matches, ticks: sim.tick(), inputs: cursor });
     sim.free();
   }

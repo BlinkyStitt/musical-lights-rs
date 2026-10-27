@@ -251,7 +251,7 @@ export class PhoneReport {
       const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
       const snapshotProgressDriftMs = firstProgress && lastProgress
         ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v5',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v6',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,

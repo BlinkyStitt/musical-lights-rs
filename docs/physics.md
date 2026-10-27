@@ -239,13 +239,14 @@ to a stop in place; Reduced Motion disables automatic travel. Source colors,
 contacts, accessible labels and audio data keep their source identity.
 
 The separate tempo setter leaves the held physical input and audio transport
-unchanged. Physics input contains 38 motion values followed by 24 current audio
-attack edges. Recording retains those edges separately from decorative bar travel.
+unchanged. The 64-value physics input contains 38 motion values, 24 current audio
+attack edges, enclosure depth and the attack-only paint policy. Recording retains
+those edges separately from decorative bar travel.
 New reports include the random seed, starting accent
 ordinal and tempo, dance settings, and tick-stamped input events with their
-tempo and accent in worker application order. Phone report v5 replay applies
+tempo and accent in worker application order. Phone report v6 replay applies
 each input and its cue together before stepping, including inputs at the same
-tick. Older report formats and physics protocols require their historical replay tool.
+tick, then verifies the full snapshot and all 72 visible regional pigment values. Older report formats and physics protocols require their historical replay tool.
 
 The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
 continuous contact-color fill, and quintic bar motion are hardware-neutral
@@ -266,12 +267,32 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 19 starts each ball uniformly in the source color at its actual
+Physics protocol 20 starts each ball uniformly in the source color at its actual
 spawn X coordinate. It rejects replays from previous engines. Physical rolling
 reveals three soft swirl regions. A contact adds its bar color at the ball's
 material contact point, and each visible region fills toward its own target
-with a 180 ms time constant. Other regions retain their colors. The shared core
-supplies the swirl profile for both contact injection and drawing.
+with a 175 ms exponential time constant (about 525 ms to 95% of a held target).
+Contact injection, elapsed-time fill and spatial joins all interpolate standard
+D65 HSLuv: hue in degrees, saturation/lightness in 0–100. Hue follows the shortest
+circular path; exact 180° ties increase hue. An achromatic endpoint borrows its
+chromatic partner's hue; two achromatic endpoints use hue zero. Saturation and
+lightness never overshoot. Numerical conversion tolerance is 3e-6 linear RGB;
+partitioned repeated fill allows 3e-4 accumulated linear-RGB error. Browser
+conversion patches allow two 8-bit framebuffer levels; curved swirl pixels allow
+eight levels against analytic ray hits because GPU varying interpolation and
+trigonometry differ near steep joins. Saturation and hue continuity are also
+checked independently.
+Other regions retain their colors. The shared core supplies the swirl profile
+for contact injection and drawing. Transport remains linear RGB. The renderer
+converts each visible region to HSLuv on upload and converts the joined color
+back to linear RGB once per fragment, before Three.js output encoding. There is
+no RGB instance-color underlay. Lighting uses the core's ¼–½–¼ visible RGB summary,
+never future contact targets. Spawn colors are preserved exactly in simulation.
+
+The hue-path precedent is [FastLED's shortest hue gradients](https://fastled.io/docs/d1/dfb/colorutils_8h.html);
+conversion uses [HSLuv reference D65 gamut bounds](https://www.hsluv.org/math/).
+Core and renderer conversion checks share selected official snapshot-rev4 vectors;
+`validation/fixtures/hsluv-reference.json` records source provenance and digest.
 Bar shaders retain rainbow fills, full-height glow, and a 1.25-CSS-pixel
 white inner edge. The flash keeps its existing 180 ms decay and Reduced Motion
 intensity. In silence, distinct physical bar contacts add color. During microphone

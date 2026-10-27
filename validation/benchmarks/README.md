@@ -25,7 +25,9 @@ The processor warms for six seconds and retains its continuous sample clock.
 Physics cases replay 240 ticks at 120 Hz through the production Rapier
 simulation. Their 24 filtered targets come from that same audio processor.
 Portrait and landscape cases include scrolling, full-depth paired colliders,
-eight balls and snapshot reads. The full-attack case exercises all bands in
+eight balls and snapshot reads. All physics fixtures use the production
+peak-scaled HSLuv rainbow (100 saturation, 58 lightness), so contact painting
+exercises chromatic hue paths instead of a uniform grey fast path. The full-attack case exercises all bands in
 the tall portrait enclosure. Setup and one second of settling are excluded
 from the reported time. Each workload checks the substep-overload field
 before benchmarking; an overloaded run is a failure, not a speed result.
