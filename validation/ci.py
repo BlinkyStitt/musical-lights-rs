@@ -49,6 +49,7 @@ VALIDATORS = {
     "loudness-reference",
     "Build website",
     "Validated website",
+    "Required website checks",
 }
 
 
@@ -369,6 +370,63 @@ def affected(paths, package, workflow):
     )
 
 
+def site_affected(paths):
+    if paths is None:
+        return True
+    return any(
+        any(
+            affected([path], package, "validate")
+            for package in (
+                "musical-leptos",
+                "musical-lights-worklet",
+                "musical-lights-physics",
+            )
+        )
+        or (
+            path.startswith("validation/")
+            and path
+            not in (
+                "validation/demos.config.mjs",
+                "validation/tests/other-apps.spec.mjs",
+            )
+        )
+        or path.startswith("docs/audio-audit-results/")
+        for path in paths
+    )
+
+
+def recognition_affected(paths):
+    return paths is None or any(
+        path.startswith("musical-recognition-worker/")
+        or path in (".github/workflows/recognition.yml", "rust-toolchain.toml")
+        for path in paths
+    )
+
+
+def require_checks(group, needs):
+    """Skipped dependencies only satisfy a gate when its selector excludes them."""
+    selector, jobs = {
+        "website": ("plan", {"validated": "site_required"}),
+        "other-apps": ("changes", {"terminal": "terminal", "demos": "demos"}),
+        "firmware": (
+            "changes",
+            {"firmware-tools": "firmware_tools", "rust": "rust", "esp": "esp"},
+        ),
+        "recognition": ("changes", {"worker": "recognition"}),
+    }[group]
+    if set(needs) != {selector, *jobs}:
+        raise ValueError("Required check dependencies are incomplete or unexpected")
+    if needs[selector]["result"] != "success":
+        raise ValueError(f"Required change selector {selector} did not succeed")
+    for job, flag in jobs.items():
+        selected = needs[selector].get("outputs", {}).get(flag)
+        if selected not in ("true", "false"):
+            raise ValueError(f"Required change selector omitted {flag}")
+        result = needs[job]["result"]
+        if result != "success" and (selected == "true" or result != "skipped"):
+            raise ValueError(f"Required check {job} did not succeed: {result}")
+
+
 def output(values):
     with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
         stream.writelines(
@@ -382,6 +440,10 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plan")
     sub.add_parser("changes")
+    p = sub.add_parser("required-checks")
+    p.add_argument(
+        "group", choices=("website", "other-apps", "firmware", "recognition")
+    )
     p = sub.add_parser("pack")
     p.add_argument("bundle", type=Path)
     p.add_argument("inventory", type=Path)
@@ -398,6 +460,8 @@ def main():
     p.add_argument("reports", type=Path)
     args = parser.parse_args()
     if args.command == "plan":
+        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+        site_required = site_affected(changed_paths(event))
         run_id, artifact = (
             ("", "")
             if os.environ["GITHUB_EVENT_NAME"] == "pull_request"
@@ -406,6 +470,7 @@ def main():
         output(
             {
                 "reuse": bool(run_id),
+                "site_required": site_required,
                 "run_id": run_id,
                 "artifact_id": artifact,
                 "tree": inputs()["source_tree"],
@@ -413,9 +478,13 @@ def main():
             }
         )
         summary = (
-            f"Reuse verified validation from https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run_id}.\n"
-            if run_id
-            else "No exact validated artifact exists. Run the complete build and validation.\n"
+            "No website inputs changed. Website build and tests are not required.\n"
+            if not site_required
+            else (
+                f"Reuse verified validation from https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run_id}.\n"
+                if run_id
+                else "No exact validated artifact exists. Run the complete build and validation.\n"
+            )
         )
         print(summary.strip())
         if os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -438,6 +507,12 @@ def main():
             for name, (package, workflow) in targets.items()
         }
         result["demos"] |= affected(paths, "musical-wasm", "other-apps")
+        result["recognition"] = recognition_affected(paths)
+        result["firmware_tools"] = (
+            any(result[name] for name in ("feather", "stm32", "esp-embassy", "esp-idf"))
+            or paths is None
+            or any(path.startswith("tools/firmware/") for path in paths)
+        )
         for group, names in (
             ("rust", ("feather", "stm32")),
             ("esp", ("esp-embassy", "esp-idf")),
@@ -453,6 +528,9 @@ def main():
                 }
             )
         output(result)
+    elif args.command == "required-checks":
+        require_checks(args.group, json.loads(os.environ["CI_NEEDS"]))
+        print(f"All applicable {args.group} checks passed.")
     elif args.command == "pack":
         pack(args.bundle, args.inventory)
     elif args.command == "unpack":
