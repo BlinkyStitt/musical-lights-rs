@@ -101,7 +101,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     const before = await page.locator('#dancinglights').boundingBox();
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('visualizer-screen');
     const card = await page.locator('.audio-card').boundingBox();
     expect(card).toEqual({ x: 0, y: 0, ...viewport });
     await expect(page.locator('#dancinglights')).toBeInViewport({ ratio: 1 });
@@ -123,9 +123,26 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await closeFullscreenSettings(page);
     // Keep the real exit button available to touch users in the fullscreen view.
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await page.mouse.move(viewport.width / 2, 80);
+    // Recovery notices can appear below the toolbar while audio is running.
+    // Keep that real overlay present so the drag cannot depend on its absence.
+    await page.locator('.analysis-status').evaluate(node => {
+      node.textContent = 'Audio recovered after a timing change. Measurements restarted.';
+    });
+    await expect(page.locator('.analysis-status')).toBeVisible();
+    // Start in the clear center of the graph, below controls and notices.
+    const dragStart = await page.locator('#dancinglights').evaluate(scene => {
+      const bounds = scene.getBoundingClientRect();
+      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      const target = document.elementFromPoint(point.x, point.y);
+      if (point.y + 120 > bounds.bottom || !scene.contains(target)
+        || target.closest('button, input, label, summary, [role=button]')) {
+        throw new Error('Fullscreen exit drag must start on the graph, outside controls');
+      }
+      return point;
+    });
+    await page.mouse.move(dragStart.x, dragStart.y);
     await page.mouse.down();
-    await page.mouse.move(viewport.width / 2, 200, { steps: 5 });
+    await page.mouse.move(dragStart.x, dragStart.y + 120, { steps: 5 });
     await page.mouse.up();
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();
     await expect(page.locator('.diagnostic-fps')).toHaveCount(0);
@@ -133,7 +150,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812
     await expect(page.locator('.frame-rate')).toHaveText(/^\d+ FPS$/);
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('audio-card');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('visualizer-screen');
     // Native browser exit emits the same event as Escape or browser controls.
     await page.evaluate(() => document.exitFullscreen());
     await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toBeVisible();

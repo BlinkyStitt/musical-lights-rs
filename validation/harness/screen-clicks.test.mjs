@@ -76,3 +76,59 @@ test('a fresh pointer gesture can activate Fullscreen', t => {
   env.dispatch('pointerdown', env.fullscreen, { isPrimary: true, button: 0, pointerType: 'mouse', pointerId: 9 });
   assert.deepEqual(env.click(env.fullscreen, { pointerId: 9 }), { prevented: false, activated: true });
 });
+
+test('Rotate cancels capture and stale Exit suppression, retains selection until cleanup', t => {
+  const env = exitGesture(t);
+  env.element.setAttribute = () => {};
+  env.screen.setExpanded(true);
+  const released = [];
+  env.element.hasPointerCapture = () => true;
+  env.element.releasePointerCapture = id => released.push(id);
+  env.screen.swipe = { id: 99 };
+  env.element.dispatchEvent(new Event('rotate-display'));
+  assert.equal(env.screen.swipe, null);
+  assert.deepEqual(released, [99]);
+  assert.equal(env.element.displayQuarterTurn, 1);
+  assert.deepEqual(env.click(), { prevented: false, activated: true });
+  env.screen.setExpanded(false);
+  env.element.dispatchEvent(new Event('rotate-display'));
+  assert.equal(env.element.displayQuarterTurn, 1);
+  env.screen.setExpanded(true);
+  for (const expected of [2, 3, 0]) {
+    env.element.dispatchEvent(new Event('rotate-display'));
+    assert.equal(env.element.displayQuarterTurn, expected);
+  }
+  env.screen.close();
+  assert.equal(env.element.displayQuarterTurn, undefined);
+  env.element.dispatchEvent(new Event('rotate-display'));
+  assert.equal(env.element.displayQuarterTurn, undefined);
+});
+
+for (let turn = 0; turn < 4; turn++) {
+  test(`exit swipes follow logical down at display turn ${turn}`, t => {
+    const env = exitGesture(t);
+    env.screen.setExpanded(true);
+    const width = turn % 2 ? 800 : 400, height = turn % 2 ? 400 : 800;
+    Object.assign(env.element, { displayQuarterTurn: turn, clientWidth: width, clientHeight: height,
+      hasAttribute: () => true, classList: { contains: () => false },
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 800 }),
+      setPointerCapture() {}, hasPointerCapture: () => false });
+    const target = { closest: selector => selector === '#dancinglights' ? target : null };
+    const physical = (x, y) => {
+      const [clientX, clientY] = [[x, y], [height - y, x], [width - x, height - y], [y, width - x]][turn];
+      return { clientX, clientY, pointerId: 42, pointerType: 'touch', isPrimary: true, button: 0 };
+    };
+    env.dispatch('pointerdown', target, physical(width / 2, 100));
+    assert.ok(env.screen.swipe);
+    env.dispatch('pointermove', target, physical(width / 2, 190));
+    assert.equal(env.screen.expanded, false);
+    assert.equal(env.screen.swipe, null);
+  });
+}
+
+test('Exit consumes a matching touch click retargeted onto a revealed page link', t => {
+  const env = exitGesture(t);
+  const link = { closest: () => null };
+  assert.deepEqual(env.click(link, { pointerId: 7 }), { prevented: true, activated: false });
+  assert.deepEqual(env.click(link, { pointerId: 8 }), { prevented: false, activated: true });
+});

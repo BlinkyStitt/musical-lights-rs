@@ -147,7 +147,7 @@ test('normal scenes fill a larger centered frame before and after fullscreen', a
           await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
           await page.waitForFunction(() => {
             const card = document.querySelector('.audio-card');
-            return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+            return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card.closest('.visualizer-screen'));
           }, null, { timeout: 5000 });
           await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).press('Enter');
         }
@@ -582,7 +582,7 @@ for (const path of ['/', '/advanced/']) {
       // Wait for that transition before measuring the first scroll.
       await page.waitForFunction(() => {
         const card = document.querySelector('.audio-card');
-        return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+        return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card.closest('.visualizer-screen'));
       });
       await expect(tempo).toHaveText('132 BPM');
       // This loop owns a closed dialog. Keep native activation and its
@@ -621,7 +621,7 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await page.waitForFunction(() => {
     const card = document.querySelector('.audio-card');
-    return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+    return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card.closest('.visualizer-screen'));
   });
   const expanded = await readout();
   expect(expanded.count).toBe(1); expect(expanded.text).toMatch(/^\d+ FPS$/);
@@ -633,7 +633,7 @@ test('Home and expanded mode share a small rendered FPS readout', async ({ page 
     await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
     await page.waitForFunction(() => {
       const card = document.querySelector('.audio-card');
-      return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card);
+      return card.hasAttribute('data-expanded') && (!document.fullscreenEnabled || document.fullscreenElement === card.closest('.visualizer-screen'));
     });
     // This loop owns a closed dialog. Keep native activation and its
     // visibility check without probing the same known state twice.

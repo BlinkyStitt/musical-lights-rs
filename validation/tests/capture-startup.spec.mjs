@@ -89,6 +89,8 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     expect(await page.evaluate(() => captureStarts)).toBe(1);
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
     await page.getByRole('link', { name: 'About', exact: true }).click();
-    expect(await page.evaluate(() => [testContext.state, captureTrack.readyState])).toEqual(['closed', 'ended']);
+    // Cleanup stops tracks synchronously; AudioContext.close() completes later.
+    expect(await page.evaluate(() => captureTrack.readyState)).toBe('ended');
+    await expect.poll(() => page.evaluate(() => testContext.state)).toBe('closed');
   });
 }

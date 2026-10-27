@@ -136,8 +136,9 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
       const v = document.querySelector('#dancinglights').physics;
       cancelAnimationFrame(v.request); v.stopPreview(); v.onFrame = () => {};
       const offset = v.layout[9], original = Array.from(v.input.slice(0, 24));
+      const firstFrame = v.renderer.info.render.frame;
       let at = performance.now();
-      const frame = () => { v.draw(at += 1000 / 60); return { edges: Array.from(v.meshEdges), lights: v.lighting.uniforms.stripState.value.map(s => s.z) }; };
+      const frame = () => { v.updateScene(at += 1000 / 60); return { edges: Array.from(v.meshEdges), lights: v.lighting.uniforms.stripState.value.map(s => s.z) }; };
       v.listening = true; frame(); // Reset the inactive visual envelopes.
       v.listening = false; v.edges.fill(1); v.current.fill(.1, offset, offset + 24);
       const first = frame();
@@ -151,8 +152,11 @@ for (const reducedMotion of ['no-preference', 'reduce']) {
       v.current[offset] = .2; const microphone = frame();
       v.positionMeters(2.5); const labels = [...v.card.querySelectorAll('.spectrum-labels span')].map(n => n.textContent);
       return { first, rise, heldFrames, held, fall, fallingFrames, faded, other, microphone, labels,
-        maximum: v.current[v.layout[17] + 1], original, final: Array.from(v.input.slice(0, 24)) };
+        maximum: v.current[v.layout[17] + 1], original, final: Array.from(v.input.slice(0, 24)),
+        submittedFrames: v.renderer.info.render.frame - firstFrame };
     });
+    // State-only synthetic frames must not leave GPU work for the next test.
+    expect(result.submittedFrames).toBe(0);
     const intensity = reducedMotion === 'reduce' ? .5 : 1;
     expect(result.first.edges).toEqual(Array(144).fill(0));
     expect(result.rise.edges[0]).toBeGreaterThan(0);

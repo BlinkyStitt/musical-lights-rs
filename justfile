@@ -1,4 +1,6 @@
-# Run from the repository root. Missing pinned tools or rendered artifacts fail.
-validate:
-    .tools/bin/node --eval "if (process.version !== 'v26.8.2') throw new Error('Expected pinned Node v26.8.2');"
-    PATH="{{justfile_directory()}}/.tools/bin:$PATH" python3 validation/validate.py core physics worklet leptos benchmarks dioxus wasm browser
+export PATH := justfile_directory() + "/.tools/bin:" + env("PATH")
+
+# Validate the shared core and all web apps, including offline and browser checks.
+check:
+    python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm
+    python3 validation/validate.py browser

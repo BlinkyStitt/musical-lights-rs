@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "mosqito==1.2.1", "numpy==2.5.3", "scipy==1.18.1",
     "openpyxl==3.1.5", "matplotlib==3.11.1",
+    "pillow>=13.0.0",
 ]
 
 [dependency-groups]

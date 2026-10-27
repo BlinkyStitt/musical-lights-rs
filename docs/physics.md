@@ -126,7 +126,11 @@ invalidates pending grants while musical targets continue. Turning Listening
 off releases audio capture and starts the silent sine preview while sensors
 continue. Leaving the page closes both sessions and the preview. Display rotation
 lock never gates accelerometer delivery: a fixed screen angle still maps shakes
-into that fixed viewport, even with no orientation events.
+into that fixed viewport, even with no orientation events. The expanded view's
+**Rotate** button adds a fixed clockwise quarter turn to the browser screen angle.
+The inverse display mapping also applies to pointer input and exit gestures;
+gravity already received is remapped immediately, while shake expiry and the
+depth axis remain unchanged. Returning to the normal page uses upright coordinates.
 When linear acceleration is unavailable, a 250 ms exponential baseline removes
 the slow gravity component from gravity-inclusive readings; the baseline
 also supplies gravity with the same platform sign correction. This fallback is

@@ -122,6 +122,16 @@ export class PhysicsView {
     this.visibilityObserver = new IntersectionObserver(([entry]) => { this.sceneVisible = entry.isIntersecting; if (!this.sceneVisible) { this.cameraPan.clear(); } });
     this.visibilityObserver.observe(layer);
     this.controls = this.card.querySelector('.audio-controls'); this.observer.observe(this.controls);
+    this.listen(this.card, 'display-rotation', () => {
+      this.resizePending = true;
+      this.input[27] = 0;
+      if (this.lastGravity) this.deviceGravity(...this.lastGravity);
+      if (this.lastAcceleration) {
+        const at = this.accelerationAt;
+        this.deviceAcceleration(...this.lastAcceleration);
+        this.accelerationAt = at;
+      }
+    });
     this.listen(window, 'scroll', () => this.measurePointer(), { passive: true });
     this.listen(document, 'visibilitychange', () => { if (document.hidden) { this.cameraPan.clear(); this.report?.invalidate('Page hidden during test'); } this.pause(); });
     this.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'rigid-body-physics' });
@@ -255,21 +265,23 @@ export class PhysicsView {
     this.input[28] = this.pointerPoint.x; this.input[29] = this.pointerPoint.y; this.input[30] = 0;
   }
   deviceGravity(x, y, z, angle) {
-    this.input.set(this.rotate(x, y, angle), 34);
+    this.lastGravity = [x, y, z, angle];
+    this.input.set(this.motion.rotate(x, y, angle), 34);
     this.input[36] = z;
     this.input[37] = 1;
   }
   // Device acceleration and gravity are both SI m/s². Inertia acts opposite
   // the phone's linear acceleration, with no visual gain or per-axis clipping.
   deviceAcceleration(x, y, z, angle) {
-    this.acceleration = this.rotate(-x, -y, angle);
+    this.lastAcceleration = [x, y, z, angle];
+    this.acceleration = this.motion.rotate(-x, -y, angle);
     this.acceleration[2] = -z;
     this.accelerationAt = performance.now();
   }
-  rotate(x, y, angle) { const a = angle * Math.PI / 180; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), 0]; }
   measurePointer() { this.motion.bounds = this.layer.getBoundingClientRect(); }
   measure() {
-    const box = this.layer.getBoundingClientRect(); this.motion.bounds = box;
+    this.measurePointer();
+    const box = this.motion.measureBounds(this.layer);
     if (box.width <= 0 || box.height <= 0) return;
     this.card.style.setProperty('--fullscreen-control-bottom', `${Math.max(0, this.controls.getBoundingClientRect().bottom - this.graph.getBoundingClientRect().top) + 8}px`);
     this.width = this.layout?.[2] ?? 1.2;
@@ -480,6 +492,13 @@ export class PhysicsView {
     this.renderer.compile(this.scene, this.camera);
   }
   draw(now) {
+    this.updateScene(now);
+    this.render();
+  }
+  // Prepare geometry and lighting separately from submitting a GPU frame.
+  // Synthetic-clock fixtures can inspect this state without bypassing the
+  // animation loop's bounded GPU queue with hundreds of immediate draws.
+  updateScene(now) {
     const [count, , , pitch, joinWidth, , , , stride, barOffset] = this.layout;
     const current = this.current, previous = this.previous ?? current;
     this.fitEnclosure();
@@ -555,7 +574,6 @@ export class PhysicsView {
     this.renderedAt = performance.timeOrigin + now;
     this.renderAlpha = alpha;
     this.starfield.update(now, this.reduced.matches, this.camera, phase, pitch, height, depth, this.meshEdges);
-    this.render();
   }
   render(camera = this.camera) { this.renderer.render(this.scene, camera); }
   renderedHeight(band, end = 0) {
@@ -617,7 +635,10 @@ export class PhysicsView {
     this.input.set(edges, 38);
     this.input[33] = scrolling ? 1 : 0;
   }
-  clearMotion() { this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38); }
+  clearMotion() {
+    this.lastGravity = this.lastAcceleration = null;
+    this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38);
+  }
   clearAudio() { this.push(new Float32Array(24), new Float32Array(24), false); }
   pause() {
     if (this.request != null) cancelAnimationFrame(this.request);

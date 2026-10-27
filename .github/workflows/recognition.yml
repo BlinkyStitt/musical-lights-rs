@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
   workflow_dispatch:
 permissions:
@@ -13,12 +14,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   worker:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.0.0
         with:
-          node-version: '26.8.2'
+          node-version: '26.12.1'
           cache: npm
           cache-dependency-path: musical-recognition-worker/package-lock.json
       - name: Install Rust

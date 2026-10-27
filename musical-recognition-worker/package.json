@@ -7,5 +7,12 @@
     "deploy": "wrangler deploy",
     "test": "node --test test/*.test.mjs"
   },
-  "devDependencies": { "wrangler": "4.146.0", "miniflare": "5.20261001.0-alpha" }
+  "devDependencies": {
+    "wrangler": "4.146.0",
+    "miniflare": "5.20261001.0-alpha"
+  },
+  "overrides": {
+    "sharp": ">=0.35.5 <0.36",
+    "undici": ">=7.30.1 <8"
+  }
 }

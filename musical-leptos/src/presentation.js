@@ -1,3 +1,4 @@
+import { localPoint, viewportBounds, placeDialog } from './screen.js';
 import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
@@ -98,6 +99,13 @@ export class Presentation {
     this.observer = new MutationObserver(() => this.enhanceControls()); this.observer.observe(this.row, { childList: true, subtree: true });
     this.screenObserver = new MutationObserver(() => this.updateVideoEditor());
     this.screenObserver.observe(card, { attributes: true, attributeFilter: ['data-expanded'] });
+    this.listen(card, 'display-rotation', () => {
+      if (card.hasAttribute('data-expanded')) this.editViewport = null;
+      this.hideHelp();
+      this.updateVideoEditor();
+      this.fullscreenSettings?.layout();
+      this.fullscreenSettings?.updateRotation();
+    });
     this.listen(window, 'resize', () => this.updateVideoEditor());
     if (window.visualViewport) {
       this.listen(window.visualViewport, 'resize', () => this.updateVideoEditor());
@@ -153,17 +161,11 @@ export class Presentation {
     try { if (navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch { /* Physical mobile acceptance is still required. */ }
   }
   enhanceControls() {
-    for (const [className, text] of Object.entries(explanations)) {
+    for (const className of Object.keys(explanations)) {
       const input = this.row.querySelector('.' + className); const span = input?.closest('.setting-switch')?.querySelector('span');
       if (!span || span.dataset.help) continue;
-      span.dataset.help = className; span.setAttribute('role', 'button'); span.tabIndex = 0; span.setAttribute('aria-expanded', 'false');
-      this.listen(span, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(span, className); });
-      this.listen(span, 'pointerleave', event => { if (event.pointerType === 'mouse' && !this.popup.matches(':hover') && document.activeElement !== span) this.hideHelp(); });
-      this.listen(span, 'focus', () => this.showHelp(span, className));
-      this.listen(span, 'blur', () => this.hideHelp());
-      this.listen(span, 'click', event => { event.preventDefault(); event.stopPropagation(); this.showHelp(span, className); });
-      this.listen(span, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(span, className); } });
-      span.dataset.explanation = text;
+      span.setAttribute('role', 'button'); span.tabIndex = 0;
+      this.mountHelp(span, className);
     }
     for (const button of [this.videoButton, this.fullscreenButton]) {
       if (button.dataset.help) continue;
@@ -175,6 +177,16 @@ export class Presentation {
       this.listen(button, 'click', () => this.hideHelp());
     }
   }
+  mountHelp(anchor, key) {
+    anchor.dataset.help = key; anchor.dataset.explanation = explanations[key];
+    anchor.setAttribute('aria-expanded', 'false');
+    this.listen(anchor, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(anchor, key); });
+    this.listen(anchor, 'pointerleave', event => { if (event.pointerType === 'mouse' && !this.popup.matches(':hover') && document.activeElement !== anchor) this.hideHelp(); });
+    this.listen(anchor, 'focus', () => this.showHelp(anchor, key));
+    this.listen(anchor, 'blur', () => this.hideHelp());
+    this.listen(anchor, 'click', event => { event.preventDefault(); event.stopPropagation(); this.showHelp(anchor, key); });
+    this.listen(anchor, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(anchor, key); } });
+  }
   showHelp(anchor, key) {
     this.hideHelp(); this.anchor = anchor; anchor.setAttribute('aria-describedby', this.popup.id); anchor.setAttribute('aria-expanded', 'true');
     const state = this.card.dataset.audioState ?? 'off';
@@ -183,30 +195,44 @@ export class Presentation {
   }
   positionHelp() {
     if (this.popup.hidden || !this.anchor) return;
-    const rect = this.anchor.getBoundingClientRect(); const width = Math.min(300, innerWidth - 24);
-    this.popup.style.width = width + 'px'; this.popup.style.left = Math.max(12, Math.min(innerWidth - width - 12, rect.left)) + 'px';
-    const height = this.popup.getBoundingClientRect().height;
-    this.popup.style.top = Math.max(12, Math.min(innerHeight - height - 12, rect.top > height + 20 ? rect.top - height - 8 : rect.bottom + 8)) + 'px';
+    const expanded = this.card.hasAttribute('data-expanded');
+    const container = this.popup.closest('dialog[open]') ?? this.card;
+    const rect = this.anchor.getBoundingClientRect();
+    const points = expanded ? [localPoint(container, rect.left, rect.top), localPoint(container, rect.right, rect.bottom)]
+      : [{ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom }];
+    const availableWidth = expanded ? container.clientWidth : innerWidth;
+    const availableHeight = expanded ? container.clientHeight : innerHeight;
+    const left = Math.min(...points.map(p => p.x)), top = Math.min(...points.map(p => p.y)), bottom = Math.max(...points.map(p => p.y));
+    const width = Math.min(300, availableWidth - 24);
+    this.popup.style.width = width + 'px';
+    this.popup.style.left = Math.max(12, Math.min(availableWidth - width - 12, left)) + 'px';
+    this.popup.style.maxHeight = Math.max(44, availableHeight - 24) + 'px';
+    const height = this.popup.offsetHeight;
+    this.popup.style.top = Math.max(12, Math.min(availableHeight - height - 12, top > height + 20 ? top - height - 8 : bottom + 8)) + 'px';
   }
+
   hideHelp() { this.popup.hidden = true; this.anchor?.removeAttribute('aria-describedby'); this.anchor?.setAttribute('aria-expanded', 'false'); this.anchor = null; }
   updateVideoEditor() {
     const expanded = this.card.hasAttribute('data-expanded');
     if (!expanded || (!this.card.classList.contains('video-editing') && !this.fullscreenSettings?.dialog.open)) {
       if (!expanded && this.editViewport && this.entry.contains(document.activeElement)) document.activeElement.blur();
       this.editViewport = null;
-      for (const name of ['--expanded-height', '--video-editor-top', '--video-editor-height']) this.card.style.removeProperty(name);
+      for (const name of ['--expanded-width', '--expanded-height', '--video-editor-top', '--video-editor-height']) this.card.style.removeProperty(name);
       return;
     }
     // Keyboard height changes must not resize the scene or its colliders.
     // A width change represents a new layout (including device rotation).
     if (!this.editViewport || this.editViewport.width !== innerWidth) {
+      this.card.style.removeProperty('--expanded-width');
       this.card.style.removeProperty('--expanded-height');
-      this.editViewport = { width: innerWidth, height: this.card.getBoundingClientRect().height };
+      this.editViewport = { width: innerWidth, height: this.card.clientHeight };
+      this.card.style.setProperty('--expanded-width', this.card.clientWidth + 'px');
       this.card.style.setProperty('--expanded-height', this.editViewport.height + 'px');
     }
     const viewport = window.visualViewport;
     this.card.style.setProperty('--video-editor-top', (viewport?.offsetTop ?? 0) + 'px');
     this.card.style.setProperty('--video-editor-height', (viewport?.height ?? innerHeight) + 'px');
+    this.fullscreenSettings?.layout();
   }
   endVideoEdit() {
     this.card.classList.remove('video-editing');
@@ -252,6 +278,7 @@ class FullscreenSettings {
     this.moves = [];
     this.exit = this.card.querySelector('.fullscreen-button');
     this.listening = this.card.querySelector('.listening-toggle').closest('label');
+    this.motion = this.card.querySelector('.motion-button').closest('label');
     this.toolbar = document.createElement('div');
     this.toolbar.className = 'fullscreen-toolbar';
     this.button = document.createElement('button');
@@ -264,7 +291,14 @@ class FullscreenSettings {
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-controls', 'fullscreen-settings');
     this.button.setAttribute('aria-expanded', 'false');
-    this.toolbar.append(this.button);
+    this.rotate = document.createElement('button');
+    this.rotate.type = 'button';
+    this.rotate.tabIndex = 0;
+    this.rotate.className = 'rotate-display';
+    this.rotate.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></svg>`;
+    this.updateRotation();
+    presentation.listen(this.rotate, 'click', () => this.card.dispatchEvent(new Event('rotate-display')));
+    this.toolbar.append(this.rotate, this.button);
     this.dialog = document.createElement('dialog');
     this.dialog.id = 'fullscreen-settings';
     this.dialog.className = 'fullscreen-settings';
@@ -288,6 +322,25 @@ class FullscreenSettings {
     this.observer.observe(this.card, { attributes: true, attributeFilter: ['data-expanded'] });
     this.sync();
   }
+  updateRotation() {
+    this.rotate.setAttribute('aria-label', `Rotate view clockwise, current rotation ${(this.card.displayQuarterTurn ?? 0) * 90} degrees`);
+    this.rotate.title = this.rotate.getAttribute('aria-label');
+  }
+  layout() {
+    if (!this.dialog.open) return;
+    const visible = viewportBounds(this.card, window.visualViewport);
+    const style = getComputedStyle(this.card, '::after');
+    // Resolve safe-area env() values through computed padding on the hidden pseudo-element.
+    const inset = side => Math.max(8, parseFloat(style.getPropertyValue(`padding-${side}`)) || 0);
+    const left = Math.max(inset('left'), visible.left + 8), top = Math.max(inset('top'), visible.top + 8);
+    const right = Math.min(this.card.clientWidth - inset('right'), visible.right - 8);
+    let bottom = Math.min(this.card.clientHeight / 2, visible.bottom - 8);
+    // A keyboard can cover the logical top half after a half turn. Keep the
+    // editor and fixed Close usable in the remaining visible region.
+    if (bottom - top < 96) bottom = visible.bottom - 8;
+    const width = Math.min(1120, Math.max(0, right - left));
+    placeDialog(this.card, this.dialog, { left: left + (right - left - width) / 2, top, width, height: Math.max(0, bottom - top) });
+  }
   move(node, destination) {
     const marker = document.createComment('fullscreen control position');
     node.before(marker);
@@ -301,6 +354,8 @@ class FullscreenSettings {
       const active = document.activeElement;
       this.move(this.exit, this.toolbar);
       this.toolbar.prepend(this.exit);
+      this.motionMarker = this.move(this.motion, this.toolbar);
+      this.toolbar.insertBefore(this.motion, this.button);
       this.listeningMarker = this.move(this.listening, this.toolbar);
       this.toolbar.insertBefore(this.listening, this.button);
       const controls = '.audio-controls, .scene-controls, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
@@ -315,8 +370,10 @@ class FullscreenSettings {
     if (!this.card.hasAttribute('data-expanded') || this.dialog.open) return;
     this.presentation.hideHelp();
     this.dialog.append(this.presentation.popup);
+    this.motionMarker.before(this.motion);
     this.listeningMarker.before(this.listening);
     this.dialog.showModal();
+    this.layout();
     this.body.scrollTop = 0;
     this.button.setAttribute('aria-expanded', 'true');
     this.presentation.updateVideoEditor();
@@ -324,6 +381,7 @@ class FullscreenSettings {
   hide() {
     if (this.dialog.open) this.dialog.close();
     if (this.listeningMarker) this.toolbar.insertBefore(this.listening, this.button);
+    if (this.motionMarker) this.toolbar.insertBefore(this.motion, this.listening);
     this.presentation.hideHelp();
     this.card.append(this.presentation.popup);
     this.button.setAttribute('aria-expanded', 'false');
@@ -336,6 +394,7 @@ class FullscreenSettings {
     for (const { node, marker } of this.moves) { marker.replaceWith(node); }
     this.moves.length = 0;
     this.listeningMarker = null;
+    this.motionMarker = null;
     if (!this.presentation.closed && active === this.exit) this.exit.focus({ preventScroll: true });
     this.presentation.hideHelp();
   }

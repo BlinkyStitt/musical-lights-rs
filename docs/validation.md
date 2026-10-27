@@ -3,16 +3,28 @@
 ## Website deployment
 
 Website validation builds physics, the worklet and Leptos once. The build job
-runs the offline harness and records the complete browser test inventory. Two
-isolated Chromium groups and one WebKit/iPhone-profile job download that same
-compiled bundle. Each retains the serial startup/crash guard, one worker, zero
-retries. The final job compares the reports with
+runs the offline harness and records the complete browser test inventory. Ten
+isolated Chromium groups and eight WebKit/iPhone-profile groups download that same
+compiled bundle. The planner distributes cases from each browser family in
+round-robin order, so one large file cannot occupy a whole runner. Each group
+retains the serial startup/crash guard, one worker and zero retries. The ten-minute
+browser target includes all cases; it is not permission to omit slow tests.
+The final job compares all eighteen reports with
 the inventory: omitted, duplicated, incomplete or failed tests stop publication.
-Core and loudness-reference checks run alongside the build and browser jobs.
+Core, native physics tests/Clippy and the Criterion correctness smoke checks run
+in the existing native job alongside the build and browser jobs. That job remains
+required by the final validation barrier. The build job runs physics WASM checks,
+the worklet and Leptos; native physics and benchmarks do not delay its artifact.
+The local `physics` target still runs both phases. CI uses `physics-native` and
+`physics-wasm` to schedule the same checks once each. Loudness-reference checks
+retain their independent job.
 
 The artifact contains `musical-leptos/dist`, both compiled WASM packages, the
 test inventory, and file digests. Its provenance records the Git source tree,
-workflow digest, runner platform/image, producer run/attempt and source commit.
+workflow digest, runner platform, producer image, run/attempt and source commit.
+Consumers verify the same source, workflow recipe and OS/architecture. The workflow
+pins the build runner; its ambient image label remains a producer receipt rather
+than an input taken from the browser container.
 PRs always perform fresh validation. After a merge or manual dispatch, the plan
 can reuse an unexpired artifact only from a successful same-repository PR run
 of this workflow with all required validation jobs passed. It verifies the
@@ -39,12 +51,15 @@ validation/build tooling and pinned Cargo configuration changes reach all
 consumers. Manual dispatch includes every target. Browser-only test changes do
 not rebuild unrelated firmware or terminal applications.
 
-Rust caches use the actual workspace `target` and root `Cargo.lock` for core
-and reference jobs. Standalone packages cache their own target directories.
+The native job uses the workspace `target` for core, physics and benchmarks,
+with all three lockfiles and Rust inputs in its cache key. The reference job
+retains the workspace target and root lockfile. The site job caches only its
+standalone physics, worklet and Leptos target directories.
 Keys include platform, pinned toolchain, lockfiles and Rust/build inputs, so
 JavaScript/test-only commits do not create new copies of identical Rust caches.
-Cargo still validates/rebuilds restored inputs. Tool caches remain separated
-by site, demos, ESP installers and the pinned actionlint checker. Locked Python
+Restores prefer matching lockfiles, then the same platform and pinned toolchain.
+Cargo rebuilds changed inputs and keeps locked dependency checks. Tool caches
+remain separated by site, demos, ESP installers and the pinned actionlint checker. Locked Python
 reference downloads and npm downloads are also cached. Missing caches take the
 normal pinned installation/build path; test failures are never retried or ignored.
 Closed same-repository PRs remove only their `refs/pull/<number>/merge` caches.
@@ -52,10 +67,13 @@ They do not remove default-branch caches.
 
 Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
-Standard GitHub-hosted runners remain free for this public repository; these
-changes do not require larger runners, paid images or increased cache storage.
-Docker image pulls and browser downloads are not used as substitutes for the
-isolated test jobs: the measured dominant cost is test execution.
+Standard GitHub-hosted runners remain free for this public repository.
+The workflow keeps the existing runner sizes and cache quota.
+Website browser groups use the official Playwright 1.64.1 Noble image, pinned
+by manifest digest in the workflow, with the matching locked SDK. Its bundled
+browsers and system libraries avoid per-run OS dependency installation. Keep the
+SDK and image versions synchronized when updating them. The groups retain every
+scheduled test and the final complete-coverage barrier.
 
 On macOS, the native crash guard reads each new browser IPS report. Actual crashes
 and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots
@@ -64,7 +82,7 @@ precede a process quit, so it does not replace Playwright's startup and page-cra
 checks. See [Apple's report fields](https://developer.apple.com/documentation/xcode/examining-the-fields-in-a-crash-report).
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
-`just validate` runs the core feature matrix, native physics, worklet, Leptos,
+`just check` runs the core feature matrix, native physics, worklet, Leptos,
 benchmark smoke checks, demo builds and full browser suite with pinned tools.
 `npm run test:site` and `npm run test:demos` retain their complete local subsets.
 Run from the repository root with pinned tools and macOS host access. To check
@@ -85,6 +103,11 @@ standalone Criterion benchmarks, not a wall-clock assertion on a shared CI runne
 
 Browser tests cover actual rendering, native input, audio output and lifecycle
 integration. All viewport/theme combinations retain geometry and audio checks.
+Synthetic-clock tests of scene matrices and lighting uniforms call
+`PhysicsView.updateScene`, which prepares state without submitting GPU work.
+Production `draw` still prepares and renders a frame. Pixel probes retain real
+draws and readback. Do not flood the GPU with synchronous synthetic draws outside
+the animation loop's two-frame queue: that work can stall the next test's renderer.
 The complete 24-band hover sequence and common-control keyboard order run once;
 other layouts check edge and center readouts. The existing keyboard tests still
 visit every band. Route tests own route content checks. The short-landscape test
@@ -676,11 +699,12 @@ ordered input, tempo and accent events for exact replay. Historical recordings
 need their matching historical engine. Raw loudness, filtered targets and the
 fixed-window reference audit retain their existing contracts.
 
-Browser traces retain DOM snapshots and source code. They omit the continuous
-screenshot filmstrip because GPU readbacks compete with realtime audio on
-software renderers. Failure screenshots and explicit GPU pixel comparisons,
-layout screenshots and preview images remain enabled. This reduces diagnostic
-recording work without changing browser assertions, deadlines or retries.
+Browser traces retain action timings, errors and source code. They omit
+continuous DOM snapshots and the screenshot filmstrip because recording each
+protocol call stalls software renderers. Failure screenshots, browser process
+logs, explicit GPU pixel comparisons, layout screenshots and preview images
+remain enabled. The tests keep all assertions, deadlines, one worker, zero
+retries and the serial startup/crash guard.
 
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and
@@ -1147,3 +1171,16 @@ commands exited successfully. Pinned Dioxus nevertheless logged a
 the produced demo passed browser checks. This optimizer error remains separate
 from the pigment checks. Human appearance review, physical-device performance,
 Linux CI, live-provider acceptance and deployment verification remain pending.
+
+## Draft checkpoints and CI
+
+Push unfinished checkpoints to draft pull requests. The site, other-apps,
+firmware, and recognition workflows skip their root jobs for draft PRs, which
+also skips their dependent jobs. Pushes to `main` and manual runs retain their
+existing validation and deployment rules.
+
+After local validation and agent reviews pass for the current commit, mark the
+PR ready. Each validation workflow listens for `ready_for_review` as well as
+new commits on ready PRs. Return a PR to draft before pushing a repair. Draft
+checks that were skipped do not establish acceptance; wait for the completed
+current-head CI run before merging.
