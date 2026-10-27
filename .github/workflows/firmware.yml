@@ -21,23 +21,6 @@ on:
       - 'tools/firmware/**'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'musical-lights-core/**'
-      - 'validation/ci.py'
-      - 'validation/validate.py'
-      - 'validation/firmware_artifacts.py'
-      - 'validation/install_tools.py'
-      - 'validation/tooling/**'
-      - '.github/workflows/firmware.yml'
-      - '**/.cargo/**'
-      - '**/rust-toolchain*'
-      - 'musical-feather-m0/**'
-      - 'musical-stm32/**'
-      - 'musical-adafruit-sparkle-embassy/**'
-      - 'musical-adafruit-sparkle-idf/**'
-      - 'tools/firmware/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -46,7 +29,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   firmware-tools:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: changes
+    if: needs.changes.outputs.firmware_tools == 'true'
     name: Wired provisioning and calibration tools
     runs-on: ubuntu-24.04
     steps:
@@ -61,6 +45,7 @@ jobs:
     name: Affected firmware
     runs-on: ubuntu-24.04
     outputs:
+      firmware_tools: ${{ steps.changes.outputs.firmware_tools }}
       rust: ${{ steps.changes.outputs.rust }}
       esp: ${{ steps.changes.outputs.esp }}
       rust_matrix: ${{ steps.changes.outputs.rust_matrix }}
@@ -156,3 +141,13 @@ jobs:
           path: ${{ runner.temp }}/firmware-esp-idf/
           if-no-files-found: error
           retention-days: 30
+  required:
+    name: Required firmware checks
+    needs: [changes, firmware-tools, rust, esp]
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 validation/ci.py required-checks firmware
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}

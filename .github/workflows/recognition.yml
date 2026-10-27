@@ -5,7 +5,6 @@ on:
     paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,8 +12,19 @@ concurrency:
   group: recognition-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  worker:
+  changes:
+    name: Affected recognition Worker
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    outputs:
+      recognition: ${{ steps.changes.outputs.recognition }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: changes
+        run: python3 validation/ci.py changes
+  worker:
+    needs: changes
+    if: needs.changes.outputs.recognition == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
@@ -50,3 +60,13 @@ jobs:
         run: npm --prefix musical-recognition-worker run deploy -- --dry-run
       - name: Test compiled Worker with fake AudD
         run: npm --prefix musical-recognition-worker test
+  required:
+    name: Required recognition checks
+    needs: [changes, worker]
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 validation/ci.py required-checks recognition
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
