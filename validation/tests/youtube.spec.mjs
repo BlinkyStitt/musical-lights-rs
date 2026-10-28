@@ -88,9 +88,9 @@ async function setup(page, path = '/', progressingVideo = false, nativeFullscree
 }
 async function load(page) {
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
   await page.locator('.youtube-link').fill('https://youtu.be/abcDEF012_-?t=1m23s');
-  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Load video', exact: true }));
   await expect(page.locator('.youtube-status')).toBeEmpty();
   await expect(page.locator('.youtube-frame iframe')).toBeVisible();
 }
@@ -121,7 +121,7 @@ for (const resizeLayout of [false, true]) {
       };
     });
     await setup(page); await load(page);
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
     await page.evaluate(() => {
       const card = document.querySelector('.audio-card');
@@ -147,7 +147,7 @@ for (const resizeLayout of [false, true]) {
     })).toBe(true);
     const before = await geometry();
     await openFullscreenSettings(page);
-    await page.getByRole('button', { name: 'Video', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
     await expect(page.locator('.youtube-link')).toBeFocused();
     expect(await geometry()).toEqual(before);
     await page.evaluate(() => window.keyboardViewport(320, 40));
@@ -162,12 +162,12 @@ for (const resizeLayout of [false, true]) {
       expect(rect.height).toBeGreaterThanOrEqual(44); expect(rect.y + rect.height).toBeLessThanOrEqual(360);
     }
     await page.screenshot({ path: info.outputPath('floating-youtube-keyboard.png') });
-    await page.getByRole('button', { name: 'Load video', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Load video', exact: true }));
     await expect(editor).toBeHidden(); await expect(page.locator('.youtube-link')).not.toBeFocused();
     expect(await page.locator('.audio-card').evaluate(n => n.style.getPropertyValue('--expanded-height'))).toBe('');
     await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => window.keyboardViewport(844));
     await openFullscreenSettings(page);
-    await page.getByRole('button', { name: 'Video', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
     await page.setViewportSize({ width: 844, height: 390 }); await page.evaluate(() => window.keyboardViewport(390));
     await expect.poll(() => page.locator('.audio-card').evaluate(n => n.getBoundingClientRect().height)).toBe(390);
     await page.keyboard.press('Escape');
@@ -182,18 +182,18 @@ for (const resizeLayout of [false, true]) {
 }
 test('expanded entry without a loaded video does not reserve or resize the scene', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await setup(page);
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
   const sceneHeight = await page.locator('.balloon-layer').evaluate(n => n.getBoundingClientRect().height);
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
   expect(await page.locator('.balloon-layer').evaluate(n => n.getBoundingClientRect().height)).toBe(sceneHeight);
-  await page.getByRole('button', { name: 'Clear YouTube link', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Clear YouTube link', exact: true }));
   await page.locator('.youtube-link').fill('https://example.com/video');
-  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Load video', exact: true }));
   await expect(page.locator('.youtube-status')).toContainText('Use a link to one YouTube video');
   await expect(page.locator('.video-form')).toBeVisible();
-  await page.getByRole('button', { name: 'Remove video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Remove video', exact: true }));
   await expect(page.locator('.video-panel')).toBeHidden();
   await expect(page.locator('.youtube-link')).not.toBeFocused();
   expect(await page.locator('.audio-card').evaluate(n => n.style.getPropertyValue('--expanded-height'))).toBe('');
@@ -201,15 +201,15 @@ test('expanded entry without a loaded video does not reserve or resize the scene
 test('default video is ready to load and the clear button preserves playback and an empty preference', async ({ page }) => {
   await setup(page);
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
   await expect(page.locator('.youtube-link')).toHaveValue('https://www.youtube.com/watch?v=6d4NOjyd2Ik');
   await expect(page.locator('.youtube-frame iframe')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Load video', exact: true }));
   await expect(page.locator('.youtube-frame iframe')).toHaveAttribute('src', /embed\/6d4NOjyd2Ik/);
   await page.evaluate(() => window.videoPlayer.playVideo());
   const clear = page.getByRole('button', { name: 'Clear YouTube link', exact: true });
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
   expect(await clear.evaluate(n => n.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await clear.focus(); await page.keyboard.press('Enter');
   await expect(page.locator('.youtube-link')).toHaveValue('');
@@ -219,7 +219,7 @@ test('default video is ready to load and the clear button preserves playback and
   expect(await page.evaluate(() => window.micRequests)).toBe(0);
   await page.reload(); await physicsReady(page); await normalView(page);
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
   await expect(page.locator('.youtube-link')).toHaveValue('');
 });
 for (const path of ['/', '/advanced/']) {
@@ -231,7 +231,7 @@ for (const path of ['/', '/advanced/']) {
     await expect(page.locator('.youtube-frame iframe')).toHaveAttribute('credentialless', '');
     await expect(page.locator('.youtube-frame iframe')).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
     await page.evaluate(() => window.videoPlayer.playVideo());
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     expect(await page.evaluate(() => window.micRequests)).toBe(1);
     expect(await page.evaluate(() => document.querySelector('.audio-card').presentation.videoPlaying)).toBe(true);
@@ -253,7 +253,7 @@ for (const path of ['/', '/advanced/']) {
       await page.screenshot({ path: testInfo.outputPath(`youtube-${viewport.width}.png`) });
     }
     expect(await page.evaluate(() => window.videoPlayer.destroyed ?? false)).toBe(false);
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
     await page.getByRole('link', { name: 'About', exact: true }).click();
     expect(await page.evaluate(() => window.videoPlayer.destroyed)).toBe(true);
     expect(await page.evaluate(() => navigator.audioSession.type)).toBe('auto');
@@ -264,7 +264,7 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
     await page.emulateMedia({ reducedMotion, colorScheme: reducedMotion === 'reduce' ? 'light' : 'dark' });
     await page.setViewportSize({ width: 568, height: 320 });
     await setup(page); await load(page);
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
     await page.evaluate(() => {
       const card = document.querySelector('.audio-card');
@@ -301,7 +301,7 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
     }
     await page.screenshot({ path: info.outputPath('short-landscape-youtube-notices.png') });
     // Exit remains reachable after scrolling through the footer.
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
     await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
   });
 }
@@ -315,9 +315,9 @@ test('speaker playback and microphone capture share an audio session, and stoppi
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
   expect(await page.evaluate(() => window.videoPlayer.destroyed ?? false)).toBe(false);
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
   await page.locator('.youtube-link').fill('https://example.com/video');
-  await page.getByRole('button', { name: 'Load video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Load video', exact: true }));
   await expect(page.locator('.youtube-status')).toContainText('Use a link to one YouTube video');
   // A rejected replacement must not invalidate the current player's callbacks.
   await page.evaluate(() => window.videoPlayer.pauseVideo());
@@ -456,8 +456,8 @@ test('stale replaced or removed video callbacks cannot change the current microp
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('play-and-record');
   await expect(page.locator('.youtube-status')).toBeEmpty();
   await openFullscreenSettings(page);
-  await page.getByRole('button', { name: 'Video', exact: true }).click();
-  await page.getByRole('button', { name: 'Remove video', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Remove video', exact: true }));
   await page.evaluate(() => players[1].playVideo());
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('play-and-record');
   await page.getByRole('link', { name: 'About', exact: true }).click();
@@ -492,7 +492,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     await page.emulateMedia({ reducedMotion });
     await setup(page, path, true, true); await load(page);
     const video = page.frameLocator('.youtube-frame iframe').locator('video');
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     await page.frameLocator('.youtube-frame iframe').getByRole('button', { name: 'Play test video', exact: true }).click();
     await page.evaluate(() => {
@@ -503,7 +503,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     for (let turn = 0; turn < 4; turn++) {
       if (info.project.name === 'chromium') await expect.poll(() => page.evaluate(() => document.fullscreenElement === document.querySelector('.visualizer-screen'))).toBe(true);
       await openFullscreenSettings(page); await closeFullscreenSettings(page);
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
       const before = await video.evaluate(v => ({ time: v.currentTime, frames: videoFrames }));
       await expect.poll(() => video.evaluate((v, before) => !v.paused && !v.error
@@ -567,7 +567,7 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
         }
       };
     });
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     await expect.poll(() => page.evaluate(() => rotationAudio.rms ?? -160)).toBeGreaterThan(-45);
     await page.evaluate(() => {
@@ -692,7 +692,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
       window.setEditorHeight = height => { viewport.height = height; viewport.dispatchEvent(new Event('resize')); };
     });
     await setup(page, path);
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     for (let turn = 0; turn < 4; turn++) {
       for (const action of ['Load video', 'Remove video']) {
         await openFullscreenSettings(page);

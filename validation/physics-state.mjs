@@ -4,7 +4,7 @@ import { clickControlAtHitPoint } from './control-input.mjs';
 // Explicitly leave the mobile default when a fixture tests the normal page.
 export async function normalView(page) {
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
-  if (await exit.isVisible()) await exit.click();
+  if (await exit.isVisible()) await clickControlAtHitPoint(page, exit);
 }
 // Fullscreen controls share the page's nodes inside the top-half dialog.
 export async function openFullscreenSettings(page) {

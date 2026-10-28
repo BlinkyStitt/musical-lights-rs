@@ -743,6 +743,15 @@ logs, explicit GPU pixel comparisons, layout screenshots and preview images
 remain enabled. The tests keep all assertions, deadlines, one worker, zero
 retries and the serial startup/crash guard.
 
+Repeated Settings, rotation, video and normal-view button clicks use
+`validation/control-input.mjs` to resolve scrolling, two stable animation frames,
+enabled state, 44-pixel bounds and the actual hit target in one browser call,
+then send a native mouse click. The input regression rejects covered, disabled,
+undersized and moving controls and requires trusted events. Keyboard, help-text
+taps, screenshots and all post-action assertions remain in their existing paths.
+This avoids repeated locator/driver round trips in the serial suite; it changes
+neither application timing nor the required test matrix.
+
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and
 the existing assertion deadlines within focused test cases. Preview sampling

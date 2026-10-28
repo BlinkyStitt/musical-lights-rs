@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { clickControlAtHitPoint } from '../control-input.mjs';
 import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
@@ -53,10 +54,10 @@ test.describe('compact mobile controls', () => {
       expect((await face(listening)).shadow).toContain('inset');
       await page.locator('.fullscreen-toolbar').screenshot({ path: info.outputPath('compact-listening-on.png') });
       await page.evaluate(() => { window.compactInputs = [document.querySelector('.motion-button'), document.querySelector('.listening-toggle')]; });
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
       expect(await page.evaluate(() => compactInputs.every(n => n.closest('dialog[open]')))).toBe(true);
       await expect(page.getByRole('button', { name: 'Phone motion', exact: true })).toBeVisible();
-      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
       expect(await page.evaluate(() => compactInputs.every(n => n.closest('.fullscreen-toolbar')))).toBe(true);
       await expect(listening).toBeChecked();
       await listening.uncheck(); await expect(listening).not.toBeChecked();
@@ -77,7 +78,7 @@ for (const path of ['/', '/advanced/']) {
     });
     await page.goto(origin + path); await physicsReady(page);
     await normalView(page);
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     // The entry action still requests Listening. Opening settings adds no input.
     await expect.poll(() => page.evaluate(() => micRequests)).toBe(1);
     await expect(page.locator('.listening-toggle')).toBeEnabled();
@@ -112,7 +113,7 @@ for (const path of ['/', '/advanced/']) {
           icon: gear.querySelector('svg')?.getAttribute('aria-hidden'), text: gear.textContent.trim(),
           count: document.querySelectorAll('.listening-toggle').length };
       })).toEqual({ toolbar: true, left: true, touch: true, gearWidth: true, icon: 'true', text: '', count: 1 });
-      await settings.click();
+      await clickControlAtHitPoint(page, settings);
       const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
       await expect(dialog).toBeVisible();
       await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeFocused();
@@ -159,12 +160,12 @@ for (const path of ['/', '/advanced/']) {
       await expect(dialog).not.toBeVisible();
       await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
       await expect(settings).toBeFocused();
-      await settings.click();
-      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+      await clickControlAtHitPoint(page, settings);
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
       await expect(dialog).not.toBeVisible();
       await page.evaluate(() => { document.querySelector('#dancinglights').physics.renderer.render = modalIdentity.render; });
     }
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
     await expect(page.locator('.scene-controls')).toBeVisible();
     await expect(page.locator('.camera-rotation')).toHaveValue('17');
     await expect(page.locator('.camera-zoom')).toHaveValue('40');
@@ -191,7 +192,7 @@ async function startFullscreenAudio(page, path, reducedMotion, info) {
   } else await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await page.evaluate(() => { window.modalSession = { context: modalContext, id: document.querySelector('.audio-card').dataset.audioSession }; });
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
   if (info.project.name === 'chromium') await expect.poll(() => page.evaluate(() => document.fullscreenElement === document.querySelector('.visualizer-screen'))).toBe(true);
 }
 
@@ -218,7 +219,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
       await expect(motion).not.toBeChecked();
       expect(await motion.evaluate(n => getComputedStyle(n).outlineStyle)).not.toBe('none');
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
       await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
       const help = page.getByRole('button', { name: 'Phone motion', exact: true });
       await help.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Space');
@@ -228,8 +229,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         const r = n.getBoundingClientRect();
         return [r.bottom <= innerHeight / 2, r.left >= innerWidth / 2, r.top >= innerHeight / 2, r.right <= innerWidth / 2][turn];
       }, turn)).toBe(true);
-      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
     }
     expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
       && document.querySelector('.audio-card').dataset.audioSession === modalSession.id)).toBe(true);
@@ -245,14 +246,14 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     // help/keyboard workflow above. Each retains the normal 30-second deadline.
     for (let turn = 0; turn < 4; turn++) {
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
       await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
       // Camera clicks must work while the existing switch help is open too.
       await page.getByRole('button', { name: 'Phone motion', exact: true }).focus();
       await expect(page.locator('.control-help')).toBeVisible();
-      await page.getByRole('button', { name: 'Increase Zoom', exact: true }).click();
-      await page.getByRole('button', { name: 'Increase Horizontal position', exact: true }).click();
-      await page.getByRole('button', { name: 'Decrease Vertical position', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Increase Zoom', exact: true }));
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Increase Horizontal position', exact: true }));
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Decrease Vertical position', exact: true }));
       // Sample readout, shared parameters, geometry and resource ownership in
       // one browser call; separate traced reads needlessly stall CI rendering.
       await expect.poll(() => page.evaluate(turn => {
@@ -268,8 +269,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
           native: document.fullscreenElement === document.querySelector('.visualizer-screen') };
       }, turn)).toMatchObject({ values: [101 + turn, 51 + turn, 49 - turn], readout: `${101 + turn}%`,
         same: true, motion: false, topHalf: true, ...(info.project.name === 'chromium' ? { native: true } : {}) });
-      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
     }
     await expect(page.locator('.rotate-display')).toHaveAccessibleName('Rotate view clockwise, current rotation 0 degrees');
     expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
@@ -278,9 +279,9 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
 
   test(`settings close on native browser exit and route cleanup on ${path} (${reducedMotion})`, async ({ page }, info) => {
     await startFullscreenAudio(page, path, reducedMotion, info);
-    await page.locator('.rotate-display').click();
+    await clickControlAtHitPoint(page, page.locator('.rotate-display'));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-display-rotation', '1');
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
     if (info.project.name === 'chromium') {
       expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
       await page.evaluate(() => document.exitFullscreen());
@@ -293,8 +294,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     if (path === '/advanced/') await expect(page.locator('.input-source')).toHaveValue('generated');
     else await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
     expect(await page.evaluate(() => ({ same: modalContext === modalSession.context, state: modalContext.state, id: document.querySelector('.audio-card').dataset.audioSession }))).toEqual({ same: true, state: 'running', id: await page.evaluate(() => modalSession.id) });
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
     await page.evaluate(() => { window.oldModal = document.querySelector('dialog'); document.querySelector('nav a[href="/about"]').click(); });
     await expect(page.locator('.audio-card')).toHaveCount(0);
     expect(await page.evaluate(() => oldModal.open || oldModal.isConnected)).toBe(false);
@@ -312,8 +313,8 @@ test('Escape respects focused controls, closes Settings, and exits with action h
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   const input = page.locator('.camera-rotation');
   // A focused editor can consume Escape before the dialog's native cancel.
@@ -340,8 +341,8 @@ test('queued dialog close keeps new action help and Escape usable', async ({ pag
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
   const result = await page.evaluate(async () => {
     const card = document.querySelector('.audio-card'), dialog = card.querySelector('dialog');
     const closed = new Promise(resolve => dialog.addEventListener('close', resolve, { once: true }));
@@ -415,7 +416,7 @@ test('toolbar Listening keeps one microphone session through Settings and restor
     MediaDevices.prototype.getUserMedia = async (...args) => { toolbarCaptures++; return capture.call(navigator.mediaDevices, ...args); };
   });
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
   const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(listening).toBeChecked();
@@ -427,7 +428,7 @@ test('toolbar Listening keeps one microphone session through Settings and restor
       order: exit.getBoundingClientRect().right <= label.getBoundingClientRect().left && label.getBoundingClientRect().right <= gear.getBoundingClientRect().left };
   })).toEqual({ textFits: true, fits: true, order: true });
   await page.evaluate(() => { window.toolbarAudio = { context: testContext, input: document.querySelector('.listening-toggle'), session: document.querySelector('.audio-card').dataset.audioSession }; });
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
   await expect(listening).toBeChecked();
   expect(await listening.evaluate(n => !!n.closest('dialog'))).toBe(true);
   const close = page.getByRole('button', { name: 'Close settings', exact: true });
@@ -439,7 +440,7 @@ test('toolbar Listening keeps one microphone session through Settings and restor
   await listening.uncheck();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
   await expect.poll(() => page.evaluate(() => toolbarAudio.context.state)).toBe('closed');
-  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
   expect(await listening.evaluate(n => !!n.closest('.audio-controls') && !n.closest('.fullscreen-toolbar'))).toBe(true);
   await expect(listening).not.toBeChecked();
   await expect(listening).toHaveCount(1);
@@ -452,9 +453,9 @@ test('Escape cancels a typed slider value before it closes fullscreen Settings',
   await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
   await page.locator('.input-source').selectOption('generated');
-  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Edit Box depth (cm)', exact: true }).click();
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Box depth (cm)', exact: true }));
   const editor = page.getByRole('spinbutton', { name: 'Box depth (cm) value', exact: true });
   await editor.fill('90'); await editor.press('Escape');
   await expect(editor).not.toBeVisible();
