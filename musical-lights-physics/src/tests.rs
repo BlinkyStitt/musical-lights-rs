@@ -2702,6 +2702,124 @@ fn live_ball_settings_preserve_survivors_and_remove_real_bodies() {
 }
 
 #[test]
+fn removing_a_ball_preserves_survivors_with_settled_contacts() {
+    let mut sim = world(SimulationConfig {
+        height: MIN_HEIGHT,
+        depth: 0.2,
+        balls: BallSettings {
+            count: 16,
+            ..BallSettings::default()
+        },
+        ..SimulationConfig::default()
+    });
+    for _ in 0..600 {
+        sim.step();
+    }
+    let survivors = 15;
+    assert!(
+        (0..survivors).any(|i| (0..i).any(|j| {
+            (position(&sim, i) - position(&sim, j)).length()
+                < (sim.config.balls.diameter(i) + sim.config.balls.diameter(j)) / 2.0
+        })),
+        "the regression needs ordinary penetration between settled survivors"
+    );
+    let states: Vec<_> = sim.balls[..survivors]
+        .iter()
+        .map(|&(h, c)| {
+            let body = &sim.world.bodies[h];
+            ((h, c), *body.position(), body.linvel(), body.angvel())
+        })
+        .collect();
+    let pigments = sim.pigments;
+    let targets = sim.color_targets;
+    let bodies = sim.world.bodies.len();
+    let colliders = sim.world.colliders.len();
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        balls: BallSettings {
+            count: survivors,
+            ..sim.config.balls
+        },
+        ..sim.input
+    })
+    .unwrap();
+    sim.update_balls();
+    assert_eq!(sim.balls.len(), survivors);
+    assert_eq!(sim.world.bodies.len(), bodies - 1);
+    assert_eq!(sim.world.colliders.len(), colliders - 1);
+    for (i, &(handles, pose, linear, angular)) in states.iter().enumerate() {
+        let body = &sim.world.bodies[handles.0];
+        assert_eq!(sim.balls[i], handles);
+        assert_eq!(*body.position(), pose, "survivor {i} moved during removal");
+        assert_eq!(body.linvel(), linear);
+        assert_eq!(body.angvel(), angular);
+    }
+    assert_eq!(sim.pigments, pigments);
+    assert_eq!(sim.color_targets, targets);
+    sim.step();
+    for (i, &(_, pose, linear, _)) in states.iter().enumerate() {
+        let displacement = (position(&sim, i) - pose.translation).length();
+        assert!(
+            displacement < linear.length() * DT + 0.005,
+            "survivor {i}: {displacement}"
+        );
+    }
+}
+
+#[test]
+fn ball_changes_repack_only_new_or_deeper_intersections() {
+    for (count, diameter, repacks) in [(3, 0.1, false), (2, 0.09, false), (2, 0.11, true)] {
+        let mut sim = world(SimulationConfig {
+            balls: BallSettings {
+                count: 2,
+                small: 0.1,
+                big: 0.1,
+            },
+            ..SimulationConfig::default()
+        });
+        // The survivors share a shallow contact, away from the next spawn.
+        let positions = [Vector::new(0.3, 0.3, 0.0), Vector::new(0.3999, 0.3, 0.0)];
+        for (i, &p) in positions.iter().enumerate() {
+            place(&mut sim, i, p, Vector::ZERO);
+        }
+        sim.apply(SimulationInput {
+            balls: BallSettings {
+                count,
+                small: diameter,
+                big: diameter,
+            },
+            ..sim.input
+        })
+        .unwrap();
+        sim.update_balls();
+        for (i, &p) in positions.iter().enumerate() {
+            assert_eq!(
+                position(&sim, i) != p,
+                repacks,
+                "{count} balls, {diameter} m"
+            );
+        }
+        if repacks {
+            assert!((position(&sim, 0) - position(&sim, 1)).length() >= diameter);
+        }
+    }
+}
+
+fn sphere_fits_depth(z: f32, radius: f32, depth: f32) -> bool {
+    z.abs() + radius <= depth / 2.0 + 0.001
+}
+
+#[test]
+fn depth_containment_oracle_rejects_an_escaped_sphere() {
+    assert!(sphere_fits_depth(0.0, 0.096, 0.2));
+    for sign in [-1.0, 1.0] {
+        assert!(sphere_fits_depth(sign * 0.004, 0.096, 0.2));
+        assert!(!sphere_fits_depth(sign * 0.006, 0.096, 0.2));
+        assert!(!sphere_fits_depth(sign * 0.1, 0.096, 0.2));
+    }
+}
+
+#[test]
 fn maximum_equal_balls_fit_short_shallow_room_and_update_mass() {
     let mut sim = world(SimulationConfig {
         height: MIN_HEIGHT,
@@ -2745,7 +2863,7 @@ fn maximum_equal_balls_fit_short_shallow_room_and_update_mass() {
         for &(h, _) in &sim.balls {
             let p = sim.world.bodies[h].translation();
             assert!(p.x >= 0.095 && p.x <= WIDTH - 0.095, "{p:?}");
-            assert!(p.z.abs() + 0.096 <= 0.201, "{p:?}");
+            assert!(sphere_fits_depth(p.z, 0.096, sim.config.depth), "{p:?}");
             assert!(
                 p.y >= 0.095 && p.y + 0.096 <= sim.ceiling_height + 0.001,
                 "{p:?}"

@@ -207,6 +207,34 @@ test('built WASM records attack-only paint policy and preserves physical replay'
   assert.deepEqual(runs[0], runs[1]); assert.deepEqual(runs[1], runs[2]);
 });
 
+test('built WASM removes a settled ball without repacking survivors and replays the transition', async () => {
+  const layout = Array.from(PhysicsSimulation.layout()), config = Array.from(PhysicsSimulation.defaults()), palette = Array(72).fill(.5);
+  config[0] = .4; config[5] = .2; config[8] = 16;
+  const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));
+  const snapshot = () => Array.from(new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]));
+  try {
+    for (let i = 0; i < 600; i++) sim.step();
+    const before = snapshot();
+    const values = Array(layout[22]).fill(0);
+    values[32] = config[0]; values[62] = config[5]; values.splice(64, 3, 15, config[9], config[10]);
+    const inputs = [{ tick: sim.tick(), values }];
+    sim.input(new Float32Array(values)); sim.step();
+    const after = snapshot();
+    assert.equal(after[layout[30]], 15);
+    assert(after.slice(3 + 15 * layout[8], layout[9]).every(value => value === 0));
+    for (let i = 0; i < 15; i++) {
+      const offset = 3 + i * layout[8];
+      const displacement = Math.hypot(...after.slice(offset, offset + 3).map((value, axis) => value - before[offset + axis]));
+      const speed = Math.hypot(...before.slice(offset + 9, offset + 12));
+      assert(displacement < speed * (after[0] - before[0]) + .005, `Survivor ${i} moved ${displacement} m after removal`);
+    }
+    const report = { type: 'musical-lights-phone-report-v7', layout, config, palette, initialTempo: 120, inputs,
+      finalTick: sim.tick(), finalSnapshot: after,
+      finalPigments: Array.from(new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), layout[21] * 9)) };
+    assert((await replayReport(report)).every(result => result.matches));
+  } finally { sim.free(); }
+});
+
 test('variable ball inputs replay exactly and reject invalid engine settings', async () => {
   const layout = Array.from(PhysicsSimulation.layout()), config = Array.from(PhysicsSimulation.defaults()), palette = Array(72).fill(.5);
   const sim = new PhysicsSimulation(new Float32Array(config), new Float32Array(palette));

@@ -1183,17 +1183,23 @@ impl Simulation {
         self.write_transforms();
     }
     /// Preserve stable survivor handles, momentum and pigment. Repack only when
-    /// additions or growing colliders would overlap the current arrangement.
+    /// a settings change introduces or deepens overlap in the current arrangement.
     fn update_balls(&mut self) {
         let settings = self.input.balls;
-        let changed = settings != self.config.balls;
+        let previous_settings = self.config.balls;
+        let changed = settings != previous_settings;
         let growing =
-            settings.small > self.config.balls.small || settings.big > self.config.balls.big;
+            settings.small > previous_settings.small || settings.big > previous_settings.big;
         let previous_ceiling = self.ceiling_height;
         let added = settings.count > self.balls.len();
         if !changed && settings.count == self.balls.len() {
             return;
         }
+        let previous_positions: [_; MAX_BALLS] = std::array::from_fn(|i| {
+            self.balls
+                .get(i)
+                .map_or(Vector::ZERO, |&(h, _)| self.world.bodies[h].translation())
+        });
         while self.balls.len() > settings.count {
             let (body, _) = self.balls.pop().expect("active body");
             self.world.remove_body(body);
@@ -1280,10 +1286,10 @@ impl Simulation {
         for (i, &(h, _)) in self.balls.iter().enumerate() {
             let radius = settings.diameter(i) / 2.0;
             let mut position = self.world.bodies[h].translation();
-            position.x = position.x.clamp(radius + 0.002, WIDTH - radius - 0.002);
-            let z = (self.input.depth / 2.0 - radius - 0.002).max(0.0);
-            position.z = position.z.clamp(-z, z);
             if growing {
+                position.x = position.x.clamp(radius + 0.002, WIDTH - radius - 0.002);
+                let z = (self.input.depth / 2.0 - radius - 0.002).max(0.0);
+                position.z = position.z.clamp(-z, z);
                 let bar_top = self
                     .bar_positions
                     .iter()
@@ -1299,14 +1305,20 @@ impl Simulation {
             );
             self.world.bodies[h].set_translation(position, true);
         }
-        let overlaps = self.balls.iter().enumerate().any(|(i, &(h, _))| {
+        let new_overlap = self.balls.iter().enumerate().any(|(i, &(h, _))| {
             let p = self.world.bodies[h].translation();
             self.balls[..i].iter().enumerate().any(|(j, &(other, _))| {
-                (p - self.world.bodies[other].translation()).length()
-                    < (settings.diameter(i) + settings.diameter(j)) / 2.0
+                let penetration = (settings.diameter(i) + settings.diameter(j)) / 2.0
+                    - (p - self.world.bodies[other].translation()).length();
+                // Settled contacts can already penetrate slightly. Removing a
+                // ball or spawning elsewhere does not make those contacts new.
+                let previous_penetration =
+                    (previous_settings.diameter(i) + previous_settings.diameter(j)) / 2.0
+                        - (previous_positions[i] - previous_positions[j]).length();
+                penetration > 0.0 && (i >= survivors || penetration > previous_penetration)
             })
         });
-        if overlaps || (added && survivors == 0) {
+        if new_overlap || (added && survivors == 0) {
             let bar_top = self.bar_positions.iter().copied().fold(0.0_f64, f64::max) as f32;
             self.ceiling_height = self.ceiling_height.max(bottom + bar_top + CLEARANCE);
             for (i, &(h, _)) in self.balls.iter().enumerate() {
