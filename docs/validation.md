@@ -233,7 +233,7 @@ The server records timestamped HTTP request, response-finish and connection-clos
 events in `server-requests.jsonl`, without headers or bodies. On Linux, navigation
 or page creation lasting five seconds triggers `stalled-steps.jsonl`: the current
 runner's native descendants and thread wait locations, syscalls and kernel stacks.
-Permission-denied and exited-process reads remain explicit. These samples run
+Unavailable wait, syscall and stack reads retain their error codes. These samples run
 before the test deadline and browser teardown, without restarting a browser or
 changing the serial startup guard. Correlate their UTC timestamps with the HTTP
 log and `process-exits.log`; an empty action trace's network file alone does not

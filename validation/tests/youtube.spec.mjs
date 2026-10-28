@@ -5,7 +5,8 @@ import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsRea
 const origin = 'http://127.0.0.1:8101';
 
 test('batched control input requires a stable enabled hit target and emits trusted input', async ({ page }) => {
-  await page.setContent(`<button style="width:100px;height:44px;position:absolute;left:50px;top:50px">Control</button>
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1">
+    <button style="width:100px;height:44px;position:absolute;left:50px;top:50px">Control</button>
     <div id="cover" style="position:absolute;inset:0"></div>`);
   const button = page.getByRole('button', { name: 'Control', exact: true });
   await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');

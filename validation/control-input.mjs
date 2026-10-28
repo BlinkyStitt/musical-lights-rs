@@ -17,7 +17,13 @@ export async function clickControlAtHitPoint(page, control) {
     if (box.width < 44 || box.height < 44 || getComputedStyle(node).visibility !== 'visible'
       || node.matches(':disabled') || node.closest('[aria-disabled="true"]')
       || !node.contains(node.ownerDocument.elementFromPoint(x, y))) {
-      throw new Error('Mouse input point must hit the requested enabled control');
+      throw new Error('Mouse input point must hit the requested enabled control: ' + JSON.stringify({
+        box: box.toJSON(), visibility: getComputedStyle(node).visibility,
+        disabled: node.matches(':disabled'), ariaDisabled: !!node.closest('[aria-disabled="true"]'),
+        hit: node.ownerDocument.elementFromPoint(x, y)?.tagName,
+        receivesInput: node.contains(node.ownerDocument.elementFromPoint(x, y)),
+        viewport: { width: innerWidth, height: innerHeight, scale: visualViewport?.scale },
+      }));
     }
     return { x, y };
   });
