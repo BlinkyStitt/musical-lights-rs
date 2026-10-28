@@ -1,7 +1,32 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { clickControlAtHitPoint } from '../control-input.mjs';
 import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
+
+test('batched control input requires a stable enabled hit target and emits trusted input', async ({ page }) => {
+  await page.setContent(`<button style="width:100px;height:44px;position:absolute;left:50px;top:50px">Control</button>
+    <div id="cover" style="position:absolute;inset:0"></div>`);
+  const button = page.getByRole('button', { name: 'Control', exact: true });
+  await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');
+  await page.locator('#cover').evaluate(node => node.remove());
+  await button.evaluate(node => { node.disabled = true; });
+  await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');
+  await button.evaluate(node => { node.disabled = false; node.style.height = '20px'; });
+  await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');
+  await button.evaluate(node => {
+    node.style.height = '44px';
+    window.controlAnimation = node.animate([{ left: '50px' }, { left: '250px' }], { duration: 1000, iterations: Infinity });
+  });
+  await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('stable control');
+  await button.evaluate(node => {
+    controlAnimation.cancel();
+    window.controlClicks = [];
+    node.addEventListener('click', event => controlClicks.push(event.isTrusted));
+  });
+  await clickControlAtHitPoint(page, button);
+  expect(await page.evaluate(() => controlClicks)).toEqual([true]);
+});
 
 async function setup(page, path = '/', progressingVideo = false, nativeFullscreen = false) {
   await syntheticAudio(page);
@@ -509,6 +534,10 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
     const video = page.frameLocator('.youtube-frame iframe').locator('video');
     await video.evaluate(v => { window.rotationVideo = v; });
     await expect.poll(() => video.evaluate(v => v.readyState)).toBeGreaterThanOrEqual(2);
+    // Keep the original frame for continuity checks. Re-resolving the iframe
+    // and video locator for each sample adds several driver round trips.
+    const frame = page.frames().find(frame => frame.url().startsWith('https://www.youtube-nocookie.com/'));
+    expect(frame).toBeTruthy();
     await page.frameLocator('.youtube-frame iframe').getByRole('button', { name: 'Play test video', exact: true }).click();
     await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(0);
     await page.evaluate(() => {
@@ -554,7 +583,7 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
     for (let turn = 0; turn < 4; turn++) {
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
       await openFullscreenSettings(page);
-      await page.getByRole('button', { name: 'Video', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
       await expect.poll(() => page.evaluate(() => {
         const v = document.querySelector('#dancinglights').physics, style = getComputedStyle(v.layer);
         return !v.resizePending && Math.abs(v.canvasWidth - parseFloat(style.width)) < .1 && Math.abs(v.canvasHeight - parseFloat(style.height)) < .1;
@@ -584,33 +613,60 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
       if (resizeLayout) await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.evaluate(height => rotationKeyboard(height), viewport.height);
       await closeFullscreenSettings(page);
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
       // Require at least 100 ms of newly analyzed samples AFTER every click,
       // including the fourth turn back to zero. Queued pre-click packets and
       // an advancing AudioContext clock cannot satisfy this check.
       const [videoAfterClick, afterClick] = await Promise.all([
-        video.evaluate(v => ({ frames: window.videoFrames, time: v.currentTime })),
+        frame.evaluate(() => ({ frames: window.videoFrames, time: document.querySelector('video').currentTime })),
         page.evaluate(() => Math.ceil(testContext.currentTime * testContext.sampleRate)),
       ]);
       try {
+        // Observe both video clocks together inside the frame. Repeated driver
+        // calls to the busy video frame cost hundreds of milliseconds each on
+        // software renderers. Keep the same thresholds and five-second deadline.
         await Promise.all([
-          expect.poll(() => video.evaluate(() => window.videoFrames)).toBeGreaterThan(videoAfterClick.frames + 2),
-          expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(videoAfterClick.time + .1),
-          expect.poll(() => page.evaluate(() => rotationAudio.sample)).toBeGreaterThan(afterClick + 4800),
+          frame.evaluate(before => new Promise((resolve, reject) => {
+            const v = document.querySelector('video');
+            let frame;
+            const timer = setTimeout(() => {
+              cancelAnimationFrame(frame);
+              reject(new Error(`Video did not advance: time=${v.currentTime}, frames=${window.videoFrames}`));
+            }, 5000);
+            const sample = () => {
+              if (window.videoFrames > before.frames + 2 && v.currentTime > before.time + .1) {
+                clearTimeout(timer); resolve();
+              } else frame = requestAnimationFrame(sample);
+            };
+            sample();
+          }), videoAfterClick),
+          page.waitForFunction(afterClick => rotationAudio.sample > afterClick + 4800, afterClick, { timeout: 5000 }),
         ]);
       } catch (error) {
-        await info.attach('video-progress.json', { contentType: 'application/json', body: JSON.stringify(await video.evaluate(v => ({
-          time: v.currentTime, duration: v.duration, paused: v.paused, ended: v.ended, ready: v.readyState, seeking: v.seeking,
-          frames: window.videoFrames, mediaTime: window.mediaTime, events: window.mediaEvents,
-          decoded: v.getVideoPlaybackQuality().totalVideoFrames, dropped: v.getVideoPlaybackQuality().droppedVideoFrames,
-        }))) });
+        await info.attach('video-progress.json', { contentType: 'application/json', body: JSON.stringify(await frame.evaluate(() => {
+          const v = document.querySelector('video');
+          return {
+            time: v.currentTime, duration: v.duration, paused: v.paused, ended: v.ended, ready: v.readyState, seeking: v.seeking,
+            frames: window.videoFrames, mediaTime: window.mediaTime, events: window.mediaEvents,
+            decoded: v.getVideoPlaybackQuality().totalVideoFrames, dropped: v.getVideoPlaybackQuality().droppedVideoFrames,
+          };
+        })) });
         throw error;
       }
-      expect(await video.evaluate(v => ({ same: v === window.rotationVideo, paused: v.paused, error: v.error, pauses: window.videoPauses }))).toEqual({ same: true, paused: false, error: null, pauses: 0 });
+      expect(await frame.evaluate(() => {
+        const v = document.querySelector('video');
+        return { same: v === window.rotationVideo, paused: v.paused, error: v.error, pauses: window.videoPauses };
+      })).toEqual({ same: true, paused: false, error: null, pauses: 0 });
       const audio = await page.evaluate(() => ({
         ...rotationAudio, expectedSession: playbackIdentity.session, state: document.querySelector('.audio-card').dataset.audioState,
         transitions: rotationAudioStates, video: videoPlayer.getPlayerState(), videoTransitions: videoPlayer.states,
+        identity: (() => {
+          const v = document.querySelector('#dancinglights').physics, old = playbackIdentity;
+          return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
+            && v.worker === old.worker && v.renderer === old.renderer && testContext === old.context
+            && testContext.state === 'running' && micRequests === old.requests;
+        })(),
       }));
       expect(audio.session).toBe(audio.expectedSession);
       expect(audio.continuity).toMatchObject({ segment: 0, missingSamples: 0, overlapSamples: 0 });
@@ -619,12 +675,7 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
       expect(audio.transitions.every(state => state === 'playing')).toBe(true);
       expect(audio.video).toBe(1);
       expect(audio.videoTransitions).toEqual([1]);
-      expect(await page.evaluate(() => {
-        const v = document.querySelector('#dancinglights').physics, old = playbackIdentity;
-        return videoPlayer === old.player && videoPlayer.frame === old.frame && !old.player.destroyed
-          && v.worker === old.worker && v.renderer === old.renderer && testContext === old.context
-          && testContext.state === 'running' && micRequests === old.requests;
-      })).toBe(true);
+      expect(audio.identity).toBe(true);
     }
   });
 }
@@ -644,7 +695,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     for (let turn = 0; turn < 4; turn++) {
       for (const action of ['Load video', 'Remove video']) {
         await openFullscreenSettings(page);
-        await page.getByRole('button', { name: 'Video', exact: true }).click();
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
         await page.locator('.youtube-link').fill('https://youtu.be/abcDEF012_-?t=83');
         await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.resizePending)).toBe(false);
         const before = await page.evaluate(() => {
@@ -664,7 +715,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
           const v = document.querySelector('#dancinglights').physics;
           return [v.canvasWidth, v.canvasHeight, v.input[32]];
         })).toEqual(before);
-        await button.click();
+        await clickControlAtHitPoint(page, button);
         await expect(page.locator('.fullscreen-settings')).not.toBeVisible();
         expect(await page.evaluate(() => {
           const card = document.querySelector('.audio-card');
@@ -679,7 +730,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         if (resizeLayout) await page.setViewportSize({ width: 568, height: 320 });
         await page.evaluate(() => setEditorHeight(320));
       }
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${((turn + 1) % 4) * 90} degrees`);
     }
   });
