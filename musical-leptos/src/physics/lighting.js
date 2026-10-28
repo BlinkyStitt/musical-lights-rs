@@ -3,7 +3,7 @@ import * as THREE from './three.module.js';
 export const LIGHT_FIELD = `
   uniform vec3 stripState[24]; uniform vec3 stripColor[24];
   uniform float stripPulse[24]; uniform float colorAttack;
-  uniform vec3 glowBallPosition[8]; uniform vec3 glowBallColor[8];
+  uniform vec3 glowBallPosition[16]; uniform vec3 glowBallColor[16];
   uniform vec3 lightExtent; uniform mat3 lightView;
   uniform vec4 lightStrength; uniform vec2 colorEmission;
   vec3 sourceIllumination(vec3 delta, vec3 normal, vec3 color) {
@@ -26,7 +26,7 @@ export const LIGHT_FIELD = `
       illumination += sourceIllumination(vec3(dx, lower, 0.0), normal, color);
       illumination += sourceIllumination(vec3(dx, upper, 0.0), normal, color);
     }
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 16; i++) {
       vec3 delta = glowBallPosition[i] - point;
       delta.x -= floor(delta.x / lightExtent.x + .5) * lightExtent.x;
       vec3 color = glowBallColor[i] * lightStrength.x * colorEmission.y;
@@ -38,7 +38,7 @@ export const LIGHT_FIELD = `
     return lightField(point, normal * lightView);
   }
 `;
-// One bounded field: 24 paired full-depth strips and the eight physical balls.
+// One bounded field: 24 paired full-depth strips and up to sixteen physical balls.
 // Translation copies reuse it; no light objects, shadow maps, or bloom passes.
 export class SceneLighting {
   constructor(palette, settings) {
@@ -47,8 +47,8 @@ export class SceneLighting {
       colorAttack: { value: 1 },
       stripState: { value: Array.from({ length: 24 }, () => new THREE.Vector3()) },
       stripColor: { value: Array.from({ length: 24 }, (_, i) => new THREE.Color().fromArray(palette, i * 3)) },
-      glowBallPosition: { value: Array.from({ length: 8 }, () => new THREE.Vector3()) },
-      glowBallColor: { value: Array.from({ length: 8 }, () => new THREE.Color(0, 0, 0)) },
+      glowBallPosition: { value: Array.from({ length: 16 }, () => new THREE.Vector3()) },
+      glowBallColor: { value: Array.from({ length: 16 }, () => new THREE.Color(0, 0, 0)) },
       lightExtent: { value: new THREE.Vector3(1.2, .5, .4) },
       lightView: { value: new THREE.Matrix3() },
       lightStrength: { value: new THREE.Vector4() },
@@ -80,7 +80,8 @@ export class SceneLighting {
     this.uniforms.lightView.value.setFromMatrix4(view.camera.matrixWorldInverse);
     for (let i = 0; i < 24; i++) this.uniforms.stripState.value[i].set(((i + phase) % 24 + .5) * pitch, heights[offset + i], view.meshEdges[i]);
     const matrices = view.balls.instanceMatrix.array, colors = view.balls.instanceColor.array;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 16; i++) {
+      if (i >= view.balls.count) { this.uniforms.glowBallColor.value[i].setRGB(0, 0, 0); continue; }
       this.uniforms.glowBallPosition.value[i].set(matrices[i * 16 + 12], matrices[i * 16 + 13], matrices[i * 16 + 14]);
       this.uniforms.glowBallColor.value[i].fromArray(colors, i * 3);
       // Snapshot instance colors are the core's 1/4–1/2–1/4 visible linear

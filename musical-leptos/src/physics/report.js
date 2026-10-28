@@ -27,7 +27,7 @@ export class PhoneReport {
     this.physicsHost.innerHTML = `<summary>Physics</summary>
       <p>Apply settings to reset the balls and bars. Current enclosure dimensions are retained.</p>
       <p>Vertical walls have no friction and at least 0.55 bounce. These controls set the other surfaces and balls.</p>
-      <div class="physics-fields">${fields.map(([name, index, min, max, step]) => `<label class="control-row">${name}<input data-config="${index}" type="number" min="${min}" max="${max}" step="${step}" value="${Number((view.config[index] * (index >= 6 ? 1000 : 1)).toPrecision(6))}"></label>`).join('')}</div>
+      <div class="physics-fields">${fields.map(([name, index, min, max, step]) => `<label class="control-row">${name}<input data-config="${index}" type="number" min="${min}" max="${max}" step="${step}" value="${Number((view.config[index] * (index === 6 || index === 7 ? 1000 : 1)).toPrecision(6))}"></label>`).join('')}</div>
       <button type="button" class="physics-reset">Apply settings and reset</button>
       <button type="button" class="physics-defaults">Restore defaults and reset</button>`;
     this.host.innerHTML = `<summary>Diagnostics</summary>
@@ -60,7 +60,7 @@ export class PhoneReport {
       if (this.active) return;
       const config = [...this.defaults]; config[0] = view.height; config[5] = view.config[5];
       for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
-        const index = Number(node.dataset.config); node.value = Number((config[index] * (index >= 6 ? 1000 : 1)).toPrecision(6));
+        const index = Number(node.dataset.config); node.value = Number((config[index] * (index === 6 || index === 7 ? 1000 : 1)).toPrecision(6));
       }
       view.worker.postMessage({ type: 'reset', config });
     });
@@ -142,10 +142,11 @@ export class PhoneReport {
     const config = [...this.view.config]; config[0] = this.view.height;
     // Capture the requested depth even if its next physics snapshot is pending.
     config[5] = this.view.input[62];
+    config.splice(8, 3, ...this.view.input.slice(64, 67));
     for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
       if (!node.reportValidity()) return null;
       const index = Number(node.dataset.config);
-      config[index] = Number(node.value) / (index >= 6 ? 1000 : 1);
+      config[index] = Number(node.value) / (index === 6 || index === 7 ? 1000 : 1);
     }
     return config;
   }
@@ -252,7 +253,7 @@ export class PhoneReport {
       const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
       const snapshotProgressDriftMs = firstProgress && lastProgress
         ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v6',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v7',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,

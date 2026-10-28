@@ -550,6 +550,17 @@ pub fn DancingLights(
                 <button class="depth-status slider-value" type="button" aria-label="Edit box depth">"48 cm"</button>
             </div>
             </div>
+            <div class="ball-settings">
+            <div class="camera-controls ball-controls">
+                <div class="control-row"><label for="ball-count-slider">"Ball count"</label><input id="ball-count-slider" class="ball-count" aria-label="Ball count" type="range" min="0" max="16" step="1" value="8"/></div>
+            </div>
+            <div class="camera-controls ball-controls">
+                <div class="control-row"><label for="small-ball-slider">"Small ball"</label><input id="small-ball-slider" class="small-ball" aria-label="Small ball (cm)" type="range" min="2.64" max="19.2" step="0.01" value="2.64"/></div>
+            </div>
+            <div class="camera-controls ball-controls">
+                <div class="control-row"><label for="big-ball-slider">"Big ball"</label><input id="big-ball-slider" class="big-ball" aria-label="Big ball (cm)" type="range" min="2.64" max="19.2" step="0.01" value="19.2"/></div>
+            </div>
+            </div>
             <div class="display-note">
                 <p class="display-status">
                     <span class="wake-status" title="Keeps the screen on while this page is visible">{move || wake_status.get()}</span>

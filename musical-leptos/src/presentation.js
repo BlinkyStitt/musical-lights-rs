@@ -5,9 +5,9 @@ import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
   cameraMotion: true, ...CAMERA_DEFAULTS, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
-  ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
+  ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, balls: Object.freeze([8, 2.64, 19.2]), youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
-  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL] };
+  const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL], balls: [...DEFAULT_SETTINGS.balls] };
   try {
     const saved = JSON.parse(storage.getItem(SETTINGS_KEY));
     if (saved?.version !== 1) return defaults;
@@ -15,6 +15,8 @@ export function readSettings(storage) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
     for (const id of Object.keys(CAMERA_PARAMETERS)) if (validCameraParameter(id, saved[id])) defaults[id] = saved[id];
+
+    if (validBalls(saved.balls)) defaults.balls = [...saved.balls];
     if (validVisual(saved.visual)) defaults.visual = [...saved.visual];
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
@@ -26,6 +28,11 @@ export function readSettings(storage) {
     if (Array.isArray(saved.physics) && saved.physics.length === 8 && saved.physics.every((v, i) => Number.isFinite(v) && Math.fround(v) >= Math.fround([[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][0]) && Math.fround(v) <= Math.fround([[.4, 20], [0, 30], [1, 20000], [0, 1], [0, 2], [.2, 2], [.02, 2], [.32, 4]][i][1]))) defaults.physics = saved.physics;
   } catch { /* Private browsing still has session settings. */ }
   return defaults;
+}
+export function validBalls(v) {
+  return Array.isArray(v) && v.length === 3 && v.every(Number.isFinite)
+    && Number.isInteger(v[0]) && v[0] >= 0 && v[0] <= 16
+    && v[1] >= 2.64 && v[2] <= 19.2 && v[1] <= v[2];
 }
 export function validDirectionOdds(v) {
   return Array.isArray(v) && v.length === 5 && v.every(Number.isFinite)
@@ -134,6 +141,18 @@ export class Presentation {
       depth.disabled = !card.querySelector('#dancinglights')?.physics?.ready;
       card.querySelector('.depth-status').textContent = `${depth.value} cm`;
     };
+    this.ballInputs = ['.ball-count', '.small-ball', '.big-ball'].map(sel => card.querySelector(sel));
+    this.syncBalls = () => {
+      this.ballInputs.forEach((node, i) => { node.value = this.settings.balls[i]; });
+      this.ballInputs[1].max = this.settings.balls[2];
+      this.ballInputs[2].min = this.settings.balls[1];
+    };
+    this.syncBalls();
+    this.ballInputs.forEach((node, i) => this.listen(node, 'input', () => {
+      const values = [...this.settings.balls]; values[i] = Number(node.value);
+      if (!node.validity.valid || !validBalls(values)) { this.syncBalls(); return; }
+      this.settings.balls = values; this.save();
+    }));
     this.syncDepth();
     this.listen(card.querySelector('.depth-slider'), 'input', event => {
       const node = event.target, cm = Number(node.value);
@@ -166,7 +185,7 @@ export class Presentation {
       this.listen(label, 'click', event => { event.preventDefault(); this.showHelp(label, id); });
       this.listen(label, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(label, id); } });
     }
-    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, ...CAMERA_DEFAULTS, scrolling: true }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.cameraParameters.reset(); this.syncCamera(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, ...CAMERA_DEFAULTS, scrolling: true, balls: [...DEFAULT_SETTINGS.balls] }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.cameraParameters.reset(); this.syncCamera(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
     mountSliderControls(this);
     this.save(false);
     card.presentation = this;
@@ -188,7 +207,7 @@ export class Presentation {
     if (persist) this.persist();
     return true;
   }
-  save(persist = true) { this.syncDepth?.(); if (persist) this.persist(); this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
+  save(persist = true) { this.syncDepth?.(); this.syncBalls?.(); if (persist) this.persist(); this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
   updateAudioType() {
     if (!navigator.audioSession) return;
     const type = this.microphoneActive ? 'play-and-record' : this.videoPlaying ? 'playback' : this.originalAudioType ?? 'auto';
@@ -403,7 +422,7 @@ class FullscreenSettings {
       this.toolbar.insertBefore(this.motion, this.button);
       this.listeningMarker = this.move(this.listening, this.toolbar);
       this.toolbar.insertBefore(this.listening, this.button);
-      const controls = '.audio-controls, .scene-controls, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
+      const controls = '.audio-controls, .scene-controls, .ball-settings, .input-source-controls, .playback-controls, .loudness-readouts, .settings-section, .display-note, .reduced-motion-note, .song-tools, .tone-status, .motion-status';
       for (const node of [...this.card.children]) if (node.matches(controls)) this.move(node, this.body);
       this.move(this.card.querySelector('.video-entry'), this.body);
       this.body.prepend(this.presentation.entry);
@@ -473,9 +492,10 @@ function mountSliderControls(presentation) {
     group.append(minus, range, plus, value, editor);
     const sync = () => {
       for (const node of [minus, plus, value, editor]) node.disabled = range.disabled;
+      editor.min = range.min; editor.max = range.max;
       if (!existing) {
         const id = range.dataset.cameraParameter;
-        const text = `${id ? Number(presentation.cameraParameters.get(id).toFixed(1)) : range.value}%`;
+        const text = range.matches('.ball-count') ? range.value : range.matches('.small-ball, .big-ball') ? `${Number(range.value)} cm` : `${id ? Number(presentation.cameraParameters.get(id).toFixed(1)) : range.value}%`;
         // Preserve the native click target during keyboard-driven updates too.
         if (value.firstChild) value.firstChild.nodeValue = text; else value.textContent = text;
       }

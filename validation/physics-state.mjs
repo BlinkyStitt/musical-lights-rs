@@ -97,7 +97,7 @@ export async function physicsState(page) {
     const state = view.current, layout = view.layout;
     return { tick: state[2], height: state[1], ceiling: state[layout[17]], barMax: state[layout[17] + 1], metrics: { ...view.metrics }, config: view.config,
       bars: Array.from(state.slice(layout[9], layout[10])), edges: Array.from(view.edges),
-      balls: Array.from({ length: layout[21] }, (_, i) => {
+      balls: Array.from({ length: state[layout[30]] }, (_, i) => {
         const o = 3 + i * layout[8];
         return { position: Array.from(state.slice(o, o + 3)), rotation: Array.from(state.slice(o + 3, o + 7)),
           radius: state[o + 7], mass: state[o + 8], velocity: Array.from(state.slice(o + 9, o + 12)),

@@ -21,7 +21,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
     // free space. Repeated blue contacts must not hide a lost swirl target.
     config[0] = 5;
     const sim = new PhysicsSimulation(config, palette), input = new Float32Array(layout[22]);
-    input[24] = 5; input[31] = v.reduced.matches ? 1 : 0; input[32] = config[0]; input[62] = config[5]; sim.input(input);
+    input[24] = 5; input[31] = v.reduced.matches ? 1 : 0; input[32] = config[0]; input[62] = config[5]; input[64] = 8; input[65] = .0264; input[66] = .192; sim.input(input);
     const surface = () => new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72).slice(0, 9);
     const mean = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]).slice(18, 21);
     const frames = [{ tick: 0, surface: Array.from(surface()), mean: Array.from(mean()) }];
@@ -81,7 +81,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
     }
   });
   await info.attach('contact-fill-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.version).toBe(20); expect(result.firstContact).toBeGreaterThan(0);
+  expect(result.version).toBe(21); expect(result.firstContact).toBeGreaterThan(0);
   expect(result.maximumJump).toBeGreaterThan(.001); expect(result.maximumPerceptualJump).toBeLessThan(.047);
   expect(result.frames).toHaveLength(5);
   const [initial, impact, early, middle, late] = result.frames;

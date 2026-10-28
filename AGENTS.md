@@ -74,7 +74,7 @@
   seeded replay and reject invalid settings; do not reverse on a fixed timer.
 - Depth controls the physical enclosure in centimeters, from 20 to 200 with a
   48 cm default. Apply it live without resetting the balls or their colors.
-  Keep eight opaque physical balls and eight full-size background boxes beside
+  Keep 0–16 opaque physical balls (eight by default) and eight full-size background boxes beside
   the center box. Reuse all source bands in matching vertical banks. Extend
   source posts through the actual collider depth. Cull side posts against
   their complete bounds and verify visible pixels before claiming savings.

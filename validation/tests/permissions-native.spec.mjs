@@ -128,13 +128,13 @@ test('native gravity turns upside down and settles balls against the back of a f
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[35])).toBeCloseTo(9.8, 5);
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    return Array.from({ length: v.layout[21] }, (_, i) => v.current[3 + i * v.layout[8] + 1]).every(y => y > v.current[1] / 2);
+    return Array.from({ length: v.current[v.layout[30]] }, (_, i) => v.current[3 + i * v.layout[8] + 1]).every(y => y > v.current[1] / 2);
   })).toBe(true);
   await cdp.send('Emulation.setSensorOverrideReadings', { type: 'accelerometer', reading: { xyz: { x: 0, y: 0, z: 9.8 } } });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[36])).toBeCloseTo(-9.8, 5);
   await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    return Array.from({ length: v.layout[21] }, (_, i) => v.current[3 + i * v.layout[8] + 2]).every(z => z < -.01);
+    return Array.from({ length: v.current[v.layout[30]] }, (_, i) => v.current[3 + i * v.layout[8] + 2]).every(z => z < -.01);
   })).toBe(true);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[35])).toBe(0);
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).uncheck();

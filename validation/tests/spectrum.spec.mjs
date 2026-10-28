@@ -99,7 +99,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   }).toBeGreaterThan(.99);
   const falling = await page.evaluate(async () => {
     const view = document.querySelector('#dancinglights').physics;
-    const before = Array.from({ length: 24 }, (_, i) => view.current[4 + i * view.layout[8]]);
+    const before = Array.from({ length: view.current[view.layout[30]] }, (_, i) => view.current[4 + i * view.layout[8]]);
     const state = new Float64Array(102); state.set([0, 1, .18], 99);
     state[0] = window.transportContext.currentTime;
     state[2] = NaN;

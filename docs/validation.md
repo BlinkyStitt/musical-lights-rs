@@ -783,7 +783,7 @@ fixture with the real processor and its real completion acknowledgement.
 Each source keeps a flat top across 48 mm of its 50 mm pitch. A straight
 2 mm join connects adjacent tops without an open slot. The shared Rust profile
 preserves the source heights and bounds every join by its endpoints, including
-the scrolling seam. Protocol 19 records the same 24 heights, live depth, attack-only paint policy
+the scrolling seam. Protocol 21 records the same 24 heights, live depth, attack-only paint policy
 and contact-local swirl colors; it does not publish spline coefficients.
 
 Physics uses one flat prism and one joining prism per pitch, with fixed topology
@@ -1291,3 +1291,7 @@ digital pause/end and actionable input-recovery checks. It does not inject DOM
 These automated checks do not establish live-microphone, human-listening,
 physical-device or deployment acceptance. Statistical DSP comparisons use the
 standalone Criterion package on an idle host, separately from browser validation.
+
+### Live ball settings
+
+Home and Advanced share count (0–16), diameter endpoints (2.64–19.2 cm) and physical Depth controls, including fullscreen Settings. `just validate` runs the core feature matrix, worklet, native physics, produced WASM/application builds and full serial browser suite. Native tests cover live body removal, survivor state, equal maximum sizes in short/shallow rooms, mass/inertia and deterministic transitions. Protocol/worker harnesses cover malformed settings and exact replay across counts; fullscreen browser checks cover editors, endpoint ordering, persistence, rendered counts/radii, inactive lighting and stable GPU resources. Phone report v7/protocol 21 require matching replay engines. Browser profiles remain distinct from physical-phone performance evidence.

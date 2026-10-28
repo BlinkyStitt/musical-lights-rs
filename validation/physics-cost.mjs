@@ -28,7 +28,7 @@ const palette = Float32Array.from(Array.from({ length: 24 }, (_, i) => {
 }).flat());
 for (let run = 0; run < 3; run++) {
   const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), palette);
-  const input = new Float32Array(layout[22]); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5];
+  const input = new Float32Array(layout[22]); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5]; input[64] = 8; input[65] = .0264; input[66] = .192;
   let totalMs = 0, maxTickMs = 0, substeps = 0;
   for (let tick = 0; tick < 1440; tick++) {
     if (tick % 2 === 0) {
@@ -48,7 +48,7 @@ const result = { node: process.version, platform: process.platform, cpu: cpus()[
   palette: 'production peak-scaled HSLuv rainbow (100, 58)',
   physicsSha256: createHash('sha256').update(bytes).digest('hex'),
   pcmSha256: createHash('sha256').update(new Uint8Array(pcm.buffer)).digest('hex'),
-  protocol: layout[18], bands: layout[0], balls: layout[21] ?? layout[0],
+  protocol: layout[18], bands: layout[0], balls: PhysicsSimulation.defaults()[8],
   durationSeconds: 12, physicsHz: layout[1], runs,
   medianCpuMs: runs.map(run => run.totalMs).sort((a, b) => a - b)[1] };
 // Reproduce the full-height attack separately from the generated-audio workload.
@@ -58,7 +58,7 @@ result.fullAttacks = [];
 for (const height of [.927803, 2.596923]) {
   const config = PhysicsSimulation.defaults(); config[0] = height;
   const sim = new PhysicsSimulation(config, palette);
-  const input = new Float32Array(layout[22] ?? 34); input[32] = height; input[62] = config[5];
+  const input = new Float32Array(layout[22] ?? 34); input[32] = height; input[62] = config[5]; input[64] = 8; input[65] = .0264; input[66] = .192;
   sim.input(input);
   for (let tick = 0; tick < 120; tick++) sim.step();
   input.fill(1, 0, 24); sim.input(input);
