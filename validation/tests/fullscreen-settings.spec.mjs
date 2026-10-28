@@ -1,3 +1,4 @@
+import { clickControlAtHitPoint } from '../control-input.mjs';
 import { test, expect } from '@playwright/test';
 import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
@@ -218,7 +219,7 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
       await expect(motion).not.toBeChecked();
       expect(await motion.evaluate(n => getComputedStyle(n).outlineStyle)).not.toBe('none');
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
       await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
       const help = page.getByRole('button', { name: 'Phone motion', exact: true });
       await help.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Space');
@@ -228,8 +229,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         const r = n.getBoundingClientRect();
         return [r.bottom <= innerHeight / 2, r.left >= innerWidth / 2, r.top >= innerHeight / 2, r.right <= innerWidth / 2][turn];
       }, turn)).toBe(true);
-      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
     }
     expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
       && document.querySelector('.audio-card').dataset.audioSession === modalSession.id)).toBe(true);
@@ -245,14 +246,14 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     // help/keyboard workflow above. Each retains the normal 30-second deadline.
     for (let turn = 0; turn < 4; turn++) {
       await expect(page.locator('.rotate-display')).toHaveAccessibleName(`Rotate view clockwise, current rotation ${turn * 90} degrees`);
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
       await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
       // Camera clicks must work while the existing switch help is open too.
       await page.getByRole('button', { name: 'Phone motion', exact: true }).focus();
       await expect(page.locator('.control-help')).toBeVisible();
-      await page.getByRole('button', { name: 'Increase Zoom', exact: true }).click();
-      await page.getByRole('button', { name: 'Increase Horizontal position', exact: true }).click();
-      await page.getByRole('button', { name: 'Decrease Vertical position', exact: true }).click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Increase Zoom', exact: true }));
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Increase Horizontal position', exact: true }));
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Decrease Vertical position', exact: true }));
       // Sample readout, shared parameters, geometry and resource ownership in
       // one browser call; separate traced reads needlessly stall CI rendering.
       await expect.poll(() => page.evaluate(turn => {
@@ -268,8 +269,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
           native: document.fullscreenElement === document.querySelector('.visualizer-screen') };
       }, turn)).toMatchObject({ values: [101 + turn, 51 + turn, 49 - turn], readout: `${101 + turn}%`,
         same: true, motion: false, topHalf: true, ...(info.project.name === 'chromium' ? { native: true } : {}) });
-      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-      await page.locator('.rotate-display').click();
+      await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+      await clickControlAtHitPoint(page, page.locator('.rotate-display'));
     }
     await expect(page.locator('.rotate-display')).toHaveAccessibleName('Rotate view clockwise, current rotation 0 degrees');
     expect(await page.evaluate(() => modalContext === modalSession.context && modalContext.state === 'running'
