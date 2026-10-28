@@ -747,10 +747,22 @@ Repeated Settings, rotation, video and normal-view button clicks use
 `validation/control-input.mjs` to resolve scrolling, two stable animation frames,
 enabled state, 44-pixel bounds and the actual hit target in one browser call,
 then send a native mouse click. The input regression rejects covered, disabled,
-undersized and moving controls and requires trusted events. Keyboard, help-text
-taps, screenshots and all post-action assertions remain in their existing paths.
+undersized and moving controls and requires trusted events. Keyboard operations,
+screenshots and all post-action assertions remain in their existing paths.
 This avoids repeated locator/driver round trips in the serial suite; it changes
 neither application timing nor the required test matrix.
+
+Fullscreen control visibility checks batch the real scroll and intersection
+observations while retaining each control's viewport and modal-ownership checks.
+Ball-count transitions use the same intersection helper and native button input.
+Native keyboard-scroll synchronization remains in the video checks. The full
+suite still runs every case with one worker, zero retries and unchanged deadlines.
+
+The rotation matrix also resolves help-text touch targets in one browser call
+before sending native touchscreen input. It checks the text's stable bounds,
+visibility, enabled state and actual hit inside a switch label of at least 44px.
+The input regression rejects covered, disabled, moving and undersized-label
+fixtures, and requires trusted touch events without toggling the checkbox.
 
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and

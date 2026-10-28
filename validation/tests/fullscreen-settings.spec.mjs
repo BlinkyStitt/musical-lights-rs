@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { clickControlAtHitPoint } from '../control-input.mjs';
-import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
+import { normalView, physicsReady, scrollingIntersections, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 test.describe('compact mobile controls', () => {
@@ -135,12 +135,16 @@ for (const path of ['/', '/advanced/']) {
         })), contentType: 'application/json' });
       }
       expect(covered.equals(uncovered), 'bottom-half pixels remain visible through the modal backdrop').toBe(true);
-      for (const selector of ['.listening-toggle', '.identify-song', '.motion-button', '.scroll-lights', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y', '.depth-slider', '.ball-count', '.small-ball', '.big-ball', '.display-controls > summary', '.visual-gain-mode']) {
-        if (selector === '.visual-gain-mode' && !await page.locator('.audio-tuning').evaluate(n => n.closest('details').open)) await page.getByText('Audio response & readouts', { exact: true }).click();
-        await page.locator(selector).scrollIntoViewIfNeeded();
-        await expect(page.locator(selector)).toBeInViewport();
-        expect(await page.locator(selector).evaluate(n => !!n.closest('dialog'))).toBe(true);
+      const selectors = ['.listening-toggle', '.identify-song', '.motion-button', '.scroll-lights', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y', '.depth-slider', '.ball-count', '.small-ball', '.big-ball', '.display-controls > summary'];
+      // Observe each control after its real scroll, in one browser call. Keep
+      // visibility and modal ownership checks for every original selector.
+      for (const [selector, ratio] of Object.entries(await scrollingIntersections(page, selectors))) {
+        expect(ratio, `${selector} intersects the viewport`).toBeGreaterThan(0);
       }
+      if (!await page.locator('.audio-tuning').evaluate(n => n.closest('details').open)) await page.getByText('Audio response & readouts', { exact: true }).click();
+      expect((await scrollingIntersections(page, ['.visual-gain-mode']))['.visual-gain-mode']).toBeGreaterThan(0);
+      selectors.push('.visual-gain-mode');
+      expect(await page.evaluate(selectors => selectors.map(selector => !!document.querySelector(selector)?.closest('dialog')), selectors)).toEqual(selectors.map(() => true));
       await page.locator('.camera-rotation').fill('17');
       await page.locator('.camera-zoom').fill('40');
       await page.locator('.camera-x').fill('30'); await page.locator('.camera-y').fill('60');
@@ -486,15 +490,15 @@ for (const path of ['/', '/advanced/']) {
       await count.fill(String(n));
       // Normal-page settings can scroll the scene out of view. Return to the
       // scene to inspect the rendered instances, as a viewer does after editing.
-      await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+      expect((await scrollingIntersections(page, ['#dancinglights']))['#dancinglights']).toBeGreaterThan(0);
       await expect.poll(() => page.evaluate(() => {
         const v = document.querySelector('#dancinglights').physics;
         return [v.current[v.layout[30]], v.balls.count];
       })).toEqual([n, n]);
       if (n === 0) expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.glowBallColor.value.every(c => c.r === 0 && c.g === 0 && c.b === 0))).toBe(true);
     }
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
     const modal = page.getByRole('dialog', { name: 'Settings', exact: true });
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
     const audioSession = await page.locator('.audio-card').getAttribute('data-audio-session');
@@ -503,13 +507,13 @@ for (const path of ['/', '/advanced/']) {
       expect(await control.evaluate(n => !!n.closest('dialog'))).toBe(true);
       await expect(control).toHaveCount(1);
     }
-    await page.getByRole('button', { name: 'Edit Small ball (cm)', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Small ball (cm)', exact: true }));
     const editor = page.getByRole('spinbutton', { name: 'Small ball (cm) value', exact: true });
     await editor.fill('19.2'); await editor.press('Enter');
     await expect(small).toHaveValue('19.2'); await expect(big).toHaveAttribute('min', '19.2');
-    await page.getByRole('button', { name: 'Decrease Big ball (cm)', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Decrease Big ball (cm)', exact: true }));
     await expect(big).toHaveValue('19.2');
-    await page.getByRole('button', { name: 'Edit Big ball (cm)', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Big ball (cm)', exact: true }));
     const bigEditor = page.getByRole('spinbutton', { name: 'Big ball (cm) value', exact: true });
     await bigEditor.fill('19.19'); await bigEditor.press('Enter');
     await expect(bigEditor).toBeVisible(); await expect(big).toHaveValue('19.2');
@@ -522,9 +526,9 @@ for (const path of ['/', '/advanced/']) {
           && Math.abs(Math.hypot(m[at], m[at + 1], m[at + 2]) - .096) < 1e-6;
       }).every(Boolean);
     })).toBe(true);
-    await page.getByRole('button', { name: 'Decrease Ball count', exact: true }).click(); await expect(count).toHaveValue('7');
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Decrease Ball count', exact: true })); await expect(count).toHaveValue('7');
     await count.focus(); await count.press('ArrowRight'); await expect(count).toHaveValue('8');
-    await page.getByRole('button', { name: 'Edit Ball count', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Ball count', exact: true }));
     await page.getByRole('spinbutton', { name: 'Ball count value', exact: true }).fill('0');
     await page.keyboard.press('Escape'); await expect(count).toHaveValue('8');
     expect(await page.evaluate(() => {
@@ -534,11 +538,11 @@ for (const path of ['/', '/advanced/']) {
     await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-session', audioSession);
     expect(await page.evaluate(() => document.querySelector('.audio-card').activeAudioContext === window.ballAudioContext && window.ballAudioContext.state === 'running')).toBe(true);
     await page.keyboard.press('Escape'); await expect(modal).not.toBeVisible();
-    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
     await page.reload(); await physicsReady(page); await normalView(page);
     await expect(small).toHaveValue('19.2'); await expect(count).toHaveValue('8');
     await expect(page.locator('.camera-zoom')).toHaveValue('135');
-    await page.locator('.display-controls > summary').click(); await page.getByRole('button', { name: 'Reset display', exact: true }).click();
+    await page.locator('.display-controls > summary').click(); await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Reset display', exact: true }));
     await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2'); await expect(count).toHaveValue('8');
     await expect(page.locator('.camera-zoom')).toHaveValue('100');
     expect(errors).toEqual([]);
