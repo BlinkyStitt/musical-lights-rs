@@ -77,6 +77,12 @@ impl TempoEstimator {
             self.lost_seconds = 0.0;
         } else {
             self.lost_seconds += 0.020;
+            if self.lost_seconds > self.settings.tempo_silence as f32 {
+                // Once the hold expires, reacquire without the old song's octave
+                // prior. Keep the envelope and the existing fallback smoothing.
+                self.established = false;
+                self.accepted = 120.0;
+            }
         }
         let target = if !self.established || self.lost_seconds > self.settings.tempo_silence as f32
         {
@@ -130,24 +136,32 @@ impl TempoEstimator {
                 + correlations[(lower + 1).min(50)] * fraction;
             sum += correlation.max(0.0);
             // Similar octave peaks keep the previous interpretation; the initial
-            // interpretation favors 120 BPM. Stronger evidence still wins.
-            let continuity = 1.0 / (1.0 + F32Ext::abs(F32Ext::ln(bpm as f32 / self.accepted)));
+            // interpretation favors 120 BPM. Use the full symmetric prior:
+            // compressing it into 0.85..1 let weaker subdivisions override the
+            // musical period and let transient 3:2 peaks displace a stable beat.
+            // A new period still wins once the old rhythm leaves the history.
+            let continuity = tempo_continuity(bpm as f32, self.accepted);
             // Suppress slower integer multiples when the shorter period also
             // explains the envelope (including the common octave ambiguity).
             let mut harmonic = 1.0;
             for divisor in [2.0, 3.0] {
                 let sublag = lag / divisor;
-                if sublag >= 15.0 {
-                    let k = sublag as usize;
+                // Include the nearest boundary bin: otherwise candidates just
+                // above 100 BPM evade their 200 BPM harmonic at lag 15.
+                if sublag >= 14.5 {
+                    let k = (sublag as usize).max(15);
                     let sub = correlations[k].max(correlations[(k + 1).min(50)]);
                     if sub > correlation * 0.7
                         && !(self.established && (bpm as f32 / self.accepted - 1.0).abs() < 0.08)
                     {
-                        harmonic = 0.7;
+                        // Near-identical peaks explain the same pulse train:
+                        // discount a redundant slower period by an octave. A
+                        // weaker subdivision gets only the original penalty.
+                        harmonic = if sub >= correlation * 0.95 { 0.5 } else { 0.7 };
                     }
                 }
             }
-            let score = correlation * (0.85 + 0.15 * continuity) * harmonic;
+            let score = correlation * continuity * continuity * harmonic;
             if score > best.0 {
                 best = (score, bpm as f32, correlation);
             }
@@ -168,9 +182,23 @@ impl TempoEstimator {
     }
 }
 
+// micromath's ln(x < 1) uses an approximate reciprocal. Form the ratio >= 1
+// with division first so equally distant slower/faster candidates have exactly
+// the same prior; otherwise the approximation penalizes the slower one more.
+fn tempo_continuity(bpm: f32, previous: f32) -> f32 {
+    let ratio = (bpm / previous).max(previous / bpm);
+    1.0 / (1.0 + F32Ext::ln(ratio))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn continuity_has_no_faster_tempo_bias() {
+        for bpm in [60.0, 75.0, 96.0, 144.0, 180.0, 200.0] {
+            assert_eq!(tempo_continuity(bpm, 120.0), tempo_continuity(120.0, bpm));
+        }
+    }
     fn feed(t: &mut TempoEstimator, bpm: f64, seconds: usize) {
         for i in 0..seconds * 500 {
             let phase = (i as f64 * 0.002 * bpm / 60.0).fract();

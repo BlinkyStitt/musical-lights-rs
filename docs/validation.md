@@ -86,8 +86,9 @@ level 2 even when a user-wide profile sets level 0. The test profiles retain deb
 assertions and overflow checks.
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
-`just check` runs the core feature matrix, native physics, worklet, Leptos,
-benchmark smoke checks, demo builds and full browser suite with pinned tools.
+`just check` runs workflow lint and tooling regressions, then the core feature
+matrix, native physics, worklet, Leptos, benchmark smoke checks, demo builds and
+full browser suite with pinned tools.
 `npm run test:site` and `npm run test:demos` retain their complete local subsets.
 Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
@@ -226,6 +227,17 @@ For a focused browser check, use host access with this command. Add test files,
 ```sh
 .tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs
 ```
+
+Browser diagnostics are retained under `validation/test-results/browser-processes/`.
+The server records timestamped HTTP request, response-finish and connection-close
+events in `server-requests.jsonl`, without headers or bodies. On Linux, navigation
+or page creation lasting five seconds triggers `stalled-steps.jsonl`: the current
+runner's native descendants and thread wait locations, syscalls and kernel stacks.
+Unavailable wait, syscall and stack reads retain their error codes. These samples run
+before the test deadline and browser teardown, without restarting a browser or
+changing the serial startup guard. Correlate their UTC timestamps with the HTTP
+log and `process-exits.log`; an empty action trace's network file alone does not
+prove that no request reached the server when DOM snapshots are disabled.
 
 The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
 and network access. `.codex/rules/browser-tests.rules` allows the two browser
@@ -731,6 +743,15 @@ logs, explicit GPU pixel comparisons, layout screenshots and preview images
 remain enabled. The tests keep all assertions, deadlines, one worker, zero
 retries and the serial startup/crash guard.
 
+Repeated Settings, rotation, video and normal-view button clicks use
+`validation/control-input.mjs` to resolve scrolling, two stable animation frames,
+enabled state, 44-pixel bounds and the actual hit target in one browser call,
+then send a native mouse click. The input regression rejects covered, disabled,
+undersized and moving controls and requires trusted events. Keyboard, help-text
+taps, screenshots and all post-action assertions remain in their existing paths.
+This avoids repeated locator/driver round trips in the serial suite; it changes
+neither application timing nor the required test matrix.
+
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and
 the existing assertion deadlines within focused test cases. Preview sampling
@@ -1199,23 +1220,21 @@ Linux CI, live-provider acceptance and deployment verification remain pending.
 
 ## Draft checkpoints and CI
 
-Push unfinished checkpoints to draft pull requests. The site, other-apps,
-firmware, and recognition workflows skip their root jobs for draft PRs, which
-also skips their build and test jobs. Their final required checks fail because
-validation has not run; a skipped required check would otherwise count as passing
-for GitHub auto-merge. Marking the PR ready starts fresh validation. Pushes to
-`main` and manual runs retain their existing validation and deployment rules.
+Draft and ready pull requests run the same change selection and affected
+validation jobs. A draft checkpoint must produce CI evidence before it is ready
+for review; draft status does not substitute for validation or force required
+checks to fail. Each workflow listens for `opened`, `synchronize`, `reopened`
+and `ready_for_review`. Change selection always runs, and its outputs alone
+exclude unaffected applications.
 
-After local validation and agent reviews pass for the current commit, mark the
-PR ready. Each validation workflow listens for `ready_for_review` as well as
-new commits on ready PRs. Return a PR to draft before pushing a repair. Draft
-checks that were skipped do not establish acceptance; wait for the completed
-current-head CI run before merging.
+Required checks still fail for missing, failed, canceled or unexpectedly skipped
+validation. Wait for the completed current-head CI run before merging. Pushes to
+`main` and manual runs retain their existing validation and deployment rules.
 
 ## Required checks on main
 
-Every ready pull request starts the four validation workflows. Change selectors
-skip builds and tests for unaffected applications; they do not skip the workflow.
+Every draft or ready pull request starts the four validation workflows. Change
+selectors skip builds and tests for unaffected applications; they do not skip the workflow.
 Each workflow reports one final check:
 
 - `Required website checks`
@@ -1235,3 +1254,40 @@ branch. It requires no reviewer approvals. Administrators retain an explicit
 emergency bypass. Enable auto-merge on an individual pull request to let GitHub
 merge it after these requirements pass. The repository auto-merge setting alone
 does not enable auto-merge on every pull request.
+
+## Tempo regression acceptance
+
+From the repository root, install the pinned web tools with
+`python3 validation/install_tools.py web` and `python3 validation/install_tools.py ci`,
+add `.tools/bin` to `PATH`, then run `just validate` (an alias for `just check`).
+The recipe runs workflow lint and tooling regressions, then the core feature
+matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
+cases, and the two demo builds required by the full browser suite. It then runs
+`python3 validation/validate.py browser`, whose npm pretest runs the Node harness
+against produced WASM before the browser suite.
+Missing apps and tools fail validation. The existing serial startup/crash guard,
+one browser worker and zero retries remain authoritative.
+
+`musical-lights-core/tests/tempo_pcm.rs` uses frozen continuous music PCM,
+explicit sample origins and callbacks split at identical half-second input
+checkpoints. No samples are appended to flush the meter delay. It requires ±5 BPM
+and confidence ≥0.45 from seconds 24–32 for each clip and after the declared
+splice. It compares all raw specific loudness bins, targets and filtered targets
+with the pre-tempo measurement pipeline and compares tempo/confidence exactly
+across callback partitions. The reference runs in the active std/libm feature
+configuration; cross-feature floating-point hashes are not assumed equal.
+Silence, microphone gating/reopening, digital bypass, invalid PCM rejection and
+reset/reacquisition retain their distinct semantics.
+
+The worklet harness checks acknowledged BPM/confidence fields from built WASM,
+continuous analysis and calibrated gap recovery at real input indices. The
+mirrors browser suite connects deterministic PCM to a media-stream destination
+used as microphone capture, with the production analysis worklet and ordinary
+frame acknowledgements. It observes numeric packets and rendered counter changes,
+Stop/restart, stale-session rejection and `aria-live=off`, alongside existing
+digital pause/end and actionable input-recovery checks. It does not inject DOM
+`audio-tempo` events to establish delivery.
+
+These automated checks do not establish live-microphone, human-listening,
+physical-device or deployment acceptance. Statistical DSP comparisons use the
+standalone Criterion package on an idle host, separately from browser validation.

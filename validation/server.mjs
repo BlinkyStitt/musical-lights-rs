@@ -1,6 +1,10 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
+import { mkdirSync, appendFileSync } from 'node:fs';
+import { traceRequest } from './server-trace.mjs';
+const traceDirectory = new URL('./test-results/browser-processes/', import.meta.url);
+const tracePath = new URL('server-requests.jsonl', traceDirectory);
 const contentTypes = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.css': 'text/css', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.png': 'image/png' };
 const roots = [
   [8101, '../musical-leptos/dist'],
@@ -10,6 +14,10 @@ const roots = [
 const servers = roots.map(([port, directory]) => {
   const root = resolve(directory);
   const server = createServer(async (request, response) => {
+    traceRequest(request, response, port, line => {
+      mkdirSync(traceDirectory, { recursive: true });
+      appendFileSync(tracePath, line);
+    });
     try {
       const url = new URL(request.url, 'http://localhost');
       const pathname = decodeURIComponent(url.pathname);

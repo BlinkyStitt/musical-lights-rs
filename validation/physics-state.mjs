@@ -1,20 +1,21 @@
 import { expect } from '@playwright/test';
+import { clickControlAtHitPoint } from './control-input.mjs';
 
 // Explicitly leave the mobile default when a fixture tests the normal page.
 export async function normalView(page) {
   const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
-  if (await exit.isVisible()) await exit.click();
+  if (await exit.isVisible()) await clickControlAtHitPoint(page, exit);
 }
 // Fullscreen controls share the page's nodes inside the top-half dialog.
 export async function openFullscreenSettings(page) {
   if (await page.locator('.audio-card').getAttribute('data-expanded') === null) return;
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
-  if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  if (!await dialog.isVisible()) await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
   await expect(dialog).toBeVisible();
 }
 export async function closeFullscreenSettings(page) {
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
-  if (await dialog.isVisible()) await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+  if (await dialog.isVisible()) await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
   await expect(dialog).not.toBeVisible();
 }
 // Sample real viewport intersections after each scroll without taking a DOM

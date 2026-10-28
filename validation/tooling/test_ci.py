@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -374,6 +375,23 @@ class RequiredChecksTests(unittest.TestCase):
             },
             **{name: {"result": "success"} for name in jobs},
         }
+
+    def test_workflow_selectors_run_for_draft_and_ready_pull_requests(self):
+        # A required gate cannot validate a draft checkpoint if its root
+        # selector is skipped. Keep roots unconditional; only their outputs
+        # may exclude unaffected downstream applications.
+        for group, selector, _ in self.cases():
+            workflow = "validate" if group == "website" else group
+            source = (ci.ROOT / ".github/workflows" / f"{workflow}.yml").read_text()
+            with self.subTest(workflow=workflow):
+                root = re.search(
+                    rf"^  {selector}:\n((?:^    .*\n|^\n)+)", source, re.MULTILINE
+                )
+                self.assertIsNotNone(root, "Missing change-selection job")
+                assert root is not None
+                keys = re.findall(r"^    ([\w-]+):", root[1], re.MULTILINE)
+                self.assertNotIn("if", keys, "Change selection must run on drafts")
+                self.assertNotIn("needs", keys, "Change selection must be a root")
 
     def test_success_and_explicitly_unselected_skips_pass(self):
         for group, selector, jobs in self.cases():
