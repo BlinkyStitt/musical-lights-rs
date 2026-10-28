@@ -98,9 +98,10 @@ export LIBRARY_PATH="$(brew --prefix sdl2)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
 For the shared core and all web apps, install the pinned web tools above, then run
 `just check` from the repository root. It adds `.tools/bin` to `PATH`, validates
 and builds the core, worklet, physics, Leptos, Dioxus and standalone WASM packages,
-and runs the offline harness plus every browser project through
-`python3 validation/validate.py browser`, including the Dioxus and standalone
-WASM rendered checks. Missing tools or failed checks stop the recipe.
+runs the offline harness and demo browser project locally, and requires the complete
+website browser CI for the exact clean commit and its same-repository pull request.
+GitHub access is required. Missing tools, stale CI or failed checks stop the recipe.
+For the full browser suite on one host, run `python3 validation/validate.py browser`.
 `just --summary` lists this entry point
 for automated validation discovery.
 

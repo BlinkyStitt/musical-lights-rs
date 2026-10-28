@@ -101,6 +101,7 @@ def validate(name):
             "validation/validate.py",
             "validation/install_tools.py",
             "validation/ci.py",
+            "validation/ci_browser.py",
             "validation/firmware_artifacts.py",
             "validation/generate-stars.py",
             "validation/tooling",

@@ -403,6 +403,10 @@ def recognition_affected(paths):
     )
 
 
+def website_required(event_name, paths):
+    return event_name == "pull_request" or site_affected(paths)
+
+
 def require_checks(group, needs):
     """Skipped dependencies only satisfy a gate when its selector excludes them."""
     selector, jobs = {
@@ -461,7 +465,9 @@ def main():
     args = parser.parse_args()
     if args.command == "plan":
         event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-        site_required = site_affected(changed_paths(event))
+        site_required = website_required(
+            os.environ["GITHUB_EVENT_NAME"], changed_paths(event)
+        )
         run_id, artifact = (
             ("", "")
             if os.environ["GITHUB_EVENT_NAME"] == "pull_request"
