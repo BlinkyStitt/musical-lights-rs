@@ -228,6 +228,17 @@ For a focused browser check, use host access with this command. Add test files,
 .tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs
 ```
 
+Browser diagnostics are retained under `validation/test-results/browser-processes/`.
+The server records timestamped HTTP request, response-finish and connection-close
+events in `server-requests.jsonl`, without headers or bodies. On Linux, navigation
+or page creation lasting five seconds triggers `stalled-steps.jsonl`: the current
+runner's native descendants and thread wait locations, syscalls and kernel stacks.
+Permission-denied and exited-process reads remain explicit. These samples run
+before the test deadline and browser teardown, without restarting a browser or
+changing the serial startup guard. Correlate their UTC timestamps with the HTTP
+log and `process-exits.log`; an empty action trace's network file alone does not
+prove that no request reached the server when DOM snapshots are disabled.
+
 The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
 and network access. `.codex/rules/browser-tests.rules` allows the two browser
 command prefixes above outside the sandbox. Rules match command tokens; run
