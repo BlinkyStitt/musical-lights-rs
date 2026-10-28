@@ -1,0 +1,7 @@
+# Cargo's user configuration can otherwise override the optimized test
+# profiles declared by the workspace and standalone physics package.
+[profile.test]
+opt-level = 2
+
+[profile.test.package."*"]
+opt-level = 2

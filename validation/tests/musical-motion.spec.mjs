@@ -188,26 +188,36 @@ test('source selection waits for its handlers and digital transport to initializ
   expect(await page.evaluate(() => microphoneRequests)).toBe(0);
 });
 
-test('slider buttons step once and value editors validate, cancel and save', async ({ page }) => {
+// Run each native editor workflow independently: all six controls previously
+// shared one 30-second deadline, reached during the fifth control in Linux CI.
+async function openSliderSettings(page) {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page);
   const exit = page.getByRole('button', {name: 'Exit fullscreen', exact: true});
   if (await exit.isVisible()) await exit.click();
   await page.locator('.display-controls').evaluate(node => { node.open = true; });
+}
+
+test('slider keyboard order and editor cancellation restore focus', async ({ page }) => {
+  await openSliderSettings(page);
   await page.getByRole('button', {name: 'Decrease Camera angle (degrees)', exact: true}).focus();
   await page.keyboard.press('Tab'); await expect(page.locator('.camera-rotation')).toBeFocused();
   await page.keyboard.press('Tab'); await expect(page.getByRole('button', {name: 'Increase Camera angle (degrees)', exact: true})).toBeFocused();
   await page.keyboard.press('Tab'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
   await page.keyboard.press('Enter'); await expect(page.getByRole('spinbutton', {name: 'Camera angle (degrees) value', exact: true})).toBeFocused();
   await page.keyboard.press('Escape'); await expect(page.getByRole('button', {name: 'Edit Camera angle (degrees)', exact: true})).toBeFocused();
-  for (const [selector, name, value, next] of [
-    ['.camera-rotation', 'Camera angle (degrees)', '12', '13'],
-    ['.camera-zoom', 'Zoom', '25', '26'],
-    ['.camera-x', 'Horizontal position', '20', '21'],
-    ['.camera-y', 'Vertical position', '70', '71'],
-    ['.depth-slider', 'Box depth (cm)', '199', '200'],
-    ['.flight-height', 'Flight height (% of available space)', '35', '36'],
-  ]) {
+});
+
+for (const [selector, name, value, next, preference] of [
+  ['.camera-rotation', 'Camera angle (degrees)', '12', '13', 'cameraAngle'],
+  ['.camera-zoom', 'Zoom', '25', '26', 'cameraZoom'],
+  ['.camera-x', 'Horizontal position', '20', '21', 'cameraX'],
+  ['.camera-y', 'Vertical position', '70', '71', 'cameraY'],
+  ['.depth-slider', 'Box depth (cm)', '199', '200', 'physics'],
+  ['.flight-height', 'Flight height (% of available space)', '35', '36', 'flight'],
+]) {
+  test(`slider buttons step once and value editors validate, cancel and save: ${name}`, async ({ page }) => {
+    await openSliderSettings(page);
     const range = page.locator(selector), edit = page.getByRole('button', {name: `Edit ${name}`, exact: true});
     const positions = await range.locator('..').evaluate(group => {
       const [minus, slider, plus, value] = [...group.children].slice(0, 4).map(node => node.getBoundingClientRect());
@@ -237,7 +247,20 @@ test('slider buttons step once and value editors validate, cancel and save', asy
     await expect.poll(editorState).toEqual({ value, visible: true, type: 'number', label: `${name} value`, focused: true });
     await page.keyboard.press('Escape');
     await expect.poll(editorState).toEqual({ value, visible: false, type: 'number', label: `${name} value`, focused: false });
-  }
+    const saved = await page.evaluate(key => JSON.parse(localStorage.getItem('musical-lights-display-v1'))[key], preference);
+    if (preference === 'physics') expect(saved[5]).toBeCloseTo(Number(value) / 100, 5);
+    else expect(saved).toBe(Number(value));
+    await page.reload(); await physicsReady(page);
+    await expect(range).toHaveValue(value);
+  });
+}
+
+test('slider settings persist together without starting audio and restore after reload', async ({ page }) => {
+  await openSliderSettings(page);
+  for (const [selector, value] of [
+    ['.camera-rotation', '12'], ['.camera-zoom', '25'], ['.camera-x', '20'],
+    ['.camera-y', '70'], ['.depth-slider', '199'], ['.flight-height', '35'],
+  ]) await page.locator(selector).fill(value);
   const { saved, audio } = await page.evaluate(() => ({ saved: JSON.parse(localStorage.getItem('musical-lights-display-v1')),
     audio: !!document.querySelector('.audio-card').activeAudioContext }));
   expect(saved.cameraZoom).toBe(25); expect(saved.cameraX).toBe(20); expect(saved.cameraY).toBe(70);
