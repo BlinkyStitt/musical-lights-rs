@@ -2,7 +2,7 @@ name: Song recognition Worker
 on:
   push:
     branches: [main]
-    paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml']
+    paths: ['musical-recognition-worker/**', '.github/workflows/recognition.yml', 'rust-toolchain.toml', '.cargo/**']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
             ~/.cargo/git
             musical-recognition-worker/target
             .tools/worker
-          key: recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}-${{ hashFiles('musical-recognition-worker/src/**/*.rs', 'musical-recognition-worker/Cargo.toml') }}
+          key: recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}-${{ hashFiles('musical-recognition-worker/src/**/*.rs', 'musical-recognition-worker/Cargo.toml', '.cargo/config.toml') }}
           restore-keys: |
             recognition-${{ runner.os }}-nightly-2026-09-10-worker-build-0.8.7-${{ hashFiles('musical-recognition-worker/Cargo.lock') }}
       - name: Install pinned Worker tools

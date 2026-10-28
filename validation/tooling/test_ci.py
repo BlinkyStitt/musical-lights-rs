@@ -302,6 +302,7 @@ class ChangeTests(unittest.TestCase):
             "musical-recognition-worker/src/lib.rs",
             ".github/workflows/recognition.yml",
             "rust-toolchain.toml",
+            ".cargo/config.toml",
         ):
             self.assertTrue(ci.recognition_affected([path]))
         for paths in ([], ["docs/validation.md"], ["musical-leptos/src/app.rs"]):

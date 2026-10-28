@@ -397,7 +397,7 @@ def site_affected(paths):
 
 def recognition_affected(paths):
     return paths is None or any(
-        path.startswith("musical-recognition-worker/")
+        path.startswith(("musical-recognition-worker/", ".cargo/"))
         or path in (".github/workflows/recognition.yml", "rust-toolchain.toml")
         for path in paths
     )

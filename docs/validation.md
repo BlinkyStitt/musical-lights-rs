@@ -81,6 +81,10 @@ as simulated; the guard retains and logs these separately. A simulated report ca
 precede a process quit, so it does not replace Playwright's startup and page-crash
 checks. See [Apple's report fields](https://developer.apple.com/documentation/xcode/examining-the-fields-in-a-crash-report).
 
+The workspace Cargo configuration keeps test code and dependencies at optimization
+level 2 even when a user-wide profile sets level 0. The test profiles retain debug
+assertions and overflow checks.
+
 For local checks, `python3 validation/validate.py browser` still runs all projects.
 `just check` runs the core feature matrix, native physics, worklet, Leptos,
 benchmark smoke checks, demo builds and full browser suite with pinned tools.
