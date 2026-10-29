@@ -268,9 +268,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
         with:
-          artifact-ids: ${{ needs.web.outputs.artifact_id || needs.plan.outputs.artifact_id }}
-          run-id: ${{ needs.plan.outputs.run_id || github.run_id }}
-          github-token: ${{ github.token }}
+          artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
       - name: Verify the compiled site
         env:
