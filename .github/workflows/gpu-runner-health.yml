@@ -1,0 +1,55 @@
+name: GPU runner health
+on:
+  pull_request:
+    paths:
+      - .github/workflows/gpu-runner-health.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  webgl:
+    name: WebGL (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        label: [gpu-nuc1, gpu-nuc3]
+    runs-on: [self-hosted, linux, x64, gpu-opengl, '${{ matrix.label }}']
+    timeout-minutes: 5
+    steps:
+      - name: Verify Chrome uses the shared Intel GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          cat > "$scratch/probe.html" <<'HTML'
+          <!doctype html><html><body><script>
+          const gl = document.createElement('canvas').getContext('webgl2');
+          const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+          const renderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : '';
+          document.body.textContent = 'WEBGL_RENDERER=' + renderer;
+          </script></body></html>
+          HTML
+          google-chrome --headless --no-sandbox --disable-dev-shm-usage \
+            --use-gl=angle --use-angle=gl --enable-gpu \
+            --user-data-dir="$scratch/profile" --dump-dom "file://$scratch/probe.html" \
+            > "$scratch/result.html" 2> "$scratch/chrome.log" || {
+              cat "$scratch/chrome.log"
+              exit 1
+            }
+          python3 - "$scratch/result.html" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          html = Path(sys.argv[1]).read_text()
+          match = re.search(r'WEBGL_RENDERER=([^<\n]+)', html)
+          if not match:
+              raise SystemExit('Chrome did not report a WebGL renderer')
+          renderer = match.group(1)
+          print(f'WebGL renderer: {renderer}')
+          if not re.search(r'virgl.*Intel', renderer, re.IGNORECASE):
+              raise SystemExit('Chrome did not use the shared Intel GPU')
+          if re.search(r'llvmpipe|softpipe|swiftshader|software', renderer, re.IGNORECASE):
+              raise SystemExit('Chrome used a software renderer')
+          PY
