@@ -1,6 +1,6 @@
 import { localPoint, viewportBounds, placeDialog } from './screen.js';
 import { CAMERA_PARAMETERS, CAMERA_DEFAULTS, CameraParameters, validCameraParameter } from './physics/camera-pan.js';
-import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
+import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, recoverVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
@@ -17,7 +17,8 @@ export function readSettings(storage) {
     for (const id of Object.keys(CAMERA_PARAMETERS)) if (validCameraParameter(id, saved[id])) defaults[id] = saved[id];
 
     if (validBalls(saved.balls)) defaults.balls = [...saved.balls];
-    if (validVisual(saved.visual)) defaults.visual = [...saved.visual];
+    const recovered = recoverVisual(saved.visual); defaults.visual = recovered.values;
+    Object.defineProperty(defaults, 'gateReset', { value: recovered.gateReset });
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;
@@ -255,6 +256,7 @@ export class Presentation {
     if (anchor.tagName !== 'INPUT') anchor.setAttribute('aria-expanded', 'true');
     const state = this.card.dataset.audioState ?? 'off';
     this.popup.textContent = key === 'listening-toggle' ? `${explanations[key]} Microphone: ${this.microphoneActive ? state : 'off'}. Permission: ${this.permission ?? this.card.querySelector('.microphone-permission')?.dataset.state ?? 'not requested'}. ${this.card.querySelector('.mic-session-status')?.textContent ?? ''}` : anchor.dataset.explanation ?? (explanations[key] ? explanations[key] + (key === 'identify-song' ? ' ' + this.card.querySelector('.recognition-status').textContent : '') : null) ?? (key === 'video' ? 'Paste a YouTube link to play a video. Listening must hear the speakers for the lights to follow its audio.' : 'Show video, lights, and controls together. Use Exit fullscreen or Escape to return.');
+    this.popup.classList.toggle('activation-popup', key === 'activation-floor');
     this.popup.hidden = false; this.positionHelp();
   }
   positionHelp() {
@@ -270,9 +272,14 @@ export class Presentation {
     const width = Math.min(300, availableWidth - 24);
     this.popup.style.width = width + 'px';
     this.popup.style.left = Math.max(12, Math.min(availableWidth - width - 12, left)) + 'px';
-    this.popup.style.maxHeight = Math.max(44, availableHeight - 24) + 'px';
+    // Keep guidance inside the modal body in logical coordinates, including
+    // quarter-turn views. The fixed Close button and remaining scene stay clear.
+    const body = container.matches('dialog[open]') ? container.querySelector('.fullscreen-settings-body') : null;
+    const helpTop = Math.max(12, body ? body.offsetTop + 8 : 12);
+    const helpBottom = Math.min(availableHeight - 12, body ? body.offsetTop + body.offsetHeight - 8 : availableHeight - 12);
+    this.popup.style.maxHeight = Math.max(0, helpBottom - helpTop) + 'px';
     const height = this.popup.offsetHeight;
-    this.popup.style.top = Math.max(12, Math.min(availableHeight - height - 12, top > height + 20 ? top - height - 8 : bottom + 8)) + 'px';
+    this.popup.style.top = Math.max(helpTop, Math.min(helpBottom - height, top > height + helpTop + 8 ? top - height - 8 : bottom + 8)) + 'px';
   }
 
   hideHelp() { this.popup.hidden = true; this.anchor?.removeAttribute('aria-describedby'); if (this.anchor && this.anchor.tagName !== 'INPUT') this.anchor.setAttribute('aria-expanded', 'false'); this.anchor = null; }

@@ -592,3 +592,87 @@ test('ball settings transitions render the room and bodies from the same applied
     expect(result.alpha).toBe(1);
   }
 });
+
+for (const path of ['/', '/advanced/']) {
+  test(`activation floor recovery and help share keyboard and touch controls on ${path}`, async ({ page }, info) => {
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('seededActivation')) {
+        localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, visual: [1, -60, 3, 2], youtubeLink: '' }));
+        sessionStorage.setItem('seededActivation', 'true');
+      }
+      MediaDevices.prototype.getUserMedia = async () => { throw Error('No microphone needed'); };
+      Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+    });
+    await page.goto(origin + path); await physicsReady(page);
+    await normalView(page);
+    await page.getByText('Audio response & readouts', { exact: true }).click();
+    await expect(page.locator('.gate-reset-notice')).toContainText('disabled / 0.1 sones');
+    await expect(page.locator('.visual-gain-mode')).toHaveValue('3');
+    await expect(page.locator('.manual-visual-gain')).toHaveValue('2');
+    const help = page.getByRole('button', { name: 'Activation floor help', exact: true });
+    await help.focus(); await expect(page.locator('.control-help')).toContainText('does not remove fans');
+    await page.keyboard.press('Escape'); await expect(page.locator('.control-help')).not.toBeVisible();
+    if (info.project.use.hasTouch) await help.tap(); else await help.click();
+    await expect(page.locator('.control-help')).toContainText('calibration is optional');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { window.floorIdentity = document.querySelector('.microphone-floor'); });
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const floor = page.getByLabel('Activation floor (sones)', { exact: true });
+    await floor.fill('.00001'); await floor.press('Tab');
+    await expect(floor).toHaveValue('0.00001');
+    expect(await floor.evaluate(n => n === window.floorIdentity && !!n.closest('dialog') && n.getBoundingClientRect().height >= 44)).toBe(true);
+    await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+    const lowerScene = await page.evaluate(() => {
+      const view = document.querySelector('#dancinglights').physics;
+      window.activationRender = view.renderer.render; view.renderer.render = () => {};
+      document.querySelector('.audio-card').presentation.hideHelp();
+      return { x: 0, y: Math.ceil(innerHeight / 2), width: innerWidth, height: Math.floor(innerHeight / 2) };
+    });
+    const withoutHelp = await page.screenshot({ clip: lowerScene });
+    await page.evaluate(() => document.querySelector('.audio-card').presentation.showHelp(document.querySelector('.activation-help'), 'activation-floor'));
+    await expect(page.locator('.control-help')).toBeVisible();
+    await expect(page.locator('.control-help')).toHaveCSS('pointer-events', 'auto');
+    const withHelp = await page.screenshot({ clip: lowerScene });
+    if (!withHelp.equals(withoutHelp)) {
+      await info.attach('scene-without-help.png', { body: withoutHelp, contentType: 'image/png' });
+      await info.attach('scene-with-help.png', { body: withHelp, contentType: 'image/png' });
+    }
+    expect(withHelp.equals(withoutHelp), 'help preserves every lower-half rendered pixel').toBe(true);
+    const helpBounds = await page.evaluate(() => {
+      const help = document.querySelector('.control-help').getBoundingClientRect();
+      const body = document.querySelector('.fullscreen-settings-body').getBoundingClientRect();
+      return { inside: help.top >= body.top && help.bottom <= body.bottom, lowerSceneClear: help.bottom <= innerHeight / 2 };
+    });
+    expect(helpBounds).toEqual({ inside: true, lowerSceneClear: true });
+    await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: info.outputPath('activation-floor-settings.png') });
+    await page.evaluate(() => { document.querySelector('#dancinglights').physics.renderer.render = window.activationRender; });
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    if (path === '/advanced/') {
+      for (const turn of [1, 2, 3]) {
+        await clickControlAtHitPoint(page, page.locator('.rotate-display'));
+        await expect(page.locator('.audio-card')).toHaveAttribute('data-display-rotation', String(turn));
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+        await help.scrollIntoViewIfNeeded(); await help.focus();
+        await expect(page.locator('.control-help')).toContainText('calibration is optional');
+        expect(await page.evaluate(() => {
+          const popup = document.querySelector('.control-help').getBoundingClientRect();
+          const body = document.querySelector('.fullscreen-settings-body').getBoundingClientRect();
+          return popup.left >= body.left && popup.right <= body.right
+            && popup.top >= body.top && popup.bottom <= body.bottom;
+        }), `activation help stays inside the rotated Settings body at turn ${turn}`).toBe(true);
+        await page.locator('.fullscreen-settings').screenshot({ path: info.outputPath(`activation-help-turn-${turn}.png`) });
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+      }
+    }
+    await page.reload(); await physicsReady(page); await normalView(page);
+    await page.getByText('Audio response & readouts', { exact: true }).click();
+    await expect(floor).toHaveValue('0.00001');
+    await expect(page.locator('.visual-gain-mode')).toHaveValue('3');
+    await expect(page.locator('.manual-visual-gain')).toHaveValue('2');
+    await expect(page.locator('.microphone-gate')).not.toBeChecked();
+    await expect(page.locator('.gate-reset-notice')).toBeEmpty();
+    await expect(page.locator('.audio-card')).not.toHaveAttribute('data-audio-session');
+  });
+}

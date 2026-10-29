@@ -168,3 +168,24 @@ test('ball preferences migrate independently and reject malformed diameter inter
   for (const balls of [[17, 2.64, 19.2], [1.5, 2.64, 19.2], [8, 10, 9], [8, 2.63, 19.2], [8, 2.64, 19.21], [8, null, 19.2]])
     assert.deepEqual(read({ version: 1, balls }).balls, [8, 2.64, 19.2]);
 });
+
+test('saved sones gate recovers independently from each gain field and other preferences', async () => {
+  const { recoverVisual, validVisual } = await import('../../musical-leptos/src/audio_controls.js');
+  for (const floor of [undefined, null, -60, 0, '0.1', NaN, Infinity]) {
+    const saved = [1, floor, 3, 2];
+    assert.deepEqual(recoverVisual(saved), { values: [0, .1, 3, 2], gateReset: true });
+    const restored = readSettings({ getItem: () => JSON.stringify({ version: 1, visual: saved, youtubeLink: '', cameraAngle: 17,
+      cameraZoom: 135, cameraX: 20, cameraY: 80, balls: [16, 4, 12] }) });
+    assert.deepEqual(restored.visual, [0, .1, 3, 2]); assert.equal(restored.gateReset, true);
+    assert.equal(restored.youtubeLink, ''); assert.equal(restored.cameraAngle, 17);
+    assert.deepEqual([restored.cameraZoom, restored.cameraX, restored.cameraY], [135, 20, 80]);
+    assert.deepEqual(restored.balls, [16, 4, 12]);
+    assert(!validVisual(saved));
+  }
+  for (const floor of [Number.MIN_VALUE, .00001, Number.MAX_VALUE]) {
+    assert(validVisual([1, floor, 0, 64]));
+    assert.deepEqual(recoverVisual([1, floor, 99, 2]), { values: [1, floor, 1, 2], gateReset: false });
+    assert.deepEqual(recoverVisual([1, floor, 3, -1]), { values: [1, floor, 3, 1], gateReset: false });
+  }
+  assert.deepEqual(recoverVisual([9, .1, 0, 2]).values, [0, .1, 0, 2]);
+});

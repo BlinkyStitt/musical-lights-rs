@@ -19,6 +19,13 @@ pub struct RecentPeak {
     candidate_eligible_until: Option<f64>,
 }
 impl RecentPeak {
+    /// Suppress queued decisions without erasing the measured peak or time history.
+    pub fn cancel_pending(&mut self) {
+        self.deadline = None;
+        self.eligible = false;
+        self.candidate_eligible_until = None;
+    }
+
     pub fn push(&mut self, at: f64, loudness: f64, attack: bool, candidate: bool) -> bool {
         if !at.is_finite() || !loudness.is_finite() || loudness < 0.0 {
             return false;

@@ -53,7 +53,12 @@ test('an unknown nested route loads the app not-found view with HTTP 404', async
 for (const route of ['/', '/about/', '/advanced/']) {
   test(`Musical Lights branding fits a narrow header on ${route}`, async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 700 });
-    await page.goto(`${origin}${route}`);
+    const response = await page.goto(`${origin}${route}`);
+    // Exercise the same non-isolated document used by GitHub Pages. The
+    // standalone shared-memory demo tests its separate isolation requirement.
+    expect(response.headers()['cross-origin-opener-policy']).toBeUndefined();
+    expect(response.headers()['cross-origin-embedder-policy']).toBeUndefined();
+    expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
     await expect(page.locator('.wordmark')).toHaveText('▂▅▃▆ Musical Lights');
     await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute('content', 'Musical Lights');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);

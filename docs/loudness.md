@@ -56,7 +56,7 @@ Current RMS dBFS uses exponential power integration, default 125 ms. Silence has
 
 The background estimate never feeds the model, gain, attack detector, or calibration. dBFS cannot determine safe exposure. Absolute acoustic sones require measured microphone sensitivity and fixed capture settings.
 
-Advanced controls expose gain, smoothing, attack history and gates, flash timing, tempo range and response, RMS integration, background history and percentile, numeric updates, and display packet rate. The core validates all settings before use. ISO coefficients and band definitions stay fixed. Audio settings apply on the next explicit audio start. Latency and block requests are browser-dependent hints. Default uses the browser quantum, normally 128 samples (2.67 ms at 48 kHz). Unsupported requests remain unavailable. The UI reports actual block size. No setting inserts silence or drops input to hide an overrun.
+Advanced controls expose gain, smoothing, attack history and gates, flash timing, tempo range and response, RMS integration, background history and percentile, numeric updates, and display packet rate. The core validates all settings before use. ISO coefficients and band definitions stay fixed. Audio settings apply live at an acknowledged analysis boundary; saved changes while stopped apply at the next explicit start. Latency and block requests are browser-dependent hints. Default uses the browser quantum, normally 128 samples (2.67 ms at 48 kHz). Unsupported requests remain unavailable. The UI reports actual block size. No setting inserts silence or drops input to hide an overrun.
 
 ## Rendering
 
@@ -90,13 +90,33 @@ The checked-in partial-loudness, fixed-window, spectrum, and audio-audit reports
 
 ## Manual gate, gain modes and live tuning
 
-The microphone noise gate is disabled by default. Its default floor is −60 dBFS,
-with a permitted range of −90 through −20 dBFS. A fixed 10 ms RMS detector opens
-at 3 dB above the floor and closes after 100 ms below the floor. Digital playback
-bypasses it. A closed gate eases sound targets toward zero, freezes automatic
-gain, suppresses new attack and direction events, and feeds silence to tempo.
-Raw loudness, calibration and the separate decorative listening wave continue.
-The gate changes display policy; it does not subtract noise from measurements.
+The microphone activation gate is disabled by default, with an activation floor
+of 0.1 sones. Any finite positive floor is accepted, including values below 0.01.
+Each emitted 96-sample (2 ms) frame evaluates the authoritative, temporally weighted
+total sones before visual gain, not the sum of rounded bands or RMS. A closed gate
+opens at or above the floor. An open gate closes after 50 consecutive frames
+(4,800 samples / 100 ms) strictly below 80% of the floor; equality resets the hold.
+This hold is separate from filtered bar decay. The analysis cadence is not total
+microphone-to-screen delay. Digital playback bypasses the gate.
+
+A closed gate eases sound targets toward zero, freezes automatic gain, suppresses
+attacks and clears pending direction eligibility while preserving recent peak
+history, and feeds zero novelty to tempo. Raw loudness, calibration, diagnostic RMS
+and the separate decorative listening wave continue. Stop, interruption and Reduced
+Motion still disable that wave. No background subtraction or automatic floor is used.
+The gate cannot remove fan noise while music is playing above the floor.
+
+To set a floor: turn on Listening, observe the adjacent background estimate in a
+quiet room, adjust for the room and microphone, then test with sound. Uncalibrated
+sones are estimates; calibration is optional. The background remains readout-only,
+including as it rises under sustained sound. Status reports the processor's actual
+disabled/open/closed/digital-bypass decision, not rounded sones, and is unavailable
+at startup, Stop or interruption.
+
+Floor edits clear the quiet timer; enabling starts closed and evaluates the current
+frame. Invalid live records preserve accepted settings and state. Saved legacy dBFS,
+missing or invalid floors reset only the gate to disabled/0.1 sones with a notice;
+there is no unit conversion. Gain mode and manual gain recover independently.
 
 Normal gain retains the production behavior. Vivid uses one quarter of the
 configured gain time constants; Lazy uses twice those constants. Off permits
@@ -107,7 +127,7 @@ their saved format; the four validated visual options have a separate record.
 Processing changes carry a session ID and revision. The worklet applies a complete
 validated update at the next fixed analysis boundary and acknowledges that revision.
 It keeps filters, history, calibration and sample continuity. The changed frame
-cannot create an attack event. Obsolete sessions and revisions are rejected.
+cannot create an attack event. Obsolete sessions and revisions are rejected. Only the latest matching acknowledgment confirms application in the UI; requested preferences are separate from accepted values. Rejections show a reason, active floor and recovery instructions. Calibration rebuilds preserve accepted and valid queued updates. Diagnostic trace version 8 records gate state, applied revision and all four visual values on each analysis frame (tone export version 9).
 
 Block-size and latency changes recreate an active AudioContext. Digital source,
 sample position, pause/repeat and monitor state survive. Stop, route cleanup and

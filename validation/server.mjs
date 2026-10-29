@@ -43,8 +43,13 @@ const servers = roots.map(([port, directory]) => {
       }
       response.writeHead(status, {
         'Content-Type': contentTypes[extname(file)] ?? 'application/octet-stream',
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        // Only the standalone shared-memory demo needs isolation. Pages serves
+        // the main app without COOP/COEP. Adding COOP here forces WebKit through
+        // a cross-process navigation that the deployed application never uses.
+        ...(port === 8103 ? {
+          'Cross-Origin-Opener-Policy': 'same-origin',
+          'Cross-Origin-Embedder-Policy': 'require-corp',
+        } : {}),
       });
       response.end(body);
     } catch { response.writeHead(404).end('Not found'); }

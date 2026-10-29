@@ -90,6 +90,9 @@ level 2 even when a user-wide profile sets level 0. The test profiles retain deb
 assertions and overflow checks.
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
+`just validate` runs workflow lint, tooling regressions, the native/WASM feature
+matrix and app builds, benchmark smoke cases, the offline harness and all browser
+projects locally. It does not require a published branch.
 `just check` runs workflow lint and tooling regressions, then the core feature
 matrix, native physics, worklet, Leptos, benchmark smoke checks and demo builds.
 It requires a clean worktree with an open same-repository pull request at the
@@ -246,6 +249,20 @@ before the test deadline and browser teardown, without restarting a browser or
 changing the serial startup guard. Correlate their UTC timestamps with the HTTP
 log and `process-exits.log`; an empty action trace's network file alone does not
 prove that no request reached the server when DOM snapshots are disabled.
+
+The main app and deployment fixture use the ordinary document policy served by
+GitHub Pages: no COOP or COEP headers. Only the standalone shared-memory demo on
+port 8103 requires isolation. This avoids adding a WebKit process-switch boundary
+to every main-app navigation; route checks verify the policy and the standalone
+demo still requires `crossOriginIsolated`.
+
+Rotation continuity checks use the analyzed-frame timestamp in ordinary worklet
+packets. The produced-WASM harness verifies that this is exactly the sample index
+of the last diagnostic row across callback sizes and a nonzero sample origin, and
+that missing input cannot advance it. Enabling 472-value diagnostic rows every
+2 ms solely to observe that timestamp adds unnecessary work to native playback.
+The rotation cases still require fresh analysis after every click, non-silent PCM,
+zero missing/overlapping samples, advancing video frames, and retained resources.
 
 The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
 and network access. `.codex/rules/browser-tests.rules` allows the two browser
@@ -1115,9 +1132,13 @@ for codec, redaction, ellipsoid coverage/holdout and native-unit calibration che
 linker reserves sectors 6 and 7; its application must fit below `0x08040000`.
 The release uses size optimization. Verify device timing separately.
 
-Audio regressions compare the default pipeline exactly, gate transitions and RMS
-updates across callback sizes, digital bypass, gain ratios, settings boundaries,
-revision acknowledgments and calibration rejection. Browser checks exercise live
+Audio regressions compare the default pipeline exactly, raw-sone gate transitions and RMS
+readout updates across callback sizes, digital bypass, gain ratios, settings boundaries,
+latest revision acknowledgments and calibration rejection. Gate checks cover opening
+equality, the 49/50-frame hold boundary, equal-RMS spectra with different sones,
+gain independence, sustained sound as the background rises, and early reopening
+without a stale direction decision. `just validate` runs core, worklet, physics,
+Leptos, Dioxus, standalone WASM and the full offline/browser suite with pinned tools. Browser checks exercise live
 tuning, paused playback restart, settings during acquisition, Stop and route cleanup.
 Run `worklet physics leptos` before the full browser suite. Keep one browser worker,
 zero retries and the startup guard. Use the standalone production benchmark on an
@@ -1139,8 +1160,10 @@ An interrupted reference measurement is canceled. Invalid PCM or a missing chann
 remains an error. A backward clock starts a new declared segment without
 rewinding playback; sample indices stay truthful within each segment.
 
-The current worklet trace is version 7, with 466 values per row. The final value
-identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v8`
+The current worklet trace is version 8, with 472 values per row. After the 24
+suppression counters it records gate state, applied revision and four visual
+options (enabled, activation floor in sones, gain mode, manual gain). The final value
+identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v9`
 and include continuity counters in their chunks and session metadata. Diagnostic
 plots break at segment boundaries. A sample gap invalidates an active phone FPS
 record even when playback recovers; recovery is not continuity acceptance.
@@ -1288,12 +1311,13 @@ does not enable auto-merge on every pull request.
 
 From the repository root, install the pinned web tools with
 `python3 validation/install_tools.py web` and `python3 validation/install_tools.py ci`,
-add `.tools/bin` to `PATH`, then run `just validate` (an alias for `just check`).
+add `.tools/bin` to `PATH`, then run `just validate`.
 The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
 cases, and the two demo builds required by the full browser suite. It then
-checks the exact-commit website browser CI and runs the Node harness and demo
-browser project locally against produced WASM.
+runs the Node harness and full serial browser suite locally against produced
+WASM. After delivery, `just check` additionally verifies the exact-commit website
+browser CI as described above.
 Missing apps and tools fail validation. The existing serial startup/crash guard,
 one browser worker and zero retries remain authoritative.
 

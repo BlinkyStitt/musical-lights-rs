@@ -139,12 +139,46 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
     expect(p.messages[0].data.type).toBe('frame');
     expect(p.messages[0].data.state).toBeInstanceOf(Float64Array);
     expect(p.messages[0].data.state.length).toBe(102);
-    expect(Object.keys(p.messages[0].data).sort()).toEqual(['accentSequence', 'calibration', 'clipped', 'continuity', 'quantum', 'readouts', 'sessionId', 'sones', 'state', 'tempo', 'tempoConfidence', 'type']);
+    expect(Object.keys(p.messages[0].data).sort()).toEqual(['accentSequence', 'calibration', 'clipped', 'continuity', 'gateState', 'quantum', 'readouts', 'revision', 'sessionId', 'sones', 'state', 'tempo', 'tempoConfidence', 'type']);
     expect(Number.isInteger(p.messages[0].data.accentSequence)).toBe(true);
     p.value.port.onmessage({ data: { type: 'ack' } });
     p.push(tone(128));
     expect(p.messages).toHaveLength(2);
     expect(p.messages[1].data.state[0]).toBeGreaterThan(3);
+  }
+});
+
+test('ordinary packets expose the same analyzed sample clock as diagnostic rows', () => {
+  const pcm = tone(48000, 1000, .02);
+  for (const size of [128, 256, 800, 4096]) {
+    const ordinary = processor(), traced = processor(0, true);
+    try {
+      for (const p of [ordinary, traced]) {
+        p.scope.currentFrame = 997;
+        assert.equal(p.value.process([]), true);
+        assert.equal(p.messages.length, 0); // A running clock is not analyzed PCM.
+      }
+      let packets = 0;
+      for (let start = 0; start < pcm.length; start += size) {
+        for (const p of [ordinary, traced]) {
+          p.value.port.onmessage({ data: { type: 'ack' } });
+          assert.equal(p.push(pcm.subarray(start, start + size)), true);
+        }
+        const a = ordinary.messages.at(-1).data, b = traced.messages.at(-1).data;
+        assert.deepEqual(a.state, b.state);
+        assert.deepEqual(a.continuity, b.continuity);
+        assert.equal(a.trace, undefined);
+        assert.equal(Math.round(a.state[0] * 48000), b.trace[b.trace.length - b.traceStride]);
+        assert.ok(a.state[0] * 48000 <= ordinary.scope.currentFrame);
+        packets = ordinary.messages.length;
+      }
+      assert.ok(packets > 1);
+      assert.equal(ordinary.value.process([]), false);
+      assert.equal(ordinary.messages.at(-1).data.type, 'error');
+      assert.equal(ordinary.messages.filter(({ data }) => data.type === 'frame').length, packets);
+    } finally {
+      for (const p of [ordinary, traced]) p.value.wasm.processor_destroy(p.value.processor);
+    }
   }
 });
 
@@ -302,7 +336,7 @@ test('live settings apply at a fixed boundary and acknowledge only the active se
   const p = processor(0, false, { sessionId: 41, settings: [...DEFAULT_AUDIO] });
   assert(p.push(new Float32Array(128)));
   const send = data => p.value.port.onmessage({ data });
-  const update = { type: 'settings', sessionId: 41, revision: 2, settings: [...DEFAULT_AUDIO], visual: [0, -60, 0, 2] };
+  const update = { type: 'settings', sessionId: 41, revision: 2, settings: [...DEFAULT_AUDIO], visual: [0, .1, 0, 2] };
   send({ ...update, sessionId: 40 });
   assert.equal(p.value.wasm.processor_revision(p.value.processor), 1);
   send(update);
@@ -310,7 +344,7 @@ test('live settings apply at a fixed boundary and acknowledge only the active se
   assert(p.push(new Float32Array(128)));
   assert.equal(p.value.wasm.processor_revision(p.value.processor), 2);
   assert.deepEqual(p.messages.filter(x => x.data.type === 'settings-ack').at(-1).data,
-    { type: 'settings-ack', sessionId: 41, revision: 2, accepted: true });
+    { type: 'settings-ack', sessionId: 41, revision: 2, accepted: true, settings: update.settings, visual: update.visual });
   assert.equal(p.snapshot()[100], 2);
   const count = p.messages.length;
   send(update); // Duplicate cannot reapply.
@@ -324,7 +358,7 @@ test('live settings apply at a fixed boundary and acknowledge only the active se
 
 test('rejected visual settings cannot poison a later calibration or its accepted gain', async () => {
   const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
-  const p = processor(0, false, { sessionId: 71, settings: [...DEFAULT_AUDIO], visual: [0, -60, 0, 2] });
+  const p = processor(0, false, { sessionId: 71, settings: [...DEFAULT_AUDIO], visual: [0, .1, 0, 2] });
   const samples = tone(48000, 1000, .002);
   assert(p.push(samples.subarray(0, 128)));
   p.value.port.onmessage({ data: { type: 'settings', sessionId: 71, revision: 2, settings: [...DEFAULT_AUDIO], visual: [1, -100, 0, 3] } });
@@ -342,7 +376,7 @@ test('live RMS tuning uses the same analysis boundary for every callback size', 
     const p = processor(0, false, { sessionId: 93, settings: [...DEFAULT_AUDIO] });
     for (let at = 0; at < 12000; at += size) assert(p.push(samples.subarray(at, Math.min(at + size, 12000))));
     const settings = [...DEFAULT_AUDIO]; settings[23] = .5;
-    p.value.port.onmessage({ data: { type: 'settings', sessionId: 93, revision: 2, settings, visual: [0, -60, 1, 1] } });
+    p.value.port.onmessage({ data: { type: 'settings', sessionId: 93, revision: 2, settings, visual: [0, .1, 1, 1] } });
     for (let at = 12000; at < samples.length; at += size) assert(p.push(samples.subarray(at, Math.min(at + size, samples.length))));
     const w = p.value.wasm, h = p.value.processor;
     const actual = [...new Float64Array(w.memory.buffer, w.processor_readouts(h), 4)];
@@ -355,7 +389,7 @@ test('live RMS tuning uses the same analysis boundary for every callback size', 
 test('initial microphone gate survives saved-settings configuration while digital playback bypasses it', async () => {
   const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
   for (const microphone of [true, false]) {
-    const p = processor(0, false, { sessionId: 117, microphone, settings: [...DEFAULT_AUDIO], visual: [1, -20, 1, 1] });
+    const p = processor(0, false, { sessionId: 117, microphone, settings: [...DEFAULT_AUDIO], visual: [1, 100, 1, 1] });
     const samples = tone(24000, 1000, .005);
     for (let at = 0; at < samples.length; at += 128) assert(p.push(samples.subarray(at, at + 128)));
     assert(p.value.wasm.processor_sones(p.value.processor) > 0);
@@ -386,7 +420,7 @@ test('forward gaps reject the block before an explicit reset and preserve raw sa
 });
 
 test('recovered analysis equals a fresh calibrated segment at the real clock without growing memory or the UI queue', () => {
-  const options = { pascalsPerUnit: 1.5, microphone: true, visual: [0, -60, 0, 2], sessionId: 12 };
+  const options = { pascalsPerUnit: 1.5, microphone: true, visual: [0, .1, 0, 2], sessionId: 12 };
   const p = processor(0, false, options), reference = processor(0, false, options);
   const memory = p.value.wasm.memory.buffer.byteLength;
   const pcm = tone(48000, 1000, .02);
@@ -407,13 +441,13 @@ test('recovered analysis equals a fresh calibrated segment at the real clock wit
 
 test('a gap cancels incomplete calibration, retains the accepted scale and applies queued settings', () => {
   const settings = [.8,2,20,1,1,.8,.01,.1,.03,.25,.01,.15,.1,.3,.01,.16,.06,.18,60,200,8,3,2,.125,30,.1,10,240];
-  const p = processor(0, false, { pascalsPerUnit: 1.5, sessionId: 22, settings, visual: [0,-60,0,2] });
+  const p = processor(0, false, { pascalsPerUnit: 1.5, sessionId: 22, settings, visual: [0,.1,0,2] });
   for (let i = 0; i < 20; i++) expect(p.push(tone(128, 1000, .02))).toBe(true);
   p.value.port.onmessage({ data: { type: 'calibrate', dbSpl: 94 } });
   settings[0] = .7;
-  p.value.port.onmessage({ data: { type: 'settings', sessionId: 22, revision: 2, settings, visual: [0,-60,0,4] } });
+  p.value.port.onmessage({ data: { type: 'settings', sessionId: 22, revision: 2, settings, visual: [0,.1,0,4] } });
   p.scope.currentFrame += 128;
-  const reference = processor(0, false, { pascalsPerUnit: 1.5, settings, visual: [0,-60,0,4] });
+  const reference = processor(0, false, { pascalsPerUnit: 1.5, settings, visual: [0,.1,0,4] });
   reference.scope.currentFrame = p.scope.currentFrame;
   const pcm = tone(48000 * 4, 1000, .02);
   for (let at = 0; at < pcm.length; at += 128) {
@@ -434,14 +468,14 @@ test('diagnostic rows retain actual sample indices and identify both sides of a 
   for (let i = 0; i < 8; i++) { expect(p.push(tone(128, 1000, .02))).toBe(true); p.value.port.onmessage({ data: { type: 'ack' } }); }
   const rows = [];
   for (const { data } of p.messages) {
-    expect(data.traceVersion).toBe(7); expect(data.traceStride).toBe(466);
+    expect(data.traceVersion).toBe(8); expect(data.traceStride).toBe(472);
     for (let at = 0; at < data.trace.length; at += data.traceStride) rows.push(data.trace.slice(at, at + data.traceStride));
   }
-  expect(rows.some(row => row[465] === 0)).toBe(true);
-  expect(rows.some(row => row[465] === 1)).toBe(true);
+  expect(rows.some(row => row.at(-1) === 0)).toBe(true);
+  expect(rows.some(row => row.at(-1) === 1)).toBe(true);
   for (const row of rows) {
     expect(row[0] < expected || row[0] >= expected + 128).toBe(true);
-    if (row[465] === 1) expect(row[0]).toBeGreaterThanOrEqual(expected + 128);
+    if (row.at(-1) === 1) expect(row[0]).toBeGreaterThanOrEqual(expected + 128);
   }
 });
 
@@ -486,7 +520,7 @@ test('a backward clock rejects first, starts a declared overlapping segment and 
   expect(p.snapshot()).toEqual(reference.snapshot()); expect(w.memory.buffer.byteLength).toBe(memory);
   expect(p.messages.at(-1).data.continuity).toEqual({ segment: 1, missingSamples: 0, overlapSamples: 128, expectedSample: expected, receivedSample: received, calibrationCancellations: 0 });
   const rows = p.messages.flatMap(({ data }) => Array.from({ length: data.trace.length / data.traceStride }, (_, row) => data.trace.slice(row * data.traceStride, (row + 1) * data.traceStride)));
-  const before = rows.filter(row => row[465] === 0), after = rows.filter(row => row[465] === 1);
+  const before = rows.filter(row => row.at(-1) === 0), after = rows.filter(row => row.at(-1) === 1);
   expect(before.length).toBeGreaterThan(0); expect(after.length).toBeGreaterThan(0);
   expect(after[0][0]).toBe(received); expect(after[0][0]).toBeLessThan(before.at(-1)[0]);
   for (let i = 1; i < after.length; i++) expect(after[i][0]).toBeGreaterThan(after[i - 1][0]);
@@ -496,7 +530,7 @@ test('tempo crosses acknowledged production WASM packets and reacquires at a rea
   const { tempoPCM } = await import('../tempo-input.mjs');
   const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
   const options = { sessionId: 1232, pascalsPerUnit: 1.5, microphone: true,
-    settings: [...DEFAULT_AUDIO], visual: [0, -60, 0, 2] };
+    settings: [...DEFAULT_AUDIO], visual: [0, .1, 0, 2] };
   const p = processor(0, false, options);
   p.scope.currentFrame = 997;
   const initialMemory = p.value.wasm.memory.buffer.byteLength;
@@ -548,4 +582,99 @@ test('tempo crosses acknowledged production WASM packets and reacquires at a rea
   assert.equal(p.value.wasm.memory.buffer.byteLength, initialMemory);
   p.value.wasm.processor_destroy(p.value.processor);
   fresh.value.wasm.processor_destroy(fresh.value.processor);
+});
+
+test('WASM gate traces match the total-sones hysteresis oracle across callback sizes and gain modes', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const pcm = tone(72000, 1000, .005); pcm.fill(0, 0, 12000); pcm.fill(0, 36000);
+  let reference;
+  for (const size of [1, 13, 96, 128, 4096]) {
+    for (const gainMode of [0, 1, 2, 3]) {
+      const p = processor(0, true, { sessionId: 10, microphone: true, settings: [...DEFAULT_AUDIO], visual: [1, .1, gainMode, 4] });
+      const w = p.value.wasm, h = p.value.processor, stride = w.processor_trace_stride(h), rows = [];
+      for (let at = 0; at < pcm.length; at += size) {
+        assert(p.push(pcm.subarray(at, at + size)));
+        rows.push(...p.messages.splice(0).flatMap(({ data }) => data.trace ? Array.from({ length: data.trace.length / stride }, (_, i) => [...data.trace.slice(i * stride, (i + 1) * stride)]) : []));
+        const values = new Float64Array(w.memory.buffer, w.processor_trace_ptr(h), w.processor_trace_count(h) * stride);
+        for (let i = 0; i < values.length; i += stride) rows.push([...values.slice(i, i + stride)]);
+        w.processor_trace_clear(h);
+      }
+      let open = false, quiet = 0;
+      for (const row of rows) {
+        if (open) { quiet = row[1] < .08 ? quiet + 96 : 0; if (quiet >= 4800) { open = false; quiet = 0; } }
+        else if (row[1] >= .1) open = true;
+        assert.equal(row[stride - 7], open ? 1 : 2);
+        assert.equal(row[stride - 6], 1);
+        assert.deepEqual(row.slice(stride - 5, stride - 1), [1, .1, gainMode, 4]);
+        if (!open) {
+          assert(row.slice(417, 441).every(v => v === -1));
+          assert(Array.from({ length: 24 }, (_, b) => row[318 + b * 4]).every(v => v === 0));
+        }
+      }
+      const measured = rows.map(row => [...row.slice(0, 266), row[stride - 7]]);
+      if (!reference) reference = measured; else assert.deepEqual(measured, reference);
+      assert(rows.some(row => row[stride - 7] === 1));
+      assert.equal(rows.at(-1)[stride - 7], 2);
+      w.processor_destroy(h);
+    }
+  }
+});
+
+test('sustained microphone sound stays open as the readout-only background rises', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const settings = [...DEFAULT_AUDIO]; settings[24] = 1;
+  const p = processor(0, false, { settings, visual: [1, .1, 1, 1], microphone: true });
+  const w = p.value.wasm, h = p.value.processor;
+  for (let i = 0; i < 500; i++) assert(p.push(new Float32Array(96)));
+  const background = () => new Float64Array(w.memory.buffer, w.processor_readouts(h), 4)[2];
+  assert.equal(background(), 0);
+  const pcm = tone(144000, 1000, .005);
+  for (let at = 0; at < pcm.length; at += 96) {
+    assert(p.push(pcm.subarray(at, at + 96)));
+    if (at >= 48000) assert.equal(w.processor_gate_state(h), 1);
+  }
+  assert(background() > .1);
+  assert(p.snapshot().some((value, i) => i >= 3 && i < 99 && (i - 3) % 4 === 0 && value > 0));
+});
+
+test('calibration completion reapplies a queued floor without accepting a later invalid record', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const p = processor(0, false, { sessionId: 81, settings: [...DEFAULT_AUDIO], visual: [1, 100, 0, 2], microphone: true });
+  assert(p.push(tone(128, 1000, .002)));
+  p.value.port.onmessage({ data: { type: 'calibrate', dbSpl: 60 } });
+  const pcm = tone(144000, 1000, .002);
+  for (let at = 0; at < 143999; at += 128) assert(p.push(pcm.subarray(at, Math.min(at + 128, 143999))));
+  const send = (revision, visual) => p.value.port.onmessage({ data: { type: 'settings', sessionId: 81, revision, settings: [...DEFAULT_AUDIO], visual } });
+  send(2, [1, .0001, 0, 3]); send(3, [1, -60, 0, 4]);
+  assert(p.push(pcm.subarray(143999)));
+  assert(p.push(tone(4096, 1000, .002)));
+  assert.equal(p.value.wasm.processor_revision(p.value.processor), 2);
+  assert.equal(p.value.wasm.processor_gate_state(p.value.processor), 1);
+  assert.equal(p.snapshot()[100], 3);
+  const ack = p.messages.filter(m => m.data.type === 'settings-ack' && m.data.accepted).at(-1).data;
+  assert.deepEqual(ack.visual, [1, .0001, 0, 3]);
+});
+
+test('produced WASM distinguishes equal-RMS spectra by raw sones and opens at equality', async () => {
+  const { DEFAULT_AUDIO } = await import('../../musical-leptos/src/audio_controls.js');
+  const signals = [tone(48000, 100, .001), tone(48000, 1000, .001)];
+  const run = (pcm, floor, enabled) => {
+    const p = processor(0, false, { microphone: true, settings: [...DEFAULT_AUDIO], visual: [Number(enabled), floor, 1, 1] });
+    for (let at = 0; at < pcm.length; at += 128) assert(p.push(pcm.subarray(at, at + 128)));
+    const w = p.value.wasm, h = p.value.processor;
+    const result = { sones: w.processor_sones(h), gate: w.processor_gate_state(h), bands: Array.from({length: 24}, (_, b) => p.snapshot()[6 + b * 4]) };
+    w.processor_destroy(h); return result;
+  };
+  const power = pcm => pcm.reduce((sum, v) => sum + v * v, 0);
+  assert(Math.abs(power(signals[0]) - power(signals[1])) < 1e-8);
+  const raw = signals.map(pcm => run(pcm, .1, false));
+  assert(raw[1].sones > raw[0].sones);
+  const floor = (raw[0].sones + raw[1].sones) / 2;
+  for (let i = 0; i < signals.length; i++) {
+    const gated = run(signals[i], floor, true);
+    assert.equal(gated.sones, raw[i].sones); assert.deepEqual(gated.bands, raw[i].bands);
+    assert.equal(gated.gate, i === 0 ? 2 : 1);
+  }
+  // Replay reaches exactly the selected measured total at the accepted floor.
+  assert.equal(run(signals[1], raw[1].sones, true).gate, 1);
 });

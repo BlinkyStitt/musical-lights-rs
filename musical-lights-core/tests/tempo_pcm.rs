@@ -2,7 +2,7 @@ mod common;
 use common::*;
 use musical_lights_core::audio::{
     loudness::{Calibration, LoudnessError, SoundField},
-    policy::{GainMode, VisualOptions},
+    policy::{GainMode, GateState, VisualOptions},
     processor::LoudnessProcessor,
     settings::AudioSettings,
 };
@@ -70,7 +70,7 @@ fn configured(microphone: bool, gate: bool) -> LoudnessProcessor {
         settings,
         VisualOptions {
             gate_enabled: gate,
-            gate_dbfs: -40.0,
+            gate_sones: 1.0,
             gain_mode: GainMode::Off,
             manual_gain: 2.0
         }
@@ -131,7 +131,9 @@ fn microphone_gate_closes_reopens_and_digital_bypasses_it() {
             144.0,
             &feed(&mut mic, &music, 0, &[partition]),
         );
+        assert_eq!(mic.gate_state(), GateState::Open);
         let muted = feed(&mut mic, &quiet, music.len() as u64, &[partition]);
+        assert_eq!(mic.gate_state(), GateState::Closed);
         assert_eq!(mic.tempo().confidence, 0.0);
         assert!((mic.tempo().bpm - 60.0).abs() < 0.1);
         assert_eq!(mic.snapshot().targets, [0.0; 24]);
@@ -146,6 +148,7 @@ fn microphone_gate_closes_reopens_and_digital_bypasses_it() {
             144.0,
             &feed(&mut mic, &music, (music.len() * 2) as u64, &[partition]),
         );
+        assert_eq!(mic.gate_state(), GateState::Open);
         assert_eq!(mic.revision(), 7);
     }
     let bypass = feed(&mut configured(false, true), &quiet, 0, &[128]);

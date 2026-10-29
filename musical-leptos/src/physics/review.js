@@ -86,7 +86,7 @@ export class ListeningReview {
       const v = this.view, b = 8; // Labelled 1 kHz source band; no normalized fitting.
       const renderedTime = Number.isFinite(v.renderedAt) && Number.isFinite(detail.receivedAudioTime) && Number.isFinite(detail.receivedAt)
         ? detail.receivedAudioTime + (v.renderedAt - detail.receivedAt) / 1000 : null;
-      this.samples.push({ at: trace[row + 315], analysisSegment: trace[row + stride - 1], band: b, raw: trace[row + 242 + b], filtered: trace[row + 319 + 4 * b],
+      this.samples.push({ at: trace[row + 315], analysisSegment: trace[row + stride - 1], gateState: detail.traceVersion >= 8 ? trace[row + stride - 7] : null, appliedRevision: detail.traceVersion >= 8 ? trace[row + stride - 6] : null, band: b, raw: trace[row + 242 + b], filtered: trace[row + 319 + 4 * b],
         collider: v.current ? v.current[v.layout[9] + b] / v.height : 0,
         rendered: v.renderedHeight(b) / v.renderedEnclosureHeight, barBase: 'both',
         renderedAt: v.renderedAt, renderedTime, renderedTimeConfidence: renderedTime == null ? 'unverified' : 'host/context estimate',

@@ -411,3 +411,9 @@ nav { flex-wrap: wrap; }
 .visualizer-screen { display: contents; }
 .visualizer-screen:fullscreen { display: block; visibility: visible; background: var(--plot); }
 .visualizer-screen::backdrop { background: var(--plot); }
+
+.visual-audio-controls > output { display: block; margin: .5rem 0; }
+.visual-audio-controls input, .visual-audio-controls select, .activation-help { min-height: 44px; }
+.visual-audio-controls input[type="checkbox"] { width: 44px; height: 44px; }
+
+.control-help.activation-popup { pointer-events: auto; }
