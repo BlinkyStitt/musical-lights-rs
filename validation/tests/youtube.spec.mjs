@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { clickControlAtHitPoint } from '../control-input.mjs';
+import { clickControlAtHitPoint, controlHitPoint } from '../control-input.mjs';
 import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
@@ -10,9 +10,11 @@ test('batched control input requires a stable enabled hit target and emits trust
     <div id="cover" style="position:absolute;inset:0"></div>`);
   const button = page.getByRole('button', { name: 'Control', exact: true });
   await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');
+  await expect(controlHitPoint(button, { nativeScroll: true })).rejects.toThrow('must hit');
   await page.locator('#cover').evaluate(node => node.remove());
   await button.evaluate(node => { node.disabled = true; });
   await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');
+  await expect(controlHitPoint(button, { nativeScroll: true })).rejects.toThrow('must hit');
   await button.evaluate(node => { node.disabled = false; node.style.height = '20px'; });
   await expect(clickControlAtHitPoint(page, button)).rejects.toThrow('must hit');
   await button.evaluate(node => {
@@ -25,8 +27,26 @@ test('batched control input requires a stable enabled hit target and emits trust
     window.controlClicks = [];
     node.addEventListener('click', event => controlClicks.push(event.isTrusted));
   });
-  await clickControlAtHitPoint(page, button);
+  const point = await controlHitPoint(button);
+  expect(point.bounds).toMatchObject({ x: 50, y: 50, width: 100, height: 44 });
+  expect([point.x, point.y]).toEqual([100, 72]);
+  await page.mouse.click(point.x, point.y);
   expect(await page.evaluate(() => controlClicks)).toEqual([true]);
+  // Native keyboard-scroll synchronization must return viewport coordinates
+  // from the scrolled target, suitable for the same trusted pointer action.
+  await button.evaluate(node => {
+    node.style.top = '2000px';
+    node.animate([{ left: '50px' }, { left: '150px' }], { duration: 150, fill: 'forwards' });
+  });
+  const scrolled = await controlHitPoint(button, { nativeScroll: true });
+  expect(scrolled.bounds.left).toBe(150);
+  expect(scrolled.bounds.top).toBeGreaterThanOrEqual(0);
+  expect(scrolled.bounds.bottom).toBeLessThanOrEqual(await page.evaluate(() => innerHeight));
+  expect([scrolled.x, scrolled.y]).toEqual([
+    scrolled.bounds.x + scrolled.bounds.width / 2, scrolled.bounds.y + scrolled.bounds.height / 2,
+  ]);
+  await page.mouse.click(scrolled.x, scrolled.y);
+  expect(await page.evaluate(() => controlClicks)).toEqual([true, true]);
 });
 
 async function setup(page, path = '/', progressingVideo = false, nativeFullscreen = false) {
@@ -315,7 +335,9 @@ test('speaker playback and microphone capture share an audio session, and stoppi
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
   expect(await page.evaluate(() => window.videoPlayer.destroyed ?? false)).toBe(false);
   await openFullscreenSettings(page);
-  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }));
+  // Stopping capture can still change the surrounding layout. Keep native
+  // stability synchronization before opening the replacement-video editor.
+  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Video', exact: true }), { nativeScroll: true });
   await page.locator('.youtube-link').fill('https://example.com/video');
   await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Load video', exact: true }));
   await expect(page.locator('.youtube-status')).toContainText('Use a link to one YouTube video');
@@ -534,13 +556,13 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
     await setup(page, path, true); await load(page);
     const video = page.frameLocator('.youtube-frame iframe').locator('video');
     await video.evaluate(v => { window.rotationVideo = v; });
-    await expect.poll(() => video.evaluate(v => v.readyState)).toBeGreaterThanOrEqual(2);
     // Keep the original frame for continuity checks. Re-resolving the iframe
     // and video locator for each sample adds several driver round trips.
     const frame = page.frames().find(frame => frame.url().startsWith('https://www.youtube-nocookie.com/'));
     expect(frame).toBeTruthy();
+    await expect.poll(() => frame.evaluate(() => window.rotationVideo.readyState)).toBeGreaterThanOrEqual(2);
     await page.frameLocator('.youtube-frame iframe').getByRole('button', { name: 'Play test video', exact: true }).click();
-    await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(0);
+    await expect.poll(() => frame.evaluate(() => window.rotationVideo.currentTime)).toBeGreaterThan(0);
     await page.evaluate(() => {
       // Feed a real, non-silent signal through the synthetic microphone stream.
       // A running context alone would also pass with a disconnected input graph.
@@ -578,7 +600,7 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
       window.playbackIdentity = { player: videoPlayer, frame: videoPlayer.frame, worker: v.worker, renderer: v.renderer,
         context: testContext, requests: micRequests, session: Number(card.dataset.audioSession) };
     });
-    await expect.poll(() => video.evaluate(v => v.currentTime)).toBeGreaterThan(0);
+    await expect.poll(() => frame.evaluate(() => window.rotationVideo.currentTime)).toBeGreaterThan(0);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.evaluate(height => rotationKeyboard(height), viewport.height);
     for (let turn = 0; turn < 4; turn++) {
@@ -706,17 +728,15 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
         if (resizeLayout) await page.setViewportSize({ width: 568, height: 180 });
         await page.evaluate(() => setEditorHeight(180));
         const button = page.getByRole('button', { name: action, exact: true });
-        await button.scrollIntoViewIfNeeded();
-        expect(await button.evaluate(n => {
-          const r = n.getBoundingClientRect();
-          return r.left >= 0 && r.top >= 0 && r.right <= 568 && r.bottom <= 180 && r.width >= 44 && r.height >= 44
-            && n.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
-        })).toBe(true);
+        // Reuse the stable, enabled, hit-tested point for the bounds assertion
+        // and native click. A second scroll/resolve used to dominate this loop.
+        const point = await controlHitPoint(button, { nativeScroll: true }), r = point.bounds;
+        expect(r.left >= 0 && r.top >= 0 && r.right <= 568 && r.bottom <= 180 && r.width >= 44 && r.height >= 44).toBe(true);
         expect(await page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
           return [v.canvasWidth, v.canvasHeight, v.input[32]];
         })).toEqual(before);
-        await clickControlAtHitPoint(page, button);
+        await page.mouse.click(point.x, point.y);
         await expect(page.locator('.fullscreen-settings')).not.toBeVisible();
         expect(await page.evaluate(() => {
           const card = document.querySelector('.audio-card');

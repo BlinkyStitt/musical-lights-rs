@@ -757,6 +757,15 @@ observations while retaining each control's viewport and modal-ownership checks.
 Ball-count transitions use the same intersection helper and native button input.
 Native keyboard-scroll synchronization remains in the video checks. The full
 suite still runs every case with one worker, zero retries and unchanged deadlines.
+After that native synchronization, Load/Remove checks reuse the same measured
+bounds and enabled hit point for their viewport assertions and native mouse
+input. They do not scroll and resolve the button a second time. Video readiness
+and clock checks use the already resolved original frame, retaining the same
+progress thresholds and player/frame identity assertions.
+The transition from stopped Listening to the Video editor also uses native
+stability synchronization while the surrounding layout settles. The input
+regression covers a moving, offscreen target that settles before native input;
+fast-path stability failures include both measured rectangles and scroll offset.
 
 The rotation matrix also resolves help-text touch targets in one browser call
 before sending native touchscreen input. It checks the text's stable bounds,
