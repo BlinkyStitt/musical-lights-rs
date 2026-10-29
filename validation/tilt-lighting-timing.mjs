@@ -1,22 +1,34 @@
 // Host comparison, independent of phone acceptance. Run on an idle host after
 // building. Pixel probes belong in tilt-lighting.spec.mjs, never this timing loop.
 import { chromium } from '@playwright/test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import startup from './browser-startup.mjs';
 import { staticPreview } from './static-preview.mjs';
+import { timingIdentity } from './tilt-timing-evidence.mjs';
 const output = process.argv[2];
-if (!output) throw new Error('Usage: node validation/tilt-lighting-timing.mjs OUTPUT.json [--hardware]');
+if (!output) throw new Error('Usage: node validation/tilt-lighting-timing.mjs OUTPUT.json [--hardware] [--build VERSION]');
 const hardware = process.argv.includes('--hardware');
+const buildIndex = process.argv.indexOf('--build');
+if (buildIndex !== -1) assert.match(process.argv[buildIndex + 1] ?? '', /^[a-f0-9]{24}$/, '--build requires a runtime version');
 const launchOptions = hardware ? { args: process.platform === 'darwin'
   ? ['--use-angle=metal', '--enable-gpu']
   : ['--use-gl=angle', '--use-angle=gl', '--enable-gpu'] } : {};
-const finish = await startup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium', launchOptions } }] });
-const build = JSON.parse(await readFile('musical-leptos/dist/build.json', 'utf8'));
 const rows = [];
+let finish, identity, nativeGpu, browserVersion, activeSample;
+// Overwrite previous samples before attempting startup: a failed run must not
+// leave a prior run's success at the requested output path.
+await writeFile(output, '[]\n');
+await rm(`${output}.failure.json`, { force: true });
 try {
+  identity = await timingIdentity(process.cwd(), buildIndex === -1 ? undefined : process.argv[buildIndex + 1]);
+  finish = await startup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium', launchOptions } }] });
   const browser = await chromium.launch(launchOptions);
   try {
+    browserVersion = browser.version();
+    const session = await browser.newBrowserCDPSession();
+    nativeGpu = (await session.send('SystemInfo.getInfo')).gpu;
+    await session.detach();
     // Reverse the order on a second round to expose warmup/thermal ordering.
     for (const [round, modes] of [['forward', ['baseline', 'shading', 'shadows']], ['reverse', ['shadows', 'shading', 'baseline']]]) {
       for (const mode of modes) {
@@ -25,12 +37,15 @@ try {
         await staticPreview(context, 'https://musical-lights.test');
         await context.route('**/tilt-shadow-candidate.mjs', route => route.fulfill({ path: new URL('./tilt-shadow-candidate.mjs', import.meta.url).pathname, contentType: 'text/javascript' }));
         const page = await context.newPage(), errors = [];
+        activeSample = { round, mode, errors, failedRequests: [] };
+        page.on('requestfailed', request => activeSample.failedRequests.push({ url: request.url(), error: request.failure() }));
         page.on('pageerror', e => errors.push(e.message));
         page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
         await page.goto('https://musical-lights.test/advanced/');
         await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current).catch(error => {
           throw new Error(`Scene startup failed (${hardware ? 'hardware requested' : 'software requested'}): ${JSON.stringify(errors)}; ${error.message}`, { cause: error });
         });
+        assert.equal(await page.locator('meta[name="musical-lights-assets"]').getAttribute('content'), `/assets/${identity.build.version}/`);
         await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.locator('.input-source').selectOption('generated');
@@ -91,7 +106,7 @@ try {
               measuring = false; v.renderer.render = render; v.report.frame = reportFrame;
               queries.forEach(q => gl.deleteQuery(q));
               resolve({ gpu, timerAvailable: !!timer, submittedFps: 1000 / summary(frameMs).mean, frameMs: summary(frameMs), cpuSubmissionMs: summary(cpuMs), gpuMs: summary(gpuMs), simulationDebtMs: summary(debtMs), snapshotAgeMs: summary(snapshotMs), discardedSimulationMs: v.metrics.discardedSimulationMs - before.discardedSimulationMs,
-                canvas: [v.canvas.width, v.canvas.height], viewport: [innerWidth, innerHeight], depth: v.renderedDepth, depthCopies: 0, banks: 9, balls: v.balls.count, camera: v.rotation,
+                canvas: [v.canvas.width, v.canvas.height], viewport: [innerWidth, innerHeight], resolution: v.renderResolution, depth: v.renderedDepth, depthCopies: 0, banks: 9, balls: v.balls.count, camera: v.rotation,
                 workload: v.report.audioState, diagnostics: v.card.dataset.toneDiagnostics });
             }
           };
@@ -102,11 +117,23 @@ try {
         if (hardware) assert(!software, `Hardware comparison requires a hardware renderer; found ${data.gpu}`);
         else assert(software, `Software comparison requires a software renderer; found ${data.gpu}`);
         assert.deepEqual(errors, []);
-        rows.push({ build, round, mode, rendererClass: software ? 'software' : 'hardware', measuredAt: new Date().toISOString(), ...data, errors });
+        if (rows.length) {
+          for (const key of ['gpu', 'canvas', 'viewport', 'resolution', 'depth', 'depthCopies', 'banks', 'balls', 'camera']) {
+            assert.deepEqual(data[key], rows[0][key], `Comparison workload changed: ${key}`);
+          }
+          for (const key of ['source', 'kind', 'state', 'repeat', 'diagnostics', 'sampleRate', 'dbfs', 'frequency', 'channel', 'pascalsPerUnit']) {
+            assert.deepEqual(data.workload[key], rows[0].workload[key], `Comparison audio changed: ${key}`);
+          }
+        }
+        assert.deepEqual(await timingIdentity(), identity, 'Timing artifact or instrumentation changed during measurement');
+        rows.push({ ...identity, browserVersion, nativeGpu, round, mode, rendererClass: software ? 'software' : 'hardware', measuredAt: new Date().toISOString(), ...data, errors });
         await writeFile(output, JSON.stringify(rows, null, 2) + '\n');
         console.log(JSON.stringify(rows.at(-1)));
         await context.close();
       }
     }
   } finally { await browser.close(); }
-} finally { await finish(); }
+} catch (error) {
+  await writeFile(`${output}.failure.json`, JSON.stringify({ ...identity, browserVersion, nativeGpu, hardwareRequested: hardware, launchOptions, activeSample, completedSamples: rows.length, error: error.stack }, null, 2) + '\n');
+  throw error;
+} finally { await finish?.(); }
