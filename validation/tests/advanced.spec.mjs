@@ -422,6 +422,15 @@ test('live audio settings during microphone startup cannot undo Stop or route cl
 
 test('activation floor uses precise sones, authoritative status and latest revision acknowledgments', async ({ page }) => {
   await syntheticAudio(page); await advanced(page);
+  await page.evaluate(() => {
+    MediaDevices.prototype.getUserMedia = async () => {
+      const context = window.testContext, destination = context.createMediaStreamDestination();
+      const tone = context.createOscillator(), gain = context.createGain();
+      tone.frequency.value = 1000; gain.gain.value = .002;
+      tone.connect(gain); gain.connect(destination); tone.start();
+      return destination.stream;
+    };
+  });
   await page.locator('.audio-tuning').evaluate(node => node.parentElement.open = true);
   const floor = page.getByLabel('Activation floor (sones)', { exact: true });
   await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
