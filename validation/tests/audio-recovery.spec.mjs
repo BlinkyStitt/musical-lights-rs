@@ -32,7 +32,10 @@ async function recoveryPage(page, microphone = false) {
         super(context, name, options); recoveryNodes.push({ node: this, name, options });
         this.port.addEventListener('message', ({ data }) => {
           if (name === 'loudness-processor' && data.type === 'frame') recoveryFrames++;
-          if (name === 'pcm-playback' && data.type === 'transport') recoveryTransport.push(data);
+          if (name === 'pcm-playback' && data.type === 'transport') {
+            recoveryTransport.push({ ...data, receivedAudioTime: context.currentTime });
+            if (recoveryTransport.length > 64) recoveryTransport.shift();
+          }
         });
       }
     };
@@ -168,14 +171,15 @@ test('a backward analysis clock keeps the same playback position and declares it
   await page.locator('.input-source').selectOption('generated');
   await page.locator('.tone-trace').check(); await page.locator('.review-start').click();
   await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback?.processingSeconds ?? 0)).toBeGreaterThan(.2);
-  const before = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, clock: recoveryClock, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, transport: recoveryTransport }));
+  const before = await page.evaluate(() => ({ timing: document.querySelector('.audio-card').review.lastPlayback, nativeOutput: recoveryContexts[0].getOutputTimestamp?.(), performanceNow: performance.now(), contextSeconds: recoveryContexts[0].currentTime, baseLatency: recoveryContexts[0].baseLatency, outputLatency: recoveryContexts[0].outputLatency, position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, clock: recoveryClock, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, transport: recoveryTransport }));
   expect(before.transport).toEqual([expect.objectContaining({ sequence: 0, positionFrame: 0, state: 'playing' })]);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await dropQuantum(page, 1, 'validation-clock-backstep');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.analysis-status')).toContainText('Audio recovered'); await expect(page.locator('.audio-error')).toBeEmpty();
   await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.processingSeconds)).toBeGreaterThan(before.position);
-  const after = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, clock: recoveryClock, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, contexts: recoveryContexts.length, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, overlapMarked: document.querySelector('#dancinglights').physics.report.toneChunks.some(c => Array.from(c.values).some((value, i) => i % c.stride === c.stride - 1 && value === 1)), transport: recoveryTransport }));
+  const after = await page.evaluate(() => ({ timing: document.querySelector('.audio-card').review.lastPlayback, nativeOutput: recoveryContexts[0].getOutputTimestamp?.(), performanceNow: performance.now(), contextSeconds: recoveryContexts[0].currentTime, baseLatency: recoveryContexts[0].baseLatency, outputLatency: recoveryContexts[0].outputLatency, position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, clock: recoveryClock, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, contexts: recoveryContexts.length, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, overlapMarked: document.querySelector('#dancinglights').physics.report.toneChunks.some(c => Array.from(c.values).some((value, i) => i % c.stride === c.stride - 1 && value === 1)), transport: recoveryTransport }));
+  await test.info().attach('playback-clock-evidence.json', { body: JSON.stringify({ before, after }, null, 2), contentType: 'application/json' });
   expect(after.session).toBe(before.session); expect(after.nodes).toBe(before.nodes); expect(after.contexts).toBe(1);
   expect(after.transport).toEqual(before.transport);
   expect(after.position).toBeGreaterThan(before.position);
