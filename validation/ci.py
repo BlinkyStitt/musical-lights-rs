@@ -48,6 +48,8 @@ VALIDATORS = {
     "rust (core)",
     "loudness-reference",
     "Build website",
+    "GPU browser (1)",
+    "GPU browser (2)",
     "Validated website",
     "Required website checks",
 }
