@@ -57,7 +57,7 @@ export function mountAudioControls(presentation) {
   helpButton.setAttribute('aria-expanded', 'false');
   for (const event of ['focus', 'click']) presentation.listen(helpButton, event, () => presentation.showHelp(helpButton, 'activation-floor'));
   presentation.listen(helpButton, 'pointerenter', event => { if (event.pointerType === 'mouse') presentation.showHelp(helpButton, 'activation-floor'); });
-  presentation.listen(helpButton, 'pointerleave', event => { if (event.pointerType === 'mouse' && document.activeElement !== helpButton) presentation.hideHelp(); });
+  presentation.listen(helpButton, 'pointerleave', event => { if (event.pointerType === 'mouse' && !presentation.popup.matches(':hover') && document.activeElement !== helpButton) presentation.hideHelp(); });
   presentation.listen(helpButton, 'blur', () => presentation.hideHelp());
   visualHost.append(background, gateStatus, helpButton, guide);
   const resetNotice = document.createElement('p'); resetNotice.className = 'gate-reset-notice'; resetNotice.setAttribute('role', 'status');

@@ -623,7 +623,32 @@ for (const path of ['/', '/advanced/']) {
     await expect(floor).toHaveValue('0.00001');
     expect(await floor.evaluate(n => n === window.floorIdentity && !!n.closest('dialog') && n.getBoundingClientRect().height >= 44)).toBe(true);
     await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+    const lowerScene = await page.evaluate(() => {
+      const view = document.querySelector('#dancinglights').physics;
+      window.activationRender = view.renderer.render; view.renderer.render = () => {};
+      document.querySelector('.audio-card').presentation.hideHelp();
+      return { x: 0, y: Math.ceil(innerHeight / 2), width: innerWidth, height: Math.floor(innerHeight / 2) };
+    });
+    const withoutHelp = await page.screenshot({ clip: lowerScene });
+    await page.evaluate(() => document.querySelector('.audio-card').presentation.showHelp(document.querySelector('.activation-help'), 'activation-floor'));
+    await expect(page.locator('.control-help')).toBeVisible();
+    await expect(page.locator('.control-help')).toHaveCSS('pointer-events', 'auto');
+    const withHelp = await page.screenshot({ clip: lowerScene });
+    if (!withHelp.equals(withoutHelp)) {
+      await info.attach('scene-without-help.png', { body: withoutHelp, contentType: 'image/png' });
+      await info.attach('scene-with-help.png', { body: withHelp, contentType: 'image/png' });
+    }
+    expect(withHelp.equals(withoutHelp), 'help preserves every lower-half rendered pixel').toBe(true);
+    const helpBounds = await page.evaluate(() => {
+      const help = document.querySelector('.control-help').getBoundingClientRect();
+      const body = document.querySelector('.fullscreen-settings-body').getBoundingClientRect();
+      return { inside: help.top >= body.top && help.bottom <= body.bottom, lowerSceneClear: help.bottom <= innerHeight / 2 };
+    });
+    expect(helpBounds).toEqual({ inside: true, lowerSceneClear: true });
+    await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: info.outputPath('activation-floor-settings.png') });
+    await page.evaluate(() => { document.querySelector('#dancinglights').physics.renderer.render = window.activationRender; });
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     await page.reload(); await physicsReady(page); await normalView(page);
     await page.getByText('Audio response & readouts', { exact: true }).click();
     await expect(floor).toHaveValue('0.00001');
