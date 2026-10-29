@@ -44,6 +44,10 @@ Only Pages receives Pages/OIDC permissions; artifact lookup/download uses read
 permissions. See the GitHub
 [artifact deployment workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
+Pull requests always run the full website validation, including all browser
+groups, so the repository check can use its exact-commit result. Default-branch
+pushes retain change selection.
+
 Independent consumers remain separate: `other-apps.yml` validates terminal,
 Dioxus and standalone WASM; `firmware.yml` validates Feather, STM32, ESP Embassy
 and ESP-IDF. A change selector runs only affected consumers. Core, shared
@@ -87,8 +91,12 @@ assertions and overflow checks.
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
 `just check` runs workflow lint and tooling regressions, then the core feature
-matrix, native physics, worklet, Leptos, benchmark smoke checks, demo builds and
-full browser suite with pinned tools.
+matrix, native physics, worklet, Leptos, benchmark smoke checks and demo builds.
+It requires a clean worktree with an open same-repository pull request at the
+exact commit. It waits for all isolated website browser groups and the complete
+coverage barrier, then verifies the source tree, commit and artifact digests.
+It runs the offline harness and demo browser project locally with pinned tools.
+GitHub access is required; missing, failed or stale CI cannot pass the check.
 `npm run test:site` and `npm run test:demos` retain their complete local subsets.
 Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
@@ -1283,9 +1291,9 @@ From the repository root, install the pinned web tools with
 add `.tools/bin` to `PATH`, then run `just validate` (an alias for `just check`).
 The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
-cases, and the two demo builds required by the full browser suite. It then runs
-`python3 validation/validate.py browser`, whose npm pretest runs the Node harness
-against produced WASM before the browser suite.
+cases, and the two demo builds required by the full browser suite. It then
+checks the exact-commit website browser CI and runs the Node harness and demo
+browser project locally against produced WASM.
 Missing apps and tools fail validation. The existing serial startup/crash guard,
 one browser worker and zero retries remain authoritative.
 
