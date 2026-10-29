@@ -94,6 +94,18 @@ class BrowserGateTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.verify()
 
+    def test_rejects_missing_or_failed_gpu_shards(self):
+        original = self.jobs.copy()
+        for name in ("GPU browser (1)", "GPU browser (2)"):
+            for conclusion in (None, "failure"):
+                with self.subTest(name=name, conclusion=conclusion):
+                    self.jobs = [job for job in original if job["name"] != name]
+                    if conclusion:
+                        self.jobs.append({"name": name, "conclusion": conclusion})
+                    with self.assertRaises(ValueError):
+                        self.verify()
+        self.jobs = original
+
     def test_rejects_wrong_producer_attempt_tree_or_commit(self):
         for field, value in (
             ("producer", "other/project"),

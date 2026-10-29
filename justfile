@@ -8,8 +8,13 @@ check:
     python3 validation/ci_browser.py
     cd validation && npm ci --ignore-scripts && npx playwright install chromium && node --test harness/*.test.mjs && npm run test:demos
 
-# Run the complete local acceptance suite before delivery. CI remains required by check.
+# Run CPU-only validation. GitHub runs the complete browser suite and GPU checks.
 validate:
     .tools/bin/actionlint .github/workflows/*.yml
     python3 -m unittest discover -s validation/tooling -v
-    python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm browser
+    python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm
+    cd validation && npm ci --ignore-scripts && node --test harness/*.test.mjs
+
+# Run the hardware-rendered browser checks against the already-built site.
+validate-gpu *args:
+    cd validation && npm ci --ignore-scripts && npx playwright install chromium && npx playwright test --config playwright.gpu.config.mjs {{args}}

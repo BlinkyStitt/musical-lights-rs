@@ -89,10 +89,15 @@ The workspace Cargo configuration keeps test code and dependencies at optimizati
 level 2 even when a user-wide profile sets level 0. The test profiles retain debug
 assertions and overflow checks.
 
-For local checks, `python3 validation/validate.py browser` still runs all projects.
-`just validate` runs workflow lint, tooling regressions, the native/WASM feature
-matrix and app builds, benchmark smoke cases, the offline harness and all browser
-projects locally. It does not require a published branch.
+For local checks, `just validate` runs workflow lint, tooling regressions, the
+native/WASM feature matrix and app builds, benchmark smoke cases and the offline
+harness. It needs no physical GPU and no published branch. After the site is built,
+`just validate-gpu` runs the renderer and pixel checks in Chromium on a verified
+hardware WebGL2 renderer. It fails if the browser selects software rendering.
+GitHub runs the complete software browser suite and two hardware GPU shards for
+each website validation. Both GPU shards must pass before the website barrier can
+succeed or its artifact can be reused. `python3 validation/validate.py browser`
+remains available to run the full software browser suite locally.
 `just check` runs workflow lint and tooling regressions, then the core feature
 matrix, native physics, worklet, Leptos, benchmark smoke checks and demo builds.
 It requires a clean worktree with an open same-repository pull request at the
@@ -1138,7 +1143,8 @@ latest revision acknowledgments and calibration rejection. Gate checks cover ope
 equality, the 49/50-frame hold boundary, equal-RMS spectra with different sones,
 gain independence, sustained sound as the background rises, and early reopening
 without a stale direction decision. `just validate` runs core, worklet, physics,
-Leptos, Dioxus, standalone WASM and the full offline/browser suite with pinned tools. Browser checks exercise live
+Leptos, Dioxus, standalone WASM and the offline harness with pinned tools. GitHub
+runs the browser suite and hardware renderer checks. Browser checks exercise live
 tuning, paused playback restart, settings during acquisition, Stop and route cleanup.
 Run `worklet physics leptos` before the full browser suite. Keep one browser worker,
 zero retries and the startup guard. Use the standalone production benchmark on an
@@ -1314,10 +1320,10 @@ From the repository root, install the pinned web tools with
 add `.tools/bin` to `PATH`, then run `just validate`.
 The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
-cases, and the two demo builds required by the full browser suite. It then
-runs the Node harness and full serial browser suite locally against produced
-WASM. After delivery, `just check` additionally verifies the exact-commit website
-browser CI as described above.
+cases, and the two demo builds required by browser validation. It then runs the
+Node harness. `just validate-gpu` checks hardware rendering against the built site.
+GitHub runs the full software browser suite and the hardware GPU checks. After
+delivery, `just check` verifies the exact-commit website CI as described above.
 Missing apps and tools fail validation. The existing serial startup/crash guard,
 one browser worker and zero retries remain authoritative.
 
@@ -1347,4 +1353,4 @@ standalone Criterion package on an idle host, separately from browser validation
 
 ### Live ball settings
 
-Home and Advanced share count (0–16), diameter endpoints (2.64–19.2 cm) and physical Depth controls, including fullscreen Settings. `just validate` runs the core feature matrix, worklet, native physics, produced WASM/application builds and full serial browser suite. Native tests cover live body removal, survivor state, equal maximum sizes in short/shallow rooms, mass/inertia and deterministic transitions. Protocol/worker harnesses cover malformed settings and exact replay across counts; fullscreen browser checks cover editors, endpoint ordering, persistence, rendered counts/radii, inactive lighting and stable GPU resources. Phone report v7/protocol 21 require matching replay engines. Browser profiles remain distinct from physical-phone performance evidence.
+Home and Advanced share count (0–16), diameter endpoints (2.64–19.2 cm) and physical Depth controls, including fullscreen Settings. `just validate` runs the core feature matrix, worklet, native physics, produced WASM/application builds and the offline harness. GitHub runs the full browser suite and GPU checks. Native tests cover live body removal, survivor state, equal maximum sizes in short/shallow rooms, mass/inertia and deterministic transitions. Protocol/worker harnesses cover malformed settings and exact replay across counts; fullscreen browser checks cover editors, endpoint ordering, persistence, rendered counts/radii, inactive lighting and stable GPU resources. Phone report v7/protocol 21 require matching replay engines. Browser profiles remain distinct from physical-phone performance evidence.

@@ -252,11 +252,53 @@ jobs:
           retention-days: ${{ job.status == 'failure' && 7 || 2 }}
           overwrite: true
           if-no-files-found: error
+  gpu:
+    name: GPU browser (${{ matrix.shard }})
+    needs: [plan, web]
+    if: needs.plan.outputs.site_required == 'true'
+    runs-on: [self-hosted, linux, x64, gpu-opengl]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    concurrency:
+      group: site-gpu-${{ matrix.shard }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          artifact-ids: ${{ needs.web.outputs.artifact_id || needs.plan.outputs.artifact_id }}
+          run-id: ${{ needs.plan.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: .ci/site
+      - name: Verify the compiled site
+        env:
+          PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
+        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '26.12.1'
+          cache: npm
+          cache-dependency-path: validation/package-lock.json
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Run hardware-rendered browser checks
+        run: just validate-gpu --shard=${{ matrix.shard }}/2
+      - uses: actions/upload-artifact@v7.0.1
+        if: failure()
+        with:
+          name: gpu-browser-report-${{ matrix.shard }}
+          path: validation/test-results/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: ignore
   validated:
     name: Validated website
-    needs: [plan, core, web, loudness-reference, browser]
+    needs: [plan, core, web, loudness-reference, browser, gpu]
     if: >-
-      ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.web.result == 'success' &&
+      ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.web.result == 'success' && needs.gpu.result == 'success' &&
           (needs.plan.outputs.reuse == 'true' ||
            (needs.core.result == 'success' && needs.loudness-reference.result == 'success' && needs.browser.result == 'success')) }}
     runs-on: ubuntu-24.04
@@ -352,7 +394,7 @@ jobs:
     if: >-
       ${{ always() && !cancelled() && github.ref == 'refs/heads/main' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    needs: [plan, core, web, loudness-reference, browser, validated, required, pages]
+    needs: [plan, core, web, loudness-reference, browser, gpu, validated, required, pages]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
