@@ -451,7 +451,23 @@ test('activation floor uses precise sones, authoritative status and latest revis
     window.heldSettings = []; window.originalSettingsPost = testNode.port.postMessage.bind(testNode.port);
     testNode.port.postMessage = data => data.type === 'settings' ? heldSettings.push(data) : originalSettingsPost(data);
   });
+  await floor.fill('.2'); await floor.press('Tab');
+  await expect(page.locator('.audio-settings-status')).toContainText('Applying');
+  await floor.fill('0'); await floor.press('Tab');
+  await expect(floor).toHaveAttribute('aria-invalid', 'true');
+  const rejection = active => `Rejected: use a finite positive activation floor and gain from 1/64 to 64. Active floor: ${active} sones. Correct the value and try again.`;
+  await expect(page.locator('.audio-settings-status')).toHaveText(rejection(.0001));
+  expect(await page.evaluate(() => heldSettings.length)).toBe(1);
+  // The valid update can finish after a newer, locally rejected edit. Its
+  // acknowledgment updates the active value without clearing the entry error.
+  await page.evaluate(() => originalSettingsPost(heldSettings[0]));
+  await expect.poll(() => page.evaluate(() => testContext.acceptedVisual[1])).toBe(.2);
+  await expect(floor).toHaveValue('0');
+  await expect(floor).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('.audio-settings-status')).toHaveText(rejection(.2));
+  await page.evaluate(() => { heldSettings = []; });
   await floor.fill('100'); await floor.press('Tab');
+  await expect(floor).not.toHaveAttribute('aria-invalid');
   await floor.fill('200'); await floor.press('Tab');
   await expect(page.locator('.audio-settings-status')).toContainText('Applying');
   await page.evaluate(() => {
@@ -459,13 +475,22 @@ test('activation floor uses precise sones, authoritative status and latest revis
     testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'settings-ack', sessionId: stale.sessionId, revision: stale.revision, accepted: true, settings: stale.settings, visual: stale.visual } }));
   });
   await expect(page.locator('.audio-settings-status')).toContainText('Applying');
-  expect(await page.evaluate(() => testContext.acceptedVisual[1])).toBe(.0001);
+  expect(await page.evaluate(() => testContext.acceptedVisual[1])).toBe(.2);
   await page.evaluate(() => originalSettingsPost(heldSettings.at(-1)));
   await expect(page.locator('.audio-settings-status')).toHaveText('Applied. Activation floor: 200 sones.');
   await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: closed');
+  await floor.fill('0'); await floor.press('Tab');
+  await expect(page.locator('.audio-settings-status')).toHaveText(rejection(200));
   await page.evaluate(() => testContext.suspend());
   await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+  await expect(page.locator('.audio-settings-status')).toHaveText(rejection(200));
   await listening(page).uncheck();
   await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
   await expect(page.locator('.activation-background')).toHaveText('Background estimate: unavailable');
+  await expect(page.locator('.audio-settings-status')).toHaveText(rejection(200));
+  await page.getByRole('button', { name: 'Reset audio controls', exact: true }).click();
+  await expect(floor).toHaveValue('0.1');
+  await expect(floor).not.toHaveAttribute('aria-invalid');
+  await expect(page.locator('.audio-settings-status')).toHaveText('Saved for next start.');
+  await expect(listening(page)).not.toBeChecked();
 });

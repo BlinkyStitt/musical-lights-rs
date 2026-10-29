@@ -40,8 +40,18 @@ export function mountAudioControls(presentation) {
   const host = card.querySelector('.audio-tuning');
   const help = document.createElement('p'); help.textContent = 'These controls change scheduling, readouts, and presentation. The ISO loudness model stays fixed. Audio settings apply live. Block and latency changes restart active audio.'; host.append(help);
   const status = document.createElement('p'); status.className = 'audio-settings-status'; status.id = 'audio-settings-status'; status.setAttribute('role', 'status');
+  const activeFloor = () => card.activeAudioContext?.acceptedVisual?.[1] ?? (card.activeAudioContext ? 'unavailable' : settings.visual[1]);
+  // Invalid local edits send no processor revision. Keep their errors visible
+  // while acknowledgments and lifecycle events update the accepted state.
+  let visualInvalid = false, audioInvalid = false, processorStatus = '';
+  const renderStatus = () => {
+    status.textContent = visualInvalid
+      ? `Rejected: use a finite positive activation floor and gain from 1/64 to 64. Active floor: ${activeFloor()} sones. Correct the value and try again.`
+      : audioInvalid ? 'Use values in the displayed ranges, increasing tempo limits, and peak history no longer than baseline history.' : processorStatus;
+  };
+  const updateStatus = message => { processorStatus = message; renderStatus(); };
   presentation.listen(card, 'audio-settings-ack', ({ detail }) => {
-    status.textContent = detail.accepted ? `Applied. Activation floor: ${detail.visual?.[1] ?? settings.visual[1]} sones.` : `Rejected: ${detail.reason ?? 'Invalid settings.'} Active floor: ${detail.visual?.[1] ?? 'unavailable'} sones. Enter a finite positive floor and valid gain, then try again.`;
+    updateStatus(detail.accepted ? `Applied. Activation floor: ${detail.visual?.[1] ?? settings.visual[1]} sones.` : `Rejected: ${detail.reason ?? 'Invalid settings.'} Active floor: ${detail.visual?.[1] ?? 'unavailable'} sones. Enter a finite positive floor and valid gain, then try again.`);
   });
   const visualHost = document.createElement('div'); visualHost.className = 'visual-audio-controls'; host.append(visualHost);
   const gateRow = document.createElement('label'); gateRow.className = 'control-row'; gateRow.textContent = 'Microphone activation gate';
@@ -67,15 +77,14 @@ export function mountAudioControls(presentation) {
     const context = card.activeAudioContext;
     const same = context?.acceptedVisual && JSON.stringify([context.requestedAudio, context.requestedVisual]) === JSON.stringify([settings.audio, settings.visual])
       && JSON.stringify([context.loudnessSettings, context.acceptedVisual]) === JSON.stringify([settings.audio, settings.visual]);
-    status.textContent = !context || context.audioRetired || context.state === 'closed' ? 'Saved for next start.'
-      : same ? `Applied. Activation floor: ${context.acceptedVisual[1]} sones.` : 'Applying audio settings…';
+    updateStatus(!context || context.audioRetired || context.state === 'closed' ? 'Saved for next start.'
+      : same ? `Applied. Activation floor: ${context.acceptedVisual[1]} sones.` : 'Applying audio settings…');
   };
-  const activeFloor = () => card.activeAudioContext?.acceptedVisual?.[1] ?? (card.activeAudioContext ? 'unavailable' : settings.visual[1]);
   presentation.listen(card, 'audio-session', ({ detail }) => {
-    if (detail.state === 'starting') status.textContent = 'Applying audio settings…';
+    if (detail.state === 'starting') updateStatus('Applying audio settings…');
     if (detail.state !== 'playing') {
       gateStatus.textContent = 'Activation gate: unavailable'; background.textContent = 'Background estimate: unavailable';
-      if (detail.state === 'stopped') status.textContent = 'Saved for next start.';
+      if (detail.state === 'stopped') updateStatus('Saved for next start.');
     }
   });
   presentation.listen(card, 'audio-gate', ({ detail }) => {
@@ -92,7 +101,8 @@ export function mountAudioControls(presentation) {
   syncVisual();
   for (const input of [gate, floor, gain, manual]) presentation.listen(input, 'change', () => {
     const values = [Number(gate.checked), Number(floor.value), Number(gain.value), Number(manual.value)];
-    if (floor.value === '' || manual.value === '' || !floor.validity.valid || !manual.validity.valid || !validVisual(values)) { floor.setAttribute('aria-invalid', String(!Number.isFinite(values[1]) || values[1] <= 0 || floor.value === '')); manual.setAttribute('aria-invalid', String(manual.value === '' || !manual.validity.valid)); status.textContent = `Rejected: use a finite positive activation floor and gain from 1/64 to 64. Active floor: ${activeFloor()} sones. Correct the value and try again.`; return; }
+    visualInvalid = floor.value === '' || manual.value === '' || !floor.validity.valid || !manual.validity.valid || !validVisual(values);
+    if (visualInvalid) { floor.setAttribute('aria-invalid', String(!Number.isFinite(values[1]) || values[1] <= 0 || floor.value === '')); manual.setAttribute('aria-invalid', String(manual.value === '' || !manual.validity.valid)); renderStatus(); return; }
     floor.removeAttribute('aria-invalid'); manual.removeAttribute('aria-invalid'); resetNotice.textContent = '';
     settings.visual = values; syncVisual(); savedStatus(); presentation.save();
   });
@@ -102,7 +112,8 @@ export function mountAudioControls(presentation) {
     input.dataset.audioSetting = i; row.append(input); host.append(row);
     presentation.listen(input, 'change', () => {
       const values = inputs.map(input => Number(input.value));
-      if (!inputs.every(input => input.value !== '' && input.validity.valid) || !validAudio(values)) { status.textContent = 'Use values in the displayed ranges, increasing tempo limits, and peak history no longer than baseline history.'; return; }
+      audioInvalid = !inputs.every(input => input.value !== '' && input.validity.valid) || !validAudio(values);
+      if (audioInvalid) { renderStatus(); return; }
       settings.audio = values; savedStatus(); presentation.save();
     }); return input;
   });
@@ -123,7 +134,7 @@ export function mountAudioControls(presentation) {
   presentation.listen(latency, 'change', () => { settings.latency = Number.isFinite(Number(latency.value)) ? Number(latency.value) : latency.value; presentation.save(); });
   const note = document.createElement('p'); note.textContent = 'Block and latency requests depend on browser support. They do not specify total microphone-to-screen delay. RMS uses exponential integration. Background is a readout only.'; host.append(note);
   const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset audio controls'; host.append(reset);
-  presentation.listen(reset, 'click', () => { settings.audio = [...DEFAULT_AUDIO]; settings.visual = [...DEFAULT_VISUAL]; syncVisual(); floor.removeAttribute('aria-invalid'); manual.removeAttribute('aria-invalid'); resetNotice.textContent = ''; settings.quantum = 'default'; settings.latency = 'interactive'; inputs.forEach((input, i) => { input.value = settings.audio[i]; }); quantum.value = 'default'; latency.value = 'interactive'; savedStatus(); presentation.save(); });
+  presentation.listen(reset, 'click', () => { settings.audio = [...DEFAULT_AUDIO]; settings.visual = [...DEFAULT_VISUAL]; syncVisual(); visualInvalid = audioInvalid = false; floor.removeAttribute('aria-invalid'); manual.removeAttribute('aria-invalid'); resetNotice.textContent = ''; settings.quantum = 'default'; settings.latency = 'interactive'; inputs.forEach((input, i) => { input.value = settings.audio[i]; }); quantum.value = 'default'; latency.value = 'interactive'; savedStatus(); presentation.save(); });
   const renderHost = card.querySelector('.render-tuning');
   for (const [key, label, , min, max, step] of RENDER_CONTROLS) {
     const row = document.createElement('label'); row.className = 'control-row'; row.textContent = label;
