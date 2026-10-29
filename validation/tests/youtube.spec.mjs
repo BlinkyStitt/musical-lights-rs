@@ -577,13 +577,14 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
       window.rotationAudio = { sample: 0 };
       window.AudioWorkletNode = class extends Worklet {
         constructor(context, name, options) {
-          // Home has no diagnostic controls. Enable the real processor's trace
-          // in this fixture; never fabricate frames or advance its sample clock.
-          if (name === 'loudness-processor') options.processorOptions.diagnostics = true;
           super(context, name, options);
           if (name === 'loudness-processor') this.port.addEventListener('message', ({ data }) => {
-            if (data.type !== 'frame' || !data.trace?.length) return;
-            window.rotationAudio = { sample: data.trace[data.trace.length - data.traceStride],
+            if (data.type !== 'frame') return;
+            // The snapshot timestamp is the latest analyzed loudness frame,
+            // exactly the same sample as the last diagnostic row. Collecting
+            // 472 values every 2 ms just for that clock burdens this live test.
+            // Keep ordinary production packets and the strict gap checks below.
+            window.rotationAudio = { sample: Math.round(data.state[0] * context.sampleRate),
               session: data.sessionId, rms: data.readouts[0], continuity: data.continuity };
           });
         }

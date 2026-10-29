@@ -148,6 +148,40 @@ test('audio WASM has no imports and callback boundaries cannot change analysis o
   }
 });
 
+test('ordinary packets expose the same analyzed sample clock as diagnostic rows', () => {
+  const pcm = tone(48000, 1000, .02);
+  for (const size of [128, 256, 800, 4096]) {
+    const ordinary = processor(), traced = processor(0, true);
+    try {
+      for (const p of [ordinary, traced]) {
+        p.scope.currentFrame = 997;
+        assert.equal(p.value.process([]), true);
+        assert.equal(p.messages.length, 0); // A running clock is not analyzed PCM.
+      }
+      let packets = 0;
+      for (let start = 0; start < pcm.length; start += size) {
+        for (const p of [ordinary, traced]) {
+          p.value.port.onmessage({ data: { type: 'ack' } });
+          assert.equal(p.push(pcm.subarray(start, start + size)), true);
+        }
+        const a = ordinary.messages.at(-1).data, b = traced.messages.at(-1).data;
+        assert.deepEqual(a.state, b.state);
+        assert.deepEqual(a.continuity, b.continuity);
+        assert.equal(a.trace, undefined);
+        assert.equal(Math.round(a.state[0] * 48000), b.trace[b.trace.length - b.traceStride]);
+        assert.ok(a.state[0] * 48000 <= ordinary.scope.currentFrame);
+        packets = ordinary.messages.length;
+      }
+      assert.ok(packets > 1);
+      assert.equal(ordinary.value.process([]), false);
+      assert.equal(ordinary.messages.at(-1).data.type, 'error');
+      assert.equal(ordinary.messages.filter(({ data }) => data.type === 'frame').length, packets);
+    } finally {
+      for (const p of [ordinary, traced]) p.value.wasm.processor_destroy(p.value.processor);
+    }
+  }
+});
+
 test('selected channel survives opposite phase and invalid PCM stops analysis', () => {
   const samples = tone(48000, 1000, .1);
   const inverted = samples.map(v => -v);

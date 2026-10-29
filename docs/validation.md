@@ -250,6 +250,20 @@ changing the serial startup guard. Correlate their UTC timestamps with the HTTP
 log and `process-exits.log`; an empty action trace's network file alone does not
 prove that no request reached the server when DOM snapshots are disabled.
 
+The main app and deployment fixture use the ordinary document policy served by
+GitHub Pages: no COOP or COEP headers. Only the standalone shared-memory demo on
+port 8103 requires isolation. This avoids adding a WebKit process-switch boundary
+to every main-app navigation; route checks verify the policy and the standalone
+demo still requires `crossOriginIsolated`.
+
+Rotation continuity checks use the analyzed-frame timestamp in ordinary worklet
+packets. The produced-WASM harness verifies that this is exactly the sample index
+of the last diagnostic row across callback sizes and a nonzero sample origin, and
+that missing input cannot advance it. Enabling 472-value diagnostic rows every
+2 ms solely to observe that timestamp adds unnecessary work to native playback.
+The rotation cases still require fresh analysis after every click, non-silent PCM,
+zero missing/overlapping samples, advancing video frames, and retained resources.
+
 The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
 and network access. `.codex/rules/browser-tests.rules` allows the two browser
 command prefixes above outside the sandbox. Rules match command tokens; run

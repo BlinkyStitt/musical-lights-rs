@@ -17,8 +17,6 @@ async function deploymentFixture() {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     requests.push(pathname);
     response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-    response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
     if (retireOn && pathname.endsWith(retireOn)) { version = next; retireOn = null; }
     if (pathname === '/build.json') {
       response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ version })); return;
