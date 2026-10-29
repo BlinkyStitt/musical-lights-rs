@@ -9,7 +9,7 @@ export PATH="$PWD/.tools/bin:$PATH"
 python3 validation/validate.py leptos
 ```
 
-For the complete local acceptance checks, install the pinned web CLIs with `python3 validation/install_tools.py web`, then run `just validate` from the repository root. This builds the native/WASM packages and all apps exercised by the full browser suite, then runs the Node harness and rendered checks.
+For the complete local acceptance checks, install the pinned web CLIs with `python3 validation/install_tools.py web` and the workflow checker with `python3 validation/install_tools.py ci`, then run `just validate` from the repository root. This builds the native/WASM packages and all apps exercised by the full browser suite, then runs the Node harness and rendered checks. After delivery, `just check` also verifies exact-commit website CI.
 
 Listening controls microphone capture. Digital playback and phone motion have independent lifetimes. Local audio files stay in browser memory. Song identification remains opt-in.
 

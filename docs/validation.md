@@ -90,6 +90,9 @@ level 2 even when a user-wide profile sets level 0. The test profiles retain deb
 assertions and overflow checks.
 
 For local checks, `python3 validation/validate.py browser` still runs all projects.
+`just validate` runs workflow lint, tooling regressions, the native/WASM feature
+matrix and app builds, benchmark smoke cases, the offline harness and all browser
+projects locally. It does not require a published branch.
 `just check` runs workflow lint and tooling regressions, then the core feature
 matrix, native physics, worklet, Leptos, benchmark smoke checks and demo builds.
 It requires a clean worktree with an open same-repository pull request at the
@@ -1294,12 +1297,13 @@ does not enable auto-merge on every pull request.
 
 From the repository root, install the pinned web tools with
 `python3 validation/install_tools.py web` and `python3 validation/install_tools.py ci`,
-add `.tools/bin` to `PATH`, then run `just validate` (an alias for `just check`).
+add `.tools/bin` to `PATH`, then run `just validate`.
 The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
 cases, and the two demo builds required by the full browser suite. It then
-checks the exact-commit website browser CI and runs the Node harness and demo
-browser project locally against produced WASM.
+runs the Node harness and full serial browser suite locally against produced
+WASM. After delivery, `just check` additionally verifies the exact-commit website
+browser CI as described above.
 Missing apps and tools fail validation. The existing serial startup/crash guard,
 one browser worker and zero retries remain authoritative.
 

@@ -649,6 +649,23 @@ for (const path of ['/', '/advanced/']) {
     await page.screenshot({ path: info.outputPath('activation-floor-settings.png') });
     await page.evaluate(() => { document.querySelector('#dancinglights').physics.renderer.render = window.activationRender; });
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    if (path === '/advanced/') {
+      for (const turn of [1, 2, 3]) {
+        await clickControlAtHitPoint(page, page.locator('.rotate-display'));
+        await expect(page.locator('.audio-card')).toHaveAttribute('data-display-rotation', String(turn));
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+        await help.scrollIntoViewIfNeeded(); await help.focus();
+        await expect(page.locator('.control-help')).toContainText('calibration is optional');
+        expect(await page.evaluate(() => {
+          const popup = document.querySelector('.control-help').getBoundingClientRect();
+          const body = document.querySelector('.fullscreen-settings-body').getBoundingClientRect();
+          return popup.left >= body.left && popup.right <= body.right
+            && popup.top >= body.top && popup.bottom <= body.bottom;
+        }), `activation help stays inside the rotated Settings body at turn ${turn}`).toBe(true);
+        await page.locator('.fullscreen-settings').screenshot({ path: info.outputPath(`activation-help-turn-${turn}.png`) });
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+      }
+    }
     await page.reload(); await physicsReady(page); await normalView(page);
     await page.getByText('Audio response & readouts', { exact: true }).click();
     await expect(floor).toHaveValue('0.00001');
