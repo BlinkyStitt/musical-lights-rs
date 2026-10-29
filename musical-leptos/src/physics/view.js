@@ -1,5 +1,5 @@
 import { linearToHsluv, pigmentGLSL } from './pigment.js';
-import { SceneLighting } from './lighting.js';
+import { GlobalLighting, SceneLighting } from './lighting.js';
 import * as THREE from './three.module.js';
 import { PhoneReport } from './report.js';
 import { Enclosure, barProjection, BAR_PROFILE } from './enclosure.js';
@@ -114,10 +114,8 @@ export class PhysicsView {
     this.canvas.addEventListener('webglcontextrestored', this.contextRestored = () => {
       this.gpuFrames.clear(); this.lost = false; this.notice.clear(); this.pause();
     });
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.2));
+    this.globalLighting = new GlobalLighting(this.scene);
     this.lighting = new SceneLighting(palette, this.settings);
-    const light = new THREE.DirectionalLight(0xffffff, 1.8); light.position.set(-1, 3, 4); this.scene.add(light);
-    const fill = new THREE.DirectionalLight(0xffffff, .9); fill.position.set(2, 1, 1); this.scene.add(fill);
     this.pointerPoint = new THREE.Vector3(); this.pointerRay = new THREE.Raycaster(); this.pointerCoordinates = new THREE.Vector2(); this.pointerPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     this.object = new THREE.Object3D(); this.color = new THREE.Color(); this.quaternion = new THREE.Quaternion();
     this.listeners = [];
@@ -276,10 +274,12 @@ export class PhysicsView {
     this.input[28] = this.pointerPoint.x; this.input[29] = this.pointerPoint.y; this.input[30] = 0;
   }
   deviceGravity(x, y, z, angle) {
+    if (this.closed) return;
     this.lastGravity = [x, y, z, angle];
     this.input.set(this.motion.rotate(x, y, angle), 34);
     this.input[36] = z;
     this.input[37] = 1;
+    this.globalLighting.update(this.input[34], this.input[35], this.input[36]);
   }
   // Device acceleration and gravity are both SI m/s². Inertia acts opposite
   // the phone's linear acceleration, with no visual gain or per-axis clipping.
@@ -670,6 +670,7 @@ export class PhysicsView {
   clearMotion() {
     this.lastGravity = this.lastAcceleration = null;
     this.acceleration = [0, 0, 0]; this.input.fill(0, 24, 27); this.input.fill(0, 34, 38);
+    this.globalLighting.update(0, -1, 0);
   }
   clearAudio() { this.push(new Float32Array(24), new Float32Array(24), false); }
   pause() {

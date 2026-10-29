@@ -1354,3 +1354,105 @@ standalone Criterion package on an idle host, separately from browser validation
 ### Live ball settings
 
 Home and Advanced share count (0–16), diameter endpoints (2.64–19.2 cm) and physical Depth controls, including fullscreen Settings. `just validate` runs the core feature matrix, worklet, native physics, produced WASM/application builds and the offline harness. GitHub runs the full browser suite and GPU checks. Native tests cover live body removal, survivor state, equal maximum sizes in short/shallow rooms, mass/inertia and deterministic transitions. Protocol/worker harnesses cover malformed settings and exact replay across counts; fullscreen browser checks cover editors, endpoint ordering, persistence, rendered counts/radii, inactive lighting and stable GPU resources. Phone report v7/protocol 21 require matching replay engines. Browser profiles remain distinct from physical-phone performance evidence.
+
+## Gravity-oriented illumination (SKI-1239)
+
+`just validate` runs workflow/tooling checks, the core feature matrix, worklet,
+physics, Leptos, benchmark smoke, Dioxus, standalone WASM and offline harness
+checks. GitHub runs the complete Chromium and WebKit browser suite and the
+hardware GPU checks. Browser runs retain the startup guard, one worker and zero
+retries.
+
+`tilt-lighting.spec.mjs` runs in Chromium and WebKit. With Listening off and
+frozen geometry, actual render-target pixels check opposing opaque faces for
+upright, inverted, sideways, face-up and face-down gravity. Sensor results are
+compared with ideal-pose pixel references, including Apple/non-Apple signs,
+continuous gravity-only filtering, orientation-only permission and screen
+rotation. Checks also cover linear-shake separation, invalid/near-zero vectors,
+Reduced Motion, camera independence, oblique source/adjacent-bank pixels,
+motion shutdown without body/pigment resets, route cleanup and late permissions.
+The rebase regression compares opaque-face and oblique-bank pixels across all
+four display turns with a nonzero browser rotation and cached gravity. It also
+checks that rotating after motion shutdown cannot revive the old illumination.
+The current scene has nine adjacent banks, eight physical balls by default
+(configurable from zero to sixteen), full-depth
+bars and one coating; it has **zero depth copies**. Historical image-count
+measurements above describe removed geometry, not a control to restore.
+
+The measurement-only `tilt-shadow-candidate.mjs` tests eight analytical sphere
+occluders per fragment using final rendered world positions, including bar ramp
+deformation and floor/roof extension. Occlusion affects global direct diffuse;
+colored source illumination and emissive attack/pigment layers remain separate.
+Its pixel test removes the caster to isolate shadow pixels, compares shadow
+centroids under tilt and verifies unchanged emission. No maps, extra render
+passes, recursive cameras or bloom are used. This prototype is outside the
+bundled runtime. The shipped implementation uses the authorized shading-only
+fallback and therefore adds no object-to-object shadows.
+
+### Local software comparison, 2026-10-29
+
+Run from the repository root after building, with no other validation or build
+running:
+
+```sh
+PATH="$PWD/.tools/bin:$PATH" node validation/tilt-lighting-timing.mjs /tmp/tilt-software.json
+PATH="$PWD/.tools/bin:$PATH" node validation/tilt-lighting-timing.mjs /tmp/tilt-hardware.json --hardware
+```
+
+The script checks the actual renderer class and fails a requested hardware run
+that resolves to software. It compares the original fixed global rig, rotating
+shading and the analytical prototype in forward and reverse order. All use
+844 × 390 at DPR 1, a 657 × 304 canvas, resolution 1, 48 cm depth, zero depth
+copies, nine banks, eight balls and a fixed 20° camera. The real 48 kHz worklet
+plays the repeating 24-tone exercise at −34 dBFS with diagnostics off. Each
+sample has five seconds of warmup and twenty seconds of measurement. Pixel
+readbacks are excluded. The measured runtime identity was
+`7a6ef74f43e5e876dab5a9af`; the shadow prototype is injected separately.
+
+Linux Chromium reported **ANGLE Vulkan SwiftShader Device (Subzero)**:
+
+| Order | Variant | Submitted FPS | Frame mean / p95 / max (ms) | CPU submission mean / p95 (ms) |
+| --- | --- | ---: | --- | --- |
+| Forward | Fixed baseline | 38.12 | 26.23 / 33.40 / 33.50 | 0.360 / 0.50 |
+| Forward | Tilt shading | 38.75 | 25.81 / 33.40 / 33.50 | 0.368 / 0.50 |
+| Forward | Tilt shadows | 25.80 | 38.76 / 50.10 / 50.10 | 0.441 / 0.60 |
+| Reverse | Tilt shadows | 25.91 | 38.60 / 50.10 / 50.10 | 0.416 / 0.60 |
+| Reverse | Tilt shading | 39.35 | 25.41 / 33.40 / 33.50 | 0.392 / 0.50 |
+| Reverse | Fixed baseline | 39.32 | 25.43 / 33.40 / 33.50 | 0.369 / 0.50 |
+
+Submitted intervals include draws skipped by the GPU queue gate. CPU cost is
+the animation callback through draw submission, not GPU completion. The GPU
+timer extension was unavailable, so no GPU-duration claim is made. Maximum
+simulation debt was 8.31 ms or less, maximum snapshot age 5.61 ms or less,
+and discarded simulation time was zero in all six samples. Shadows lost about
+one third of submitted throughput in both orders. Shading-only stayed within
+baseline variation. This repeatable material regression supports omitting
+shadows; even the baseline did not achieve 60 FPS on this software renderer.
+No new numerical software-renderer acceptance threshold is inferred.
+
+Hardware comparison and physical-phone performance remain separate acceptance
+work. This runner exposes no `/dev/dri` device. The `--hardware` attempt selected
+Mesa llvmpipe (OpenGL 4.5), then Chromium reported `WebGL2 blocklisted` and
+`THREE.WebGLRenderer: Error creating WebGL context`; scene startup timed out
+at 30 seconds before any timed sample. A second diagnostic run retained the
+same native process and page errors. Neither run provides hardware timings.
+Run the same three variants on
+a verified hardware renderer and record GPU timing where available. Before
+claiming phone acceptance, perform the existing fifteen-second warmup and
+five-minute normal, portrait-expanded and landscape-expanded device runs with
+diagnostics off, and confirm real sensor flips, motion shutdown and visual
+smoothness. Desktop WebKit, including an iPhone profile, is browser evidence
+only. Linux CI and production deployment are not established by these local
+measurements.
+
+Before the main rebase, the local `just validate` run exited 0 on Linux: Leptos native checks and
+release WASM, Dioxus and standalone WASM checks/builds, 156 offline harness tests,
+and 642 browser passes across Chromium, native Chromium permissions, both demo
+apps, WebKit and the iPhone profile. The two pre-existing opt-in review-recording
+and live-YouTube cases were skipped. All sixteen new tilt cases passed. The
+final correctness-build identity was `ff34cf58d1ecdfb11d7cbf5f`.
+The Dioxus CLI logged a `wasm-opt` SIGABRT with an unsupported-DWARF diagnostic,
+then returned 0 and emitted the app; its rendered browser test passed. This
+unrelated optimizer failure is retained as a tooling caveat, not hidden by a
+source or assertion change. No Linux CI, physical-device, live provider,
+human-listening or production-deployment result is claimed.

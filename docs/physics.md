@@ -408,7 +408,20 @@ floor, does not set audio brightness. Silent preview uses only its rising wave.
 The saved **Colored attack light** control sets pulse strength from 0 to 3,
 independently of the white **Bar attack glow** control. One bounded field of
 24 paired strips and up to sixteen balls lights nearby surfaces. Hemisphere/directional fill
-lights the enclosure. Rendering remains
+lights the enclosure. With Phone motion enabled, the original global rig rotates
+from enclosure-up to the opposite of normalized, screen-mapped gravity. Its
+upright key direction (-1, 3, 4), fill direction (2, 1, 1), colors and intensities
+are preserved. This includes upside-down and face-up/down poses; moving the
+camera does not redefine up. Shake acceleration is separate. Gravity retains its
+SI magnitude for physics, while invalid or shorter-than-1e-6 m/s² lighting
+vectors restore the upright rig. Turning motion off restores that rig immediately
+without resetting bodies or contact pigments. Motion and lighting work with
+Listening off, including orientation-only permission. Display quarter turns
+remap cached gravity and lighting immediately, without another sensor event.
+Stopping motion clears the cached vectors so later display rotation cannot
+revive them. Closed views reject late gravity callbacks.
+
+Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;
 physical-iPhone and human-listening acceptance remain pending.
 

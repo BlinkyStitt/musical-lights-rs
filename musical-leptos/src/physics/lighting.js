@@ -1,5 +1,29 @@
 import * as THREE from './three.module.js';
 
+// Rotate the original lighting rig from enclosure-up to real-world up. This is
+// presentation only: gravity retains its SI magnitude in the physics input.
+export class GlobalLighting {
+  constructor(scene) {
+    this.up = new THREE.Vector3(0, 1, 0);
+    this.upright = new THREE.Vector3(0, 1, 0);
+    this.rotation = new THREE.Quaternion();
+    this.hemisphere = new THREE.HemisphereLight(0xffffff, 0x777777, 1.2);
+    this.key = new THREE.DirectionalLight(0xffffff, 1.8);
+    this.fill = new THREE.DirectionalLight(0xffffff, .9);
+    scene.add(this.hemisphere, this.key, this.fill);
+    this.update(0, -1, 0);
+  }
+  update(x, y, z) {
+    const length = Math.hypot(x, y, z);
+    if (!Number.isFinite(length) || length < .000001) this.up.copy(this.upright);
+    else this.up.set(-x / length, -y / length, -z / length);
+    this.rotation.setFromUnitVectors(this.upright, this.up);
+    this.hemisphere.position.copy(this.up);
+    this.key.position.set(-1, 3, 4).applyQuaternion(this.rotation);
+    this.fill.position.set(2, 1, 1).applyQuaternion(this.rotation);
+  }
+}
+
 export const LIGHT_FIELD = `
   uniform vec3 stripState[24]; uniform vec3 stripColor[24];
   uniform float stripPulse[24]; uniform float colorAttack;
