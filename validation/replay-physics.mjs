@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import init, { PhysicsSimulation } from '../musical-lights-physics/pkg/physics.js';
 
 export async function replayReport(report) {
-  if (report.type !== 'musical-lights-phone-report-v6')
+  if (report.type !== 'musical-lights-phone-report-v7')
     throw new Error('Physics report needs the matching historical replay; recording format differs');
   const wasm = await init({ module_or_path: await readFile(new URL('../musical-lights-physics/pkg/physics_bg.wasm', import.meta.url)) });
   if (JSON.stringify(report.layout) !== JSON.stringify(Array.from(PhysicsSimulation.layout())))

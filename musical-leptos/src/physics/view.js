@@ -58,12 +58,12 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(64);
+    this.input = new Float32Array(67);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
-    this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0 };
+    this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0, balls: [8, 2.64, 19.2] };
     this.cameraParameters = this.card.presentation?.cameraParameters ?? new CameraParameters(this.settings);
     this.cameraPan = new CameraPan(this.cameraParameters);
     const presentation = this.card.presentation;
@@ -105,7 +105,7 @@ export class PhysicsView {
     this.renderer.localClippingEnabled = true;
     this.gpuFrames = new GpuFrames(this.renderer.getContext());
     this.layer.append(this.renderer.domElement);
-    this.renderer.domElement.setAttribute('aria-label', '8 rigid balls, matching top and bottom audio bars, inside a box with eight side banks');
+    this.renderer.domElement.setAttribute('aria-label', 'Rigid balls, matching top and bottom audio bars, inside a box with eight side banks');
     this.canvas = this.renderer.domElement;
     this.canvas.addEventListener('webglcontextlost', this.contextLost = event => {
       event.preventDefault(); this.gpuFrames.clear(); this.lost = true; this.pause(); this.notice.show('Graphics paused. Waiting for the WebGL context.', 'Graphics paused. Waiting for recovery.');
@@ -143,7 +143,7 @@ export class PhysicsView {
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
     this.measure();
-    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics, danceOptions: this.danceOptions() });
+    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics ? [...this.settings.physics, this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100] : undefined, danceOptions: this.danceOptions() });
     this.graph.physics = this;
     this.animate = frameTime => {
       this.request = null;
@@ -222,6 +222,7 @@ export class PhysicsView {
       this.settings = detail;
       this.lighting.configure(detail); this.resizePending = true;
       if (detail.physics) this.input[62] = detail.physics[5];
+      this.input.set([detail.balls[0], detail.balls[1] / 100, detail.balls[2] / 100], 64);
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
@@ -385,12 +386,13 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout.length !== 30 || data.layout[18] !== 20 || data.layout[21] !== 8 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 31 || data.layout[18] !== 21 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];
+      this.input.set([this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100], 64);
       this.makeMeshes(); this.ready = true;
-      this.settings.physics ??= Array.from(this.config); this.card.presentation?.save(false);
+      this.settings.physics ??= Array.from(this.config).slice(0, 8); this.card.presentation?.save(false);
       this.measure();
       if (this.card.dataset.mode === 'advanced') this.report = new PhoneReport(this);
       this.requestSnapshot();
@@ -402,6 +404,7 @@ export class PhysicsView {
       this.current = new Float32Array(data.buffer);
       this.received = performance.now(); this.inflight = false;
       this.config[5] = this.current[this.layout[17] + 4];
+      this.config.splice(8, 3, ...this.current.slice(this.layout[30], this.layout[30] + 3));
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
       this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
@@ -412,8 +415,8 @@ export class PhysicsView {
       if ((this.report?.active || this.card.dataset.toneDiagnostics === 'true' || this.recordTiming) && this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
       this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
-      this.config = data.config; this.input[62] = this.config[5];
-      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config); this.card.presentation.save(); }
+      this.config = data.config; this.input[62] = this.config[5]; this.input.set(this.config.slice(8, 11), 64);
+      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config).slice(0, 8); this.card.preferences.balls = [data.config[8], Math.round(data.config[9] * 10000) / 100, Math.round(data.config[10] * 10000) / 100]; this.card.presentation.save(); }
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
       // The layout and GPU resources stay fixed across a physics reset.
       // Only snapshot interpolation and local event history belong to the old world.
@@ -451,6 +454,8 @@ export class PhysicsView {
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += pigment * colorEmission.y;');
     };
     this.balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, this.layout[21]);
+    this.balls.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3);
+    this.balls.count = 0;
     this.renderedTops = new Float32Array(count);
     // The visible post spans the same depth as its physical support surface.
     // Extend the outer ends in the vertex shader, using the physical support span.
@@ -520,13 +525,25 @@ export class PhysicsView {
     const span = Math.max(step, (current[0] - previous[0]) * 1000);
     // Keep one physics step of interpolation, even when receipts span several
     // steps. A slow renderer must not add its entire snapshot gap to attacks.
-    const alpha = Math.min(1, Math.max(0, 1 - (step - (now - this.received)) / span));
+    // A settings tick can repack spheres and enlarge the room. Draw that whole
+    // applied tick together, then resume ordinary motion interpolation.
+    const ballSettings = this.layout[30];
+    const ballsChanged = current[ballSettings] !== previous[ballSettings]
+      || current[ballSettings + 1] !== previous[ballSettings + 1]
+      || current[ballSettings + 2] !== previous[ballSettings + 2];
+    const alpha = ballsChanged ? 1 : Math.min(1, Math.max(0, 1 - (step - (now - this.received)) / span));
     const geometry = this.layout[17];
     const height = previous[geometry] + (current[geometry] - previous[geometry]) * alpha, depth = previous[geometry + 4] + (current[geometry + 4] - previous[geometry + 4]) * alpha;
+    const active = current[this.layout[30]];
+    this.balls.count = active;
+    if (this.accessibleBallCount !== active) {
+      this.accessibleBallCount = active;
+      this.canvas.setAttribute('aria-label', `${active} rigid balls, matching top and bottom audio bars, inside a box with eight side banks`);
+    }
     this.renderedDepth = depth; this.barRoof.value = height;
     for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
       const attr = this.balls.geometry.attributes[name];
-      for (let i = 0; i < this.layout[21]; i++) {
+      for (let i = 0; i < active; i++) {
         if (this.pigments) attr.array.set(linearToHsluv(this.pigments.subarray(i * 9 + k * 3, i * 9 + k * 3 + 3)), i * 3);
         else attr.array.set(linearToHsluv(current.subarray(3 + i * stride + 15, 3 + i * stride + 18)), i * 3);
       }
@@ -537,13 +554,14 @@ export class PhysicsView {
     const phase = (previous[phaseOffset] + phaseDelta * alpha + count) % count;
     this.renderedPhase = phase;
     this.positionMeters(phase);
-    for (let i = 0; i < this.layout[21]; i++) {
+    for (let i = 0; i < active; i++) {
       const offset = 3 + i * stride;
+      const from = active === previous[this.layout[30]] && current[offset + 7] === previous[offset + 7] ? previous : current;
       this.object.position.set(
-        previous[offset] + (current[offset] - previous[offset]) * alpha,
-        previous[offset + 1] + (current[offset + 1] - previous[offset + 1]) * alpha,
-        previous[offset + 2] + (current[offset + 2] - previous[offset + 2]) * alpha);
-      this.object.quaternion.fromArray(previous, offset + 3);
+        from[offset] + (current[offset] - from[offset]) * alpha,
+        from[offset + 1] + (current[offset + 1] - from[offset + 1]) * alpha,
+        from[offset + 2] + (current[offset + 2] - from[offset + 2]) * alpha);
+      this.object.quaternion.fromArray(from, offset + 3);
       this.quaternion.fromArray(current, offset + 3); this.object.quaternion.slerp(this.quaternion, alpha);
       this.object.scale.setScalar(current[offset + 7]); this.object.updateMatrix(); this.balls.setMatrixAt(i, this.object.matrix);
       this.color.fromArray(current, offset + 15); this.balls.setColorAt(i, this.color);

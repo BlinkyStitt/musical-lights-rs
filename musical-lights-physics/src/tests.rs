@@ -2662,3 +2662,261 @@ fn pigment_palette_does_not_change_any_physical_field() {
     }
     assert_ne!(vivid.pigments, grey.pigments);
 }
+
+#[test]
+fn live_ball_settings_preserve_survivors_and_remove_real_bodies() {
+    let mut sim = world(SimulationConfig::default());
+    let base_bodies = sim.world.bodies.len() - BALL_COUNT;
+    let base_colliders = sim.world.colliders.len() - BALL_COUNT;
+    let survivor = sim.balls[0];
+    sim.world.bodies[survivor.0].set_linvel(Vector::new(0.1, 0.2, 0.3), true);
+    let pigment = sim.pigments[..9].to_vec();
+    let position = sim.world.bodies[survivor.0].translation();
+    for count in [1, 16, 8, 0, 16, 8] {
+        let balls = BallSettings {
+            count,
+            ..BallSettings::default()
+        };
+        sim.apply(SimulationInput {
+            tick: sim.tick,
+            balls,
+            ..SimulationInput::default()
+        })
+        .unwrap();
+        sim.update_balls();
+        sim.write_transforms();
+        assert_eq!(sim.balls.len(), count);
+        assert_eq!(sim.world.bodies.len(), base_bodies + count);
+        assert_eq!(sim.world.colliders.len(), base_colliders + count);
+        assert_eq!(sim.snapshot.values[ACTIVE_OFFSET], count as f32);
+        if count == 1 {
+            assert_eq!(sim.balls[0], survivor);
+            assert_eq!(sim.world.bodies[survivor.0].translation(), position);
+            assert_eq!(
+                sim.world.bodies[survivor.0].linvel(),
+                Vector::new(0.1, 0.2, 0.3)
+            );
+            assert_eq!(&sim.pigments[..9], &pigment);
+        }
+    }
+}
+
+#[test]
+fn removing_a_ball_preserves_survivors_with_settled_contacts() {
+    let mut sim = world(SimulationConfig {
+        height: MIN_HEIGHT,
+        depth: 0.2,
+        balls: BallSettings {
+            count: 16,
+            ..BallSettings::default()
+        },
+        ..SimulationConfig::default()
+    });
+    for _ in 0..600 {
+        sim.step();
+    }
+    let survivors = 15;
+    assert!(
+        (0..survivors).any(|i| (0..i).any(|j| {
+            (position(&sim, i) - position(&sim, j)).length()
+                < (sim.config.balls.diameter(i) + sim.config.balls.diameter(j)) / 2.0
+        })),
+        "the regression needs ordinary penetration between settled survivors"
+    );
+    let states: Vec<_> = sim.balls[..survivors]
+        .iter()
+        .map(|&(h, c)| {
+            let body = &sim.world.bodies[h];
+            ((h, c), *body.position(), body.linvel(), body.angvel())
+        })
+        .collect();
+    let pigments = sim.pigments;
+    let targets = sim.color_targets;
+    let bodies = sim.world.bodies.len();
+    let colliders = sim.world.colliders.len();
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        balls: BallSettings {
+            count: survivors,
+            ..sim.config.balls
+        },
+        ..sim.input
+    })
+    .unwrap();
+    sim.update_balls();
+    assert_eq!(sim.balls.len(), survivors);
+    assert_eq!(sim.world.bodies.len(), bodies - 1);
+    assert_eq!(sim.world.colliders.len(), colliders - 1);
+    for (i, &(handles, pose, linear, angular)) in states.iter().enumerate() {
+        let body = &sim.world.bodies[handles.0];
+        assert_eq!(sim.balls[i], handles);
+        assert_eq!(*body.position(), pose, "survivor {i} moved during removal");
+        assert_eq!(body.linvel(), linear);
+        assert_eq!(body.angvel(), angular);
+    }
+    assert_eq!(sim.pigments, pigments);
+    assert_eq!(sim.color_targets, targets);
+    sim.step();
+    for (i, &(_, pose, linear, _)) in states.iter().enumerate() {
+        let displacement = (position(&sim, i) - pose.translation).length();
+        assert!(
+            displacement < linear.length() * DT + 0.005,
+            "survivor {i}: {displacement}"
+        );
+    }
+}
+
+#[test]
+fn ball_changes_repack_only_new_or_deeper_intersections() {
+    for (count, diameter, repacks) in [(3, 0.1, false), (2, 0.09, false), (2, 0.11, true)] {
+        let mut sim = world(SimulationConfig {
+            balls: BallSettings {
+                count: 2,
+                small: 0.1,
+                big: 0.1,
+            },
+            ..SimulationConfig::default()
+        });
+        // The survivors share a shallow contact, away from the next spawn.
+        let positions = [Vector::new(0.3, 0.3, 0.0), Vector::new(0.3999, 0.3, 0.0)];
+        for (i, &p) in positions.iter().enumerate() {
+            place(&mut sim, i, p, Vector::ZERO);
+        }
+        sim.apply(SimulationInput {
+            balls: BallSettings {
+                count,
+                small: diameter,
+                big: diameter,
+            },
+            ..sim.input
+        })
+        .unwrap();
+        sim.update_balls();
+        for (i, &p) in positions.iter().enumerate() {
+            assert_eq!(
+                position(&sim, i) != p,
+                repacks,
+                "{count} balls, {diameter} m"
+            );
+        }
+        if repacks {
+            assert!((position(&sim, 0) - position(&sim, 1)).length() >= diameter);
+        }
+    }
+}
+
+fn sphere_fits_depth(z: f32, radius: f32, depth: f32) -> bool {
+    z.abs() + radius <= depth / 2.0 + 0.001
+}
+
+#[test]
+fn depth_containment_oracle_rejects_an_escaped_sphere() {
+    assert!(sphere_fits_depth(0.0, 0.096, 0.2));
+    for sign in [-1.0, 1.0] {
+        assert!(sphere_fits_depth(sign * 0.004, 0.096, 0.2));
+        assert!(!sphere_fits_depth(sign * 0.006, 0.096, 0.2));
+        assert!(!sphere_fits_depth(sign * 0.1, 0.096, 0.2));
+    }
+}
+
+#[test]
+fn maximum_equal_balls_fit_short_shallow_room_and_update_mass() {
+    let mut sim = world(SimulationConfig {
+        height: MIN_HEIGHT,
+        depth: 0.2,
+        ..SimulationConfig::default()
+    });
+    let balls = BallSettings {
+        count: 16,
+        small: 0.192,
+        big: 0.192,
+    };
+    sim.apply(SimulationInput {
+        height: MIN_HEIGHT,
+        depth: 0.2,
+        balls,
+        levels: [1.0; COUNT],
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    sim.update_balls();
+    for &(body, collider) in &sim.balls {
+        assert_eq!(
+            sim.world.colliders[collider]
+                .shape()
+                .as_ball()
+                .unwrap()
+                .radius,
+            0.096
+        );
+        let mass = sim.world.bodies[body].mass();
+        let expected = sim.config.density * 4.0 / 3.0 * std::f32::consts::PI * 0.096_f32.powi(3);
+        assert!((mass - expected).abs() < 1e-6);
+        let inertia = sim.world.bodies[body]
+            .mass_properties()
+            .local_mprops
+            .principal_inertia();
+        assert!((inertia.x - 0.4 * mass * 0.096_f32.powi(2)).abs() < 1e-6);
+    }
+    for _ in 0..120 {
+        sim.step();
+        for &(h, _) in &sim.balls {
+            let p = sim.world.bodies[h].translation();
+            assert!(p.x >= 0.095 && p.x <= WIDTH - 0.095, "{p:?}");
+            assert!(sphere_fits_depth(p.z, 0.096, sim.config.depth), "{p:?}");
+            assert!(
+                p.y >= 0.095 && p.y + 0.096 <= sim.ceiling_height + 0.001,
+                "{p:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn changing_ball_inputs_replay_and_reject_invalid_settings() {
+    let replay = || {
+        let mut sim = world(SimulationConfig::default());
+        for (count, small, big) in [
+            (0, 0.0264, 0.192),
+            (1, 0.1, 0.1),
+            (16, 0.0264, 0.192),
+            (8, 0.08, 0.12),
+        ] {
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                balls: BallSettings { count, small, big },
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            for _ in 0..12 {
+                sim.step();
+            }
+        }
+        for balls in [
+            BallSettings {
+                count: 17,
+                ..BallSettings::default()
+            },
+            BallSettings {
+                small: f32::NAN,
+                ..BallSettings::default()
+            },
+            BallSettings {
+                small: 0.15,
+                big: 0.1,
+                count: 8,
+            },
+        ] {
+            assert!(
+                sim.apply(SimulationInput {
+                    tick: sim.tick,
+                    balls,
+                    ..SimulationInput::default()
+                })
+                .is_err()
+            );
+        }
+        sim.snapshot
+    };
+    assert_eq!(replay(), replay());
+}

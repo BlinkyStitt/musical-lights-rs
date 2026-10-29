@@ -7,7 +7,7 @@ for (const height of [.4, .6, 1.2, 2]) {
   const config = PhysicsSimulation.defaults(); config[0] = height;
   const sim = new PhysicsSimulation(config, new Float32Array(72).fill(.5));
   const state = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
-  const input = new Float32Array(layout[22] ?? 34); input[32] = height; input[62] = config[5];
+  const input = new Float32Array(layout[22] ?? 34); input[32] = height; input[62] = config[5]; input[64] = 8; input[65] = .0264; input[66] = .192;
   let maxSubsteps = 0, overload = 0;
   const strokes = [];
   for (const level of [1, 0, 1, 0]) {
@@ -35,7 +35,7 @@ for (const height of [.4, .6, 1.2, 2]) {
     if (reversalArrivalMs == null && Math.abs(s[layout[9]] - .003) < (s[layout[17]+1] - .003) * .01) reversalArrivalMs = tick * 1000 / 120;
     reversalTrace.push({ ms: tick * 1000 / 120, top: s[layout[9]], velocity: s[layout[14]] });
   }
-  results.push({ height, balls: layout[21], config: Array.from(config), maxSubsteps, overloadTicks: overload, reversalMs, reversalArrivalMs, reversalTrace, strokes });
+  results.push({ height, balls: config[8], config: Array.from(config), maxSubsteps, overloadTicks: overload, reversalMs, reversalArrivalMs, reversalTrace, strokes });
   sim.free();
 }
 await writeFile(process.argv[2] ?? 'docs/gain-stroke-results/strokes.json', JSON.stringify(results, null, 2) + '\n');

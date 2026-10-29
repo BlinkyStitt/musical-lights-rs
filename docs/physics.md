@@ -1,6 +1,6 @@
 # Rigid-body prototype
 
-The Leptos visualizer runs 8 spheres and 24 prescribed bars in Rapier 3D.
+The Leptos visualizer runs 0–16 spheres (eight by default) and 24 prescribed bars in Rapier 3D.
 The display target is smooth 60 FPS; 120 FPS is optional. Physics retains a
 fixed 120 Hz clock with collision substeps and no discarded simulation time.
 `musical-lights-physics` contains the same simulation for native tests and WASM.
@@ -16,15 +16,15 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | --- | --- |
 | Width / depth | 1.2 m / 0.48 m |
 | Bar pitch / gap / top corner radius | 50 mm / 0 mm / 0 mm |
-| Sphere diameter | 8 size ratios × 48 mm |
+| Ball count / sphere diameters | Eight / original size ratios × 48 mm, mapped into the selected 2.64–19.2 cm interval |
 | Density | 8 kg/m³ |
 | Gravity | 9.81 m/s² |
 | Ball, bar, floor and ceiling restitution / friction | 0.72 / 0.12 |
 | Vertical wall restitution / friction | 0.55 minimum / 0 |
 | Full-height attack / release | 40 ms attack; approximately 0.31 s gravity release; slower Reduced Motion |
 | Physics rate / solver iterations | 120 Hz / 8 |
-| Reserved upper space | Largest sphere diameter + hop allowance + 4 mm |
-| Minimum enclosure height | 0.40 m |
+| Reserved space between paired bars | Larger of the packed stack or largest sphere + hop allowance, plus 4 mm |
+| Minimum enclosure height | 0.40 m, expanded when the selected balls require more packing space |
 
 Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
@@ -214,7 +214,7 @@ contact impulses, and each sphere's total normal contact impulse in N·s.
 Independent device gravity uses input[34..36], enabled by input[37]. Protocol 12
 adds audio attack edges at input[38..61] and publishes the 62-value input length
 at layout[22]. SI shake magnitudes and the separate contact speed bounds stay unchanged.
-The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 6 changes the engine to gravity release and balanced scrolling; historical replays require their matching engine. Protocol 5 separates the 24 source bands in `layout[0]` from the 8 balls in `layout[21]`, with compact body and contact arrays. The ball count stays constant across normal and fullscreen views, so resizing never removes or respawns bodies. Protocol 4 replaces input[33] with scrolling enablement and publishes continuous phase at the snapshot offset in layout[20]. Geometry layout v2 adds an offset at layout[17] for actual ceiling height, maximum bar top, hop allowance, and minimum height. Reports use this geometry rather than the former fixed 5% headroom assumption. Replaying historical physics requires its matching engine; mismatched layouts are rejected explicitly.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 21 reserves sixteen body/contact/pigment slots; `layout[21]` is capacity, and `snapshot[layout[30]]` is the active physical count. Inactive body slots are zeroed. Inputs 64–66 carry count and minimum/maximum diameters in metres; the eleven-value initial configuration ends with the same settings. The original eight-index size profile repeats deterministically for indices 8–15. Core owns the interval mapping and minimum packing height. Count changes remove actual bodies/colliders; survivors keep their handles, velocities and pigments. Size changes recompute mass/inertia and all radius-dependent calculations. When growing spheres overlap, a deterministic six-column packing preserves velocities and colors while relocating the bodies. Short rooms reserve enough height for that packing. Rendering allocates sixteen instances once, draws only active bodies, initializes new instances without interpolating from empty slots and clears inactive lighting. Count and size changes render bodies and enclosure from the same applied tick; ordinary motion interpolation resumes afterwards. Protocol 21 uses 67 held inputs and phone report v7; incompatible historical reports require their matching engine and are rejected explicitly. Geometry at `layout[17]` publishes actual ceiling, maximum bar top, hop allowance, minimum height and depth.
 
 The worker clock runs independently of render frames. Each batch processes at
 most eight fixed steps. Overdue batches yield through MessageChannel without a
@@ -271,7 +271,7 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 20 starts each ball uniformly in the source color at its actual
+Physics protocol 21 starts each ball uniformly in the source color at its actual
 spawn X coordinate. It rejects replays from previous engines. Physical rolling
 reveals three soft swirl regions. A contact adds its bar color at the ball's
 material contact point, and each visible region fills toward its own target
@@ -407,7 +407,7 @@ its shared display loudness level. Physical bar travel, including the listening
 floor, does not set audio brightness. Silent preview uses only its rising wave.
 The saved **Colored attack light** control sets pulse strength from 0 to 3,
 independently of the white **Bar attack glow** control. One bounded field of
-24 paired strips and eight balls lights nearby surfaces. Hemisphere/directional fill
+24 paired strips and up to sixteen balls lights nearby surfaces. Hemisphere/directional fill
 lights the enclosure. Rendering remains
 instanced, without shadow maps or bloom. Frame measurements are host evidence;
 physical-iPhone and human-listening acceptance remain pending.
@@ -425,13 +425,13 @@ and post depth at the next fixed physics tick. Shrinking moves balls inside the
 new boundaries and removes outward velocity there. It preserves their other
 motion, pigments and simulation clock. The eight side banks use the same depth.
 
-All eight physical balls are opaque and write depth. The renderer draws no
+All active physical balls are opaque and write depth. The renderer draws no
 mirrored geometry or translated ball images. One faint outer coating covers
 all nine banks without internal walls. Bars have their actual physical depth.
 The image-count setting, Auto image trials and depth-image opacity fade are removed.
 
-Protocol 17 appends requested depth at input[62] and applied depth at
-snapshot[layout[17]+4]. The recorded input has 63 values. Replay uses the exact
+Protocol 21 retains requested depth at input[62] and applied depth at
+snapshot[layout[17]+4]. The recorded input has 67 values. Replay uses the exact
 engine layout and retains depth changes through deterministic playback. Saved
 settings keep depth in physics[5] in meters; the common control displays cm.
 

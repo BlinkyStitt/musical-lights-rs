@@ -747,10 +747,31 @@ Repeated Settings, rotation, video and normal-view button clicks use
 `validation/control-input.mjs` to resolve scrolling, two stable animation frames,
 enabled state, 44-pixel bounds and the actual hit target in one browser call,
 then send a native mouse click. The input regression rejects covered, disabled,
-undersized and moving controls and requires trusted events. Keyboard, help-text
-taps, screenshots and all post-action assertions remain in their existing paths.
+undersized and moving controls and requires trusted events. Keyboard operations,
+screenshots and all post-action assertions remain in their existing paths.
 This avoids repeated locator/driver round trips in the serial suite; it changes
 neither application timing nor the required test matrix.
+
+Fullscreen control visibility checks batch the real scroll and intersection
+observations while retaining each control's viewport and modal-ownership checks.
+Ball-count transitions use the same intersection helper and native button input.
+Native keyboard-scroll synchronization remains in the video checks. The full
+suite still runs every case with one worker, zero retries and unchanged deadlines.
+After that native synchronization, Load/Remove checks reuse the same measured
+bounds and enabled hit point for their viewport assertions and native mouse
+input. They do not scroll and resolve the button a second time. Video readiness
+and clock checks use the already resolved original frame, retaining the same
+progress thresholds and player/frame identity assertions.
+The transition from stopped Listening to the Video editor also uses native
+stability synchronization while the surrounding layout settles. The input
+regression covers a moving, offscreen target that settles before native input;
+fast-path stability failures include both measured rectangles and scroll offset.
+
+The rotation matrix also resolves help-text touch targets in one browser call
+before sending native touchscreen input. It checks the text's stable bounds,
+visibility, enabled state and actual hit inside a switch label of at least 44px.
+The input regression rejects covered, disabled, moving and undersized-label
+fixtures, and requires trusted touch events without toggling the checkbox.
 
 Layout and keyboard checks run separately from live noise, contrast images and
 theme changes at each viewport and theme. This keeps all 24 hover checks and
@@ -783,7 +804,7 @@ fixture with the real processor and its real completion acknowledgement.
 Each source keeps a flat top across 48 mm of its 50 mm pitch. A straight
 2 mm join connects adjacent tops without an open slot. The shared Rust profile
 preserves the source heights and bounds every join by its endpoints, including
-the scrolling seam. Protocol 19 records the same 24 heights, live depth, attack-only paint policy
+the scrolling seam. Protocol 21 records the same 24 heights, live depth, attack-only paint policy
 and contact-local swirl colors; it does not publish spline coefficients.
 
 Physics uses one flat prism and one joining prism per pitch, with fixed topology
@@ -1291,3 +1312,7 @@ digital pause/end and actionable input-recovery checks. It does not inject DOM
 These automated checks do not establish live-microphone, human-listening,
 physical-device or deployment acceptance. Statistical DSP comparisons use the
 standalone Criterion package on an idle host, separately from browser validation.
+
+### Live ball settings
+
+Home and Advanced share count (0–16), diameter endpoints (2.64–19.2 cm) and physical Depth controls, including fullscreen Settings. `just validate` runs the core feature matrix, worklet, native physics, produced WASM/application builds and full serial browser suite. Native tests cover live body removal, survivor state, equal maximum sizes in short/shallow rooms, mass/inertia and deterministic transitions. Protocol/worker harnesses cover malformed settings and exact replay across counts; fullscreen browser checks cover editors, endpoint ordering, persistence, rendered counts/radii, inactive lighting and stable GPU resources. Phone report v7/protocol 21 require matching replay engines. Browser profiles remain distinct from physical-phone performance evidence.

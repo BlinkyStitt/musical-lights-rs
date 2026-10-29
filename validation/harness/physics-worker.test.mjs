@@ -60,7 +60,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
   const w = await worker();
   try {
     await w.send({ type: 'record', config: w.ready.config });
-    const values = new Float32Array(w.ready.layout[22]); values[32] = .6; values[62] = .48;
+    const values = new Float32Array(w.ready.layout[22]); values[32] = .6; values[62] = .48; values[64] = 8; values[65] = .0264; values[66] = .192;
     for (let frame = 0; frame < 60; frame++) {
       await w.send({ type: 'pulse', timestamp: 1000 + frame * 1000 / 60,
         input: values.slice(), listening: true, tempo: 60, accent: 0 });
@@ -77,7 +77,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
       'The decorative listening floor must not create audio attacks');
     assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
     assert(values.slice(0, 24).every(value => value === 0));
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v6',
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v7',
       palette: Array(72).fill(.5), layout: w.ready.layout })).every(result => result.matches));
   } finally { w.close(); }
 });
@@ -87,7 +87,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
     const w = await worker();
     try {
       await w.send({ type: 'record', config: w.ready.config });
-      const values = Array(w.ready.layout[22]).fill(0); values[0] = .3; values[32] = .6; values[62] = .48; values[33] = 1;
+      const values = Array(w.ready.layout[22]).fill(0); values[0] = .3; values[32] = .6; values[62] = .48; values[64] = 8; values[65] = .0264; values[66] = .192; values[33] = 1;
       const off = [...values]; off[flag] = disabled;
       await w.send({ type: 'pulse', timestamp: 1000, input: values, tempo: 160, accent: 1 });
       await w.send({ type: 'pulse', timestamp: 1000, input: off, tempo: 80, accent: 2 });
@@ -101,7 +101,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
       assert.deepEqual(recorded.inputs.map(e => e.accent), [1, 2, 3]);
       assert.deepEqual(recorded.inputs.map(e => e.tempo), [160, 80, 120]);
       assert.equal(recorded.motionEvents, undefined); assert.equal(recorded.tempoEvents, undefined);
-      const report = { ...recorded, type: 'musical-lights-phone-report-v6', palette: Array(72).fill(.5), layout: w.ready.layout };
+      const report = { ...recorded, type: 'musical-lights-phone-report-v7', palette: Array(72).fill(.5), layout: w.ready.layout };
       assert((await replayReport(report)).every(result => result.matches));
       // Losing the first eligible draw reproduces the old split-list ordering result.
       const reordered = structuredClone(report);
@@ -125,5 +125,22 @@ test('each physics tick can publish fresh travel with one outstanding snapshot',
     const next = w.messages.at(-1);
     assert.equal(next.type, 'snapshot');
     assert.equal(next.tick, first.tick + 1);
+  } finally { w.close(); }
+});
+
+test('worker records same-tick ball changes in order with exact replay', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'record', config: w.ready.config });
+    const values = new Float32Array(w.ready.layout[22]); values[32] = .4; values[62] = .2;
+    for (const count of [0, 16, 8]) {
+      values.set([count, .192, .192], 64);
+      await w.send({ type: 'pulse', timestamp: 1000, input: values.slice(), tempo: 120, accent: 0 });
+    }
+    w.advance(100);
+    await w.send({ type: 'report' });
+    const report = w.messages.at(-1);
+    assert.deepEqual(report.inputs.map(e => e.values[64]), [0, 16, 8]);
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v7', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
   } finally { w.close(); }
 });

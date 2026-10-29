@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { clickControlAtHitPoint } from '../control-input.mjs';
-import { normalView, physicsReady, syntheticAudio } from '../physics-state.mjs';
+import { normalView, physicsReady, scrollingIntersections, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
 test.describe('compact mobile controls', () => {
@@ -135,12 +135,16 @@ for (const path of ['/', '/advanced/']) {
         })), contentType: 'application/json' });
       }
       expect(covered.equals(uncovered), 'bottom-half pixels remain visible through the modal backdrop').toBe(true);
-      for (const selector of ['.listening-toggle', '.identify-song', '.motion-button', '.scroll-lights', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y', '.depth-slider', '.display-controls > summary', '.visual-gain-mode']) {
-        if (selector === '.visual-gain-mode' && !await page.locator('.audio-tuning').evaluate(n => n.closest('details').open)) await page.getByText('Audio response & readouts', { exact: true }).click();
-        await page.locator(selector).scrollIntoViewIfNeeded();
-        await expect(page.locator(selector)).toBeInViewport();
-        expect(await page.locator(selector).evaluate(n => !!n.closest('dialog'))).toBe(true);
+      const selectors = ['.listening-toggle', '.identify-song', '.motion-button', '.scroll-lights', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y', '.depth-slider', '.ball-count', '.small-ball', '.big-ball', '.display-controls > summary'];
+      // Observe each control after its real scroll, in one browser call. Keep
+      // visibility and modal ownership checks for every original selector.
+      for (const [selector, ratio] of Object.entries(await scrollingIntersections(page, selectors))) {
+        expect(ratio, `${selector} intersects the viewport`).toBeGreaterThan(0);
       }
+      if (!await page.locator('.audio-tuning').evaluate(n => n.closest('details').open)) await page.getByText('Audio response & readouts', { exact: true }).click();
+      expect((await scrollingIntersections(page, ['.visual-gain-mode']))['.visual-gain-mode']).toBeGreaterThan(0);
+      selectors.push('.visual-gain-mode');
+      expect(await page.evaluate(selectors => selectors.map(selector => !!document.querySelector(selector)?.closest('dialog')), selectors)).toEqual(selectors.map(() => true));
       await page.locator('.camera-rotation').fill('17');
       await page.locator('.camera-zoom').fill('40');
       await page.locator('.camera-x').fill('30'); await page.locator('.camera-y').fill('60');
@@ -464,4 +468,127 @@ test('Escape cancels a typed slider value before it closes fullscreen Settings',
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-expanded', '');
+});
+
+for (const path of ['/', '/advanced/']) {
+  test(`ball controls apply live, persist and reuse scene resources on ${path}`, async ({ page }) => {
+    const errors = []; page.on('pageerror', e => errors.push(e.message));
+    await syntheticAudio(page);
+    await page.addInitScript(() => { Object.defineProperty(document, 'fullscreenEnabled', { value: false }); });
+    await page.goto(origin + path); await physicsReady(page); await normalView(page);
+    await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      window.ballScene = { balls: v.balls, bars: v.bars, canvas: v.canvas, worker: v.worker, geometries: v.renderer.info.memory.geometries };
+    });
+    const count = page.getByRole('slider', { name: 'Ball count', exact: true });
+    const small = page.getByRole('slider', { name: 'Small ball (cm)', exact: true });
+    const big = page.getByRole('slider', { name: 'Big ball (cm)', exact: true });
+    // Camera and ball preferences share the relocated controls and reset owner.
+    await page.locator('.camera-zoom').fill('135');
+    await expect(count).toHaveValue('8'); await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2');
+    for (const n of [0, 16, 8, 0, 16, 8]) {
+      await count.fill(String(n));
+      // Normal-page settings can scroll the scene out of view. Return to the
+      // scene to inspect the rendered instances, as a viewer does after editing.
+      expect((await scrollingIntersections(page, ['#dancinglights']))['#dancinglights']).toBeGreaterThan(0);
+      await expect.poll(() => page.evaluate(() => {
+        const v = document.querySelector('#dancinglights').physics;
+        return [v.current[v.layout[30]], v.balls.count];
+      })).toEqual([n, n]);
+      if (n === 0) expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.lighting.uniforms.glowBallColor.value.every(c => c.r === 0 && c.g === 0 && c.b === 0))).toBe(true);
+    }
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+    const modal = page.getByRole('dialog', { name: 'Settings', exact: true });
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    const audioSession = await page.locator('.audio-card').getAttribute('data-audio-session');
+    await page.evaluate(() => { window.ballAudioContext = document.querySelector('.audio-card').activeAudioContext; });
+    for (const control of [count, small, big, page.locator('.depth-slider')]) {
+      expect(await control.evaluate(n => !!n.closest('dialog'))).toBe(true);
+      await expect(control).toHaveCount(1);
+    }
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Small ball (cm)', exact: true }));
+    const editor = page.getByRole('spinbutton', { name: 'Small ball (cm) value', exact: true });
+    await editor.fill('19.2'); await editor.press('Enter');
+    await expect(small).toHaveValue('19.2'); await expect(big).toHaveAttribute('min', '19.2');
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Decrease Big ball (cm)', exact: true }));
+    await expect(big).toHaveValue('19.2');
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Big ball (cm)', exact: true }));
+    const bigEditor = page.getByRole('spinbutton', { name: 'Big ball (cm) value', exact: true });
+    await bigEditor.fill('19.19'); await bigEditor.press('Enter');
+    await expect(bigEditor).toBeVisible(); await expect(big).toHaveValue('19.2');
+    await bigEditor.press('Escape'); await expect(modal).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics;
+      return Array.from({ length: v.balls.count }, (_, i) => {
+        const m = v.balls.instanceMatrix.array, at = i * 16;
+        return Math.abs(v.current[3 + i * v.layout[8] + 7] - .096) < 1e-6
+          && Math.abs(Math.hypot(m[at], m[at + 1], m[at + 2]) - .096) < 1e-6;
+      }).every(Boolean);
+    })).toBe(true);
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Decrease Ball count', exact: true })); await expect(count).toHaveValue('7');
+    await count.focus(); await count.press('ArrowRight'); await expect(count).toHaveValue('8');
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Edit Ball count', exact: true }));
+    await page.getByRole('spinbutton', { name: 'Ball count value', exact: true }).fill('0');
+    await page.keyboard.press('Escape'); await expect(count).toHaveValue('8');
+    expect(await page.evaluate(() => {
+      const v = document.querySelector('#dancinglights').physics, old = window.ballScene;
+      return v.balls === old.balls && v.bars === old.bars && v.canvas === old.canvas && v.worker === old.worker && v.renderer.info.memory.geometries === old.geometries;
+    })).toBe(true);
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-session', audioSession);
+    expect(await page.evaluate(() => document.querySelector('.audio-card').activeAudioContext === window.ballAudioContext && window.ballAudioContext.state === 'running')).toBe(true);
+    await page.keyboard.press('Escape'); await expect(modal).not.toBeVisible();
+    await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
+    await page.reload(); await physicsReady(page); await normalView(page);
+    await expect(small).toHaveValue('19.2'); await expect(count).toHaveValue('8');
+    await expect(page.locator('.camera-zoom')).toHaveValue('135');
+    await page.locator('.display-controls > summary').click(); await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Reset display', exact: true }));
+    await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2'); await expect(count).toHaveValue('8');
+    await expect(page.locator('.camera-zoom')).toHaveValue('100');
+    expect(errors).toEqual([]);
+  });
+}
+
+test('ball settings transitions render the room and bodies from the same applied tick', async ({ page }, info) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page);
+  const results = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const { default: init, PhysicsSimulation } = await import(new URL(`${base}physics/physics.js`, document.baseURI));
+    const wasm = await init();
+    cancelAnimationFrame(v.request); v.stopPreview();
+    const results = [];
+    for (const beforeCount of [0, 16]) {
+      const config = PhysicsSimulation.defaults(); config[0] = .4; config[5] = .2;
+      config[8] = beforeCount; config[9] = config[10] = beforeCount ? .0264 : .192;
+      const sim = new PhysicsSimulation(config, new Float32Array(v.palette));
+      try {
+        const previous = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), v.layout[12]).slice();
+        const input = new Float32Array(v.layout[22]); input[32] = .4; input[62] = .2; input.set([16, .192, .192], 64);
+        sim.input(input); sim.step();
+        v.previous = previous;
+        v.current = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), v.layout[12]).slice();
+        v.pigments = new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 16 * 9).slice();
+        v.config[5] = .2;
+        const now = performance.now(); v.received = now; v.draw(now);
+        const matrix = v.balls.instanceMatrix.array;
+        const contained = Array.from({ length: v.balls.count }, (_, i) => {
+          const at = i * 16, radius = Math.hypot(matrix[at], matrix[at + 1], matrix[at + 2]);
+          const x = matrix[at + 12], y = matrix[at + 13], z = matrix[at + 14];
+          return x - radius >= -.001 && x + radius <= v.width + .001
+            && y - radius >= -.001 && y + radius <= v.renderedEnclosureHeight + .001
+            && Math.abs(z) + radius <= v.renderedDepth / 2 + .001;
+        }).every(Boolean);
+        results.push({ beforeCount, count: v.balls.count, applied: v.current[v.layout[17]], rendered: v.renderedEnclosureHeight, contained, alpha: v.renderAlpha });
+      } finally { sim.free(); }
+    }
+    return results;
+  });
+  await info.attach('ball-setting-transitions', { body: JSON.stringify(results), contentType: 'application/json' });
+  for (const result of results) {
+    expect(result.count).toBe(16);
+    expect(result.rendered).toBeCloseTo(result.applied, 6);
+    expect(result.contained).toBe(true);
+    expect(result.alpha).toBe(1);
+  }
 });

@@ -333,7 +333,7 @@ test('depth shakes and audio bars both move balls while tilt permission is still
       await new Promise(resolve => requestAnimationFrame(resolve));
       const { current: state, layout } = view;
       samples.push({ input: view.input[26], bars: Array.from(state.slice(layout[9], layout[10])),
-        balls: Array.from({ length: layout[21] }, (_, i) => {
+        balls: Array.from({ length: state[layout[30]] }, (_, i) => {
           const o = 3 + i * layout[8];
           return { y: state[o + 1], vz: state[o + 11] };
         }) });
@@ -657,7 +657,7 @@ for (const scenario of [
     const before = await physicsState(page);
     const result = await page.evaluate(async ({ acceleration, axis, direction }) => {
       const view = document.querySelector('#dancinglights').physics;
-      const first = Array.from({ length: view.layout[21] }, (_, i) => view.current[3 + i * view.layout[8] + axis]);
+      const first = Array.from({ length: view.current[view.layout[30]] }, (_, i) => view.current[3 + i * view.layout[8] + axis]);
       const travel = first.map(() => 0);
       const started = performance.now(), startTick = view.current[2];
       const samples = [];
@@ -729,7 +729,7 @@ test('rotation-locked phone can enable shaking without starting the microphone',
   const before = await physicsState(page);
   const travel = await page.evaluate(async () => {
     const view = document.querySelector('#dancinglights').physics;
-    const count = view.layout[21], stride = view.layout[8];
+    const count = view.current[view.layout[30]], stride = view.layout[8];
     const initial = Array.from({ length: count }, (_, i) => view.current[3 + i * stride]);
     const distances = initial.map(() => 0);
     const send = x => window.dispatchEvent(Object.assign(new Event('devicemotion'), {

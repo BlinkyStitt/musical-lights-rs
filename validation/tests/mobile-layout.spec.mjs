@@ -33,6 +33,64 @@ async function tapControlAtHitPoint(page, control, { scroll = false } = {}) {
   await page.touchscreen.tap(point.x, point.y);
 }
 
+// Help text is a separate target inside a 44px native switch label. Resolve
+// its own hit (not the adjacent checkbox), retaining stable geometry and a
+// real touch event without repeating the driver's locator actionability work.
+async function tapHelpAtHitPoint(page, help) {
+  const point = await help.evaluateAll(async nodes => {
+    if (nodes.length !== 1) throw new Error('Touch help requires exactly one target');
+    const node = nodes[0];
+    node.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    await new Promise(requestAnimationFrame);
+    const before = node.getBoundingClientRect();
+    await new Promise(requestAnimationFrame);
+    const box = node.getBoundingClientRect();
+    if (['x', 'y', 'width', 'height'].some(key => before[key] !== box[key])) {
+      throw new Error('Touch help requires a stable target after scrolling');
+    }
+    const label = node.closest('label.setting-switch')?.getBoundingClientRect();
+    const x = Math.round(box.x + box.width / 2), y = Math.round(box.y + box.height / 2);
+    if (!node.matches('[role="button"][data-help]') || !label || label.width < 44 || label.height < 44
+      || box.width <= 0 || box.height <= 0 || getComputedStyle(node).visibility !== 'visible'
+      || node.matches(':disabled') || node.closest('[aria-disabled="true"]')
+      || !node.contains(node.ownerDocument.elementFromPoint(x, y))) {
+      throw new Error('Touch help must hit the enabled help text inside its switch label');
+    }
+    return { x, y };
+  });
+  await page.touchscreen.tap(point.x, point.y);
+}
+
+test.describe('touch help input', () => {
+  test.use({ hasTouch: true });
+  test('batched touch help rejects invalid targets and sends trusted touch without toggling the switch', async ({ page }) => {
+    await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1">
+      <label class="setting-switch" style="display:flex;align-items:center;position:absolute;left:50px;top:50px;width:200px;height:44px">
+        <input type="checkbox" style="width:44px;height:44px"><span role="button" data-help="motion-button" style="width:120px;height:20px">Phone motion</span>
+      </label><div id="cover" style="position:absolute;inset:0"></div>`);
+    const help = page.getByRole('button', { name: 'Phone motion', exact: true });
+    await expect(tapHelpAtHitPoint(page, help)).rejects.toThrow('must hit');
+    await page.locator('#cover').evaluate(node => node.remove());
+    await help.evaluate(node => node.setAttribute('aria-disabled', 'true'));
+    await expect(tapHelpAtHitPoint(page, help)).rejects.toThrow('must hit');
+    await help.evaluate(node => { node.removeAttribute('aria-disabled'); node.closest('label').style.height = '20px'; });
+    await expect(tapHelpAtHitPoint(page, help)).rejects.toThrow('must hit');
+    await help.evaluate(node => {
+      node.closest('label').style.height = '44px';
+      window.helpAnimation = node.closest('label').animate([{ left: '50px' }, { left: '250px' }], { duration: 1000, iterations: Infinity });
+    });
+    await expect(tapHelpAtHitPoint(page, help)).rejects.toThrow('stable target');
+    await help.evaluate(node => {
+      helpAnimation.cancel(); window.helpInputs = [];
+      node.addEventListener('pointerdown', event => helpInputs.push([event.type, event.pointerType, event.isTrusted]));
+      node.addEventListener('click', event => { event.preventDefault(); helpInputs.push([event.type, event.isTrusted]); });
+    });
+    await tapHelpAtHitPoint(page, help);
+    expect(await page.evaluate(() => helpInputs)).toEqual([['pointerdown', 'touch', true], ['click', true]]);
+    await expect(page.getByRole('checkbox')).not.toBeChecked();
+  });
+});
+
 // Each route retains the complete portrait-to-landscape workflow within its own
 // deadline. CI traces showed the second route exhausting the shared 30 seconds.
 for (const route of ['/', '/advanced/'])
@@ -201,9 +259,9 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 393, height: 852 }
               visible: r.width > 0 && r.height > 0 && getComputedStyle(node).visibility === 'visible',
               focused: document.activeElement === node.querySelector('button') };
           }), turn)).toEqual([{ fits: true, half: true, hit: true, visible: true, focused: true }]);
-          await page.locator('.fullscreen-settings [data-help="motion-button"]').tap();
+          await tapHelpAtHitPoint(page, page.locator('.fullscreen-settings [data-help="motion-button"]'));
           await expect(page.locator('.control-help')).toContainText('Phone motion lets measured tilt');
-          await page.locator('.fullscreen-settings [data-help="listening-toggle"]').tap();
+          await tapHelpAtHitPoint(page, page.locator('.fullscreen-settings [data-help="listening-toggle"]'));
           const help = await page.evaluate(() => {
             const n = document.querySelector('.control-help');
             const a = n.getBoundingClientRect(), b = n.closest('dialog').getBoundingClientRect();

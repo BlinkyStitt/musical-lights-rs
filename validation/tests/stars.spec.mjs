@@ -117,7 +117,7 @@ test('column projection follows interpolated bars, seams and depth while ball mo
     v.updateScene(now + 1000 / 120); const last = v.starfield.uniforms.phase.value;
     const original = v.starfield.points.geometry.attributes.position.array.slice();
     const flashes = Array.from(v.starfield.flashes), projection = v.starfield.uniforms.starToRoom.value.elements.slice();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < next[v.layout[30]]; i++) {
       next[3 + i * v.layout[8]] += .3;
       next[3 + i * v.layout[8] + 9] = 5; next[v.layout[11] + i] = 10;
     }
