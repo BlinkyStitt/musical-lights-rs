@@ -84,14 +84,14 @@ test(`diagnostic plot separates ${end} render geometry and its clock from analys
     view.bars.instanceMatrix.array[8 * 16 + 5] = .2 * view.height;
     view.bars.instanceMatrix.array[(8 + 72) * 16 + 5] = -.2 * view.height;
     if (Math.abs(view.renderedHeight(8, end === 'top' ? 1 : 0) / view.height - .2) > 1e-5) throw Error('Wrong rendered end');
-    const trace = new Float64Array(466);
+    const trace = new Float64Array(472);
     trace[315] = 1.1; trace[242 + 8] = 2.5; trace[319 + 4 * 8] = .5;
     const ctx = card.querySelector('.review-plot').getContext('2d'), original = ctx.moveTo, moves = [];
     ctx.moveTo = function(x, y) { moves.push([x, y]); return original.call(this, x, y); };
-    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 466, receivedAt, receivedAudioTime: 1.25 } })); }
+    try { card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 472, receivedAt, receivedAudioTime: 1.25 } })); }
     finally { ctx.moveTo = original; }
     const sample = review.samples[0];
-    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 466, receivedAt } }));
+    card.dispatchEvent(new CustomEvent('tone-trace', { detail: { sessionId: review.sessionId, trace, traceStride: 472, receivedAt } }));
     return { sample, moves, unverified: review.samples[1] };
   }, end);
   expect(sample).toMatchObject({ at: 1.1, raw: 2.5, filtered: .5, barBase: 'both', renderedTime: 1.225, renderedTimeConfidence: 'host/context estimate' });
@@ -373,7 +373,8 @@ test('audio tuning applies live and context settings restart active playback whi
   const session = await page.locator('.audio-card').getAttribute('data-audio-session');
   await page.locator('[data-audio-setting="0"]').fill('0.7');
   await page.locator('[data-audio-setting="0"]').dispatchEvent('change');
-  await expect(page.locator('.audio-settings-status')).toHaveText('Audio settings applied.');
+  await expect(page.locator('.audio-settings-status')).toHaveText('Applied. Activation floor: 0.1 sones.');
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: digital bypass');
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-session', session);
   await page.locator('.tone-pause').click();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'paused');
@@ -403,6 +404,7 @@ test('live audio settings during microphone startup cannot undo Stop or route cl
   });
   await listening(page).check();
   await expect.poll(() => page.evaluate(() => window.microphoneCalls)).toBe(1);
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
   await page.locator('.audio-tuning').evaluate(node => node.parentElement.open = true);
   await page.locator('.audio-latency').selectOption('balanced');
   await expect.poll(() => page.evaluate(() => window.microphoneCalls)).toBe(2);
@@ -416,4 +418,45 @@ test('live audio settings during microphone startup cannot undo Stop or route cl
   await expect(listening(page)).not.toBeChecked();
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
   await expect(listening(page)).not.toBeChecked();
+});
+
+test('activation floor uses precise sones, authoritative status and latest revision acknowledgments', async ({ page }) => {
+  await syntheticAudio(page); await advanced(page);
+  await page.locator('.audio-tuning').evaluate(node => node.parentElement.open = true);
+  const floor = page.getByLabel('Activation floor (sones)', { exact: true });
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+  await floor.fill('.0001'); await floor.press('Tab');
+  await expect(page.locator('.audio-settings-status')).toHaveText('Saved for next start.');
+  await start(page);
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: disabled');
+  await page.locator('.microphone-gate').focus(); await page.keyboard.press('Space');
+  await expect(page.locator('.microphone-gate')).toBeChecked();
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: open');
+  await expect(page.locator('.activation-background')).toContainText('uncalibrated estimate');
+  await expect(page.locator('.audio-settings-status')).toHaveText('Applied. Activation floor: 0.0001 sones.');
+  await floor.fill('0'); await floor.press('Tab');
+  await expect(floor).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('.audio-settings-status')).toContainText('Active floor: 0.0001 sones');
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: open');
+  await page.evaluate(() => {
+    window.heldSettings = []; window.originalSettingsPost = testNode.port.postMessage.bind(testNode.port);
+    testNode.port.postMessage = data => data.type === 'settings' ? heldSettings.push(data) : originalSettingsPost(data);
+  });
+  await floor.fill('100'); await floor.press('Tab');
+  await floor.fill('200'); await floor.press('Tab');
+  await expect(page.locator('.audio-settings-status')).toContainText('Applying');
+  await page.evaluate(() => {
+    const stale = heldSettings[0];
+    testNode.port.dispatchEvent(new MessageEvent('message', { data: { type: 'settings-ack', sessionId: stale.sessionId, revision: stale.revision, accepted: true, settings: stale.settings, visual: stale.visual } }));
+  });
+  await expect(page.locator('.audio-settings-status')).toContainText('Applying');
+  expect(await page.evaluate(() => testContext.acceptedVisual[1])).toBe(.0001);
+  await page.evaluate(() => originalSettingsPost(heldSettings.at(-1)));
+  await expect(page.locator('.audio-settings-status')).toHaveText('Applied. Activation floor: 200 sones.');
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: closed');
+  await page.evaluate(() => testContext.suspend());
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+  await listening(page).uncheck();
+  await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+  await expect(page.locator('.activation-background')).toHaveText('Background estimate: unavailable');
 });

@@ -81,7 +81,7 @@ export class PhoneReport {
       const count = detail.trace.length / detail.traceStride;
       if (this.toneRows + count <= 50000) {
         this.toneChunks.push({ sessionId: detail.sessionId, receivedAt: detail.receivedAt, receivedAudioTime: detail.receivedAudioTime, continuity: detail.continuity,
-          workletAudioTime: detail.audioTime, inputStartSample: detail.inputStartSample, stride: detail.traceStride, values: detail.trace });
+          workletAudioTime: detail.audioTime, inputStartSample: detail.inputStartSample, traceVersion: detail.traceVersion, stride: detail.traceStride, values: detail.trace });
         this.toneRows += count;
       } else this.toneDropped += count;
       this.toneWorkletDropped = detail.traceDropped;
@@ -117,9 +117,9 @@ export class PhoneReport {
     view.card.addEventListener('tone-trace', trace);
     this.removers.push(() => view.card.removeEventListener('tone-trace', trace));
     this.listen('.tone-export', 'click', () => {
-      const header = { build, type: 'musical-lights-tone-trace-v8', layout: view.layout, config: view.config,
+      const header = { build, type: 'musical-lights-tone-trace-v9', layout: view.layout, config: view.config,
         rows: this.toneRows, dropped: this.toneDropped + (this.toneWorkletDropped ?? 0), physics: this.tonePhysics,
-        rowLayout: 'ISO sample index, total sones, 240 specific values, 24 one-Bark integrals, gain, 24 log-loudness novelty values, 24 log-loudness values, 102-value shared presentation, 24 acoustic event timestamps, 24 suppression counts, analysis segment index',
+        rowLayout: 'ISO sample index, total sones, 240 specific values, 24 one-Bark integrals, gain, 24 log-loudness novelty values, 24 log-loudness values, 102-value shared presentation, 24 acoustic event timestamps, 24 suppression counts, gate state (0 disabled, 1 open, 2 closed, 3 digital bypass), applied revision, four visual options (enabled, floor sones, gain mode, manual gain), analysis segment index',
         displayMapping: 'ISO one-Bark integrals; one shared gain and headroom scale. Shared-coefficient 1 Euro presentation. Onsets use canonical log-loudness changes, independent of gain. Settings are engineering controls, not model coefficients.',
         measurementTiming: 'ISO: 2 ms grid and 1 ms lookahead, independent of callback size. Transport, physics and render timestamps are separate.',
         audioSettings: view.settings.audio, renderSettings: { ...view.settings },

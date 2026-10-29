@@ -13,7 +13,7 @@ use musical_lights_core::lights::dance::IdlePeak;
 const INPUT_CAPACITY: usize = 4096;
 const TRACE_CAPACITY: usize = 64;
 const SNAPSHOT_SIZE: usize = LoudnessSnapshot::TRANSPORT_LEN;
-const TRACE_STRIDE: usize = 315 + SNAPSHOT_SIZE + 49;
+const TRACE_STRIDE: usize = 315 + SNAPSHOT_SIZE + 55;
 
 /// Idle visual adapter; no processor, audio session, or heap allocation needed.
 #[unsafe(no_mangle)]
@@ -263,6 +263,10 @@ impl AudioProcessor {
                                         result.acoustic_events[i].unwrap_or(-1.0);
                                     row[339 + SNAPSHOT_SIZE + i] = result.suppressed[i] as f64;
                                 }
+                                row[TRACE_STRIDE - 7] = result.gate_state as u32 as f64;
+                                row[TRACE_STRIDE - 6] = f64::from(result.revision);
+                                row[TRACE_STRIDE - 5..TRACE_STRIDE - 1]
+                                    .copy_from_slice(&result.options.values());
                                 row[TRACE_STRIDE - 1] = f64::from(segment);
                                 *trace_count += 1;
                             } else {
@@ -350,7 +354,7 @@ macro_rules! export {
 // Diagnostics are opt-in and bounded. Consumers must report lost rows, never hide them.
 export!(processor_trace_enable(handle, enabled: u32) -> (), p => { p.trace = if enabled != 0 { Some(vec![0.0; TRACE_CAPACITY * TRACE_STRIDE].into_boxed_slice()) } else { None }; p.trace_count = 0; p.trace_dropped = 0; });
 export!(processor_trace_ptr(handle) -> *const f64, p => p.trace.as_ref().map_or(core::ptr::null(), |trace| trace.as_ptr()));
-export!(processor_trace_version(handle) -> u32, _p => 7);
+export!(processor_trace_version(handle) -> u32, _p => 8);
 export!(processor_trace_stride(handle) -> usize, _p => TRACE_STRIDE);
 export!(processor_trace_count(handle) -> usize, p => p.trace_count);
 export!(processor_trace_dropped(handle) -> u32, p => p.trace_dropped);
@@ -406,3 +410,5 @@ export!(processor_visual_ptr(handle) -> *mut f64, p => p.visual_input.as_mut_ptr
 export!(processor_source(handle, microphone: u32) -> (), p => { p.microphone = microphone != 0; p.core.set_microphone(p.microphone); });
 export!(processor_update(handle, revision: u32) -> u32, p => u32::from(p.update(revision)));
 export!(processor_revision(handle) -> u32, p => p.revision);
+
+export!(processor_gate_state(handle) -> u32, p => if p.core.revision() == 0 { 4 } else { p.core.gate_state() as u32 });

@@ -8,5 +8,8 @@ check:
     python3 validation/ci_browser.py
     cd validation && npm ci --ignore-scripts && npx playwright install chromium && node --test harness/*.test.mjs && npm run test:demos
 
-# Retain the camera-controls acceptance entry point with the same complete checks.
-alias validate := check
+# Run the complete local acceptance suite before delivery. CI remains required by check.
+validate:
+    .tools/bin/actionlint .github/workflows/*.yml
+    python3 -m unittest discover -s validation/tooling -v
+    python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm browser

@@ -108,10 +108,10 @@ test('a real audio gap preserves playback and monitor controls while exported tr
   const download = page.waitForEvent('download'); await page.locator('.tone-export').click();
   const file = await download; const path = info.outputPath('recovered-tone-trace.json'); await file.saveAs(path);
   const trace = JSON.parse(await readFile(path, 'utf8'));
-  expect(trace.type).toBe('musical-lights-tone-trace-v8');
+  expect(trace.type).toBe('musical-lights-tone-trace-v9');
   const rows = trace.chunks.flatMap(chunk => Array.from({ length: chunk.values.length / chunk.stride }, (_, row) => chunk.values.slice(row * chunk.stride, (row + 1) * chunk.stride)));
-  expect(rows.some(row => row[465] === 0)).toBe(true); expect(rows.some(row => row[465] === 1)).toBe(true);
-  for (const row of rows) if (row[465] === 1) expect(row[0]).toBeGreaterThanOrEqual(after.continuity.receivedSample);
+  expect(rows.some(row => row.at(-1) === 0)).toBe(true); expect(rows.some(row => row.at(-1) === 1)).toBe(true);
+  for (const row of rows) if (row.at(-1) === 1) expect(row[0]).toBeGreaterThanOrEqual(after.continuity.receivedSample);
   await page.locator('.review-stop').click();
   await expect(page.locator('.analysis-status')).toBeEmpty();
   await expect.poll(() => page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
@@ -175,7 +175,7 @@ test('a backward analysis clock keeps the same playback position and declares it
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
   await expect(page.locator('.analysis-status')).toContainText('Audio recovered'); await expect(page.locator('.audio-error')).toBeEmpty();
   await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.processingSeconds)).toBeGreaterThan(before.position);
-  const after = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, clock: recoveryClock, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, contexts: recoveryContexts.length, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, overlapMarked: document.querySelector('#dancinglights').physics.report.toneChunks.some(c => Array.from(c.values).some((value, i) => i % c.stride === 465 && value === 1)), transport: recoveryTransport }));
+  const after = await page.evaluate(() => ({ position: document.querySelector('.audio-card').review.lastPlayback.processingSeconds, clock: recoveryClock, session: document.querySelector('.audio-card').dataset.audioSession, nodes: recoveryNodes.length, contexts: recoveryContexts.length, continuity: document.querySelector('#dancinglights').physics.report.audioState.continuity, overlapMarked: document.querySelector('#dancinglights').physics.report.toneChunks.some(c => Array.from(c.values).some((value, i) => i % c.stride === c.stride - 1 && value === 1)), transport: recoveryTransport }));
   expect(after.session).toBe(before.session); expect(after.nodes).toBe(before.nodes); expect(after.contexts).toBe(1);
   expect(after.transport).toEqual(before.transport);
   expect(after.position).toBeGreaterThan(before.position);

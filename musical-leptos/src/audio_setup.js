@@ -130,13 +130,17 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
         channelCountMode: 'max', channelInterpretation: 'discrete',
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
         processorOptions: { module, pascalsPerUnit, channel: session.source === 'microphone' ? channel : 0, reducedMotion,
-            settings: context.loudnessSettings, visual: context.visualOptions, microphone: session.source === 'microphone', diagnostics: session.diagnostics, sessionId: session.sessionId },
+            settings: context.requestedAudio, visual: context.requestedVisual, microphone: session.source === 'microphone', diagnostics: session.diagnostics, sessionId: session.sessionId },
     });
     const card = document.querySelector('.audio-card');
     session.node = node;
     session.revision = 1;
     const trace = event => {
-        if (event.data.type === 'settings-ack' && isCurrentProcessorMessage(node, event.data)) {
+        if (event.data.type === 'settings-ack' && isCurrentProcessorMessage(node, event.data) && event.data.revision === session.revision) {
+            if (validAudio(event.data.settings) && validVisual(event.data.visual)) {
+                context.loudnessSettings = [...event.data.settings];
+                context.visualOptions = context.acceptedVisual = [...event.data.visual];
+            }
             card.dispatchEvent(new CustomEvent('audio-settings-ack', { detail: event.data }));
         }
         if (!session.closed && event.data.sessionId === session.sessionId && event.data.trace)
@@ -157,6 +161,9 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
             const now = performance.now();
             if (now - (session.readoutAt ?? -Infinity) >= 1000 / (context.loudnessSettings?.[26] ?? 10)) {
                 session.readoutAt = now;
+                if (session.state === 'playing') card.dispatchEvent(new CustomEvent('audio-gate', { detail: {
+                    state: data.gateState, background: `${session.source === 'microphone' ? 'Background' : 'Input background'} estimate: ${profiles.get(node).calibrated ? '' : 'uncalibrated estimate ~'}${Number(data.readouts[2].toPrecision(4))} sones${data.readouts[3] ? ' · learning' : ''}`,
+                } }));
                 const estimated = profiles.get(node).calibrated ? '' : 'estimated ';
                 const mark = estimated ? '~' : '';
                 const current = card.querySelector('.current-loudness'), background = card.querySelector('.background-loudness');
@@ -174,7 +181,7 @@ ${data.readouts[1].toFixed(1)} dBFS RMS`;
             }
             card.dispatchEvent(new CustomEvent('audio-tempo' , { detail: { bpm: event.data.tempo, confidence: event.data.tempoConfidence, accentSequence: event.data.accentSequence } }));
         }
-        if (event.data.type === 'error') session.publish('interrupted', event.data.message);
+        if (event.data.type === 'error' && isCurrentProcessorMessage(node, event.data)) session.publish('interrupted', event.data.message);
     };
     node.port.addEventListener('message', trace);
     const fail = message => {
@@ -258,8 +265,8 @@ export class InputControls {
             const context = card.activeAudioContext;
             if (!context || context.audioRetired || context.state === 'closed' || !card.isConnected) return;
             if (!validAudio(detail.audio) || !validVisual(detail.visual)) return;
-            const changed = JSON.stringify([detail.audio, detail.visual]) !== JSON.stringify([context.loudnessSettings, context.visualOptions]);
-            context.loudnessSettings = [...detail.audio]; context.visualOptions = [...detail.visual];
+            const changed = JSON.stringify([detail.audio, detail.visual]) !== JSON.stringify([context.requestedAudio, context.requestedVisual]);
+            context.requestedAudio = [...detail.audio]; context.requestedVisual = [...detail.visual];
             const requested = JSON.stringify([detail.quantum, detail.latency]);
             const session = contextSessions.get(context);
             if (requested !== context.requestedAudioOptions) {
@@ -268,7 +275,7 @@ export class InputControls {
                 onChange(card.audioRestart.source, true);
             } else if (changed && session?.node && !session.closed) {
                 session.node.port.postMessage({ type: 'settings', sessionId: session.sessionId,
-                    revision: ++session.revision, settings: context.loudnessSettings, visual: context.visualOptions });
+                    revision: ++session.revision, settings: context.requestedAudio, visual: context.requestedVisual });
             }
         };
         card.addEventListener('review-input', this.change);

@@ -1,6 +1,6 @@
 import { localPoint, viewportBounds, placeDialog } from './screen.js';
 import { CAMERA_PARAMETERS, CAMERA_DEFAULTS, CameraParameters, validCameraParameter } from './physics/camera-pan.js';
-import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, validVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
+import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, recoverVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
@@ -17,7 +17,8 @@ export function readSettings(storage) {
     for (const id of Object.keys(CAMERA_PARAMETERS)) if (validCameraParameter(id, saved[id])) defaults[id] = saved[id];
 
     if (validBalls(saved.balls)) defaults.balls = [...saved.balls];
-    if (validVisual(saved.visual)) defaults.visual = [...saved.visual];
+    const recovered = recoverVisual(saved.visual); defaults.visual = recovered.values;
+    Object.defineProperty(defaults, 'gateReset', { value: recovered.gateReset });
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;

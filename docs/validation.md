@@ -1115,9 +1115,13 @@ for codec, redaction, ellipsoid coverage/holdout and native-unit calibration che
 linker reserves sectors 6 and 7; its application must fit below `0x08040000`.
 The release uses size optimization. Verify device timing separately.
 
-Audio regressions compare the default pipeline exactly, gate transitions and RMS
-updates across callback sizes, digital bypass, gain ratios, settings boundaries,
-revision acknowledgments and calibration rejection. Browser checks exercise live
+Audio regressions compare the default pipeline exactly, raw-sone gate transitions and RMS
+readout updates across callback sizes, digital bypass, gain ratios, settings boundaries,
+latest revision acknowledgments and calibration rejection. Gate checks cover opening
+equality, the 49/50-frame hold boundary, equal-RMS spectra with different sones,
+gain independence, sustained sound as the background rises, and early reopening
+without a stale direction decision. `just validate` runs core, worklet, physics,
+Leptos, Dioxus, standalone WASM and the full offline/browser suite with pinned tools. Browser checks exercise live
 tuning, paused playback restart, settings during acquisition, Stop and route cleanup.
 Run `worklet physics leptos` before the full browser suite. Keep one browser worker,
 zero retries and the startup guard. Use the standalone production benchmark on an
@@ -1139,8 +1143,10 @@ An interrupted reference measurement is canceled. Invalid PCM or a missing chann
 remains an error. A backward clock starts a new declared segment without
 rewinding playback; sample indices stay truthful within each segment.
 
-The current worklet trace is version 7, with 466 values per row. The final value
-identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v8`
+The current worklet trace is version 8, with 472 values per row. After the 24
+suppression counters it records gate state, applied revision and four visual
+options (enabled, activation floor in sones, gain mode, manual gain). The final value
+identifies the analysis segment. Tone exports use `musical-lights-tone-trace-v9`
 and include continuity counters in their chunks and session metadata. Diagnostic
 plots break at segment boundaries. A sample gap invalidates an active phone FPS
 record even when playback recovers; recovery is not continuity acceptance.

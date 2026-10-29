@@ -592,3 +592,45 @@ test('ball settings transitions render the room and bodies from the same applied
     expect(result.alpha).toBe(1);
   }
 });
+
+for (const path of ['/', '/advanced/']) {
+  test(`activation floor recovery and help share keyboard and touch controls on ${path}`, async ({ page }, info) => {
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('seededActivation')) {
+        localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, visual: [1, -60, 3, 2], youtubeLink: '' }));
+        sessionStorage.setItem('seededActivation', 'true');
+      }
+      MediaDevices.prototype.getUserMedia = async () => { throw Error('No microphone needed'); };
+      Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+    });
+    await page.goto(origin + path); await physicsReady(page);
+    await normalView(page);
+    await page.getByText('Audio response & readouts', { exact: true }).click();
+    await expect(page.locator('.gate-reset-notice')).toContainText('disabled / 0.1 sones');
+    await expect(page.locator('.visual-gain-mode')).toHaveValue('3');
+    await expect(page.locator('.manual-visual-gain')).toHaveValue('2');
+    const help = page.getByRole('button', { name: 'Activation floor help', exact: true });
+    await help.focus(); await expect(page.locator('.control-help')).toContainText('does not remove fans');
+    await page.keyboard.press('Escape'); await expect(page.locator('.control-help')).not.toBeVisible();
+    if (info.project.use.hasTouch) await help.tap(); else await help.click();
+    await expect(page.locator('.control-help')).toContainText('calibration is optional');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { window.floorIdentity = document.querySelector('.microphone-floor'); });
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const floor = page.getByLabel('Activation floor (sones)', { exact: true });
+    await floor.fill('.00001'); await floor.press('Tab');
+    await expect(floor).toHaveValue('0.00001');
+    expect(await floor.evaluate(n => n === window.floorIdentity && !!n.closest('dialog') && n.getBoundingClientRect().height >= 44)).toBe(true);
+    await expect(page.locator('.microphone-gate-status')).toHaveText('Activation gate: unavailable');
+    await page.screenshot({ path: info.outputPath('activation-floor-settings.png') });
+    await page.reload(); await physicsReady(page); await normalView(page);
+    await page.getByText('Audio response & readouts', { exact: true }).click();
+    await expect(floor).toHaveValue('0.00001');
+    await expect(page.locator('.visual-gain-mode')).toHaveValue('3');
+    await expect(page.locator('.manual-visual-gain')).toHaveValue('2');
+    await expect(page.locator('.microphone-gate')).not.toBeChecked();
+    await expect(page.locator('.gate-reset-notice')).toBeEmpty();
+    await expect(page.locator('.audio-card')).not.toHaveAttribute('data-audio-session');
+  });
+}

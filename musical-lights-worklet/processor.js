@@ -17,7 +17,8 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         this.messageHz = settings?.[27] ?? 240;
         this.revision = 0;
         this.requestedRevision = 1;
-        this.settingsUpdate = { revision: 1, settings };
+        this.settingsUpdate = { revision: 1, settings, visual };
+        this.activeSettings = null; this.activeVisual = null;
         this.diagnostics = Boolean(diagnostics);
         this.wasm.processor_trace_enable(this.processor, Number(this.diagnostics));
         this.channel = channel;
@@ -33,15 +34,16 @@ class LoudnessProcessor extends AudioWorkletProcessor {
                     || data.revision <= this.requestedRevision || data.revision > 0xffffffff) return;
                 let accepted = false;
                 if (Array.isArray(data.settings) && data.settings.length === this.wasm.processor_settings_length(this.processor)
-                    && Array.isArray(data.visual) && data.visual.length === 4) {
+                    && Array.isArray(data.visual) && data.visual.length === 4
+                    && data.settings.every(Number.isFinite) && data.visual.every(Number.isFinite)) {
                     new Float64Array(this.wasm.memory.buffer, this.wasm.processor_settings_ptr(this.processor), data.settings.length).set(data.settings);
                     new Float64Array(this.wasm.memory.buffer, this.wasm.processor_visual_ptr(this.processor), 4).set(data.visual);
                     accepted = Boolean(this.wasm.processor_update(this.processor, data.revision));
                 }
                 if (accepted) {
                     this.requestedRevision = data.revision;
-                    this.settingsUpdate = { revision: data.revision, settings: data.settings };
-                } else this.port.postMessage({ type: 'settings-ack', sessionId: this.sessionId, revision: data.revision, accepted: false });
+                    this.settingsUpdate = { revision: data.revision, settings: data.settings, visual: data.visual };
+                } else this.port.postMessage({ type: 'settings-ack', sessionId: this.sessionId, revision: data.revision, accepted: false, reason: 'Invalid audio or visual settings.', settings: this.activeSettings, visual: this.activeVisual });
                 return;
             }
             if (data.type === 'ack') this.pending = false;
@@ -82,8 +84,12 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         const revision = this.wasm.processor_revision(this.processor);
         if (revision !== this.revision) {
             this.revision = revision;
-            if (this.settingsUpdate?.revision === revision) this.messageHz = this.settingsUpdate.settings?.[27] ?? 240;
-            this.port.postMessage({ type: 'settings-ack', sessionId: this.sessionId, revision, accepted: true });
+            if (this.settingsUpdate?.revision === revision) {
+                this.activeSettings = this.settingsUpdate.settings;
+                this.activeVisual = this.settingsUpdate.visual;
+                this.messageHz = this.activeSettings?.[27] ?? 240;
+            }
+            this.port.postMessage({ type: 'settings-ack', sessionId: this.sessionId, revision, accepted: true, settings: this.activeSettings, visual: this.activeVisual });
         }
         // At most one snapshot waits on the UI. The processor still consumes
         // every sample and every loudness frame while drawing is delayed.
@@ -91,7 +97,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
             this.wasm.processor_snapshot(this.processor);
             const state = this.snapshot.slice();
             const readouts = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_readouts(this.processor), 4).slice();
-            const extra = { readouts, quantum: samples.length, accentSequence: this.wasm.processor_accent_sequence(this.processor), tempo: this.wasm.processor_tempo(this.processor), tempoConfidence: this.wasm.processor_tempo_confidence(this.processor) }, transfer = [state.buffer];
+            const extra = { readouts, gateState: revision ? this.wasm.processor_gate_state(this.processor) : null, revision, quantum: samples.length, accentSequence: this.wasm.processor_accent_sequence(this.processor), tempo: this.wasm.processor_tempo(this.processor), tempoConfidence: this.wasm.processor_tempo_confidence(this.processor) }, transfer = [state.buffer];
             if (this.diagnostics) {
                 const stride = this.wasm.processor_trace_stride(this.processor);
                 const trace = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_trace_ptr(this.processor), this.wasm.processor_trace_count(this.processor) * stride).slice();
