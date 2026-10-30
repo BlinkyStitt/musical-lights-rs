@@ -98,8 +98,14 @@ GitHub runs the complete software browser suite and two hardware GPU shards for
 each website validation. Both GPU shards must pass before the website barrier can
 succeed or its artifact can be reused. `python3 validation/validate.py browser`
 remains available to run the full software browser suite locally.
-`just check` runs workflow lint and tooling regressions, then the core feature
-matrix, native physics, worklet, Leptos, benchmark smoke checks and demo builds.
+`just check` runs `just validate`, the complete local software browser suite
+(including demos), both orders of the software tilt comparison, the hardware
+browser suite and both orders of the hardware tilt comparison. Run it on an idle
+GPU host; all phases are serial and any missing tool or failed check fails the
+recipe. Timing artifacts and provenance are written to `.ci/tilt-lighting/`.
+It needs no published branch. A CPU-only host cannot complete this acceptance
+recipe; `just validate` remains the CPU/build/harness entry point.
+`just check-ci` retains the delivered-CI verification and local demo checks.
 It requires a clean worktree with an open same-repository pull request at the
 exact commit. It waits for all isolated website browser groups and the complete
 coverage barrier, then verifies the source tree, commit and artifact digests.
@@ -1323,7 +1329,8 @@ matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
 cases, and the two demo builds required by browser validation. It then runs the
 Node harness. `just validate-gpu` checks hardware rendering against the built site.
 GitHub runs the full software browser suite and the hardware GPU checks. After
-delivery, `just check` verifies the exact-commit website CI as described above.
+delivery, `just check-ci` verifies the exact-commit website CI as described above.
+`just check` executes the complete local acceptance recipe, including GPU checks.
 Missing apps and tools fail validation. The existing serial startup/crash guard,
 one browser worker and zero retries remain authoritative.
 
@@ -1481,7 +1488,8 @@ smoothness. Desktop WebKit, including an iPhone profile, is browser evidence
 only. Linux CI and production deployment are not established by these local
 measurements.
 
-Local `PATH="$PWD/.tools/bin:$PATH" just validate` exited 0: workflow/tooling
+Historical initial-implementation evidence (not a current-head browser result):
+local `PATH="$PWD/.tools/bin:$PATH" just validate` exited 0: workflow/tooling
 checks, the core feature matrix, worklet, physics, benchmark correctness smoke,
 Leptos native/release WASM, Dioxus and standalone WASM checks/builds,
 193 offline harness tests and 911 browser passes (56.9 minutes). The two existing
@@ -1498,3 +1506,95 @@ then returned 0 and emitted the app; its rendered browser test passed. This
 unrelated optimizer failure is retained as a tooling caveat, not hidden by a
 source or assertion change. No Linux CI, physical-device, live provider,
 human-listening or production-deployment result is claimed.
+
+### Review validation, 2026-10-30
+
+The application and test sources from `bf1f8924ce7ce0b8c776fdf9e7d5a17b3e019060`
+were rebuilt and tested locally. This remediation changes the acceptance recipe
+and this evidence only. The resulting runtime is `d418d8da6a8e562233b757d6`, with
+artifact SHA256
+`7b7cab59ce719be7e5ffc9c92e8a186a27d53c57c2e20f8fbf98ed2839fb1e9b`.
+The built sensor, view and lighting modules matched current source bytes before
+the browser run and throughout both timing commands. The shadow prototype digest
+is unchanged from the checkpoint above.
+
+`PATH="$PWD/.tools/bin:$PATH" just check` exited **1 at hardware startup**.
+Its completed phases were:
+
+- `just validate`: passed workflow lint, 42 tooling tests, core feature-matrix
+  tests/clippy, worklet/physics/Leptos checks and WASM builds, benchmark correctness
+  smoke cases, Dioxus/standalone WASM builds and 194 offline harness tests.
+  Dioxus again logged the existing unsupported-DWARF `wasm-opt` SIGABRT, returned
+  0 and emitted the app. Its browser rendering passed; the optimizer diagnostic
+  remains a tooling caveat.
+- `python3 validation/validate.py browser`: **911 passed, 2 skipped, 58.0 minutes**.
+  The log contains all 913 distinct selected cases exactly once: Chromium 378,
+  demo apps 2, native Chromium permissions 7, desktop WebKit 340 and iPhone-profile
+  WebKit 186. The skips are the existing opt-in review recording and live YouTube
+  tests. All 18 tilt tests passed, together with existing lighting, geometry,
+  gravity, keyboard, fullscreen and playback lifecycle checks. The serial startup
+  guard, one worker and zero retries were retained.
+- `npm run test:demos`: 2 passed; these cases also passed within the full suite.
+- `node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/software.json`:
+  exited 0 with all six samples below.
+- `.tools/bin/node validation/node_modules/@playwright/test/cli.js test --config
+  validation/playwright.gpu.config.mjs`: exited **1**, before any tests ran,
+  with `GPU validation requires a WebGL2 hardware renderer`.
+
+The complete command log is `.ci/tilt-remediation/check.log`, SHA256
+`1b40e021014ac497e4f64d7ea9e7471249e95cc9d5b92f043e777030f8efca71`.
+Unique-case accounting is saved in `.ci/tilt-remediation/coverage.json`.
+These are current local execution results, separate from the historical
+911-pass result above.
+
+The six software samples used Chromium 156.0.8078.4, verified ANGLE Vulkan
+SwiftShader, and the same viewport, canvas, camera, geometry, audio workload,
+warmup and measurement durations described above. No build or browser suite ran
+concurrently with timing. Raw counts, distributions and provenance are in
+`.ci/tilt-lighting/software.json`, SHA256
+`365b425a01c54043ddffb3884e3d2d792743855b4a56e44d6b9a7f0ee8b7104a`.
+
+| Order | Variant | Submitted FPS | Frame mean / p50 / p95 / max (ms) | CPU submission mean / p50 / p95 / max (ms) |
+| --- | --- | ---: | --- | --- |
+| Forward | Fixed baseline | 30.85 | 32.41 / 33.30 / 50.00 / 50.10 | 0.53 / 0.50 / 0.70 / 1.10 |
+| Forward | Tilt shading | 29.13 | 34.33 / 33.30 / 50.00 / 50.10 | 0.61 / 0.60 / 0.80 / 5.20 |
+| Forward | Tilt shadows | 20.13 | 49.67 / 50.00 / 66.60 / 66.80 | 0.65 / 0.60 / 0.90 / 4.60 |
+| Reverse | Tilt shadows | 22.59 | 44.26 / 50.00 / 50.10 / 66.70 | 0.58 / 0.50 / 0.80 / 4.20 |
+| Reverse | Tilt shading | 35.07 | 28.51 / 33.30 / 33.40 / 33.50 | 0.42 / 0.40 / 0.60 / 1.60 |
+| Reverse | Fixed baseline | 34.72 | 28.80 / 33.30 / 33.40 / 50.00 | 0.44 / 0.40 / 0.60 / 2.70 |
+
+GPU timer queries were unavailable; CPU submission is not GPU duration.
+Simulation debt means were 4.52–4.60 ms, p95 7.77–8.03 ms and maximum 8.31 ms
+or less. Snapshot-age means were 0.43–0.74 ms, p95 0.70–1.20 ms and maximum
+4.30 ms. Discarded simulation time was zero in every sample. Shadows lost
+34.7% and 34.9% of baseline throughput in the two orders. Shading was 5.6%
+slower forward and 1.0% faster reverse, so this run does not demonstrate a
+repeatable shading regression. These software results support retaining the
+shading-only fallback, but neither baseline nor shading reached 60 FPS here.
+They do not complete the required hardware comparison.
+
+After the recipe stopped, the separate required hardware comparison was executed:
+
+```sh
+PATH="$PWD/.tools/bin:$PATH" DEBUG=pw:browser node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/hardware.json --hardware --build d418d8da6a8e562233b757d6
+```
+
+It exited **1 with zero samples** on the same artifact. Chromium selected Mesa
+llvmpipe (LLVM 21.1.8, Mesa 26.0.8); WebGL was unavailable, Three.js reported
+`Error creating WebGL context`, and scene startup timed out after 30 seconds.
+No failed requests were recorded. The failure report is
+`.ci/tilt-lighting/hardware.json.failure.json`, SHA256
+`3597ee4276d6b99efb1620a5cebbd887d71cecdedb9bd9a60e415e25062eda56`;
+native process output is `.ci/tilt-remediation/hardware.log`, SHA256
+`745b79dc45c3a17446100c307a3d7da00485a597a891adccbd5b7982eebc4415`.
+Host inspection again found no `/dev/dri`, NVIDIA device or PCI display controller;
+`vulkaninfo --summary` exposed only `PHYSICAL_DEVICE_TYPE_CPU` llvmpipe. Pinned
+Node 26.12.1, Playwright 1.64.1 and Chromium are installed. This is unavailable
+hardware WebGL, not a missing application or a sandbox access failure.
+
+**Hardware acceptance remains incomplete:** execute the complete GPU suite and
+the six hardware timing samples on a verified GPU with matching artifact and
+instrumentation, then assess the 60 FPS target. No hardware result is inferred
+from software correctness. Physical-phone acceptance still requires the device
+procedure above. No Linux CI, live provider, human-listening, physical-device or
+production-deployment acceptance is claimed by this local checkpoint.

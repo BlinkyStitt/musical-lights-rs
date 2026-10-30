@@ -1,7 +1,16 @@
 export PATH := justfile_directory() + "/.tools/bin:" + env("PATH")
 
-# Validate CI contracts, the shared core and all web apps, including browser checks.
-check:
+# Validate all apps locally, including complete browser and hardware acceptance.
+# Run on an idle GPU host: timing variants execute serially after browser checks.
+check: validate
+    python3 validation/validate.py browser
+    mkdir -p .ci/tilt-lighting
+    node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/software.json
+    .tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.gpu.config.mjs
+    node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/hardware.json --hardware
+
+# Verify delivered, exact-commit CI and run local demo checks.
+check-ci:
     .tools/bin/actionlint .github/workflows/*.yml
     python3 -m unittest discover -s validation/tooling -v
     python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm
