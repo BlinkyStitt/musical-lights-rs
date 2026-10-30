@@ -1397,6 +1397,10 @@ passes, recursive cameras or bloom are used. This prototype is outside the
 bundled runtime. The runtime implementation uses the authorized shading-only
 fallback and therefore adds no object-to-object shadows.
 
+The [matched GPU assessment](#matched-gpu-assessment-2026-10-30) completes AC4
+and retains that fallback. The earlier checkpoints below preserve their actual
+failures and evidence limits; their pending hardware status is historical.
+
 ### Checkpoint renderer evidence, 2026-10-29
 
 Run from the repository root after building, with no other validation or build
@@ -1662,3 +1666,112 @@ assessed against the smooth 60 FPS target. The software results still support
 the existing shading-only fallback; its final hardware assessment is pending.
 No new Linux CI execution, physical-phone, live-provider, human-listening or
 production-deployment result is claimed for this repair.
+
+### Matched GPU assessment, 2026-10-30
+
+**AC4 is complete for the tested host workload. Retain shading-only.** The
+[checkpoint workflow](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41000657493)
+for `691ffb650210401c1c823b86f21a4805dbc74ae1` executed both comparisons
+successfully. This follow-up retrieves and verifies that completed execution;
+it does not infer performance from workflow wiring or repeat the unavailable
+local hardware run.
+
+[GPU shard 1](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41000657493/job/123884808950)
+ran `just validate-gpu --shard=1/2` (62 passes), then `just validate-tilt`
+(exit 0) on `nuc3-musical-lights`. The latter ran the software timing command,
+the hardware command with `--hardware`, and the completeness/provenance comparison
+serially. All six samples per renderer completed. Its hardware renderer was
+ANGLE/virgl on Intel UHD Graphics (CML GT2), OpenGL 4.3; software was ANGLE Vulkan
+SwiftShader. Both used Chromium 156.0.8078.4. GPU timing queries were available
+on hardware and unavailable on software.
+
+[GPU shard 2](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41000657493/job/123884808939)
+passed 31 cases on ANGLE/virgl Intel Iris Plus Graphics 655 (CFL GT3), including
+all nine tilt cases and the moving analytical-shadow pixel test. Comparing both
+logs against the current GPU inventory verified **93 unique passes**, with no
+missing or duplicate cases. Startup guards, one worker and zero retries remained
+enabled. Shard 2 finished before timing began on shard 1; neither runner was
+running this workflow's browser checks during the measurements. The Linux CI
+core, compiled-package, loudness-reference and browser jobs also passed; the
+validation barrier verified all 911 scheduled software-browser cases exactly
+once. This does not convert the suite's opt-in skips into live-service evidence.
+
+Both renderer comparisons used runtime `1fa7df4d751bf1bd37227b24`, artifact
+SHA256 `c5b7b833167fba1f43e395b4f2b5405dbf86be7d921a797d534b5162849d9887`.
+The producer's 89 file digests and workflow digest verified against source tree
+`8558e33da69309700f7d1b93698454c65e3ff9da`, identical to the checkpoint's tree.
+The CI merge commit `eda73ebebf11016218fc480d977b755f74b6a3f2` has that same
+tree and the checkpoint as a parent. Every sample's source and instrumentation
+digests match the local files; the artifact digest was independently recomputed.
+This documentation follow-up changes neither runtime nor instrumentation.
+
+Settings match across all twelve samples: 844 × 390 viewport, DPR 1,
+657 × 304 canvas, resolution 1, 48 cm depth, zero depth copies, nine banks,
+eight balls, 20° camera, and the repeating 48 kHz generated exercise at −34 dBFS
+with diagnostics off. Each sample has five seconds of warmup and twenty seconds
+of measurement, without pixel readbacks. Frame intervals include skipped draw
+submissions; CPU submission time is separate from GPU timer-query duration.
+The following distributions show **mean / p95** in milliseconds. The retained
+comparison includes count, p50, maximum, simulation debt and snapshot-age data.
+
+| Renderer | Order | Variant | Submitted FPS | Frame ms | CPU submission ms | GPU ms |
+| --- | --- | --- | ---: | --- | --- | --- |
+| Software | Forward | Fixed baseline | 24.65 | 40.57 / 50.10 | 0.63 / 0.80 | unavailable |
+| Software | Forward | Tilt shading | 24.21 | 41.30 / 50.10 | 0.64 / 0.80 | unavailable |
+| Software | Forward | Tilt shadows | 16.64 | 60.11 / 66.70 | 0.69 / 0.90 | unavailable |
+| Software | Reverse | Tilt shadows | 16.59 | 60.29 / 66.70 | 0.72 / 1.00 | unavailable |
+| Software | Reverse | Tilt shading | 24.60 | 40.65 / 50.10 | 0.63 / 0.80 | unavailable |
+| Software | Reverse | Fixed baseline | 24.23 | 41.27 / 50.10 | 0.63 / 0.80 | unavailable |
+| Hardware | Forward | Fixed baseline | 59.95 | 16.68 / 16.70 | 1.06 / 2.20 | 2.78 / 2.87 |
+| Hardware | Forward | Tilt shading | 59.95 | 16.68 / 16.80 | 1.12 / 2.40 | 2.79 / 2.87 |
+| Hardware | Forward | Tilt shadows | 58.45 | 17.11 / 16.80 | 1.00 / 2.40 | 4.63 / 4.80 |
+| Hardware | Reverse | Tilt shadows | 58.10 | 17.21 / 16.80 | 1.05 / 2.40 | 4.63 / 4.78 |
+| Hardware | Reverse | Tilt shading | 59.95 | 16.68 / 16.70 | 1.11 / 2.30 | 2.79 / 2.89 |
+| Hardware | Reverse | Fixed baseline | 59.95 | 16.68 / 16.70 | 1.03 / 2.10 | 2.81 / 2.90 |
+
+Software simulation-debt means were 4.55–4.72 ms, p95 7.93–8.07 ms and maximum
+13.37 ms; snapshot-age means were 0.83–0.93 ms, p95 1.20–1.30 ms and maximum
+7.00 ms. Hardware debt means were 4.07–4.83 ms, p95 7.87–9.13 ms and maximum
+18.13 ms; snapshot-age means were 4.26–5.90 ms, p95 8.30–12.90 ms and maximum
+19.00 ms. All samples discarded zero simulation time and recorded no page errors.
+
+On hardware, shading preserves the baseline's 59.95 FPS in both orders, with
+essentially unchanged GPU duration. Shadows reduce throughput by 2.5%/3.1%
+and increase mean GPU duration by 66.7%/64.8%. That repeatable cost loses the
+baseline's approximately 60 FPS submission cadence. On software, shadows reduce
+throughput by 32.5%/31.5%, while shading changes −1.8%/+1.5%, showing no repeatable
+shading regression. The software baseline itself is below 60 FPS; no new
+software threshold is imposed. Taken together, the sustained shadow cost and
+lost hardware cadence justify the authorized fallback. Production keeps
+gravity-responsive global shading and omits moving object-to-object shadows;
+the shadow candidate remains a validation fixture.
+
+The [retained timing artifact](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41000657493/artifacts/12953149776)
+contains `software.json`, `hardware.json`, `comparison.md` and native process
+output in `commands.log`. Its archive digest is
+`d9d9ba4594d70ff954824845162389c8c1cc44145f1eb2bc5e6aa46d4c1e6120`;
+the software/hardware JSON digests are respectively
+`b53a702a7a33f805ea7105424f6556aee4806f9fb4294815755769e6e36531d9` and
+`6e7339545e2c881246755a510028d465ac0d9f8306f813510ef9d650a99069da`.
+Downloaded archives, complete samples, GPU logs and coverage accounting are
+also retained outside Git in `.ci/tilt-ac4/`. Both archive hashes match GitHub's
+artifact metadata. Local `validation/ci.py verify` passed, the comparison command
+reproduced the retained table byte-for-byte, and independent evidence checks
+verified the twelve identities and 93 GPU passes. The first two attempts at
+the one-off evidence checker failed on its path sorting and parenthesized-test
+title parsing; correcting those checker errors produced the matching results.
+The single local validation command, `bash .ci/tilt-ac4/validate.sh`, exited 0:
+workflow lint, 42 tooling tests, all 197 offline harness tests, producer and
+timing verification, exact GPU coverage accounting, comparison reproduction
+and `git diff --check` passed. Its log is `.ci/tilt-ac4/local-validation.log`.
+Native/WASM and rendered acceptance evidence above comes from the completed
+checkpoint CI; this documentation-only follow-up does not claim a new local
+browser or hardware measurement.
+
+Physical-phone acceptance remains separate: perform the existing fifteen-second
+warmup and five-minute normal/portrait-expanded/landscape-expanded runs with
+diagnostics off, plus real sensor flips, motion shutdown and visual-smoothness
+checks, before claiming device performance. No new live-provider or
+human-listening result is claimed. The CI Pages job was skipped; production
+deployment and live tilt verification remain pending the authorized delivery
+process.

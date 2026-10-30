@@ -421,9 +421,14 @@ remap cached gravity and lighting immediately, without another sensor event.
 Stopping motion clears the cached vectors so later display rotation cannot
 revive them. Closed views reject late gravity callbacks.
 
-Rendering remains
-instanced, without shadow maps or bloom. Frame measurements are host evidence;
-physical-iPhone and human-listening acceptance remain pending.
+Rendering uses tilt-responsive surface shading without object-to-object shadows.
+The matched software/Intel GPU comparison retained this fallback: the analytical
+shadow candidate reduced submitted throughput in both sample orders and raised
+GPU time, while shading preserved the hardware baseline's approximately 60 FPS.
+See the [renderer assessment](validation.md#matched-gpu-assessment-2026-10-30)
+for measurements and the decision. Rendering remains instanced, without shadow
+maps or bloom. These are host measurements; physical-iPhone and human-listening
+acceptance remain pending.
 
 A dark starfield sits behind the scene. One batch draws stars from the HYG 4.1
 catalog at their J2000 sky positions, centered on Orion. Catalog magnitudes
