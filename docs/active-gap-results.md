@@ -408,3 +408,69 @@ identities, the specified frame/debt/discarded-time results and human smooth-mot
 confirmation. The prior 16 failing host frame-budget windows remain failed;
 this functional browser pass supplies no replacement phone-performance evidence.
 Linux CI, live-provider checks and production verification were not run here.
+
+## Hardware checkpoint execution (2026-10-30)
+
+The review-requested hardware commands were executed once, serially, from the
+repository root with `.tools/bin` prepended to `PATH`, at source checkpoint
+`45041d569308d4a80267cad2b45f6e7e9ce25d68`, tree
+`d46c130b40338137139abd7933c8b64eb20d7c75`. **Hardware acceptance remains
+incomplete:** this Linux VM exposes no PCI graphics device or `/dev/dri` nodes.
+The installed pinned Node/Playwright and Chromium executables ran successfully;
+these failures concern renderer availability, not a missing executable or a
+filesystem sandbox denial. The initial load averages were 0.12 / 0.09 / 0.77;
+process samples cover the serial run without a competing build or browser suite.
+
+| Command | Exit | Result |
+|---|---:|---|
+| `python3 validation/validate.py leptos` | 0 | Formatting, Clippy, one native test and fresh release/WASM build passed. |
+| `.tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.gpu.config.mjs` | 1 | Renderer preflight: `GPU validation requires a WebGL2 hardware renderer`. No test workers ran. |
+| `just validate-tilt` | 1 | All six software samples completed; hardware scene startup failed, producing zero hardware samples. The comparison step did not run. |
+| `.tools/bin/node --test validation/harness/gpu-renderer.test.mjs validation/harness/tilt-timing-evidence.test.mjs validation/harness/tilt-lighting-comparison.test.mjs` | 0 | Five tests passed, covering renderer rejection, artifact identity and incomplete/stale comparison rejection. |
+
+Chromium was `156.0.8078.4`. The software renderer was
+`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)`.
+Across the six forward/reverse samples, submitted FPS ranged from 24.64 to 34.60,
+p95 frame intervals from 33.4 to 50.1 ms, maximum simulation debt was 8.34 ms
+(rounded up), and maximum snapshot age was 6 ms. All samples had zero discarded
+simulation time and no page errors. These host samples do not meet the frame
+criteria and do not establish hardware or physical-phone acceptance.
+
+The hardware-requested run's CDP GPU identity was
+`ANGLE (Mesa, llvmpipe (LLVM 21.1.8 256 bits), OpenGL 4.5 (Core Profile) Mesa 26.0.8-1ubuntu0.3)`.
+Its feature status reported OpenGL and WebGL `unavailable_off`; native logs report
+`WebGL2 blocklisted`. Three.js reported `Error creating WebGL context` before the
+existing 30-second scene-startup timeout. The failure receipt records no failed
+requests. This is software fallback on a host without an exposed GPU. No launch
+flag, timeout, renderer assertion, serial startup guard, retry count or worker
+count was changed. The existing `just check` still requires both hardware phases.
+
+Retained evidence is in `.ci/ski1240-hardware-checkpoint/`, outside Git. Command
+receipts and logs record exit results and UTC times; `access.json` records the
+PCI/USB inventory and tools; process samples and `gpu-test-results/` preserve
+native execution evidence. `tilt-lighting/` contains all software samples and the
+hardware failure receipt, including CDP GPU status and scene/request errors.
+`before.json` and `verification.json` bind the fresh build and confirm all 88
+captured build-file digests stayed unchanged. `measured-site.tar.gz` retains that
+site; all 24 evidence files passed `SHA256SUMS` verification. The earlier full
+browser pass remains a separate checkpoint and was not rerun for this
+documentation-only update.
+
+| Evidence | Identity / SHA-256 |
+|---|---|
+| Served build | `d7ecf9e317b2c70987874072` |
+| Served file-tree digest (`timingIdentity`) | `a4b8d93b68a623fcdaa73cb4a7b0935a13ed8dd58a6fb7def5e943df5327773a` |
+| Hardware browser log | `169f82f9b888ff2a54c81568f227ada07a5340ce437b9f1e07982649184251ec` |
+| Tilt recipe log | `40cc3daa297dad837aaae94e892c414fe79b5b835a992551fabc202246c6d927` |
+| Measured site archive | `d3ca9b43698e87c8441671aaad359e8fba11d9cbeacc0c84664f08c7fe6ae1da` |
+| Evidence digest manifest | `1b738f9def5af1aa3de49bfbc4602ec53daa0f950a2a80e2088fa50e1ca5119c` |
+
+Both review acceptance requests remain open. The hardware commands still require
+successful execution on an idle host exposing a hardware WebGL2 renderer. The
+fresh physical-access receipt again contains only USB root hubs and no
+`usbmuxd` connection. Device/build-identified normal, portrait-fullscreen and
+landscape-fullscreen phone reports and human smooth-motion confirmation remain
+pending under [Remaining acceptance and delivery](#remaining-acceptance-and-delivery),
+with every warmup, duration, diagnostics, Low Power Mode and performance criterion
+unchanged. No physical-phone run, Linux CI, live-provider check or production
+verification was performed in this checkpoint.
