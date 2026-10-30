@@ -1363,7 +1363,8 @@ checks. GitHub runs the complete Chromium and WebKit browser suite and the
 hardware GPU checks. Browser runs retain the startup guard, one worker and zero
 retries.
 
-`tilt-lighting.spec.mjs` runs in Chromium and WebKit. With Listening off and
+`tilt-lighting.spec.mjs` runs in software Chromium and WebKit, and in hardware
+GPU Chromium. With Listening off and
 frozen geometry, actual render-target pixels check opposing opaque faces for
 upright, inverted, sideways, face-up and face-down gravity. Sensor results are
 compared with ideal-pose pixel references, including Apple/non-Apple signs,
