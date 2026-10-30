@@ -1551,7 +1551,7 @@ The six software samples used Chromium 156.0.8078.4, verified ANGLE Vulkan
 SwiftShader, and the same viewport, canvas, camera, geometry, audio workload,
 warmup and measurement durations described above. No build or browser suite ran
 concurrently with timing. Raw counts, distributions and provenance are in
-`.ci/tilt-lighting/software.json`, SHA256
+`.ci/tilt-hardware-review/prior-local-timing/software.json`, SHA256
 `365b425a01c54043ddffb3884e3d2d792743855b4a56e44d6b9a7f0ee8b7104a`.
 
 | Order | Variant | Submitted FPS | Frame mean / p50 / p95 / max (ms) | CPU submission mean / p50 / p95 / max (ms) |
@@ -1583,7 +1583,7 @@ It exited **1 with zero samples** on the same artifact. Chromium selected Mesa
 llvmpipe (LLVM 21.1.8, Mesa 26.0.8); WebGL was unavailable, Three.js reported
 `Error creating WebGL context`, and scene startup timed out after 30 seconds.
 No failed requests were recorded. The failure report is
-`.ci/tilt-lighting/hardware.json.failure.json`, SHA256
+`.ci/tilt-hardware-review/prior-local-timing/hardware.json.failure.json`, SHA256
 `3597ee4276d6b99efb1620a5cebbd887d71cecdedb9bd9a60e415e25062eda56`;
 native process output is `.ci/tilt-remediation/hardware.log`, SHA256
 `745b79dc45c3a17446100c307a3d7da00485a597a891adccbd5b7982eebc4415`.
@@ -1598,3 +1598,67 @@ instrumentation, then assess the 60 FPS target. No hardware result is inferred
 from software correctness. Physical-phone acceptance still requires the device
 procedure above. No Linux CI, live provider, human-listening, physical-device or
 production-deployment acceptance is claimed by this local checkpoint.
+
+### Hardware review follow-up, 2026-10-30
+
+The existing [Linux CI run for 94962ca](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/40996913058)
+completed the full GPU suite: [shard 1](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/40996913058/job/123872792923)
+passed 62 cases and [shard 2](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/40996913058/job/123872792833)
+passed 31, including all nine tilt cases. Shard 1 reported ANGLE/virgl on
+Intel Iris Plus Graphics 655 (CFL GT3); shard 2 reported ANGLE/virgl on
+Intel UHD Graphics (CML GT2), both with OpenGL 4.3.
+The downloaded producer manifest and all 89 file digests verified against
+source tree `44485e7cac5d334cbe869df8899302393f0419f9` and the checkpoint workflow.
+The tested runtime was `fd238e56485fa720f05bf99a`. Matching the two logs against
+the GPU inventory proved 93 distinct passes, with no missing or duplicate cases.
+The logs and coverage accounting are in `.ci/tilt-hardware-review/`.
+This is hardware rendering correctness evidence; that workflow did not execute
+the timing comparison.
+
+The GPU workflow now runs `just validate-tilt` on shard 1 after its browser
+checks. It measures software and hardware serially using the same downloaded
+site, then requires six samples per renderer with matching build, artifact,
+instrumentation, browser version, scene and audio settings. Missing samples,
+software substitution for hardware, unavailable requested GPU timer samples,
+or mismatched inputs fail the job. The existing validation barrier therefore
+cannot succeed without the comparison. The serial startup guard, one browser
+worker and zero retries remain unchanged. Native process logs, JSON reports
+and the comparison table are retained in the `tilt-lighting-comparison` CI
+artifact, including failure evidence. This checks evidence completeness; it
+does not invent a performance tolerance or establish phone acceptance.
+
+Local validation of this repair:
+
+- Workflow lint passed; `python3 -m unittest discover -s validation/tooling -v`
+  passed 42 tests. The focused comparison/provenance tests passed 4 cases,
+  then `node --test validation/harness/*.test.mjs` passed all 197 tests.
+- `PATH="$PWD/.tools/bin:$PATH" DEBUG=pw:browser just validate-tilt` exited **1**.
+  Its software command completed all six samples on SwiftShader; the hardware
+  command, `node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/hardware.json --hardware`,
+  exited **1 with zero samples**, selecting llvmpipe and failing WebGL context
+  creation. The native process log and request evidence confirm the same
+  unavailable local GPU described above, with no failed requests. Pinned
+  Node/Playwright/Chromium are installed; this is not a sandbox denial.
+
+These local samples used runtime `c9e93b0487b5faadf4a84433`, artifact SHA256
+`97c8e79c5192a3592fd63dd72dc9d9def63fd9ccb8c65cbf48c3c36ec7be575f`,
+and the unchanged timing/prototype instrumentation and workload above. They
+are separate from the CI runtime. Forward/reverse submitted FPS were
+34.32/35.44 baseline, 36.87/35.32 shading and 25.08/24.31 shadows. Shadow
+throughput fell 26.9%/31.4%; shading changed +7.4%/−0.3%. GPU timers were
+unavailable; discarded simulation time was zero. Full CPU, frame, debt and
+snapshot-age distributions are in `.ci/tilt-lighting/software.json`, SHA256
+`64121ae53cc24edf30f4a3d8a91c8b77784ac8389c61bdbba46fbd0dd1320cfb`.
+The hardware failure report SHA256 is
+`efa1c9885188e312c5ff5a091d6d43bd029351f6de1491656195fa8ea34cb26e`;
+the complete `.ci/tilt-hardware-review/timing.log` SHA256 is
+`dd58dc195a6ebbcc79a3bc3b29a90908b11e599a3fd3ea10b55f8d5ea6619272`.
+Earlier local timing files were preserved under `prior-local-timing/`.
+
+**AC4 remains incomplete.** Tailnet policy denied direct SSH to the runner
+account. The new workflow must execute after this local commit is delivered
+by the orchestrator, then its matched hardware/software measurements must be
+assessed against the smooth 60 FPS target. The software results still support
+the existing shading-only fallback; its final hardware assessment is pending.
+No new Linux CI execution, physical-phone, live-provider, human-listening or
+production-deployment result is claimed for this repair.
