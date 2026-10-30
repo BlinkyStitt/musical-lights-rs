@@ -14,6 +14,7 @@ export default defineConfig({
       '**/antialias.spec.mjs', '**/box-depth.spec.mjs', '**/color-fill.spec.mjs',
       '**/edges.spec.mjs', '**/lighting-auto.spec.mjs', '**/mirrors.spec.mjs',
       '**/musical-motion.spec.mjs', '**/star-twinkle.spec.mjs', '**/stars.spec.mjs',
+      '**/tilt-lighting.spec.mjs',
     ],
     use: { browserName: 'chromium', channel: 'chromium', launchOptions: { args } },
   }],

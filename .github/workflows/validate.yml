@@ -284,6 +284,26 @@ jobs:
           tool: just
       - name: Run hardware-rendered browser checks
         run: just validate-gpu --shard=${{ matrix.shard }}/2
+      # Each host runs one worker. Measure on one runner after its browser suite,
+      # with the same downloaded site and instrumentation for both renderers.
+      - name: Compare tilt lighting on software and hardware
+        if: matrix.shard == 1
+        env:
+          DEBUG: pw:browser
+        run: |
+          set -o pipefail
+          mkdir -p .ci/tilt-lighting
+          just validate-tilt 2>&1 | tee .ci/tilt-lighting/commands.log
+          cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always() && matrix.shard == 1
+        with:
+          name: tilt-lighting-comparison
+          path: .ci/tilt-lighting/
+          include-hidden-files: true
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7.0.1
         if: failure()
         with:
