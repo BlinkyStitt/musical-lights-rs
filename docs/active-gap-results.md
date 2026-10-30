@@ -1,5 +1,7 @@
 # Active gap validation
 
+The [full browser checkpoint](#full-browser-checkpoint-2026-10-30) records the
+successful complete suite after review. Physical-phone acceptance remains pending.
 The [review checkpoint refresh](#review-checkpoint-refresh-2026-10-30) below
 contains the current statistical and served-app measurements. Earlier sections
 retain their original measurement boundaries and validation outcomes.
@@ -340,3 +342,69 @@ Linux CI and production build-identity, direct-route and live-control verificati
 were not performed in this local task. PR artifact attachment, push, merge and
 deployment belong to the orchestrator. This report does not authorize or establish
 phone acceptance, merge or deployment.
+
+## Full browser checkpoint (2026-10-30)
+
+The review-requested complete browser command returned **0** at source checkpoint
+`1e5d80ade531c999f33be5c2fa1d9bc2b47dffe3`, tree
+`4e0cb6cb1c5fe27beb1c7928b36620dc0b4c8532`. This evidence update changes only
+this document. The source and tests were clean and unchanged throughout the run.
+
+From the repository root on Linux, with pinned Node 26.8.2 and Playwright 1.64.1:
+
+```sh
+export PATH="$PWD/.tools/bin:$PATH"
+python3 validation/validate.py leptos
+python3 validation/validate.py browser
+```
+
+Leptos validation returned 0: formatting, WASM/test Clippy, its native unit test,
+and the release build with worklet/physics WASM hooks passed. The browser command
+ran from 12:39:43 to 13:38:11 UTC and returned 0: **202 offline harness tests and
+920 browser tests passed**, with two existing opt-in skips (review-preview
+generation and live YouTube). The serial startup/crash guard, one worker and zero
+retries were unchanged. All 922 numbered browser results were present exactly
+once, including all nine passing active-gap cases across Chromium, WebKit and the
+iPhone profile. The previously failing iPhone live-cap case passed in this full
+run; its focused result is no longer the only evidence of that repair.
+
+The existing `just check` recipe includes this complete browser command after
+the CPU/build checks, followed by the hardware-rendered checks. `just --dry-run
+check` confirmed that wiring; it did not execute those other phases. `just
+validate` remains the CPU/build/harness subset. No recipe, test assertion,
+startup safeguard or CI barrier was changed for this evidence collection.
+
+Retained evidence is in `.ci/ski1240-browser-checkpoint/`, outside Git:
+`build-command.json` and `command.json` record exact commands, source checkpoint,
+UTC times and exit results; `build.log` and `browser.log` retain their output.
+`before.json` and `after.json` bind the served build and source digests before and
+after the suite. `verification.json` records complete result numbering and checks
+all 98 retained build-file digests. `test-results/` retains browser process and
+server-request evidence; `tested-site.tar.gz` preserves the tested site.
+`SHA256SUMS` verification returned 0. These artifacts are ready for the
+orchestrator to attach to the PR.
+
+| Evidence | Identity / SHA-256 |
+|---|---|
+| Served build | `1fff442b86d72138748f078c` |
+| Served file-tree digest (`timingIdentity`) | `c2cd7c97cac35e4b671d10e9695827367f30f8838c3c6f4b720b6dae269e8f6d` |
+| Full browser log | `5e404356515168363fda8ca696d51b5be06023be71926aef7523c15aebec2edc` |
+| Tested site archive | `69188c907a4618c4e77dbaadd205e149f7996515f831b6506ea54c6ebbd574d2` |
+| Evidence digest manifest | `d14078e21a6a188cdad61e9794ca38018533b72fe2b6043db658b5f4723806b1` |
+
+The initial evidence-wrapper preflight returned 1 before validation or browser
+startup: it compared the local site's newer build identity against the earlier
+performance producer's receipt. `preflight.txt` records that mismatch. The fresh
+pinned Leptos build above established this run's producer receipt; the complete
+browser command ran once. Earlier failed full-suite results remain historical
+evidence in the sections above.
+
+The current physical-access receipt still shows only USB root hubs and no
+`usbmuxd` connection. Normal, portrait-fullscreen and landscape-fullscreen
+physical-phone acceptance remains **pending** under the
+[procedure above](#remaining-acceptance-and-delivery): each requires a 15-second
+warmup, five minutes with diagnostics and Low Power Mode off, device/build
+identities, the specified frame/debt/discarded-time results and human smooth-motion
+confirmation. The prior 16 failing host frame-budget windows remain failed;
+this functional browser pass supplies no replacement phone-performance evidence.
+Linux CI, live-provider checks and production verification were not run here.
