@@ -95,7 +95,7 @@ test('non-finite motion transport closes audio and keeps sphere gravity', async 
   });
   await expect.poll(async () => {
     const state = await physicsState(page);
-    return Math.min(...state.bars) / state.barMax;
+    return (Math.min(...state.bars) - state.baseline) / state.travel;
   }).toBeGreaterThan(.99);
   const falling = await page.evaluate(async () => {
     const view = document.querySelector('#dancinglights').physics;

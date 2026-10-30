@@ -56,7 +56,7 @@ test('active microphone contacts fill color only from attacking bars', async ({ 
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[63])).toBe(1);
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments))).toEqual(before);
   await page.evaluate(() => window.sendBars(Array(24).fill(0)));
-  await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeLessThan(.0031);
+  await expect.poll(async () => { const s = await physicsState(page); return Math.max(...s.bars) - s.baseline; }).toBeLessThan(.0001);
   await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38,62)))).toEqual(Array(24).fill(1));
   await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value, i) => value !== before[i]), before)).toBe(true);
@@ -108,12 +108,12 @@ test('continuous scrolling carries source identity and stops in place', async ({
   const moved = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     return { edges: Array.from(v.edges), colors: Array.from(v.bars.instanceColor.array), palette: Array.from(v.palette),
-      phase: v.renderedPhase, x: v.bars.instanceMatrix.array[12], top: v.current[v.layout[9]], max: v.current[v.layout[17] + 1] };
+      phase: v.renderedPhase, x: v.bars.instanceMatrix.array[12], top: v.current[v.layout[9]], max: v.current[v.layout[17] + 1], baseline: v.current[v.layout[17] + 5], travel: v.current[v.layout[17] + 6] };
   });
   expect(moved.edges[0]).toBe(1); expect(moved.edges[1]).toBe(0);
   expect(moved.colors.slice(0, 3)).toEqual(moved.palette.slice(0, 3));
   expect(moved.x).toBeCloseTo((.5 + moved.phase) * .05, 5);
-  expect(moved.top).toBeCloseTo(.003 + .6 * (moved.max - .003), 4);
+  expect(moved.top).toBeCloseTo(moved.baseline + .6 * moved.travel, 4);
   await page.screenshot({ path: info.outputPath('scrolling-bands.png') });
   await page.evaluate(() => { window.audioNow += .181; });
   await expect.poll(async () => Math.max(...(await physicsState(page)).edges)).toBe(0);
@@ -196,7 +196,7 @@ for (const width of [375, 1440]) {
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
-    await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
+    await expect.poll(async () => { const s = await physicsState(page); return Math.max(...s.bars) - s.baseline; }).toBeCloseTo(0, 3);
     await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length, { timeout: 30000 }).toBe(8);
     expect(errors).toEqual([]);
   });
@@ -342,7 +342,7 @@ test('depth shakes and audio bars both move balls while tilt permission is still
   });
   expect(samples.some(s => s.input === -8)).toBe(true);
   expect(samples.some(s => s.balls.some(b => b.vz < -.1))).toBe(true);
-  expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
+  expect(samples.some(s => Math.min(...s.bars) - before.baseline > before.travel * .45)).toBe(true);
   expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[26])).toBe(0);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();

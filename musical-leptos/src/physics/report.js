@@ -58,7 +58,7 @@ export class PhoneReport {
       <button type="button" class="phone-export" disabled>Export test report</button>`;
     this.listen('.physics-defaults', 'click', () => {
       if (this.active) return;
-      const config = [...this.defaults]; config[0] = view.height; config[5] = view.config[5];
+      const config = [...this.defaults]; config[0] = view.height; config[5] = view.config[5]; config[11] = view.input[67];
       for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
         const index = Number(node.dataset.config); node.value = Number((config[index] * (index === 6 || index === 7 ? 1000 : 1)).toPrecision(6));
       }
@@ -88,6 +88,8 @@ export class PhoneReport {
       if (view.current && this.tonePhysics.length < 25000) {
         this.tonePhysics.push({ receivedAt: detail.receivedAt, renderedAt: view.renderedAt, alpha: view.renderAlpha,
           currentTick: view.current[2], previousTick: view.previous?.[2],
+          renderedBaseline: view.renderedBaseline, renderedTravel: view.renderedTravel,
+          baseline: view.current[view.layout[17] + 5], travel: view.current[view.layout[17] + 6],
           tops: Array.from(view.current.slice(view.layout[9], view.layout[10])),
           velocities: Array.from(view.current.slice(view.layout[14], view.layout[15])),
           targets: Array.from(view.input.slice(0, 24)), scrollingEnabled: view.input[33] === 1, scrollPhase: view.current[view.layout[20]], renderedPhase: view.renderedPhase, debtMs: view.metrics.debt,
@@ -143,6 +145,7 @@ export class PhoneReport {
     // Capture the requested depth even if its next physics snapshot is pending.
     config[5] = this.view.input[62];
     config.splice(8, 3, ...this.view.input.slice(64, 67));
+    config[11] = this.view.input[67];
     for (const node of this.physicsHost.querySelectorAll('[data-config]')) {
       if (!node.reportValidity()) return null;
       const index = Number(node.dataset.config);
@@ -253,7 +256,7 @@ export class PhoneReport {
       const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
       const snapshotProgressDriftMs = firstProgress && lastProgress
         ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v7',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v8',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
         invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,

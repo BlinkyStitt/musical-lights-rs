@@ -3,8 +3,9 @@ use musical_lights_core::lights::bar_motion::{DEFAULT_ATTACK_SECONDS, Motion};
 use musical_lights_core::lights::bar_surface::{BarSurface, JOIN_FRACTION};
 use musical_lights_core::lights::dance::{DanceMotion, flight_height, release_speed};
 use musical_lights_core::lights::musical_motion::{
-    DirectionOdds, PIGMENT_SWIRL, advance_pigment, contact_pigment_blend, paint_pigment,
-    paired_bar_extent, pigment_color, pigment_contact_eligible, sphere_drag_factor,
+    DEFAULT_GAP_CAP, DirectionOdds, PIGMENT_SWIRL, PairedBarGeometry, advance_pigment,
+    contact_pigment_blend, paint_pigment, pigment_color, pigment_contact_eligible,
+    sphere_drag_factor, valid_gap_cap,
 };
 use rapier3d::{na::Unit, prelude::*};
 use wasm_bindgen::prelude::*;
@@ -19,7 +20,8 @@ pub const ATTACK_OFFSET: usize = 38;
 pub const DEPTH_INPUT: usize = ATTACK_OFFSET + COUNT;
 pub const PAINT_INPUT: usize = DEPTH_INPUT + 1;
 pub const BALL_INPUT: usize = PAINT_INPUT + 1;
-pub const INPUT_LEN: usize = BALL_INPUT + 3;
+pub const GAP_INPUT: usize = BALL_INPUT + 3;
+pub const INPUT_LEN: usize = GAP_INPUT + 1;
 pub const BALL_COUNT: usize = 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
@@ -43,7 +45,7 @@ pub const MAX_SUBSTEPS: usize = 128;
 pub const MIN_HEIGHT: f32 = 0.40;
 pub const RESIZE_TICKS: u32 = HZ * 3 / 10;
 pub const CLEARANCE: f32 = 0.004;
-pub const BASELINE: f32 = 0.003;
+pub const BASELINE: f32 = musical_lights_core::lights::musical_motion::BAR_BASELINE;
 pub const WALL_RESTITUTION: f32 = 0.55;
 pub const BODY_STRIDE: usize = 18;
 pub const BAR_OFFSET: usize = 3 + MAX_BALLS * BODY_STRIDE;
@@ -52,9 +54,10 @@ pub const CONTACT_OFFSET: usize = IMPULSE_OFFSET + MAX_BALLS * COUNT;
 pub const VELOCITY_OFFSET: usize = CONTACT_OFFSET + MAX_BALLS;
 pub const COST_OFFSET: usize = VELOCITY_OFFSET + COUNT;
 pub const GEOMETRY_OFFSET: usize = COST_OFFSET + 4;
-pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 5;
+pub const SCROLL_OFFSET: usize = GEOMETRY_OFFSET + 7;
 pub const ACTIVE_OFFSET: usize = SCROLL_OFFSET + 1;
-pub const SNAPSHOT_LEN: usize = ACTIVE_OFFSET + 3;
+pub const MOTION_OFFSET: usize = ACTIVE_OFFSET + 3;
+pub const SNAPSHOT_LEN: usize = MOTION_OFFSET + COUNT;
 pub use musical_lights_core::lights::musical_motion::{
     SCROLL_EASE, SCROLL_PEAK_SPEED, SCROLL_SPEED,
 };
@@ -311,6 +314,7 @@ impl SurfaceSegment {
 /// Prototype assumptions, not measured material properties. Changes require a new world.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SimulationConfig {
+    pub gap_cap: f32,
     pub height: f32,
     pub gravity: f32,
     pub density: f32,
@@ -325,6 +329,7 @@ impl Default for SimulationConfig {
     fn default() -> Self {
         Self {
             height: 0.6,
+            gap_cap: DEFAULT_GAP_CAP,
             gravity: 9.81,
             density: 8.0,
             restitution: 0.72,
@@ -337,20 +342,29 @@ impl Default for SimulationConfig {
     }
 }
 impl SimulationConfig {
-    pub fn hop_height(self, reduced: bool) -> f32 {
-        let diameter = self.balls.largest();
-        flight_height(self.height - diameter - CLEARANCE, 0.3, reduced)
-    }
-    pub fn bar_max(self) -> f32 {
-        // Keep the same geometry in Reduced Motion: only the release energy changes.
-        paired_bar_extent(
+    pub fn geometry(self, flight: f32) -> PairedBarGeometry {
+        PairedBarGeometry::new(
             self.height,
-            (self.balls.largest() + self.hop_height(false) + CLEARANCE)
-                .max(self.balls.stack_height() + CLEARANCE),
+            self.gap_cap.max(self.balls.packed_height()),
+            self.balls.largest(),
+            self.balls.stack_height(),
+            CLEARANCE,
+            flight,
         )
     }
+    pub fn hop_height(self, reduced: bool) -> f32 {
+        flight_height(
+            self.geometry(0.3).active_height - self.balls.largest() - CLEARANCE,
+            0.3,
+            reduced,
+        )
+    }
+    pub fn bar_max(self) -> f32 {
+        let geometry = self.geometry(0.3);
+        geometry.baseline + geometry.travel
+    }
     pub fn motion_limits(self, reduced: bool) -> (f64, f64) {
-        let height = f64::from(self.bar_max() - BASELINE);
+        let height = f64::from(self.geometry(0.3).travel);
         let time = f64::from(if reduced {
             self.reduced_stroke_seconds
         } else {
@@ -358,7 +372,7 @@ impl SimulationConfig {
         });
         (2.2 * height / time, 12.0 * height / (time * time))
     }
-    pub fn values(self) -> [f32; 11] {
+    pub fn values(self) -> [f32; 12] {
         [
             self.height,
             self.gravity,
@@ -371,14 +385,16 @@ impl SimulationConfig {
             self.balls.count as f32,
             self.balls.small,
             self.balls.big,
+            self.gap_cap,
         ]
     }
     pub fn from_values(v: &[f32]) -> Result<Self, &'static str> {
-        if v.len() != 11 || v.iter().any(|v| !v.is_finite()) {
+        if v.len() != 12 || v.iter().any(|v| !v.is_finite()) {
             return Err("Invalid physics configuration");
         }
         let c = Self {
             height: v[0],
+            gap_cap: v[11],
             gravity: v[1],
             density: v[2],
             restitution: v[3],
@@ -394,6 +410,7 @@ impl SimulationConfig {
         };
         if !c.balls.valid()
             || v[8] != c.balls.count as f32
+            || !valid_gap_cap(c.gap_cap)
             || !(MIN_HEIGHT..=20.0).contains(&c.height)
             || !(0.0..=30.0).contains(&c.gravity)
             || !(1.0..=20000.0).contains(&c.density)
@@ -413,6 +430,7 @@ impl SimulationConfig {
 /// Pointer force is a radial field expressed as acceleration, then multiplied by mass.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SimulationInput {
+    pub gap_cap: f32,
     pub tick: u64,
     pub levels: [f32; COUNT],
     /// Current audio attack edges, separate from physical and decorative travel.
@@ -432,6 +450,7 @@ impl Default for SimulationInput {
     fn default() -> Self {
         Self {
             tick: 0,
+            gap_cap: DEFAULT_GAP_CAP,
             levels: [0.0; COUNT],
             attacks: [0.0; COUNT],
             attack_required: false,
@@ -484,6 +503,10 @@ pub struct Simulation {
     depth_walls: [RigidBodyHandle; 2],
     ceiling_height: f32,
     resize_from: f32,
+    gap_from: f32,
+    baseline: f32,
+    travel: f32,
+    active_height: f32,
     resize_tick: u32,
     supported: [[bool; MAX_BALLS]; 2],
     driven: [[bool; MAX_BALLS]; 2],
@@ -493,6 +516,10 @@ pub struct Simulation {
 impl Simulation {
     pub fn new(config: SimulationConfig, palette: [[f32; 3]; COUNT]) -> Result<Self, &'static str> {
         SimulationConfig::from_values(&config.values())?;
+        let config = SimulationConfig {
+            height: config.height.max(config.balls.packed_height()),
+            ..config
+        };
         if palette
             .iter()
             .flatten()
@@ -564,6 +591,7 @@ impl Simulation {
                 .friction(config.friction)
                 .restitution(config.restitution),
         );
+        let baseline = config.geometry(0.3).baseline;
         let bars: Vec<_> = (0..SURFACE_COUNT)
             .map(|index| {
                 let column = index / 2;
@@ -578,8 +606,8 @@ impl Simulation {
                         } else {
                             CAP_WIDTH
                         },
-                    BASELINE,
-                    BASELINE,
+                    baseline,
+                    baseline,
                     end,
                     config.height,
                     config.depth,
@@ -609,7 +637,7 @@ impl Simulation {
             world,
             balls,
             bars,
-            surface: BarSurface::new(&[f64::from(BASELINE); COUNT]),
+            surface: BarSurface::new(&[f64::from(baseline); COUNT]),
             surface_deltas: vec![0.0; SURFACE_COUNT],
             surface_dimensions: vec![[config.height, config.depth]; SURFACE_COUNT],
             palette,
@@ -618,7 +646,7 @@ impl Simulation {
             // Start uniformly with the source band under the actual spawn X.
             // Contact targets spread through these surface regions over time.
             pigments: [0.0; MAX_BALLS * 9],
-            bar_positions: [f64::from(BASELINE); COUNT],
+            bar_positions: [f64::from(baseline); COUNT],
             bar_velocities: [0.0; COUNT],
             motions: [Motion::default(); COUNT],
             tempo: 120.0,
@@ -633,11 +661,16 @@ impl Simulation {
             depth_walls: [boundaries[3], boundaries[4]],
             ceiling_height: config.height,
             resize_from: config.height,
+            gap_from: config.gap_cap,
+            baseline,
+            travel: config.geometry(0.3).travel,
+            active_height: config.geometry(0.3).active_height,
             resize_tick: RESIZE_TICKS,
             supported: [[false; MAX_BALLS]; 2],
             driven: [[false; MAX_BALLS]; 2],
             input: SimulationInput {
                 height: config.height,
+                gap_cap: config.gap_cap,
                 depth: config.depth,
                 balls: config.balls,
                 ..SimulationInput::default()
@@ -652,6 +685,7 @@ impl Simulation {
     }
     pub fn apply(&mut self, input: SimulationInput) -> Result<(), &'static str> {
         if !input.balls.valid()
+            || !valid_gap_cap(input.gap_cap)
             || input.tick != self.tick
             || input
                 .levels
@@ -677,8 +711,9 @@ impl Simulation {
         }
         // The input requests a room size; snapshots/config report the applied size.
         // Retarget from the current height, without touching body momentum.
-        if input.height != self.input.height {
+        if input.height != self.input.height || input.gap_cap != self.input.gap_cap {
             self.resize_from = self.config.height;
+            self.gap_from = self.config.gap_cap;
             self.resize_tick = 0;
         }
         self.input = input;
@@ -727,19 +762,14 @@ impl Simulation {
         Ok(())
     }
     fn hop_height(&self, reduced: bool) -> f32 {
-        let diameter = self.config.balls.largest();
         flight_height(
-            self.config.height - diameter - CLEARANCE,
+            self.active_height - self.config.balls.largest() - CLEARANCE,
             self.flight_fraction,
             reduced,
         )
     }
     fn bar_max(&self) -> f32 {
-        paired_bar_extent(
-            self.config.height,
-            (self.config.balls.largest() + self.hop_height(false) + CLEARANCE)
-                .max(self.config.balls.stack_height() + CLEARANCE),
-        )
+        self.baseline + self.travel
     }
     pub fn set_tempo(&mut self, bpm: f32) {
         if bpm.is_finite() {
@@ -759,7 +789,8 @@ impl Simulation {
                 self.world.bodies[handle].wake_up(true);
             }
         }
-        let old_travel = f64::from(self.bar_max() - BASELINE);
+        let old_travel = f64::from(self.travel);
+        let old_baseline = self.baseline;
         self.update_balls();
         self.resize_depth();
         self.flight_fraction +=
@@ -774,8 +805,33 @@ impl Simulation {
             };
         }
         self.config.height = self.config.height.max(self.config.balls.packed_height());
+        let t = self.resize_tick as f32 / RESIZE_TICKS as f32;
+        self.config.gap_cap = if self.resize_tick == RESIZE_TICKS {
+            self.input.gap_cap
+        } else {
+            self.gap_from + (self.input.gap_cap - self.gap_from) * t * t * (3.0 - 2.0 * t)
+        };
         let (max_speed, acceleration) = self.config.motion_limits(self.input.reduced_motion);
-        let travel = f64::from(self.bar_max() - BASELINE);
+        let geometry = self.config.geometry(self.flight_fraction);
+        let base_delta = f64::from((geometry.baseline - old_baseline).clamp(-2.0 * DT, 2.0 * DT));
+        // A reopening request cannot grant travel before the applied permanent
+        // bases retreat. Use the more inward endpoint for the entire tick;
+        // clearance gates can defer inward movement, which only adds space.
+        let inward_base = old_baseline.max(old_baseline + base_delta as f32);
+        self.active_height = geometry
+            .active_height
+            .min(self.ceiling_height.min(self.config.height) - 2.0 * (inward_base - BASELINE))
+            .max(0.0);
+        self.travel = PairedBarGeometry::new(
+            self.active_height,
+            self.active_height,
+            self.config.balls.largest(),
+            self.config.balls.stack_height(),
+            CLEARANCE,
+            self.flight_fraction,
+        )
+        .travel;
+        let travel = f64::from(self.travel);
         for (i, motion) in self.motions.iter_mut().enumerate() {
             motion.retarget(
                 f64::from(self.input.levels[i]),
@@ -785,7 +841,14 @@ impl Simulation {
             );
         }
         let enabled = self.input.scrolling && !self.input.reduced_motion;
-        let resize_speed = (travel - old_travel).abs() / f64::from(DT);
+        let resize_speed = ((travel - old_travel).abs()
+            + base_delta.abs()
+            + f64::from(
+                (self.config.height - self.ceiling_height)
+                    .abs()
+                    .min(2.0 * DT),
+            ))
+            / f64::from(DT);
         let bar_speeds: [f64; COUNT] = std::array::from_fn(|i| {
             let motion = &self.motions[i];
             (0..=32)
@@ -881,14 +944,41 @@ impl Simulation {
         for substep in 0..substeps {
             let previous_surface = self.surface;
             let previous_ceiling = self.ceiling_height;
-            self.resize_ceiling();
+            // Move the permanent lower surface through bounded contact steps.
+            // Musical Motion remains normalized and advances even while a size
+            // transition waits for occupied clearance.
+            let requested =
+                f64::from(old_baseline) + base_delta * (substep + 1) as f64 / substeps as f64;
+            let step_limit = min_radius * 0.5;
+            let mut allowed = requested as f32;
+            if allowed > self.baseline {
+                for (i, &(body, _)) in self.balls.iter().enumerate() {
+                    let body = &self.world.bodies[body];
+                    if body.is_enabled() {
+                        // No inward jump can pass through a sphere. A bounded
+                        // contact increment lets the support lift resting balls.
+                        allowed = allowed.min(
+                            (body.translation().y - self.config.balls.diameter(i) / 2.0
+                                + step_limit)
+                                .min(
+                                    self.ceiling_height
+                                        - body.translation().y
+                                        - self.config.balls.diameter(i) / 2.0
+                                        + step_limit,
+                                ),
+                        );
+                    }
+                }
+            }
+            self.baseline = allowed.clamp(self.baseline - step_limit, self.baseline + step_limit);
+            self.resize_ceiling(dt);
             let distance = self.dance.advance(enabled, self.tempo, f64::from(dt));
             self.scroll_speed = self.dance.speed();
             self.scroll_phase = (self.scroll_phase + distance).rem_euclid((COUNT * 3) as f64);
             let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
             for i in 0..COUNT {
                 self.motions[i].advance(f64::from(dt));
-                let next = f64::from(BASELINE) + self.motions[i].state.position * scale;
+                let next = f64::from(self.baseline) + self.motions[i].state.position * scale;
                 self.bar_velocities[i] = (next - self.bar_positions[i]) / f64::from(dt);
                 self.bar_positions[i] = next;
             }
@@ -1205,6 +1295,7 @@ impl Simulation {
             self.world.remove_body(body);
         }
         self.resize_from = self.config.height;
+        self.gap_from = self.config.gap_cap;
         self.resize_tick = 0;
         self.config.balls = settings;
         self.config.height = self.config.height.max(settings.packed_height());
@@ -1377,7 +1468,7 @@ impl Simulation {
             }
         }
     }
-    fn resize_ceiling(&mut self) {
+    fn resize_ceiling(&mut self, dt: f32) {
         if self.config.height >= self.ceiling_height {
             self.ceiling_height = self.config.height;
         } else {
@@ -1398,7 +1489,8 @@ impl Simulation {
                 - 2.0 * self.bar_max();
             self.ceiling_height = self
                 .ceiling_height
-                .min(self.config.height.max(ball_top).max(bar_top));
+                .min(self.config.height.max(ball_top).max(bar_top))
+                .max(self.ceiling_height - 2.0 * dt);
         }
         self.world.bodies[self.ceiling]
             .set_translation(Vector::new(0.0, self.ceiling_height, 0.0), false);
@@ -1423,6 +1515,8 @@ impl Simulation {
             hop_height,
             MIN_HEIGHT,
             self.config.depth,
+            self.baseline,
+            self.travel,
         ]);
         for (i, &(handle, _)) in self.balls.iter().enumerate() {
             let body = &self.world.bodies[handle];
@@ -1442,6 +1536,7 @@ impl Simulation {
         for i in 0..COUNT {
             values[VELOCITY_OFFSET + i] = self.bar_velocities[i] as f32;
             values[BAR_OFFSET + i] = self.bar_positions[i] as f32;
+            values[MOTION_OFFSET + i] = self.motions[i].state.position as f32;
         }
     }
     pub fn snapshot(&self) -> &SimulationSnapshot {
@@ -1492,7 +1587,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            21.0, // variable balls with HSLuv pigments; linear-RGB transport retained
+            22.0, // variable balls, capped active gap and normalized motion
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,
@@ -1500,6 +1595,7 @@ impl PhysicsSimulation {
         ];
         layout.extend(PIGMENT_SWIRL);
         layout.push(ACTIVE_OFFSET as f32);
+        layout.push(MOTION_OFFSET as f32);
         layout
     }
     pub fn input(&mut self, values: &[f32]) -> Result<(), JsError> {
@@ -1515,7 +1611,7 @@ impl PhysicsSimulation {
             || values[BALL_INPUT] != (values[BALL_INPUT] as usize) as f32
         {
             return Err(JsError::new(
-                "Expected 67 simulation inputs with scrolling, gravity, audio attacks and enclosure depth, plus the paint policy",
+                "Expected 68 simulation inputs with scrolling, gravity, audio attacks and enclosure depth, plus the paint policy",
             ));
         }
         let input = SimulationInput {
@@ -1529,6 +1625,7 @@ impl PhysicsSimulation {
             reduced_motion: values[31] == 1.0,
             height: values[32],
             depth: values[DEPTH_INPUT],
+            gap_cap: values[GAP_INPUT],
             scrolling: values[33] == 1.0,
             balls: BallSettings {
                 count: values[BALL_INPUT] as usize,

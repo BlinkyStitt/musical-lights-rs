@@ -189,3 +189,10 @@ test('saved sones gate recovers independently from each gain field and other pre
   }
   assert.deepEqual(recoverVisual([9, .1, 0, 2]).values, [0, .1, 0, 2]);
 });
+test('active gap cap restores independently and invalid fields preserve other preferences', () => {
+  const read = activeGapCap => readSettings({ getItem: () => JSON.stringify({ version: 1, activeGapCap, flight: 40, cameraAngle: 12 }) });
+  for (const cm of [40, 60, 2000]) assert.equal(read(cm).activeGapCap, cm);
+  for (const cm of [undefined, null, '60', 39, 2001, 60.5]) {
+    assert.equal(read(cm).activeGapCap, 60); assert.equal(read(cm).flight, 40); assert.equal(read(cm).cameraAngle, 12);
+  }
+});

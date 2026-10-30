@@ -54,8 +54,8 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-valuenow') === '0'))).toBe(true);
   const wave = () => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    const travel = v.current[v.layout[17] + 1] - v.layout[13];
-    return Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.layout[13]) / travel);
+    const travel = v.renderedTravel;
+    return Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.renderedBaseline) / travel);
   });
   await expect.poll(async () => Math.max(...await wave())).toBeGreaterThan(.12);
   // Wait for the taller idle preview to retract to the listening floor.
@@ -299,6 +299,12 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
   });
   await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave() });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(200);
+  // A live cap edit must leave the same continuous PCM analysis authoritative.
+  await page.evaluate(() => {
+    const node = document.querySelector('.active-gap-cap'); node.value = '40';
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(400);
   await page.waitForFunction(() => window.observedPCM);
   const data = await page.evaluate(() => {
     const card = document.querySelector('.audio-card'), report = document.querySelector('#dancinglights').physics.report;
@@ -307,14 +313,14 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
       for (let i = 0; i < chunk.values.length; i += chunk.stride) out.push(Array.from(chunk.values.subarray(i, i + chunk.stride)));
       return out;
     });
-    return { pcm: Array.from(card.review.buffer.getChannelData(1)), observedPCM: window.observedPCM, rows: rows.slice(0, 200), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
+    return { pcm: Array.from(card.review.buffer.getChannelData(1)), observedPCM: window.observedPCM, rows: rows.slice(0, 400), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
   });
   const { writeFile } = await import('node:fs/promises');
   await writeFile(info.outputPath('pcm-boundary.json'), JSON.stringify(data));
   expect(data.observedPCM).toEqual(data.pcm.slice(0, data.observedPCM.length));
   expect(Number.isSafeInteger(data.firstSample)).toBe(true);
   const expected = flashTrace(module, Float32Array.from(data.pcm), false, { firstSample: data.firstSample });
-  expect(data.rows).toHaveLength(200);
+  expect(data.rows).toHaveLength(400);
   // Diagnostic delivery has bounded storage and can report dropped rows.
   // Match the original audio sample timestamps, never shifted traces or IPC
   // array positions. Raw loudness and filtered targets must remain exact.

@@ -12,24 +12,33 @@ if (!origin || !output) throw new Error('Usage: node validation/fullscreen-timin
 const finishBrowserAudit = await startup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
 try {
 const results=[];
-for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,devices['iPhone 13']]]) {
+for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,devices['iPhone 13']]]) {
   const browser=await engine.launch();
   try {
     const context=await browser.newContext({...profile,viewport:{width:390,height:844}});
     await staticPreview(context,origin);
     await context.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{value:false});Element.prototype.requestFullscreen=undefined;});
+    await context.addInitScript(gapCap => {
+      localStorage.setItem('musical-lights-display-v1', JSON.stringify({version:1,activeGapCap:gapCap}));
+      const random = crypto.getRandomValues.bind(crypto);
+      crypto.getRandomValues = values => {
+        if (values instanceof Uint32Array && values.length === 1) { values[0] = 1; return values; }
+        return random(values);
+      };
+    }, gapCap);
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`${origin}/advanced/`);
+    await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
+    const exit=page.getByRole('button',{name:'Exit fullscreen',exact:true}); if(await exit.isVisible())await exit.click();
     await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
     await page.locator('.input-source').selectOption('generated');
-    await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
-    await page.getByRole('checkbox', { name: 'Listening', exact: true }).check();
+    await page.locator('.review-start').click();
     await page.waitForFunction(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
     await page.waitForTimeout(2000);
     await page.evaluate(()=>{
       const v=document.querySelector('#dancinglights').physics;
-      window.samples=[];window.marks=[];window.profiling=true;let previous=performance.now();
-      const sample=t=>{samples.push({t,frame:t-previous,debt:v.metrics.debt,age:v.metrics.snapshotAgeMs,overload:v.metrics.overloadTicks,height:v.current[1],requested:v.input[32]});previous=t;if(profiling)requestAnimationFrame(sample)};
+      window.samples=[];window.marks=[];v.recordTiming=true;window.profiling=true;let previous=performance.now();
+      const sample=t=>{const g=v.layout[17];samples.push({t,frame:t-previous,debt:v.metrics.debt,age:v.metrics.snapshotAgeMs,overload:v.metrics.overloadTicks,substepTotal:v.metrics.substepTotal,requestedSubstepTotal:v.metrics.requestedSubstepTotal,height:v.current[g],baseline:v.current[g+5],travel:v.current[g+6],configuredHeight:v.current[1],requested:v.input[32]});previous=t;if(profiling)requestAnimationFrame(sample)};
       requestAnimationFrame(sample);
     });
     await page.waitForTimeout(500);
@@ -43,18 +52,19 @@ for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,d
     }
     const data=await page.evaluate(()=>{
       profiling=false;const v=document.querySelector('#dancinglights').physics;
-      return{layout:v.layout,samples,marks,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
+      return{seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
     });
+    assert.equal(data.seed,1,'Comparison seed must be identical');
     const windows=data.marks.map(({event,t})=>{
       const points=data.samples.filter(p=>p.t>=t&&p.t<t+2000),before=data.samples.findLast(p=>p.t<t);
       const frames=points.map(p=>p.frame).sort((a,b)=>a-b);
       return{event,fps:1000*frames.length/frames.reduce((a,b)=>a+b,0),p95:frames[Math.ceil(frames.length*.95)-1],maxFrame:frames.at(-1),
         over25Fraction:frames.filter(x=>x>25).length/frames.length,maxDebt:Math.max(...points.map(p=>p.debt)),maxSnapshotAge:Math.max(...points.map(p=>p.age)),
-        overloadTicks:points.at(-1).overload-before.overload,fromHeight:before.height,toHeight:points.at(-1).height};
+        overloadTicks:points.at(-1).overload-before.overload,substeps:points.at(-1).substepTotal-before.substepTotal,requestedSubsteps:points.at(-1).requestedSubstepTotal-before.requestedSubstepTotal,fromHeight:before.height,toHeight:points.at(-1).height};
     });
     const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
-    const result={browser:name,version:browser.version(),physicalPhone:false,origin,build,errors,windows,...data};
-    results.push(result);console.log(JSON.stringify({browser:name,windows,errors}));
+    const result={gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,origin,build,errors,windows,...data};
+    results.push(result);console.log(JSON.stringify({gapCapCm:gapCap,browser:name,windows,errors}));
     await context.close();
   } finally {await browser.close();}
 }

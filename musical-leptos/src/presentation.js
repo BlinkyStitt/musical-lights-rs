@@ -3,7 +3,7 @@ import { CAMERA_PARAMETERS, CAMERA_DEFAULTS, CameraParameters, validCameraParame
 import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, recoverVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
-export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30,
+export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30, activeGapCap: 60,
   cameraMotion: true, ...CAMERA_DEFAULTS, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
   ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, balls: Object.freeze([8, 2.64, 19.2]), youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
@@ -19,6 +19,7 @@ export function readSettings(storage) {
     if (validBalls(saved.balls)) defaults.balls = [...saved.balls];
     const recovered = recoverVisual(saved.visual); defaults.visual = recovered.values;
     Object.defineProperty(defaults, 'gateReset', { value: recovered.gateReset });
+    if (Number.isInteger(saved.activeGapCap) && saved.activeGapCap >= 40 && saved.activeGapCap <= 2000) defaults.activeGapCap = saved.activeGapCap;
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;
@@ -154,6 +155,24 @@ export class Presentation {
       if (!node.validity.valid || !validBalls(values)) { this.syncBalls(); return; }
       this.settings.balls = values; this.save();
     }));
+    this.syncGap = () => {
+      const node = card.querySelector('.active-gap-cap');
+      node.value = this.settings.activeGapCap;
+      card.querySelector('.active-gap-status').textContent = `${node.value} cm`;
+    };
+    this.syncGap();
+    this.listen(card.querySelector('.active-gap-cap'), 'input', ({ target }) => {
+      const cm = Number(target.value);
+      if (!target.validity.valid || !Number.isInteger(cm) || cm < 40 || cm > 2000) return;
+      this.settings.activeGapCap = cm; this.save();
+    });
+    const help = card.querySelector('.active-gap-help');
+    explanations['active-gap-help'] = help.dataset.explanation;
+    this.listen(help, 'pointerenter', event => { if (event.pointerType === 'mouse') this.showHelp(help, 'active-gap-help'); });
+    this.listen(help, 'pointerleave', () => this.hideHelp());
+    this.listen(help, 'focus', () => this.showHelp(help, 'active-gap-help'));
+    this.listen(help, 'blur', () => this.hideHelp());
+    this.listen(help, 'click', () => this.showHelp(help, 'active-gap-help'));
     this.syncDepth();
     this.listen(card.querySelector('.depth-slider'), 'input', event => {
       const node = event.target, cm = Number(node.value);
@@ -186,7 +205,7 @@ export class Presentation {
       this.listen(label, 'click', event => { event.preventDefault(); this.showHelp(label, id); });
       this.listen(label, 'keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.showHelp(label, id); } });
     }
-    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, cameraMotion: true, ...CAMERA_DEFAULTS, scrolling: true, balls: [...DEFAULT_SETTINGS.balls] }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.cameraParameters.reset(); this.syncCamera(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
+    this.listen(card.querySelector('.display-reset'), 'click', () => { Object.assign(this.settings, { directionOdds: [...DEFAULT_SETTINGS.directionOdds], flight: 30, activeGapCap: 60, cameraMotion: true, ...CAMERA_DEFAULTS, scrolling: true, balls: [...DEFAULT_SETTINGS.balls] }); for (const [sel, key] of [['.flight-height', 'flight'], ['.camera-rotation', 'cameraAngle']]) card.querySelector(sel).value = this.settings[key]; card.querySelector('.camera-motion').checked = true; writeOdds(); card.querySelector('.direction-error').textContent = ''; if (this.settings.physics) this.settings.physics[5] = .48; this.cameraParameters.reset(); this.syncCamera(); this.save(); card.dispatchEvent(new CustomEvent('camera-reset')); });
     mountSliderControls(this);
     this.save(false);
     card.presentation = this;
@@ -208,7 +227,7 @@ export class Presentation {
     if (persist) this.persist();
     return true;
   }
-  save(persist = true) { this.syncDepth?.(); this.syncBalls?.(); if (persist) this.persist(); this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
+  save(persist = true) { this.syncGap?.(); this.syncDepth?.(); this.syncBalls?.(); if (persist) this.persist(); this.card.dispatchEvent(new CustomEvent('display-settings', { detail: this.settings })); }
   updateAudioType() {
     if (!navigator.audioSession) return;
     const type = this.microphoneActive ? 'play-and-record' : this.videoPlaying ? 'playback' : this.originalAudioType ?? 'auto';
@@ -490,7 +509,8 @@ function mountSliderControls(presentation) {
       button.className = 'slider-step'; button.setAttribute('aria-label', `${action} ${name}`);
     }
     const existing = range.matches('.camera-rotation') ? card.querySelector('.camera-angle')
-      : range.matches('.depth-slider') ? card.querySelector('.depth-status') : null;
+      : range.matches('.depth-slider') ? card.querySelector('.depth-status')
+      : range.matches('.active-gap-cap') ? card.querySelector('.active-gap-status') : null;
     const value = existing ?? document.createElement('button');
     value.type = 'button'; value.tabIndex = 0; value.classList.add('slider-value'); value.setAttribute('aria-label', `Edit ${name}`);
     const editor = document.createElement('input');

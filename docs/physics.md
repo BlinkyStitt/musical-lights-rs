@@ -25,6 +25,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved space between paired bars | Larger of the packed stack or largest sphere + hop allowance, plus 4 mm |
 | Minimum enclosure height | 0.40 m, expanded when the selected balls require more packing space |
+| Active gap cap | 0.60 m reference enclosure (0.40–20 m); ball packing remains reserved |
 
 Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
@@ -68,7 +69,7 @@ disables it. The physics worker records the combined targets for exact replay,
 while the audio meters and trace retain the measured values. Protocol 10 marks
 the faster release policy; older recordings need their matching engine.
 
-Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess outward release velocity is dissipated. The default flight budget is 30% of available enclosure space after maximum ball clearance; Reduced Motion halves it and caps it at 2.5 cm. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle bar end sits 3 mm inside its active floor or ceiling base.
+Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess outward release velocity is dissipated. The default flight budget is 30% of the capped active opening after maximum ball clearance; Reduced Motion halves it and caps it at 2.5 cm. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle bar end sits 3 mm inside its active floor or ceiling base.
 
 Large attacks from rest must arrive within 1% of a stable target within 50 ms
 of physics receipt. Stable corrections up to 1% must settle within 150 ms.
@@ -90,7 +91,7 @@ the solver and re-enabled before they can contact a ball. Rendering clips
 copies to the enclosure. The 24 accessible meters keep
 source identity while their pointer regions and keyboard focus follow the bars.
 
-The enclosure uses six half-spaces, including a real downward-facing ceiling. Each source has a 48 mm flat top with a straight 2 mm join to the next source. The closed prisms extend beyond the active floor or ceiling base. Shared edges have no buried collision walls; the renderer uses the same flat tops and joins, with one outer coating. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each source has a 48 mm flat top with a straight 2 mm join to the next source. The closed prisms extend beyond the active floor or ceiling base. Shared edges have no buried collision walls; the renderer uses the same flat tops and joins, with one outer coating. Size-sorted initial rows fit inside the active opening without overlaps, including restored caps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize and cap changes preserve ball state and scale the normalized musical trajectory through a separate 300 ms request transition; they never retarget music. Applied bases move at most 2 m/s through bounded contact steps. Reopening grants travel only after the applied bases have retreated far enough. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Browser camera controls use the stable `cameraAngle`, `cameraZoom`, `cameraX` and `cameraY` parameter IDs in `physics/camera-pan.js`. Their metadata defines defaults, bounds, steps and units; `CameraParameters.set()` rejects unknown IDs, nonnumeric/nonfinite values and out-of-range values. Position is the bounded camera anchor in percent (0–100, default 50); zoom is 25–200% (default 100); angle is −40° to +40° (default 0). Manual editors step by one unit, while elapsed-time WASD movement uses continuous values through the same setter. `effective()` accepts validated temporary angle overrides for the existing sweep without changing stored manual values. This is a parameter interface for future modulation, not a modulation engine.
 
@@ -214,7 +215,7 @@ contact impulses, and each sphere's total normal contact impulse in N·s.
 Independent device gravity uses input[34..36], enabled by input[37]. Protocol 12
 adds audio attack edges at input[38..61] and publishes the 62-value input length
 at layout[22]. SI shake magnitudes and the separate contact speed bounds stay unchanged.
-The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 21 reserves sixteen body/contact/pigment slots; `layout[21]` is capacity, and `snapshot[layout[30]]` is the active physical count. Inactive body slots are zeroed. Inputs 64–66 carry count and minimum/maximum diameters in metres; the eleven-value initial configuration ends with the same settings. The original eight-index size profile repeats deterministically for indices 8–15. Core owns the interval mapping and minimum packing height. Count changes remove actual bodies/colliders; survivors keep their handles, velocities and pigments. Size changes recompute mass/inertia and all radius-dependent calculations. When growing spheres overlap, a deterministic six-column packing preserves velocities and colors while relocating the bodies. Short rooms reserve enough height for that packing. Rendering allocates sixteen instances once, draws only active bodies, initializes new instances without interpolating from empty slots and clears inactive lighting. Count and size changes render bodies and enclosure from the same applied tick; ordinary motion interpolation resumes afterwards. Protocol 21 uses 67 held inputs and phone report v7; incompatible historical reports require their matching engine and are rejected explicitly. Geometry at `layout[17]` publishes actual ceiling, maximum bar top, hop allowance, minimum height and depth.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 22 reserves sixteen body/contact/pigment slots; `layout[21]` is capacity, and `snapshot[layout[30]]` is the active physical count. Inactive body slots are zeroed. Inputs 64–66 carry count and minimum/maximum diameters in metres; the twelve-value initial configuration carries those settings at indices 8–10 and the cap at index 11. The original eight-index size profile repeats deterministically for indices 8–15. Core owns the interval mapping and minimum packing height. Count changes remove actual bodies/colliders; survivors keep their handles, velocities and pigments. Size changes recompute mass/inertia and all radius-dependent calculations. When growing spheres overlap, a deterministic six-column packing preserves velocities and colors while relocating the bodies. Short rooms reserve enough height for that packing. Rendering allocates sixteen instances once, draws only active bodies, initializes new instances without interpolating from empty slots and clears inactive lighting. Count and size changes render bodies and enclosure from the same applied tick; ordinary motion interpolation resumes afterwards. Protocol 22 uses 68 held inputs and phone report v8; incompatible historical reports require their matching engine and are rejected explicitly. Geometry at `layout[17]` publishes actual ceiling, maximum bar top, hop allowance, minimum height, depth, applied baseline and travel.
 
 The worker clock runs independently of render frames. Each batch processes at
 most eight fixed steps. Overdue batches yield through MessageChannel without a
@@ -258,7 +259,7 @@ continuous contact-color fill, and quintic bar motion are hardware-neutral
 Web APIs, recording ownership and Three.js shading remain application adapters.
 See [implementation and evidence](musical-motion-results/README.md).
 
-Normal flight reserves 30% of available enclosure space after maximum ball
+Normal flight reserves 30% of the capped active opening after maximum ball
 clearance. The slider allows 0–50%. Reduced Motion halves the flight budget and
 caps it at 2.5 cm. Existing support-release limiting uses the shared core's
 `sqrt(2gh)` release speed. A floor/ceiling change retracts the bars, switches
@@ -271,7 +272,7 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 21 starts each ball uniformly in the source color at its actual
+Physics protocol 22 starts each ball uniformly in the source color at its actual
 spawn X coordinate. It rejects replays from previous engines. Physical rolling
 reveals three soft swirl regions. A contact adds its bar color at the ball's
 material contact point, and each visible region fills toward its own target
@@ -387,7 +388,7 @@ saturation, and scales each linear RGB fill until its brightest channel reaches
 one. This uses the full display gamut instead of holding every hue at the same
 muted lightness. Adjacent fills meet without a gap or dark outline. A narrow
 white attack flash sits inside each bar boundary.
-Bar height remains the loudness measure. Source labels, numeric
+Audio meters and filtered targets remain the loudness measures; permanent base height is excluded. Source labels, numeric
 meters, keyboard focus and pointer readouts remain available independently of
 color. LED palettes and acoustic analysis are unchanged.
 
@@ -461,3 +462,43 @@ continuous gradient attached to the rolling ball. Contact does not replace
 visible color bands. Repeated resting pressure does not change the target.
 The visible surface mean also drives ball lighting, so it does not jump ahead
 of the fill. Spawn colors still match each ball's actual X coordinate.
+
+## Active gap cap
+
+The shared Display settings include **Active gap cap (cm)**: 60 cm by default,
+40–2,000 cm in 1 cm steps. This is a reference enclosure height, not a stroke.
+For height `H` and cap `C`, core calculates the opening from `min(H, C)` and
+adds `(H - min(H, C)) / 2` to each permanent base. Ball diameter, flight allowance
+and clearance reduce inward bar travel. At the default flight setting, the
+60 cm reference retains 13.84 cm of travel per end, above the 3 mm baseline.
+All nine banks use the applied physical endpoints, including during transitions.
+
+Changing the cap applies live and preserves ball handles, pigments and normalized
+musical trajectories. The existing 36-tick size request transition is followed
+by bounded contact movement; occupied clearance can defer applied surfaces.
+Both bases and ceiling displacement contribute to integration predictions.
+Physics retains every elapsed tick and reports overloads and backlog normally.
+The cap changes neither loudness nor filtered audio targets, meters or attacks.
+Wave lighting uses normalized displacement above the applied permanent base.
+
+The cap is saved separately from the eight material/motion preferences. Missing
+or invalid cap preferences fall back to 60 cm without dropping other fields.
+Reset display restores 60 cm. Worker construction includes the cap before ball
+placement; live changes use the timestamped input queue and remain editable
+while recording. Engine layout 22 has twelve configuration floats (cap in metres
+at index 11), 68 input floats (cap at index 67), and seven geometry floats
+(applied baseline/travel at offsets 5/6). Layout index 31 locates 24
+normalized motion values for wave lighting, independent of moving bases. Replay requires the entire matching
+layout and rejects recordings from older engines.
+
+Run `just check` for native, produced-WASM, benchmark correctness and full
+rendered checks. `just validate` runs the CPU and offline checks. See [active-gap evidence](active-gap-results.md) for comparison
+methods and the distinction between host measurements and phone acceptance.
+
+The capped geometry retains variable-ball packing clearance. When the selected
+balls need a taller packed opening than the cap, that minimum opening takes
+precedence, just as it does for the minimum enclosure height. Changing the cap
+does not change the ball count or diameter settings. Protocol 22 appends the cap
+at input 67/config 11 and normalized musical motion at layout entry 31; existing
+ball fields remain at inputs 64–66/config 8–10 and layout entry 30. Phone reports
+use v8 and reject older layouts/formats before replay.

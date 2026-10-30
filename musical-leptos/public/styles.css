@@ -305,7 +305,7 @@ nav { flex-wrap: wrap; }
 .slider-control input[type="range"] { width: 0; flex: 1; min-width: 36px; }
 .slider-control .slider-step { width: 44px; min-width: 44px; height: 44px; padding: 0; font-size: 1.25rem; }
 .slider-control .slider-value, .slider-control .slider-editor { min-width: 44px; min-height: 44px; width: 7ch; padding: .25rem; font-variant-numeric: tabular-nums; }
-.slider-control .depth-status { width: 9ch; }
+.slider-control .depth-status, .slider-control .active-gap-status { width: 9ch; }
 .slider-control .slider-editor { flex: 0 0 7ch; }
 .slider-control [hidden] { display: none; }
 :is(.scene-controls, .ball-settings) .control-row > label { font-size: .8rem; }
