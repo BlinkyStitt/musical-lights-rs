@@ -136,6 +136,9 @@ Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
 `python3 validation/install_tools.py ci`, then run
 `.tools/bin/actionlint .github/workflows/*.yml`.
+`just validate` and `just check-ci` run that installer automatically when the
+local `.tools/bin/actionlint` executable is missing. Installation errors stop
+the recipe; workflow lint still runs on every invocation.
 Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`; the reference
 target includes their lint/type checks.
@@ -1342,7 +1345,7 @@ does not enable auto-merge on every pull request.
 ## Tempo regression acceptance
 
 From the repository root, install the pinned web tools with
-`python3 validation/install_tools.py web` and `python3 validation/install_tools.py ci`,
+`python3 validation/install_tools.py web`,
 add `.tools/bin` to `PATH`, then run `just validate`.
 The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
