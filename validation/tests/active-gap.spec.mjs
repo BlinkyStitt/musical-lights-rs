@@ -33,7 +33,9 @@ test('active gap cap edits, validates, restores and resets without acquiring aud
 });
 
 test('live gap edits preserve measured meters and filtered targets while physics continues', async ({ page }) => {
-  await syntheticAudio(page); await page.goto(origin + '/advanced/'); await normalView(page); await startFrozen(page);
+  // Wait for mobile expansion to mount before leaving it for normal-page controls.
+  await syntheticAudio(page); await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page); await startFrozen(page);
+  await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded');
   await page.evaluate(() => window.sendBars(Array(24).fill(.6)));
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[0])).toBeCloseTo(.6, 6);
   const measured = () => page.getByRole('meter').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-valuenow')));

@@ -104,7 +104,7 @@ unchanged raw capture is `/tmp/ski1240-latency.json`. Reproduce its analysis wit
 node validation/active-gap-latency.mjs --reanalyze /tmp/ski1240-latency.json /tmp/ski1240-latency-reanalyzed.json
 ```
 
-## Local correctness and remaining acceptance
+## Original local correctness and remaining acceptance
 
 The core feature matrix passed 129 tests in each of four configurations;
 native physics passed all 70 tests. Worklet, physics WASM and Leptos checks
@@ -141,3 +141,54 @@ under 1% of intervals over 25 ms, no growing debt, no discarded time and human
 smooth-motion confirmation. Browser emulation and CPU benchmarks do not meet
 that acceptance. Linux CI and production identity/routes/live control verification
 remain separate from these local results.
+
+## Rebase validation (2026-10-30)
+
+Rebased onto main `dbe3c1c1e76572a590e753b19a6a0b880d036198`, retaining
+variable balls, HSLuv pigments, camera controls and the existing validation
+recipes. Protocol 22/report v8 keep the ball fields separate from the appended
+cap and normalized-motion fields. Native coverage now also checks packed
+variable balls under a 40 cm cap; worker coverage combines ordered ball/cap
+edits during resizing and verifies exact replay.
+
+All commands ran from the repository root with `.tools/bin` prepended to PATH:
+
+- `python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm`
+  returned 0. Each core feature configuration passed 137 unit and six PCM tests;
+  native physics passed 78 tests. Clippy, produced-WASM builds, Leptos checks,
+  and Criterion correctness smoke workloads completed. Dioxus again reported
+  `wasm-opt failed with status code signal: 6 (SIGABRT)` with unsupported-DWARF
+  output, then emitted its app and returned 0. Its optimization remains failed;
+  the full browser run passed the Dioxus page and standalone WASM worklet checks.
+- `python3 validation/validate.py browser` returned 1: all 202 offline harness
+  tests passed; browsers finished with 919 passes, one failure and two existing
+  opt-in skips. The iPhone-profile live-cap test called `normalView` before
+  mobile expansion mounted. Its trace records Exit as absent, followed by
+  `startFrozen` opening/closing Settings in expanded mode. The cap slider then
+  remained hidden in the closed dialog and `locator.fill` timed out before any
+  cap edit. The repair awaits `physicsReady` before exiting and asserts normal
+  mode, retaining every meter, trajectory and geometry assertion.
+- `.tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.config.mjs active-gap.spec.mjs --output .ci/ski1240-rebase/cap-tests`
+  returned 0 after that repair: all nine Chromium/WebKit/iPhone-profile cap tests
+  passed. Both browser commands retained serial startup, one worker and zero
+  retries. The unchanged full suite was not repeated to replace its failed result.
+- `node validation/physics-cost.mjs musical-lights-physics/pkg/physics_bg.wasm .ci/ski1240-rebase/cost.json`
+  returned 0, separately after browser validation. With the production HSLuv
+  palette, the 12-second PCM/resize sequence requested 7,369 substeps capped
+  versus 10,963 uncapped. Median CPU time over three runs was 1,567.07 versus
+  2,028.85 ms. The tall 16-tick attack requested 106 versus 462 substeps
+  (maximum 19 versus 106 per tick); all cost runs had zero overloads. The
+  produced-WASM regression also passed identical normalized attack timing.
+
+The rebase physics WASM SHA-256 is
+`2950ea64928627ea553ebf96afa130ea355e38e40c989111c03895460f7f2f83`.
+The PCM digest matches the original comparison above; palette SHA-256 is
+`617480648c6e590e5949ec6d9faaba4e5a873f69174882d3cd375e7bfd00bf25`.
+Logs, cost JSON, original failure trace and native/request evidence are retained
+outside Git under `.ci/ski1240-rebase/`.
+
+These new checks do not refresh the earlier statistical Criterion, served-app
+frame/debt/snapshot-age or packet-to-render measurements. Physical-phone runs,
+human smooth-motion confirmation, Linux CI and production identity/routes/live
+control verification remain pending. No push, PR update, merge or deployment
+was performed by this rebase task.

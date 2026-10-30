@@ -244,14 +244,15 @@ to a stop in place; Reduced Motion disables automatic travel. Source colors,
 contacts, accessible labels and audio data keep their source identity.
 
 The separate tempo setter leaves the held physical input and audio transport
-unchanged. The 64-value physics input contains 38 motion values, 24 current audio
-attack edges, enclosure depth and the attack-only paint policy. Recording retains
+unchanged. The 68-value physics input contains 38 motion values, 24 current audio
+attack edges, enclosure depth, the attack-only paint policy, three ball settings
+and the active gap cap. Recording retains
 those edges separately from decorative bar travel.
 New reports include the random seed, starting accent
 ordinal and tempo, dance settings, and tick-stamped input events with their
-tempo and accent in worker application order. Phone report v6 replay applies
+tempo and accent in worker application order. Phone report v8 replay applies
 each input and its cue together before stepping, including inputs at the same
-tick, then verifies the full snapshot and all 72 visible regional pigment values. Older report formats and physics protocols require their historical replay tool.
+tick, then verifies the full snapshot and all 144 reserved regional pigment values. Older report formats and physics protocols require their historical replay tool.
 
 The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
 continuous contact-color fill, and quintic bar motion are hardware-neutral
