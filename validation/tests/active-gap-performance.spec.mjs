@@ -6,6 +6,7 @@ import { physicsReady, normalView, openFullscreenSettings, closeFullscreenSettin
 import { requireHardwareRenderer } from '../gpu-renderer.mjs';
 import { activeGapIdentity } from '../active-gap-identity.mjs';
 import { replayReport } from '../replay-physics.mjs';
+import { recordPerformanceProcesses } from '../performance-processes.mjs';
 
 // Only selected by the hardware configuration; the ordinary suite stays intact.
 for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
@@ -43,19 +44,28 @@ for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
     });
     requireHardwareRenderer(gpu);
     await page.waitForFunction(() => document.querySelector('#dancinglights').physics.sceneVisible);
-    const data = await page.evaluate(async mode => {
-      const view = document.querySelector('#dancinglights').physics;
-      const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-      const { evaluatePerformance } = await import(base + 'physics/performance.js');
-      const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
-      return collectActiveGapPerformance(view, mode, evaluatePerformance);
-    }, mode);
+    const nativePath = testInfo.outputPath('performance-processes.jsonl');
+    const stopProcesses = await recordPerformanceProcesses(nativePath);
+    let data;
+    try {
+      data = await page.evaluate(async mode => {
+        const view = document.querySelector('#dancinglights').physics;
+        const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+        const { evaluatePerformance } = await import(base + 'physics/performance.js');
+        const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
+        return collectActiveGapPerformance(view, mode, evaluatePerformance);
+      }, mode);
+    } finally {
+      try { await stopProcesses(); }
+      finally { await testInfo.attach('performance-processes', { path: nativePath, contentType: 'application/x-ndjson' }); }
+    }
     await testInfo.attach('active-gap-performance', { body: JSON.stringify({ ...identity, instrumentationSha256,
       browserVersion: page.context().browser().version(), gpu, ...data, errors, failedRequests }), contentType: 'application/json' });
     assert.deepEqual(await activeGapIdentity(), identity, 'Build changed during performance capture');
     expect(errors).toEqual([]);
     expect(failedRequests).toEqual([]);
-    expect(data.invalidReasons).toEqual([]);
+    expect(data.invalidReasons, JSON.stringify({ invalidations: data.invalidations, audioTransitions: data.audioTransitions,
+      finalAudio: data.finalAudio })).toEqual([]);
     expect(data.numericPass, JSON.stringify({ ...data.summary, debt: data.debt, maxDebt: data.maxDebt,
       debtGrowthMs: data.debtGrowthMs, simulationLagMs: data.simulationLagMs,
       snapshotProgressDriftMs: data.snapshotProgressDriftMs, maxSnapshotAgeMs: data.maxSnapshotAgeMs })).toBe(true);

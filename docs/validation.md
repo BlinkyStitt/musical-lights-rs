@@ -21,6 +21,21 @@ GPU reports upload on success and failure. The first runner then executes
 verify the served build and retain strict transition predicates. Any failure
 blocks the existing validated-site/Pages barrier.
 
+Failed five-minute captures retain timestamped audio session transitions, the
+final audio continuity state, and the first state associated with each
+invalidation. Per-second render counters distinguish animation callbacks,
+submitted frames, GPU backpressure and submission delay. These counters observe
+the existing loop; only actual submitted frames enter FPS acceptance.
+`performance-processes.jsonl` records native process/thread CPU and runnable-queue
+counters, wait states and cgroup limits/pressure before, every ten seconds during,
+and after the same capture. Each sample is saved immediately, including its own
+sampling duration. Unreadable kernel fields remain explicit errors in the
+evidence. Use these artifacts with the existing server request log to diagnose
+the failing operation; do not infer that audio gaps and slow frames share a cause
+from timing summaries alone. The collector's added sources are included in its
+provenance hashes. No resource limits, workload settings or acceptance thresholds
+change when collecting this evidence.
+
 The approved integrated lighting comparison retains hardware shading ≥59 FPS
 and p95 ≤18.5 ms. Software uses its matched same-run baseline with no absolute
 FPS floor. A shading slowdown over 10% in both orders fails on either renderer;

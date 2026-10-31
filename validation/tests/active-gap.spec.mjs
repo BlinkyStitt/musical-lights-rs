@@ -26,20 +26,22 @@ test('active gap collector snapshots live audio metadata and rejects incomplete 
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const { evaluatePerformance } = await import(base + 'physics/performance.js');
     const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
-    const hooks = [report.frame, report.receive, report.invalidate];
+    const hooks = [report.frame, report.receive, report.invalidate, view.onFrame, view.gpuFrames.ready];
     const resources = { restart: typeof report.audioState.restart, processor: report.audioState.node instanceof AudioWorkletNode };
     const pending = collectActiveGapPerformance(view, 'normal', evaluatePerformance);
     // This is a serialization smoke check, not five-minute performance evidence.
     // FIFO worker messages finish it early; the numeric gate must reject it.
     view.worker.postMessage({ type: 'report' });
     const data = structuredClone(await pending);
-    return { resources, workload: data.workload, numericPass: data.numericPass,
-      restored: hooks.every((hook, i) => hook === [report.frame, report.receive, report.invalidate][i]) };
+    return { resources, workload: data.workload, finalAudio: data.finalAudio, numericPass: data.numericPass,
+      restored: hooks.every((hook, i) => hook === [report.frame, report.receive, report.invalidate, view.onFrame, view.gpuFrames.ready][i]) };
   });
   expect(result.resources).toEqual({ restart: 'function', processor: true });
   expect(result.workload).toMatchObject({ source: 'generated', kind: 'exercise', state: 'playing',
     repeat: true, diagnostics: false, continuity: { segment: 0 } });
   expect(result.workload).not.toHaveProperty('restart'); expect(result.workload).not.toHaveProperty('node');
+  expect(result.finalAudio).toMatchObject({ source: 'generated', state: 'playing' });
+  expect(result.finalAudio).not.toHaveProperty('restart'); expect(result.finalAudio).not.toHaveProperty('node');
   expect(result.numericPass).toBe(false); expect(result.restored).toBe(true);
 });
 

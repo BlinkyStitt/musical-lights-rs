@@ -7,15 +7,23 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
     const workloadKeys = ['source', 'kind', 'state', 'repeat', 'diagnostics', 'sampleRate', 'dbfs', 'frequency', 'channel', 'pascalsPerUnit'];
     // Audio session events also contain the restart callback and live processor.
     // Snapshot evidence fields only, detaching continuity from later mutations.
-    const workload = structuredClone(Object.fromEntries([...workloadKeys, 'sessionId', 'continuity',
-      'peakAmplitude', 'audioStart', 'calibrated', 'selectedChannel'].filter(key => key in report.audioState)
-      .map(key => [key, report.audioState[key]])));
+    const audioSnapshot = (state = report.audioState) => structuredClone(Object.fromEntries([...workloadKeys, 'sessionId', 'continuity', 'reason',
+      'peakAmplitude', 'audioStart', 'calibrated', 'selectedChannel'].filter(key => key in state)
+      .map(key => [key, state[key]])));
+    const workload = audioSnapshot(), audioTransitions = [], invalidations = [], renderProgress = [];
     const scrolling = view.card.querySelector('.scroll-lights').checked;
     const cameraMotion = view.settings.cameraMotion, cameraBase = view.cameraBase;
     const config = report.readConfig(), layout = [...view.layout], palette = Array.from(view.palette);
     const oldFrame = report.frame, oldReceive = report.receive, oldInvalidate = report.invalidate;
+    const oldOnFrame = view.onFrame, oldReady = view.gpuFrames.ready;
     let start, previous, lastProgress = -Infinity, maxSnapshotAgeMs = 0, finishing = false;
-    const invalidate = reason => invalid.add(reason);
+    const captureStarted = performance.now();
+    let lastAnimation, lastRenderProgress = -Infinity;
+    let callbacks = 0, submissions = 0, backpressure = 0, maxAnimationGapMs = 0, maxSubmissionDelayMs = 0;
+    const invalidate = reason => {
+      if (!invalid.has(reason)) invalidations.push({ reason, atMs: performance.now() - captureStarted, audio: audioSnapshot() });
+      invalid.add(reason);
+    };
     const check = () => {
       if (!report.acceptanceWorkload() || report.audioState.sessionId !== workload.sessionId
         || report.audioState.continuity?.segment !== workload.continuity?.segment)
@@ -31,11 +39,17 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
         || view.cameraBase !== cameraBase) invalidate('Camera changed during test');
       if (view.card.querySelector('.scroll-lights').checked !== scrolling) invalidate('Scrolling changed during test');
     };
-    const audioChanged = () => check(), hidden = () => { if (document.hidden) invalidate('Page hidden during test'); };
+    const audioChanged = ({ detail }) => {
+      if (audioTransitions.length < 64) audioTransitions.push({ atMs: performance.now() - captureStarted, audio: audioSnapshot(detail) });
+      else invalidate('Audio event evidence capacity exceeded');
+      check();
+    };
+    const hidden = () => { if (document.hidden) invalidate('Page hidden during test'); };
     const lost = () => invalidate('WebGL context lost');
     const cleanup = () => {
       clearTimeout(deadline);
       report.frame = oldFrame; report.receive = oldReceive; report.invalidate = oldInvalidate;
+      view.onFrame = oldOnFrame; view.gpuFrames.ready = oldReady;
       view.card.removeEventListener('audio-session', audioChanged);
       document.removeEventListener('visibilitychange', hidden);
       view.canvas.removeEventListener('webglcontextlost', lost);
@@ -44,6 +58,29 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       cleanup(); reject(new Error('Performance capture ended without a complete five-minute worker report'));
     }, 330000);
     report.invalidate = reason => { invalidate(reason); oldInvalidate.call(report, reason); };
+    // Observe the production loop without creating another animation clock.
+    // These counters explain missing submissions; only frame() feeds acceptance.
+    view.onFrame = (...args) => {
+      oldOnFrame.apply(view, args);
+      if (start === undefined || finishing || args[1]) return;
+      const now = performance.now(), elapsedMs = now - start;
+      callbacks++;
+      if (lastAnimation !== undefined) maxAnimationGapMs = Math.max(maxAnimationGapMs, now - lastAnimation);
+      lastAnimation = now;
+      if (elapsedMs - lastRenderProgress >= 1000) {
+        if (renderProgress.length < 400) renderProgress.push({ elapsedMs, callbacks, submissions, backpressure,
+          maxAnimationGapMs, maxSubmissionDelayMs, debtMs: view.metrics.debt,
+          maxSchedulingGapMs: view.metrics.maxSchedulingGap, maxStepMs: view.metrics.maxStepMs });
+        else invalidate('Render progress evidence capacity exceeded');
+        lastRenderProgress = elapsedMs;
+        callbacks = submissions = backpressure = maxAnimationGapMs = maxSubmissionDelayMs = 0;
+      }
+    };
+    view.gpuFrames.ready = function () {
+      const ready = oldReady.call(this);
+      if (start !== undefined && !finishing && !ready) backpressure++;
+      return ready;
+    };
     report.receive = data => {
       if (data.type === 'recording') { start = data.timestamp - performance.timeOrigin; return; }
       if (data.type !== 'report') return oldReceive.call(report, data);
@@ -56,11 +93,14 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
         mode, viewport, camera: JSON.parse(camera), cameraBase, cameraMotion, scrolling, workload,
         physicalPhone: false, evidenceEnvironment: 'hardware-rendered desktop Chromium with mobile viewport',
         warmupSeconds: 15, measurementSeconds: 300, frameIntervalsMs: intervals, renderCostsMs: renderCosts,
-        simulationProgress: progress, maxSnapshotAgeMs, invalidReasons, ...evaluation });
+        simulationProgress: progress, maxSnapshotAgeMs, invalidReasons, invalidations, audioTransitions,
+        finalAudio: audioSnapshot(), renderProgress, ...evaluation });
     };
     report.frame = (timestamp, cost) => {
       oldFrame.call(report, timestamp, cost); check();
       if (start === undefined || finishing) return;
+      submissions++;
+      maxSubmissionDelayMs = Math.max(maxSubmissionDelayMs, performance.now() - timestamp);
       const elapsed = performance.now() - start;
       if (elapsed < 15000) return;
       maxSnapshotAgeMs = Math.max(maxSnapshotAgeMs, view.metrics.snapshotAgeMs);
