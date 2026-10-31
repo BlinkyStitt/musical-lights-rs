@@ -74,13 +74,11 @@ test('comparison CLI fails closed and replaces stale success when hardware produ
   assert.equal(await readFile(output, 'utf8'), 'Renderer comparison incomplete.\n');
 });
 
-test('performance gate rejects slow shipped shading, including a shared baseline slowdown', () => {
+test('hardware gate rejects slow shipped shading, including a shared baseline slowdown', () => {
   const software = samples('software'), hardware = samples('hardware');
   for (const row of hardware) row.submittedFps = 58;
   assert.match(performanceFailures(software, hardware).join('\n'), /hardware forward shading: 58.00 FPS/);
   assert.match(performanceFailures(software, hardware).join('\n'), /hardware reverse shading: 58.00 FPS/);
-  for (const row of software) row.submittedFps = 6;
-  assert.match(performanceFailures(software, hardware).join('\n'), /software forward shading: 6.00 FPS/);
 });
 
 test('performance gate checks hardware frame p95 and tolerates its exact limits', () => {
@@ -89,12 +87,19 @@ test('performance gate checks hardware frame p95 and tolerates its exact limits'
     row.submittedFps = 59;
     row.frameMs.p95 = 18.5;
   }
-  for (const row of software.filter(row => row.mode === 'shading')) row.submittedFps = 7;
-  // Match the low software baseline so the relative check also passes.
-  for (const row of software.filter(row => row.mode === 'baseline')) row.submittedFps = 7;
   assert.deepEqual(performanceFailures(software, hardware), []);
   hardware.find(row => row.mode === 'shading').frameMs.p95 = 18.51;
   assert.match(performanceFailures(software, hardware).join('\n'), /p95 frame 18.51 ms exceeds 18.5 ms/);
+});
+
+test('software gate follows matched cost across host speeds and still rejects a repeatable regression', () => {
+  for (const baselineFps of [5, 8, 25]) {
+    const software = samples('software'), hardware = samples('hardware');
+    for (const row of software.filter(row => row.mode !== 'shadows')) row.submittedFps = baselineFps;
+    assert.deepEqual(performanceFailures(software, hardware), []);
+    for (const row of software.filter(row => row.mode === 'shading')) row.submittedFps *= .8;
+    assert.match(performanceFailures(software, hardware).join('\n'), /software shading is more than 10% slower/);
+  }
 });
 
 test('performance gate detects a repeated tilt regression but ignores one noisy order and the shadow candidate', () => {

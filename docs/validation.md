@@ -108,22 +108,22 @@ recipe; `just validate` remains the CPU/build/harness entry point.
 
 The GPU CI job also runs `just validate-tilt`. In each order, shipped tilt
 shading must reach at least 59 submitted FPS and a p95 frame interval of at most
-18.5 ms on hardware, and at least 7 submitted FPS on software. A shading
+18.5 ms on hardware. A shading
 throughput loss over 10% relative to the same-run fixed-light baseline fails
 when it occurs in both orders on either renderer. The candidate shadows are
 measured but do not gate the shipped shading. The report remains available when
 the performance gate fails. These checks measure the specified 844 × 390 host
 workload, not a physical phone.
 
-The hardware limits use the existing smooth-motion target. The software floor
-is a coarse regression limit, based on seven retained runs on the two current
-GPU runners: their [slowest shading sample](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41066154582)
-was 7.74 FPS, while the [faster runner](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41005113168)
-measured at least 24.11 FPS. The floor catches severe common-mode slowdowns;
-it does not guarantee equal performance across hosts. The relative comparison
-checks the extra cost of tilt within a run, but its baseline uses the same build
-and cannot detect every common-mode regression. Reassess limits if the runner
-hardware or workload changes.
+The hardware limits use the existing smooth-motion target. Software rendering
+has no absolute FPS floor: the same artifact measured about 25 FPS on `nuc3`
+and 5 FPS on `nuc1`, including its fixed-light baseline. The
+[post-merge comparison](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41157035812)
+measured shading changes of −1.6%/−8.8% on software and approximately 60 FPS on
+hardware. A host-independent software floor incorrectly rejected that run.
+The relative gate checks the extra cost of tilt within a run. Its baseline
+uses the same build, so it cannot detect a slowdown shared by both modes.
+Reassess the hardware limits if the workload or GPU capability changes.
 
 `just check-ci` retains the delivered-CI verification and local demo checks.
 It requires a clean worktree with an open same-repository pull request at the

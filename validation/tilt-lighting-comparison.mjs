@@ -21,10 +21,9 @@ function distribution(value, label) {
 }
 
 // Limits apply to the shipped shading mode. The shadow candidate is informative.
-// The software floor covers both current GPU runners, whose CPUs differ greatly.
+// Software throughput depends on host capacity; gate its matched relative cost.
 const hardwareMinFps = 59;
 const hardwareMaxP95FrameMs = 18.5;
-const softwareMinFps = 7;
 const maxRepeatableShadingRegression = 0.10;
 
 export function performanceFailures(software, hardware) {
@@ -34,8 +33,7 @@ export function performanceFailures(software, hardware) {
     for (const round of ['forward', 'reverse']) {
       const baseline = rows.find(row => row.round === round && row.mode === 'baseline');
       const shading = rows.find(row => row.round === round && row.mode === 'shading');
-      const minimum = kind === 'hardware' ? hardwareMinFps : softwareMinFps;
-      if (shading.submittedFps < minimum) failures.push(`${kind} ${round} shading: ${shading.submittedFps.toFixed(2)} FPS is below ${minimum} FPS`);
+      if (kind === 'hardware' && shading.submittedFps < hardwareMinFps) failures.push(`${kind} ${round} shading: ${shading.submittedFps.toFixed(2)} FPS is below ${hardwareMinFps} FPS`);
       if (kind === 'hardware' && shading.frameMs.p95 > hardwareMaxP95FrameMs) failures.push(`${kind} ${round} shading: p95 frame ${shading.frameMs.p95.toFixed(2)} ms exceeds ${hardwareMaxP95FrameMs} ms`);
       regressions.push(shading.submittedFps / baseline.submittedFps < 1 - maxRepeatableShadingRegression);
     }
@@ -100,7 +98,7 @@ export function compareTimings(software, hardware) {
   }
   const failures = performanceFailures(software, hardware);
   lines.push('## Performance gate', '',
-    `Shading must reach ${hardwareMinFps} FPS with p95 frame intervals at most ${hardwareMaxP95FrameMs} ms on hardware, and ${softwareMinFps} FPS on software. A shading slowdown over ${maxRepeatableShadingRegression * 100}% in both orders fails on either renderer.`, '',
+    `Shading must reach ${hardwareMinFps} FPS with p95 frame intervals at most ${hardwareMaxP95FrameMs} ms on hardware. A shading slowdown over ${maxRepeatableShadingRegression * 100}% in both orders fails on either renderer. Software has no absolute FPS floor.`, '',
     failures.length ? `FAILED:\n${failures.map(failure => `- ${failure}`).join('\n')}` : 'PASSED', '',
     'The shadow candidate is informational. These host samples do not establish physical-phone acceptance.', '');
   return lines.join('\n');
