@@ -278,6 +278,7 @@ class ChangeTests(unittest.TestCase):
             "validation/tooling/test_ci.py",
             "docs/audio-audit-results/report.json",
             ".github/workflows/validate.yml",
+            ".github/workflows/gpu-runner-network.yml",
             "musical-leptos/.cargo/config.toml",
             "rust-toolchain.toml",
             "Cargo.lock",

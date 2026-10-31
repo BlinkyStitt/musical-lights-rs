@@ -1,0 +1,149 @@
+name: GPU runner network evidence
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  transfer:
+    name: Action transfer (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ci-musical-gpu-nuc1, ci-musical-gpu-nuc3]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    steps:
+      # No uses steps: the runner downloads ALL remote actions before any step.
+      # Keep this probe inline so checkout failures cannot prevent observation.
+      - name: Observe one native action-archive transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM 90s python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import socket
+          import threading
+          import time
+          import urllib.request
+          from functools import wraps
+          from pathlib import Path
+          from typing import Any
+
+          # The exact checkout archive from failed run 41206913591. No credentials,
+          # retries, alternate resolvers, address-family overrides or installations.
+          ARCHIVE = "https://codeload.github.com/actions/checkout/tar.gz/3d3c42e5aac5ba805825da76410c181273ba90b1"
+
+
+          def emit(event, **fields):
+              print(
+                  json.dumps(dict(event=event, at=time.time(), pid=os.getpid(), **fields)),
+                  flush=True,
+              )
+
+
+          def native_state():
+              paths = [
+                  "/etc/resolv.conf",
+                  "/etc/nsswitch.conf",
+                  "/proc/net/route",
+                  "/proc/net/ipv6_route",
+                  "/proc/net/snmp",
+                  "/proc/self/cgroup",
+                  "/proc/self/status",
+                  "/proc/self/limits",
+              ]
+              result = {}
+              try:
+                  for task in Path("/proc/self/task").iterdir():
+                      paths.extend(str(task / name) for name in ("comm", "wchan", "syscall"))
+              except OSError as error:
+                  result["/proc/self/task"] = {
+                      "error": type(error).__name__,
+                      "errno": error.errno,
+                  }
+              for path in paths:
+                  try:
+                      with open(path, "rb") as source:
+                          data = source.read(8193)
+                      result[path] = {
+                          "text": data[:8192].decode(errors="replace"),
+                          "truncated": len(data) > 8192,
+                      }
+                  except OSError as error:
+                      result[path] = {"error": type(error).__name__, "errno": error.errno}
+              return result
+
+
+          def capture():
+              original = socket.getaddrinfo
+              stop = threading.Event()
+
+              @wraps(original)
+              def lookup(host: Any, port: Any, *args: Any, **kwargs: Any) -> Any:
+                  started = time.monotonic()
+                  emit("lookup-start", host=host, port=port)
+                  try:
+                      addresses = original(host, port, *args, **kwargs)
+                  except OSError as error:
+                      emit(
+                          "lookup-error",
+                          host=host,
+                          errno=error.errno,
+                          error=type(error).__name__,
+                          elapsed=time.monotonic() - started,
+                          native=native_state(),
+                      )
+                      raise
+                  emit(
+                      "lookup-end",
+                      host=host,
+                      elapsed=time.monotonic() - started,
+                      addresses=[{"family": a[0], "address": a[4][0]} for a in addresses],
+                  )
+                  return addresses
+
+              def sample():
+                  while not stop.wait(2):
+                      emit("request-progress", native=native_state())
+
+              emit("request-start", archive=ARCHIVE, native=native_state())
+              sampler = threading.Thread(target=sample, daemon=True)
+              # Preserve every native call signature; the injected-failure tests exercise
+              # forwarding and restoration of this variadic observational wrapper.
+              socket.getaddrinfo = lookup  # ty: ignore[invalid-assignment]
+              sampler.start()
+              started = time.monotonic()
+              try:
+                  with urllib.request.urlopen(ARCHIVE, timeout=30) as response:
+                      data = response.read(8 * 1024 * 1024 + 1)
+                      if response.status != 200 or not 0 < len(data) <= 8 * 1024 * 1024:
+                          raise ValueError("Missing or oversized action archive")
+                      emit(
+                          "request-success",
+                          status=response.status,
+                          bytes=len(data),
+                          sha256=hashlib.sha256(data).hexdigest(),
+                      )
+              except Exception as error:
+                  # Do not print headers, proxy credentials or ambient environment.
+                  emit(
+                      "request-error",
+                      error=type(error).__name__,
+                      errno=getattr(error, "errno", None),
+                  )
+                  raise
+              finally:
+                  stop.set()
+                  sampler.join()
+                  socket.getaddrinfo = original
+                  emit("request-end", elapsed=time.monotonic() - started, native=native_state())
+
+
+          if __name__ == "__main__":
+              try:
+                  capture()
+              except (OSError, ValueError):
+                  raise SystemExit(1)
+          PY

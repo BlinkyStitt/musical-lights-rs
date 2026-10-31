@@ -393,6 +393,7 @@ def site_affected(paths):
             )
         )
         or path.startswith("docs/audio-audit-results/")
+        or path == ".github/workflows/gpu-runner-network.yml"
         for path in paths
     )
 

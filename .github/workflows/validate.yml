@@ -10,6 +10,7 @@ on:
       - '!validation/demos.config.mjs'
       - '!validation/tests/other-apps.spec.mjs'
       - '.github/workflows/validate.yml'
+      - '.github/workflows/gpu-runner-network.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-leptos/**'
@@ -252,10 +253,14 @@ jobs:
           retention-days: ${{ job.status == 'failure' && 7 || 2 }}
           overwrite: true
           if-no-files-found: error
+  gpu-network:
+    needs: plan
+    if: needs.plan.outputs.site_required == 'true'
+    uses: ./.github/workflows/gpu-runner-network.yml
   gpu:
     name: GPU browser (${{ matrix.shard }})
     timeout-minutes: 60
-    needs: [plan, web]
+    needs: [plan, web, gpu-network]
     if: needs.plan.outputs.site_required == 'true'
     runs-on: ci-musical-gpu
     strategy:
