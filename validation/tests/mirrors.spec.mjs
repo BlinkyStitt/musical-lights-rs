@@ -129,6 +129,26 @@ test('GPU backpressure keeps simulation and camera input active and resumes draw
   expect(result.blocked.x).toBeGreaterThan(result.start.x); expect(result.resumed).toBeGreaterThan(result.blocked.rendered); expect(result.stopped).toBe(false);
 });
 
+test('GPU backpressure releases an older frame while the newest frame is pending', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics, gl = v.renderer.getContext();
+    const wait = gl.clientWaitSync, fence = gl.fenceSync;
+    let latest;
+    v.gpuFrames.clear();
+    gl.fenceSync = function (...args) { latest = fence.apply(this, args); return latest; };
+    // A deterministic completion schedule: the preceding submission finishes
+    // while the latest stays pending. Exercise the actual render-loop gate.
+    gl.clientWaitSync = sync => sync === latest ? gl.TIMEOUT_EXPIRED : gl.CONDITION_SATISFIED;
+    const start = v.metrics.frames;
+    try {
+      for (let i = 0; i < 12; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+      return { frames: v.metrics.frames - start, queued: v.gpuFrames.queued };
+    } finally { gl.clientWaitSync = wait; gl.fenceSync = fence; v.gpuFrames.clear(); }
+  });
+  expect(result.frames).toBe(12); expect(result.queued).toBe(2);
+});
+
 test('normal scenes fill a larger centered frame before and after fullscreen', async ({ page }) => {
   await syntheticAudio(page);
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {

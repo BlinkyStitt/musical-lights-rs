@@ -7,6 +7,46 @@ same numerical thresholds. Ordinary owner use creates no pending acceptance
 item. Historical captures, failures and their provenance below remain unchanged;
 they do not establish current-head CI or physical-iPhone performance.
 
+## GPU recovery evidence (2026-10-31)
+
+[Run 41193507076](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41193507076)
+tested `f9c51d5fb67c0eebdb4e542cce9e8087309af14a` on Chromium 156.0.8078.4,
+ANGLE/virgl on Intel Iris Plus 655. All three five-minute captures failed:
+normal/portrait/landscape averaged 53.42/52.82/54.79 FPS, with 33.3–33.4 ms
+p95 intervals. Normal and portrait maximum debt was 388.07/209.87 ms; landscape
+was 21.50 ms. Portrait additionally recorded 256 missing and 256 overlapping
+audio samples. These remain failed captures.
+
+The retained animation counters recorded 18,869/18,817/18,834 callbacks and
+2,066/2,250/1,645 GPU backpressure rejections over the capture, including warmup.
+The previous queue retained only the newest fence: a finished older submission
+could not release its slot until the newer submission also finished. The repair
+retains two fences and reclaims completed slots in order, preserving the limit
+of two outstanding submissions and zero-time completion polls. Harness and
+browser regressions exercise partial completion and a fully blocked GPU.
+Native process artifacts show two available CPUs and scheduling waits, without
+cgroup quota throttling or OOM events; the queue repair does not establish that
+all frame/debt failures are fixed.
+
+Muted playback also polled the output clock at 10 Hz. In the pinned Chromium,
+[`getOutputTimestamp`](https://chromium.googlesource.com/chromium/src/+/156.0.8078.4/third_party/blink/renderer/modules/webaudio/audio_context.cc)
+holds the graph lock, while
+[`UpdateWorkletGlobalScopeOnRenderingThread`](https://chromium.googlesource.com/chromium/src/+/156.0.8078.4/third_party/blink/renderer/modules/webaudio/base_audio_context.cc)
+updates `currentFrame` only if its try-lock succeeds. This is a source-supported
+explanation for the observed overlap/gap, not a captured lock-contention trace.
+Muted playback with diagnostics off now avoids output timestamp and latency
+queries and explicitly reports `processing-clock` / `output muted`. Audible
+playback and diagnostic recording retain output-clock measurements. PCM,
+analysis continuity checks and acceptance invalidation remain unchanged.
+
+`just validate` includes the queue and transport regressions. The browser suite
+also checks partial GPU completion and mute/unmute clock selection against the
+built app. Exact-head GPU CI must still evaluate all original five-minute,
+transition and comparison thresholds; local checks do not establish their pass
+or physical-phone performance.
+
+## Earlier validation checkpoints
+
 The [full browser checkpoint](#full-browser-checkpoint-2026-10-30) records a
 successful complete suite. The [review checkpoint refresh](#review-checkpoint-refresh-2026-10-30)
 records statistical and served-app measurements at its stated source checkpoint.

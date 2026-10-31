@@ -436,7 +436,7 @@ export async function acquireInput(context, selectedChannel) {
             if (session.closed) return;
             const at = positionAt(context.currentTime);
             const state = generated ? toneState(kind, at, frequency, 10 ** (db / 20)) : null;
-            const timing = playbackTiming(context);
+            const timing = playbackTiming(context, { audible: monitor.gain.value !== 0, diagnostics: session.diagnostics });
             card.dispatchEvent(new CustomEvent('review-playback', { detail: { sessionId: session.sessionId, recordedAt: new Date().toISOString(), processingSeconds: at, outputSeconds: positionAt(timing.audioTime), state: session.state, ...timing } }));
             const status = query('.tone-status');
             if (status) status.textContent = state ? `${kind}: ${state.frequencies.map(f => f.toFixed(1)).join(' + ') || 'no tone'} Hz, ${state.amplitude ? (20 * Math.log10(state.amplitude)).toFixed(1) : '−∞'} dBFS peak, ${at.toFixed(1)} / ${toneCases[kind]} s (${session.state})` : `${identity.name}: ${at.toFixed(2)} / ${buffer.duration.toFixed(2)} s (${session.state}) · ${timing.confidence}`;
