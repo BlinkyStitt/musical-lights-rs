@@ -16,8 +16,12 @@ off). The ordinary browser inventory excludes those long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
 Each result attaches the full replayable report, source/build digest identity,
 collector hash, renderer and browser version, including failing numeric results.
-GPU reports upload on success and failure. The first runner then executes
-`just validate-active-gap` and `just validate-tilt` serially; timing collectors
+Each capture also saves `active-gap-performance.json` beside its process log
+before cleanup or acceptance assertions. An interrupted capture records
+`complete: false` and its error; it cannot pass numeric acceptance.
+GPU reports upload on success and failure. When the compiled site verifies,
+the first runner executes `just validate-active-gap` and `just validate-tilt`
+serially even if its browser suite failed; timing collectors
 verify the served build and retain strict transition predicates. Any failure
 blocks the existing validated-site/Pages barrier.
 
@@ -27,7 +31,7 @@ invalidation. Per-second render counters distinguish animation callbacks,
 submitted frames, GPU backpressure and submission delay. These counters observe
 the existing loop; only actual submitted frames enter FPS acceptance.
 `performance-processes.jsonl` records native process/thread CPU and runnable-queue
-counters, wait states and cgroup limits/pressure before, every ten seconds during,
+counters, wait states, VM CPU/steal counters, load and cgroup limits/pressure before, every ten seconds during,
 and after the same capture. Each sample is saved immediately, including its own
 sampling duration. Unreadable kernel fields remain explicit errors in the
 evidence. Use these artifacts with the existing server request log to diagnose

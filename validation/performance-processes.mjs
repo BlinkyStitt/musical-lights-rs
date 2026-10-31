@@ -24,7 +24,7 @@ export async function performanceProcessSample() {
   let directories = [], cgroupMappingError;
   try { directories = cgroupV2Directories(cgroup, mountinfo); }
   catch (error) { cgroupMappingError = error.message; }
-  const files = ['/proc/pressure/cpu', '/proc/pressure/memory', ...directories.flatMap(directory =>
+  const files = ['/proc/stat', '/proc/loadavg', '/proc/uptime', '/proc/pressure/cpu', '/proc/pressure/memory', '/proc/pressure/io', ...directories.flatMap(directory =>
     ['cpu.max', 'cpu.stat', 'cpu.pressure', 'memory.max', 'memory.events', 'cpuset.cpus.effective']
       .map(name => `${directory}/${name}`))];
   const limits = Object.fromEntries(await Promise.all(files.map(async path => {

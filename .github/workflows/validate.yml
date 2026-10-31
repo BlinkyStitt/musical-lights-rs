@@ -281,6 +281,7 @@ jobs:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
       - name: Verify the compiled site
+        id: gpu-site
         env:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
@@ -301,7 +302,7 @@ jobs:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-gpu --shard=${{ matrix.shard }}/2
       - name: Collect active-gap transition and latency evidence
-        if: matrix.shard == 1
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-active-gap
@@ -319,7 +320,7 @@ jobs:
       # Each host runs one worker. Measure on one runner after its browser suite,
       # with the same downloaded site and instrumentation for both renderers.
       - name: Compare tilt lighting on software and hardware
-        if: matrix.shard == 1
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
         env:
           DEBUG: pw:browser
         run: |

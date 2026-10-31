@@ -17,7 +17,7 @@ export async function activeGapIdentity() {
   for (const path of ['active-gap-identity.mjs', 'active-gap-sampler.mjs', 'active-gap-evidence.mjs',
     'tests/active-gap-performance.spec.mjs', 'physics-cost.mjs', 'physics-cost-acceptance.mjs',
     'fullscreen-timing.mjs', 'active-gap-latency.mjs', 'packet-render.mjs', 'gpu-renderer.mjs', 'replay-physics.mjs',
-    'performance-processes.mjs', 'browser-stall.mjs'])
+    'performance-processes.mjs', 'performance-evidence.mjs', 'browser-stall.mjs'])
     identity.instrumentation[path] = digest(await readFile(`${root}/validation/${path}`));
   return identity;
 }

@@ -3,7 +3,23 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { cgroupV2Directories, recordPerformanceProcesses } from '../performance-processes.mjs';
+import { cgroupV2Directories, performanceProcessSample, recordPerformanceProcesses } from '../performance-processes.mjs';
+
+test('native evidence retains VM CPU steal and I/O pressure separately from application thread counters', async () => {
+  const sample = await performanceProcessSample();
+  if (process.platform !== 'linux') {
+    assert.equal(sample.nativeCounters, 'Linux /proc unavailable');
+    return;
+  }
+  const cpu = sample.limits['/proc/stat'].split('\n')[0].trim().split(/\s+/);
+  assert.equal(cpu[0], 'cpu');
+  assert(cpu.length >= 9, 'CPU evidence must include the steal counter');
+  assert(cpu.slice(1).every(value => /^\d+$/.test(value)));
+  assert.match(sample.limits['/proc/loadavg'], /^\d/);
+  assert.match(sample.limits['/proc/uptime'], /^\d/);
+  assert.match(sample.limits['/proc/pressure/io'], /some .*total=\d+/);
+  assert(sample.processes.some(row => row.pid === process.pid));
+});
 
 test('native evidence follows the process cgroup and every visible parent quota', () => {
   const mount = '46 43 0:29 / /sys/fs/cgroup rw - cgroup2 cgroup2 rw';
