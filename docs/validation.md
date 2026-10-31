@@ -14,6 +14,9 @@ GitHub GPU jobs add `active-gap.spec.mjs` and three five-minute hardware-rendere
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
 off). The ordinary browser inventory excludes those long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
+The five-minute views retain the seeds from the failed NUC1 captures in
+`active-gap-workload.mjs`, so runners use the same per-view initial seed.
+Tests check the application seed before capture and the worker seed afterward.
 Each result attaches the full replayable report, source/build digest identity,
 collector hash, renderer and browser version, including failing numeric results.
 Each capture also saves `active-gap-performance.json` beside its process log

@@ -7,6 +7,7 @@ import { requireHardwareRenderer } from '../gpu-renderer.mjs';
 import { activeGapIdentity } from '../active-gap-identity.mjs';
 import { replayReport } from '../replay-physics.mjs';
 import { capturePerformanceEvidence } from '../performance-evidence.mjs';
+import { activeGapSeeds, setActiveGapSeed } from '../active-gap-workload.mjs';
 
 // Only selected by the hardware configuration; the ordinary suite stays intact.
 for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
@@ -20,9 +21,11 @@ for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
     page.on('requestfailed', request => failedRequests.push({ url: request.url(), error: request.failure() }));
     await page.setViewportSize(mode === 'landscape-fullscreen' ? { width: 844, height: 390 } : { width: 390, height: 844 });
     await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+    await page.addInitScript(setActiveGapSeed, activeGapSeeds[mode]);
     await page.route('**/active-gap-sampler.mjs', route => route.fulfill({ body: sampler, contentType: 'text/javascript' }));
     await page.goto('http://127.0.0.1:8101/advanced/');
     await physicsReady(page);
+    expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.seed)).toBe(activeGapSeeds[mode]);
     expect(await page.locator('meta[name="musical-lights-assets"]').getAttribute('content')).toBe(`/assets/${identity.build.version}/`);
     if (mode === 'normal') await normalView(page);
     else {
@@ -67,6 +70,7 @@ for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
     expect(data.numericPass, JSON.stringify({ ...data.summary, debt: data.debt, maxDebt: data.maxDebt,
       debtGrowthMs: data.debtGrowthMs, simulationLagMs: data.simulationLagMs,
       snapshotProgressDriftMs: data.snapshotProgressDriftMs, maxSnapshotAgeMs: data.maxSnapshotAgeMs })).toBe(true);
+    expect(data.danceOptions.seed).toBe(activeGapSeeds[mode]);
     expect((await replayReport(data)).every(row => row.matches)).toBe(true);
   });
 }
