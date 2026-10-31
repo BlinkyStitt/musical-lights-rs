@@ -1,2 +1,2 @@
 self-hosted-runner:
-  labels: [gpu-opengl, gpu-nuc1, gpu-nuc3]
+  labels: [ci-musical-gpu, ci-musical-gpu-nuc1, ci-musical-gpu-nuc3]

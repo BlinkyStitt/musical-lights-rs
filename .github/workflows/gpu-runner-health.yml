@@ -12,8 +12,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        label: [gpu-nuc1, gpu-nuc3]
-    runs-on: [self-hosted, linux, x64, gpu-opengl, '${{ matrix.label }}']
+        include:
+          - label: gpu-nuc1
+            runner: ci-musical-gpu-nuc1
+          - label: gpu-nuc3
+            runner: ci-musical-gpu-nuc3
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:
       - name: Verify Chrome uses the shared Intel GPU

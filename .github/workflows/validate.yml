@@ -256,7 +256,7 @@ jobs:
     name: GPU browser (${{ matrix.shard }})
     needs: [plan, web]
     if: needs.plan.outputs.site_required == 'true'
-    runs-on: [self-hosted, linux, x64, gpu-opengl]
+    runs-on: ci-musical-gpu
     strategy:
       fail-fast: false
       matrix:
