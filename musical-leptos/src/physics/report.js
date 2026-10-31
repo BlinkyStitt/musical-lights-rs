@@ -2,12 +2,8 @@ import { ListeningReview } from './review.js';
 import { settingSwitch } from './controls.js';
 import { build } from './build.js';
 
-const summarize = values => {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  return { count: values.length, mean, p95: sorted[Math.ceil(sorted.length * .95) - 1], max: sorted.at(-1) };
-};
+import { evaluatePerformance } from './performance.js';
+
 export class PhoneReport {
   constructor(view) {
     this.view = view;
@@ -243,29 +239,11 @@ export class PhoneReport {
     }
     if (data.type === 'report') {
       const intervals = Array.from(this.intervals.subarray(0, this.count));
-      const frames = summarize(intervals), render = summarize(Array.from(this.renderCosts.subarray(0, this.costCount)));
-      const fps = frames ? 1000 / frames.mean : 0;
-      const over25 = intervals.filter(x => x > 25).length / Math.max(1, intervals.length);
-      const warmupSteps = 15 * this.view.layout[1];
-      const physics = summarize(data.physicsCosts.slice(warmupSteps));
-      const firstDebt = summarize(this.progress.slice(0, 10).map(sample => sample.debtMs));
-      const lastDebt = summarize(this.progress.slice(-10).map(sample => sample.debtMs));
-      const debtGrowthMs = firstDebt && lastDebt ? lastDebt.mean - firstDebt.mean : null;
-      const stepMs = 1000 / this.view.layout[1];
-      const simulationLagMs = data.elapsedMs - (data.finalTick - data.initialTick) * stepMs;
-      const firstProgress = this.progress[0], lastProgress = this.progress.at(-1);
-      const snapshotProgressDriftMs = firstProgress && lastProgress
-        ? lastProgress.elapsedMs - firstProgress.elapsedMs - (lastProgress.tick - firstProgress.tick) * stepMs : null;
       this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v8',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
-        summary: { fps, frameIntervalMs: frames, renderCostMs: render, physicsStepMs: physics, over25Fraction: over25 },
-        invalidReasons: this.invalid, simulationProgress: this.progress, debtGrowthMs, simulationLagMs,
-        maxSnapshotAgeMs: this.maxSnapshotAgeMs, snapshotProgressDriftMs,
-        numericPass: Boolean(frames && intervals.reduce((a, b) => a + b, 0) >= 299000
-          && fps >= 59 && frames.p95 <= 18.5 && over25 < .01 && data.debt < 2 * stepMs
-          && data.discardedSimulationMs === 0 && simulationLagMs >= -stepMs && simulationLagMs < 3 * stepMs
-          && snapshotProgressDriftMs !== null && Math.abs(snapshotProgressDriftMs) < 3 * stepMs && this.maxSnapshotAgeMs < 100
-          && debtGrowthMs !== null && debtGrowthMs <= stepMs && data.maxDebt < 100 && !data.recordingOverflow && !this.invalid.length),
+        invalidReasons: this.invalid, simulationProgress: this.progress, maxSnapshotAgeMs: this.maxSnapshotAgeMs,
+        ...evaluatePerformance({ intervals, renderCosts: Array.from(this.renderCosts.subarray(0, this.costCount)),
+          progress: this.progress, maxSnapshotAgeMs: this.maxSnapshotAgeMs, invalid: this.invalid, hz: this.view.layout[1], data }),
       };
       this.query('.phone-export').disabled = false; this.host.open = true; this.showResult();
     }

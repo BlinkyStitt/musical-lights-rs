@@ -79,6 +79,7 @@ def main() -> None:
         "side-bars.js",
         "spheres.js",
         "report.js",
+        "performance.js",
         "demo-worker.js",
         "review.js",
     ):

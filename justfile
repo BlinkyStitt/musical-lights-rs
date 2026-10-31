@@ -5,6 +5,7 @@ export PATH := justfile_directory() + "/.tools/bin:" + env("PATH")
 check: validate
     python3 validation/validate.py browser
     .tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.gpu.config.mjs
+    just validate-active-gap
     just validate-tilt
 
 # Collect both renderer comparisons serially against one already-built artifact.
@@ -15,6 +16,11 @@ validate-tilt:
     node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/software.json
     node validation/tilt-lighting-timing.mjs .ci/tilt-lighting/hardware.json --hardware
     node validation/tilt-lighting-comparison.mjs .ci/tilt-lighting/software.json .ci/tilt-lighting/hardware.json .ci/tilt-lighting/comparison.md
+
+# Collect geometry cost, strict transition timing and instrumented latency serially.
+validate-active-gap:
+    cd validation && npm ci --ignore-scripts && npx playwright install chromium webkit
+    node validation/active-gap-evidence.mjs .ci/active-gap
 
 # Verify delivered, exact-commit CI and run local demo checks.
 check-ci: _ci-tools

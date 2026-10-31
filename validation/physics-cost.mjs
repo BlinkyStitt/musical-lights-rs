@@ -1,4 +1,5 @@
 import { runtimeRoot } from './runtime-assets.mjs';
+import { evaluatePhysicsCost } from './physics-cost-acceptance.mjs';
 import { traceLayout } from './trace-layout.mjs';
 // Deterministic 12-second generated-audio workload, including portrait/landscape
 // resize transitions. Run each engine in a separate Node process so its WASM
@@ -52,7 +53,7 @@ const result = { node: process.version, platform: process.platform, cpu: cpus()[
   physicsSha256: createHash('sha256').update(bytes).digest('hex'),
   pcmSha256: createHash('sha256').update(new Uint8Array(pcm.buffer)).digest('hex'),
   protocol: layout[18], bands: layout[0], balls: PhysicsSimulation.defaults()[8],
-  durationSeconds: 12, physicsHz: layout[1], runs,
+  durationSeconds: 12, riseDurationMs: PhysicsSimulation.defaults()[6] * 1000, physicsHz: layout[1], runs,
   cpuByCap: [.6,20].map(gapCap => ({gapCap, medianCpuMs:runs.filter(r=>r.gapCap===gapCap).map(r=>r.totalMs).sort((a,b)=>a-b)[1]})) };
 // Reproduce the full-height attack separately from the generated-audio workload.
 // Preserve real targets and the configured rise duration; record overload rather
@@ -70,7 +71,7 @@ for (const height of [.927803, 2.596923]) for (const gapCap of [.6, 20]) {
     sim.step();
     const snapshot = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
     trace.push({ ms: tick * 1000 / layout[1], top: snapshot[layout[9]], baseline: snapshot[layout[17]+5], activeTop: snapshot[layout[9]]-snapshot[layout[17]+5],
-      velocity: snapshot[layout[14]], substeps: snapshot[layout[15]], excess: snapshot[layout[15] + 1] });
+      motion: snapshot[layout[31]], travel: snapshot[layout[17]+6], velocity: snapshot[layout[14]], substeps: snapshot[layout[15]], excess: snapshot[layout[15] + 1] });
   }
   result.fullAttacks.push({ height, gapCap, requestedSubsteps: trace.reduce((s,r)=>s+r.substeps+r.excess,0), overloadTicks: trace.filter(row => row.excess > 0).length,
     maxRequestedSubsteps: Math.max(...trace.map(row => row.substeps + row.excess)), trace });
@@ -78,3 +79,5 @@ for (const height of [.927803, 2.596923]) for (const gapCap of [.6, 20]) {
 }
 await writeFile(output, JSON.stringify(result, null, 2) + '\n');
 console.log(JSON.stringify({ ...result, fullAttacks: result.fullAttacks.map(({ trace, ...summary }) => summary) }));
+
+evaluatePhysicsCost(result);

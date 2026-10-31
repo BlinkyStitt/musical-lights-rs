@@ -2,6 +2,7 @@
 // acceptance; captures real worklet packets and produced-WASM surface endpoints.
 import { chromium, webkit, devices } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
+import { hardwareBrowserOptions, requireHardwareRenderer } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
 import { openFullscreenSettings } from './physics-state.mjs';
 import { staticPreview } from './static-preview.mjs';
@@ -18,12 +19,13 @@ if (origin === '--reanalyze') {
   await writeFile(reanalyzedOutput, JSON.stringify(captures, null, 2) + '\n');
 } else {
 if (!origin || !output) throw new Error('Usage: node validation/active-gap-latency.mjs ORIGIN OUTPUT_JSON');
-const finish = await startup({ filteredProjects: ['chromium', 'webkit'].map(browserName => ({ name: browserName, use: { browserName } })) });
+const hardware = process.argv.includes('--hardware');
+const finish = await startup({ filteredProjects: ['chromium', 'webkit'].map(browserName => ({ name: browserName, use: { browserName, launchOptions: hardware ? hardwareBrowserOptions(browserName) : {} } })) });
 const results = [];
 try {
   for (const [name, engine, profile] of [['chromium', chromium, {}], ['webkit', webkit, devices['iPhone 13']]]) {
     for (const cap of [60, 2000]) {
-      const browser = await engine.launch();
+      const browser = await engine.launch(hardware ? hardwareBrowserOptions(name) : {});
       try {
         const context = await browser.newContext({ ...profile, hasTouch: true, viewport: { width: 390, height: 844 } });
         await staticPreview(context, origin);
@@ -47,9 +49,16 @@ try {
             }
           };
         }, cap);
-        const page = await context.newPage();
+        const page = await context.newPage(), errors = [];
+        page.on('pageerror', error => errors.push(error.message));
         await page.goto(origin + '/advanced/');
         await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
+        const gpu = await page.evaluate(() => {
+          const gl = document.querySelector('#dancinglights').physics.renderer.getContext();
+          const debug = gl.getExtension('WEBGL_debug_renderer_info');
+          return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null;
+        });
+        if (hardware) requireHardwareRenderer(gpu);
         await page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
           window.renders = [];
@@ -79,7 +88,8 @@ try {
         const summary = { browser: name, capCm: cap, physicalPhone: false, diagnostics: true, threshold: .1, crossings: crossings.length,
           responseWindow: 'before next same-band threshold crossing', ...packetRenderSummary(crossings) };
         if (!data.chunks.length || !data.packets.length || !summary.matched) throw new Error('No complete packet/trace/render evidence: ' + JSON.stringify(summary));
-        results.push({ summary, crossings, ...data }); console.log(JSON.stringify(summary));
+        if (errors.length) throw new Error('Latency page errors: ' + JSON.stringify(errors));
+        results.push({ summary, crossings, gpu, hardwareRequested: hardware, errors, ...data }); console.log(JSON.stringify(summary));
         await context.close();
       } finally { await browser.close(); }
     }

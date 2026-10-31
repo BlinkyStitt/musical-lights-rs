@@ -15,7 +15,7 @@ export default defineConfig({
   use: { headless: true, screenshot: 'only-on-failure',
     trace: { mode: 'retain-on-failure', screenshots: false, snapshots: false, sources: true } },
   projects: [
-    { name: 'chromium', testIgnore: ['**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: { browserName: 'chromium' } },
+    { name: 'chromium', testIgnore: ['**/active-gap-performance.spec.mjs', '**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: { browserName: 'chromium' } },
     { name: 'other-apps', testMatch: '**/other-apps.spec.mjs', use: { browserName: 'chromium' } },
     { name: 'chromium-permissions', testMatch: '**/permissions-native.spec.mjs', use: {
       browserName: 'chromium', channel: 'chromium', launchOptions: { args: [

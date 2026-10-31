@@ -5,15 +5,17 @@ assertBrowserEnvironment();
 import { chromium, webkit, devices } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { hardwareBrowserOptions, requireHardwareRenderer } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
 import { staticPreview } from './static-preview.mjs';
 const [origin, output, clean] = process.argv.slice(2);
 if (!origin || !output) throw new Error('Usage: node validation/fullscreen-timing.mjs ORIGIN OUTPUT [--expect-clean]');
-const finishBrowserAudit = await startup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName}}))});
+const hardware = process.argv.includes('--hardware');
+const finishBrowserAudit = await startup({filteredProjects:['chromium','webkit'].map(browserName=>({name:browserName,use:{browserName, launchOptions: hardware ? hardwareBrowserOptions(browserName) : {}}}))});
 try {
 const results=[];
 for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium',chromium,{}],['webkit',webkit,devices['iPhone 13']]]) {
-  const browser=await engine.launch();
+  const browser=await engine.launch(hardware ? hardwareBrowserOptions(name) : {});
   try {
     const context=await browser.newContext({...profile,viewport:{width:390,height:844}});
     await staticPreview(context,origin);
@@ -29,6 +31,12 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`${origin}/advanced/`);
     await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
+    const gpu = await page.evaluate(() => {
+      const gl = document.querySelector('#dancinglights').physics.renderer.getContext();
+      const debug = gl.getExtension('WEBGL_debug_renderer_info');
+      return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null;
+    });
+    if (hardware) requireHardwareRenderer(gpu);
     const exit=page.getByRole('button',{name:'Exit fullscreen',exact:true}); if(await exit.isVisible())await exit.click();
     await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
     await page.locator('.input-source').selectOption('generated');
@@ -63,7 +71,7 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
         overloadTicks:points.at(-1).overload-before.overload,substeps:points.at(-1).substepTotal-before.substepTotal,requestedSubsteps:points.at(-1).requestedSubstepTotal-before.requestedSubstepTotal,fromHeight:before.height,toHeight:points.at(-1).height};
     });
     const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
-    const result={gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,origin,build,errors,windows,...data};
+    const result={gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,origin,build,errors,windows,...data};
     results.push(result);console.log(JSON.stringify({gapCapCm:gapCap,browser:name,windows,errors}));
     await context.close();
   } finally {await browser.close();}

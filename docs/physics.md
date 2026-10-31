@@ -161,14 +161,11 @@ help explains site settings and potentially separate browser/Home Screen grants.
 These checks follow the [Permissions API](https://w3c.github.io/permissions/)
 and [media capture permission semantics](https://w3c.github.io/mediacapture-main/#permissions-integration).
 
-Physical-phone motion acceptance remains a separate check: after turning on Phone motion
-and allowing access, try left/right, up/down, and toward/away shakes in
-portrait and landscape. Repeat with music driving the bars; both sources must
-move the balls together. Hold still to check that shaking stops, then turn off Phone motion
-to check that sensor forces stop while gravity continues. Side impacts should
-rebound, and balls pressed against vertical walls should still fall when they
-have no support underneath. Synthetic browser events do not verify the phone's
-actual sensors or permission prompts.
+Motion regression tests inject acceleration, gravity and orientation events in
+portrait and landscape, including generated audio, stopped motion, wall rebound
+and unsupported drops. They preserve sensor-force behavior without requiring
+physical gestures. Synthetic events do not measure a phone's actual sensors or
+permission prompts; that is an evidence limit, not a manual completion gate.
 
 ## Engine selection and limits
 
@@ -312,51 +309,45 @@ and page listeners, disconnects the observer, cancels the animation loop, and
 disposes the WebGL context and resources. Async sensor permission and module
 loading cannot recreate resources after cleanup.
 
-## iPhone 16e acceptance
+## Automated performance acceptance
 
-Use the `/advanced` page in Safari. A Mac browser or an emulated
-iPhone does not establish the phone result.
+The current [active-gap specification](active-gap-spec.md) supersedes the former
+mandatory iPhone procedure and human smooth-motion confirmation. No physical
+operation, listening, or owner sign-off is an acceptance or delivery gate.
+The diagnostic phone-report UI remains available for optional investigation;
+its device fields and smooth-motion checkbox are never fabricated by automation.
 
-The FPS display counts actual animation-frame intervals. The app has no 30 FPS
-limit. WebKit intentionally limits animation to 30 FPS in Low Power Mode; see
-the [WebKit explanation](https://bugs.webkit.org/show_bug.cgi?id=215745).
-If the phone stays near 30 FPS, first check that Low Power Mode is off and Safari
-is in the foreground. If it remains slow, compare normal and fullscreen views
-and export timing data. A 30-second run ended early can help diagnose frame
-intervals, render cost, and physics delay; it is not a five-minute acceptance
-result. Do not infer a phone performance improvement from a Mac measurement.
+GitHub's verified hardware-rendered Chromium suite measures normal,
+portrait-expanded and landscape-expanded views at mobile viewport sizes. Each
+run uses the repeating generated PCM → AudioWorklet → loudness WASM exercise,
+diagnostics off, 15 seconds of warmup, and five minutes of recorded submissions.
+The shared numeric evaluator requires average FPS ≥59, p95 interval ≤18.5 ms,
+less than 1% of intervals over 25 ms, and at least 299,000 ms of frame intervals.
+At 120 Hz, final debt must be less than two steps, maximum debt below 100 ms,
+and mean debt growth from the first to last ten progress samples at most one
+step. Simulation lag must be at least minus one step and below three steps;
+absolute displayed-tick drift must be below three steps and maximum snapshot
+age below 100 ms. Discarded time, overflow, page errors, changed/interrupted
+audio, hidden pages, context loss, changed view/camera, and early termination fail.
+Only actual submitted draws count; GPU queue deferrals remain in frame intervals.
+CPU submission cost is separate from GPU completion.
 
-1. Turn Low Power Mode off. Enter the actual model, browser and iOS version.
-2. Select Test tones and click **Play audio**. It sends PCM
-   directly through the real AudioWorklet/loudness WASM pipeline. Keep Repeat
-   on and Diagnostic recording off; digital review files do not qualify.
-3. Select **Normal view** and start the test. Keep the page visible for the
-   15-second warmup and the complete five-minute measurement.
-4. Confirm smooth motion only if it looked smooth. Export the JSON report.
-5. Repeat in portrait fullscreen and landscape fullscreen. Rotate before
-   starting each run. Use **Exit** after each fullscreen run to export it.
-
-The report includes the Git build, device/browser details, configuration,
-camera, viewport, pixel ratio, frame intervals, render submission cost,
-physics step cost, recorded inputs, final state, and simulation progress.
-Render cost measures CPU work through draw submission, not GPU completion.
-
-Each run requires average FPS ≥59, p95 frame interval ≤18.5 ms, fewer than 1%
-of intervals over 25 ms, no growing simulation delay, no discarded simulation
-time, and the user's smooth-motion confirmation. Hidden pages, context loss,
-audio stopping, view/camera changes, early completion, or report overflow
-invalidate a run. A low FPS value remains visible even when physics catches up.
-
-Keep the matching build when replaying a report:
+Run `just validate` locally. GitHub runs `just validate-gpu --shard=1/2` and
+`--shard=2/2`, then serial evidence collectors and `just validate-tilt` on the
+first runner. Hardware rejects software fallback. The unchanged strict transition
+checks require debt below two steps and snapshot age below 100 ms as well as
+the frame limits. Reports bind artifact digests, instrumentation and browser
+identity. Automated recordings can be replayed with:
 
 ```sh
 export PATH="$PWD/.tools/bin:$PATH"
 node validation/replay-physics.mjs /path/to/exported-report.json
 ```
 
-Merge and Pages deployment require local checks, CI, and all three physical
-phone reports to pass. The Pages job depends on core, web and loudness-reference
-validation and runs only on `main`. A preview is not a production deployment.
+These measurements establish their desktop hardware/browser environment, not
+physical-iPhone performance. That evidence limit creates no manual acceptance
+item. Merge and Pages retain the exact-head validation and artifact barriers,
+serialized publication and latest-main check. A preview is not production.
 
 ## Local verification
 
@@ -468,9 +459,10 @@ of the fill. Spawn colors still match each ball's actual X coordinate.
 
 The shared Display settings include **Active gap cap (cm)**: 60 cm by default,
 40–2,000 cm in 1 cm steps. This is a reference enclosure height, not a stroke.
-For height `H` and cap `C`, core calculates the opening from `min(H, C)` and
-adds `(H - min(H, C)) / 2` to each permanent base. Ball diameter, flight allowance
-and clearance reduce inward bar travel. At the default flight setting, the
+For packed opening `P`, actual enclosure height `H ≥ P` and reference cap `C`,
+core and its physics adapter use `A = min(H, max(C, P))` and add `(H - A) / 2`
+to each permanent base, retaining the 3 mm idle inset at each end. Ball diameter,
+flight allowance and clearance reduce inward bar travel. At the default flight setting, the
 60 cm reference retains 13.84 cm of travel per end, above the 3 mm baseline.
 All nine banks use the applied physical endpoints, including during transitions.
 
@@ -494,7 +486,7 @@ layout and rejects recordings from older engines.
 
 Run `just check` for native, produced-WASM, benchmark correctness and full
 rendered checks. `just validate` runs the CPU and offline checks. See [active-gap evidence](active-gap-results.md) for comparison
-methods and the distinction between host measurements and phone acceptance.
+methods and the limits of host measurements.
 
 The capped geometry retains variable-ball packing clearance. When the selected
 balls need a taller packed opening than the cap, that minimum opening takes

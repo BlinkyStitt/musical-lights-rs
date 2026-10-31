@@ -1,10 +1,15 @@
 # Active gap validation
 
-The [full browser checkpoint](#full-browser-checkpoint-2026-10-30) records the
-successful complete suite after review. Physical-phone acceptance remains pending.
-The [review checkpoint refresh](#review-checkpoint-refresh-2026-10-30) below
-contains the current statistical and served-app measurements. Earlier sections
-retain their original measurement boundaries and validation outcomes.
+The [current specification](active-gap-spec.md) supersedes every older manual
+phone, physical-access and human-confirmation gate in this historical report.
+Acceptance now uses reproducible automated hardware/browser evidence with the
+same numerical thresholds. Ordinary owner use creates no pending acceptance
+item. Historical captures, failures and their provenance below remain unchanged;
+they do not establish current-head CI or physical-iPhone performance.
+
+The [full browser checkpoint](#full-browser-checkpoint-2026-10-30) records a
+successful complete suite. The [review checkpoint refresh](#review-checkpoint-refresh-2026-10-30)
+records statistical and served-app measurements at its stated source checkpoint.
 
 The candidate compares explicit 60 cm and 2,000 cm caps in the same engine.
 The latter preserves the old uncapped geometry at all supported heights. This
@@ -140,13 +145,9 @@ The Dioxus CLI also reported its existing unsupported-DWARF `wasm-opt` abort
 while returning success and emitting an unoptimized app; its rendered-page
 check passed. Optimization success is not established.
 
-Physical-phone acceptance remains pending: diagnostics off, Low Power Mode off,
-15-second warmup followed by five-minute normal, portrait-fullscreen and
-landscape-fullscreen runs. Require average FPS ≥59, p95 interval ≤18.5 ms,
-under 1% of intervals over 25 ms, no growing debt, no discarded time and human
-smooth-motion confirmation. Browser emulation and CPU benchmarks do not meet
-that acceptance. Linux CI and production identity/routes/live control verification
-remain separate from these local results.
+No physical-phone measurement was collected at this checkpoint. Its older
+manual acceptance demand is superseded by the automated contract above. Linux
+CI and production verification remain separate from these local results.
 
 ## Rebase validation (2026-10-30)
 
@@ -195,7 +196,7 @@ outside Git under `.ci/ski1240-rebase/`.
 
 At this rebase checkpoint, statistical Criterion, served-app frame/debt/snapshot-age
 and packet-to-render measurements had not yet been refreshed. The next section
-supplies that evidence. Physical-phone acceptance remains pending.
+supplies that evidence. No physical-phone performance is established.
 
 ## Review checkpoint refresh (2026-10-30)
 
@@ -327,21 +328,14 @@ latency acceptance budget.
 
 ### Remaining acceptance and delivery
 
-Physical Safari-device access and a human operator were unavailable in this Linux
-workspace (USB inventory contained only host root hubs). The required iPhone 16e
-normal, portrait-fullscreen and landscape-fullscreen runs remain **pending**.
-For each run, turn Low Power Mode and diagnostics off, play the repeating generated
-exercise, warm up for 15 seconds, then measure five minutes. Retain device/iOS/Safari
-and build identity plus exported reports proving average FPS ≥59, p95 ≤18.5 ms,
-fewer than 1% of intervals over 25 ms, no growing simulation delay and zero
-discarded time. A human must separately confirm smooth motion. Follow the
-[physical-phone procedure](physics.md#iphone-16e-acceptance); browser emulation
-cannot supply this evidence.
+Current acceptance is the automated contract in [the specification](active-gap-spec.md),
+including exact-head browser/GPU CI and provenance-bound artifacts. No human
+operator, physical-phone use or smooth-motion confirmation is required. The
+older absence of USB-connected phones remains an environment fact.
 
-Linux CI and production build-identity, direct-route and live-control verification
-were not performed in this local task. PR artifact attachment, push, merge and
-deployment belong to the orchestrator. This report does not authorize or establish
-phone acceptance, merge or deployment.
+PR attachment, publication and merge belong to the orchestrator. After merge,
+production checks must verify successful Pages completion, latest-main build
+identity, direct routes and live cap behavior. A queued job proves no deployment.
 
 ## Full browser checkpoint (2026-10-30)
 
@@ -399,15 +393,11 @@ pinned Leptos build above established this run's producer receipt; the complete
 browser command ran once. Earlier failed full-suite results remain historical
 evidence in the sections above.
 
-The current physical-access receipt still shows only USB root hubs and no
-`usbmuxd` connection. Normal, portrait-fullscreen and landscape-fullscreen
-physical-phone acceptance remains **pending** under the
-[procedure above](#remaining-acceptance-and-delivery): each requires a 15-second
-warmup, five minutes with diagnostics and Low Power Mode off, device/build
-identities, the specified frame/debt/discarded-time results and human smooth-motion
-confirmation. The prior 16 failing host frame-budget windows remain failed;
-this functional browser pass supplies no replacement phone-performance evidence.
-Linux CI, live-provider checks and production verification were not run here.
+The physical-access receipt shows only USB root hubs and no `usbmuxd`
+connection. No physical-phone performance is established. The prior 16 failing
+host frame-budget windows remain failed; this functional browser pass supplies
+no replacement performance evidence. Linux CI, live-provider checks and
+production verification were not run here.
 
 ## Hardware checkpoint execution (2026-10-30)
 
@@ -465,15 +455,11 @@ documentation-only update.
 | Measured site archive | `d3ca9b43698e87c8441671aaad359e8fba11d9cbeacc0c84664f08c7fe6ae1da` |
 | Evidence digest manifest | `1b738f9def5af1aa3de49bfbc4602ec53daa0f950a2a80e2088fa50e1ca5119c` |
 
-Both review acceptance requests remain open. The hardware commands still require
-successful execution on an idle host exposing a hardware WebGL2 renderer. The
-fresh physical-access receipt again contains only USB root hubs and no
-`usbmuxd` connection. Device/build-identified normal, portrait-fullscreen and
-landscape-fullscreen phone reports and human smooth-motion confirmation remain
-pending under [Remaining acceptance and delivery](#remaining-acceptance-and-delivery),
-with every warmup, duration, diagnostics, Low Power Mode and performance criterion
-unchanged. No physical-phone run, Linux CI, live-provider check or production
-verification was performed in this checkpoint.
+The hardware commands failed at this checkpoint. Current automated hardware
+acceptance belongs to exact-head GPU CI. The physical-access receipt contains
+only USB root hubs and no `usbmuxd` connection; no phone performance is inferred.
+No physical-phone run, Linux CI, live-provider check or production verification
+was performed in this checkpoint. The superseded manual gate creates no follow-up.
 
 ## Matched build and browser checkpoint (2026-10-31)
 
@@ -517,21 +503,57 @@ does not establish equivalence for another build or authorize CI artifact reuse
 across source trees. The exact-tree, trusted-producer and digest validation
 barrier remains required.
 
-**Hardware and physical-phone acceptance remain pending.** The fresh
-`physical-access.json` receipt again shows no PCI graphics device or `/dev/dri`
-nodes, only USB root hubs and no `usbmuxd` connection. The prior hardware-suite
-exit 1 (`GPU validation requires a WebGL2 hardware renderer`) and
-`just validate-tilt` exit 1 (zero hardware samples; no completed comparison)
-remain failed evidence. Those unchanged failures were not retried on this host.
-Run both commands serially on an idle hardware-WebGL2 host and retain passing
-results with matching source, artifact and instrumentation provenance.
+The prior hardware-suite exit 1 (`GPU validation requires a WebGL2 hardware
+renderer`) and `just validate-tilt` exit 1 (zero hardware samples) remain failed
+evidence for those captures. They were not retried on the same host. The
+`physical-access.json` receipt describes that environment only. Current hardware
+acceptance runs in exact-head CI; no physical-device operation or human
+confirmation is required. Browser emulation establishes no physical-iPhone result.
 
-Normal, portrait-fullscreen and landscape-fullscreen physical-phone runs still
-require device/iOS/Safari/build identities, a 15-second warmup and five-minute
-measurements with diagnostics and Low Power Mode off. Each must show average
-FPS ≥59, p95 interval ≤18.5 ms, fewer than 1% of intervals over 25 ms, no growing
-simulation delay and zero discarded time, plus human smooth-motion confirmation.
-Browser emulation does not satisfy these checks. Linux CI, live-provider checks
-and production verification were not run. The orchestrator owns PR evidence
-attachment and subsequent delivery; no push, PR update, merge or deployment was
-performed.
+## Automated evidence revision (2026-10-31)
+
+The protected integration `3e93d8cd52039ed751e5a0a1b2686cc496ea53fc` is preserved.
+Read-only verification of both retained SHA256SUMS manifests passed. Existing
+geometry, worklet and replay oracles are reused; no musical analysis or physical
+integration policy changes. The new collector shares the diagnostic numeric
+evaluator, measures submitted frames and records worker inputs for exact replay
+at 30/60/120 Hz. It never supplies phone declarations or human confirmation.
+GPU artifacts retain complete reports, build digests and collector identity.
+`just validate-active-gap` runs cost evaluation, strict transitions and latency
+serially against a verified origin. Instrumented latency has no invented budget.
+
+Remote PR #95 still pointed to `3e93d8c` during inspection. Its website run
+[41171989315](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41171989315)
+had passing GPU jobs but a failing Chromium YouTube rotation case: continuity
+reported 128 missing and 128 overlapping samples. The validated-site and Pages
+jobs were skipped. This baseline is not current-change acceptance or deployment.
+The orchestrator owns publication and subsequent exact-head checks.
+
+Local revision checks: root `PATH="$PWD/.tools/bin:$PATH" just validate` exited 0
+(42 tooling tests, core/native/WASM/application checks, benchmark correctness and
+209 offline harness tests). The subsequently added cost-gate test and collector,
+clock and protected comparison regressions passed in a focused 12-test command.
+Dioxus again logged its existing `wasm-opt` SIGABRT/unsupported-DWARF error while
+its CLI returned success and emitted the app; optimization success is not claimed.
+
+The produced-WASM cost command and saved-JSON evaluator passed: the tall attack
+requested 106 capped versus 462 uncapped substeps, with zero capped overloads,
+normalized timing within `1e-6` and the same configured deadline. Physics SHA-256
+remains `2950ea64928627ea553ebf96afa130ea355e38e40c989111c03895460f7f2f83`.
+PCM/palette hashes also match the retained comparison. Core, physics sources and
+benchmark inputs are unchanged from the retained statistical checkpoint; no new
+statistical CPU claim is made from this contended host. Large logs remain outside Git.
+
+Inventory-only checks found all 922 ordinary cases and 99 unique GPU cases across
+two disjoint shards. These are wiring checks, not rendered acceptance. The new
+long-run and strict transition/latency checks await published exact-head GPU CI;
+no local GPU execution or production deployment is claimed.
+
+The downloaded protected-head tilt comparison also re-evaluated successfully:
+hardware shading measured 60 FPS in both orders with p95 16.7/16.8 ms. Its build
+was `74999855b09f8c2297613821`, artifact-tree digest
+`2e5265577769bc3e02a97c44fc20f61b3c251f55c45bf2bd031c5757ed320220`.
+That short, fixed-camera comparison is historical evidence, not the new five-minute
+active-gap acceptance. The protected relative-only software policy is unchanged;
+the conflicting 7 FPS specification clause awaits the requirement decision in
+[the canonical contract](active-gap-spec.md#unresolved-requirement-decision).

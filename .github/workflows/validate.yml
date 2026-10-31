@@ -254,6 +254,7 @@ jobs:
           if-no-files-found: error
   gpu:
     name: GPU browser (${{ matrix.shard }})
+    timeout-minutes: 60
     needs: [plan, web]
     if: needs.plan.outputs.site_required == 'true'
     runs-on: ci-musical-gpu
@@ -284,6 +285,18 @@ jobs:
           tool: just
       - name: Run hardware-rendered browser checks
         run: just validate-gpu --shard=${{ matrix.shard }}/2
+      - name: Collect active-gap transition and latency evidence
+        if: matrix.shard == 1
+        run: just validate-active-gap
+      - uses: actions/upload-artifact@v7.0.1
+        if: always() && matrix.shard == 1
+        with:
+          name: active-gap-evidence
+          path: .ci/active-gap/
+          include-hidden-files: true
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
       # Each host runs one worker. Measure on one runner after its browser suite,
       # with the same downloaded site and instrumentation for both renderers.
       - name: Compare tilt lighting on software and hardware
@@ -310,7 +323,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - uses: actions/upload-artifact@v7.0.1
-        if: failure()
+        if: always()
         with:
           name: gpu-browser-report-${{ matrix.shard }}
           path: validation/test-results/
