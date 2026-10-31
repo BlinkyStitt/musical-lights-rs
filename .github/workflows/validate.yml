@@ -10,6 +10,7 @@ on:
       - '!validation/demos.config.mjs'
       - '!validation/tests/other-apps.spec.mjs'
       - '.github/workflows/validate.yml'
+      - '.github/workflows/gpu-runner-network.yml'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-leptos/**'
@@ -252,9 +253,14 @@ jobs:
           retention-days: ${{ job.status == 'failure' && 7 || 2 }}
           overwrite: true
           if-no-files-found: error
+  gpu-network:
+    needs: plan
+    if: needs.plan.outputs.site_required == 'true'
+    uses: ./.github/workflows/gpu-runner-network.yml
   gpu:
     name: GPU browser (${{ matrix.shard }})
-    needs: [plan, web]
+    timeout-minutes: 60
+    needs: [plan, web, gpu-network]
     if: needs.plan.outputs.site_required == 'true'
     runs-on: ci-musical-gpu
     strategy:
@@ -266,7 +272,11 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7.0.1
+      # Record the actual failing Node/libc lookup in job logs, even if uploads
+      # fail. Step env is required: GITHUB_ENV cannot set NODE_OPTIONS.
       - uses: actions/download-artifact@v8.0.1
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
@@ -275,15 +285,37 @@ jobs:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
       - uses: actions/setup-node@v7.0.0
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           node-version: '26.12.1'
           cache: npm
           cache-dependency-path: validation/package-lock.json
       - uses: taiki-e/install-action@v2
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           tool: just
       - name: Run hardware-rendered browser checks
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-gpu --shard=${{ matrix.shard }}/2
+      - name: Collect active-gap transition and latency evidence
+        if: matrix.shard == 1
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
+        run: just validate-active-gap
+      - uses: actions/upload-artifact@v7.0.1
+        if: always() && matrix.shard == 1
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
+        with:
+          name: active-gap-evidence
+          path: .ci/active-gap/
+          include-hidden-files: true
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
       # Each host runs one worker. Measure on one runner after its browser suite,
       # with the same downloaded site and instrumentation for both renderers.
       - name: Compare tilt lighting on software and hardware
@@ -302,6 +334,8 @@ jobs:
           fi
       - uses: actions/upload-artifact@v7.0.1
         if: always() && matrix.shard == 1
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           name: tilt-lighting-comparison
           path: .ci/tilt-lighting/
@@ -310,7 +344,9 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - uses: actions/upload-artifact@v7.0.1
-        if: failure()
+        if: always()
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           name: gpu-browser-report-${{ matrix.shard }}
           path: validation/test-results/

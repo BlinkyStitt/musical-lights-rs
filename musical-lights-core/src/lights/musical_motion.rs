@@ -17,6 +17,46 @@ pub fn paired_bar_extent(height: f32, reserved: f32) -> f32 {
     (height.max(0.0) - reserved.max(0.0)).max(0.0) * 0.5
 }
 
+/// Reference enclosure height, not a stroke length (metres).
+pub const DEFAULT_GAP_CAP: f32 = 0.6;
+pub const MIN_GAP_CAP: f32 = 0.4;
+pub const MAX_GAP_CAP: f32 = 20.0;
+pub const BAR_BASELINE: f32 = 0.003;
+
+pub fn valid_gap_cap(cap: f32) -> bool {
+    cap.is_finite() && (MIN_GAP_CAP..=MAX_GAP_CAP).contains(&cap)
+}
+
+/// Symmetric permanent bases surround an active opening. Musical displacement,
+/// flight and brightness use active geometry only; base height is never a level.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PairedBarGeometry {
+    pub active_height: f32,
+    pub baseline: f32,
+    pub travel: f32,
+    pub flight: f32,
+}
+impl PairedBarGeometry {
+    pub fn new(
+        height: f32,
+        cap: f32,
+        diameter: f32,
+        stack: f32,
+        clearance: f32,
+        flight: f32,
+    ) -> Self {
+        let active_height = height.min(cap);
+        let hop = super::dance::flight_height(active_height - diameter - clearance, flight, false);
+        let extent = paired_bar_extent(active_height, (diameter + hop).max(stack) + clearance);
+        Self {
+            active_height,
+            baseline: (height - active_height) * 0.5 + BAR_BASELINE,
+            travel: (extent - BAR_BASELINE).max(0.0),
+            flight: hop,
+        }
+    }
+}
+
 /// Allocation-free direction policy. Defaults: 5% at 60 BPM, 50% at 200 BPM.
 /// The curve is an exponent: 1 is linear, >1 delays the increase, <1 advances it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -456,5 +496,41 @@ mod tests {
         let mut targets = [0.2; 9];
         paint_pigment(&mut targets, [1.0; 3], [f32::NAN, 0.0, 1.0], 0.5);
         assert_eq!(targets, [0.2; 9]);
+    }
+}
+
+#[cfg(test)]
+mod capped_gap_tests {
+    use super::*;
+
+    #[test]
+    fn cap_reserves_symmetric_bases_and_preserves_reference_travel() {
+        for cap in [0.4, 0.6, 1.0, 20.0] {
+            for height in [0.4, 0.6, 1.2, 2.596923, 20.0] {
+                for flight in [0.0, 0.3, 0.5] {
+                    let geometry = PairedBarGeometry::new(height, cap, 0.192, 0.0, 0.004, flight);
+                    let active = height.min(cap);
+                    let reference =
+                        PairedBarGeometry::new(active, active, 0.192, 0.0, 0.004, flight);
+                    assert_eq!(geometry.travel, reference.travel);
+                    assert_eq!(geometry.flight, reference.flight);
+                    assert_eq!(geometry.baseline, (height - active) / 2.0 + BAR_BASELINE);
+                    let gap = height - 2.0 * (geometry.baseline + geometry.travel);
+                    assert!((gap - (0.192 + 0.004 + geometry.flight)).abs() < 2e-6);
+                }
+            }
+        }
+        let reference = PairedBarGeometry::new(0.6, DEFAULT_GAP_CAP, 0.192, 0.0, 0.004, 0.3);
+        assert!((reference.travel - 0.1384).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cap_validation_rejects_invalid_settings() {
+        for cap in [0.4, 0.6, 20.0] {
+            assert!(valid_gap_cap(cap));
+        }
+        for cap in [f32::NAN, f32::INFINITY, 0.399, 20.001] {
+            assert!(!valid_gap_cap(cap));
+        }
     }
 }

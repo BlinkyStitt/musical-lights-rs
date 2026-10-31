@@ -16,7 +16,7 @@ let danceOptions = null, lastAccent = 0, initialAccent = 0;
 let recordingStart = 0, initialTick = 0, impulseTotals;
 let schedulingGap = 0, maxSchedulingGap = 0, batchMs = 0, maxStepMs = 0;
 let batchTicks = 0, batchSubsteps = 0, batchMaxSubsteps = 0;
-let substepTotal = 0, maxSubsteps = 0, overloadTicks = 0, substepCosts = [];
+let substepTotal = 0, requestedSubstepTotal = 0, maxSubsteps = 0, overloadTicks = 0, substepCosts = [];
 const absoluteNow = () => performance.timeOrigin + performance.now();
 const snapshot = () => new Float32Array(wasm.memory.buffer, simulation.snapshot_ptr(), layout[12]);
 
@@ -71,6 +71,7 @@ function run() {
     const substeps = state[layout[15]], excess = state[layout[15] + 1];
     batchSubsteps += substeps; batchMaxSubsteps = Math.max(batchMaxSubsteps, substeps);
     substepTotal += substeps; maxSubsteps = Math.max(maxSubsteps, substeps);
+    requestedSubstepTotal += substeps + excess;
     if (excess > 0) overloadTicks++;
     if (recording && substepCosts.length < capacity) substepCosts.push([simulation.tick(), substeps, excess, cost]);
     for (let i = 0; i < impulseTotals.length; i++) impulseTotals[i] += state[layout[10] + i];
@@ -96,14 +97,14 @@ function publish() {
   output.set(impulseTotals, layout[10]);
   impulseTotals.fill(0);
   postMessage({ type: 'snapshot', buffer, horizontalDirection: simulation.horizontal_direction(), pigments: new Float32Array(wasm.memory.buffer, simulation.pigments_ptr(), snapshot()[layout[30]] * 9).slice(), schedulingGap, maxSchedulingGap, batchMs, batchTicks, batchSubsteps, batchMaxSubsteps, maxStepMs, debt, maxDebt, steps, totalCost,
-    tick: simulation.tick(), substepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow() }, [buffer]);
+    tick: simulation.tick(), substepTotal, requestedSubstepTotal, maxSubsteps, overloadTicks, timestamp: absoluteNow() }, [buffer]);
   buffer = null;
 }
 function reset(values) {
   simulation?.free();
   config = values ?? PhysicsSimulation.defaults();
   simulation = new PhysicsSimulation(config, palette);
-  input = new Float32Array(layout[22]); input[32] = config[0]; input[62] = config[5]; input.set(config.slice(8, 11), 64);
+  input = new Float32Array(layout[22]); input[32] = config[0]; input[62] = config[5]; input.set(config.slice(8, 11), 64); input[67] = config[11];
   simulation.input(input);
   simulation.set_tempo(tempo);
   if (danceOptions) simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);
@@ -111,7 +112,7 @@ function reset(values) {
   pending = []; publishedTick = -2; debt = 0; maxDebt = 0; steps = 0; totalCost = 0;
   schedulingGap = 0; maxSchedulingGap = 0; batchMs = 0; maxStepMs = 0;
   batchTicks = 0; batchSubsteps = 0; batchMaxSubsteps = 0;
-  substepTotal = 0; maxSubsteps = 0; overloadTicks = 0; substepCosts = [];
+  substepTotal = 0; requestedSubstepTotal = 0; maxSubsteps = 0; overloadTicks = 0; substepCosts = [];
   impulseTotals.fill(0); lastTime = origin = absoluteNow();
 }
 self.onmessage = async ({ data }) => {
@@ -122,7 +123,8 @@ self.onmessage = async ({ data }) => {
         palette = data.palette;
         const defaults = Array.from(PhysicsSimulation.defaults());
         config = new Float32Array(defaults); config[0] = data.height;
-        if (data.config?.length === 11) { config = new Float32Array(data.config); config[0] = data.height; }
+        if ([11, 12].includes(data.config?.length)) { config.set(data.config); config[0] = data.height; }
+        if (data.gapCap !== undefined) config[11] = data.gapCap;
         danceOptions = data.danceOptions ?? { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1, scrollSpeed: 2 };
         reset(config); paused = data.paused;
         buffer = null;
@@ -163,7 +165,7 @@ self.onmessage = async ({ data }) => {
         postMessage({ type: 'recording', timestamp: recordingStart, config: Array.from(config) }); break;
       case 'report':
         postMessage({ type: 'report', inputs: recording, initialTempo, danceOptions, initialAccent, physicsCosts: Array.from(costs.subarray(0, costCount)),
-          recordingOverflow, substepTotal, maxSubsteps, overloadTicks, substepCosts, config: Array.from(config), initialTick, finalTick: simulation.tick(),
+          recordingOverflow, substepTotal, requestedSubstepTotal, maxSubsteps, overloadTicks, substepCosts, config: Array.from(config), initialTick, finalTick: simulation.tick(),
           elapsedMs: absoluteNow() - recordingStart, debt, maxDebt, discardedSimulationMs: 0, finalSnapshot: Array.from(snapshot()),
           finalPigments: Array.from(new Float32Array(wasm.memory.buffer, simulation.pigments_ptr(), layout[21] * 9)) });
         recording = null; costs = null; substepCosts = []; break;

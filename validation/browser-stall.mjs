@@ -23,8 +23,13 @@ export async function nativeProcessSnapshot(rootPid = process.pid, proc = '/proc
   return Promise.all(processes.filter(p => p && selected.has(p.pid)).map(async p => {
     const base = `${proc}/${p.pid}`;
     const tasks = await readdir(`${base}/task`).catch(() => []);
-    return { ...p, tasks: await Promise.all(tasks.map(async tid => ({
+    return { ...p, stat: await read(`${base}/stat`), cgroup: await read(`${base}/cgroup`),
+      tasks: await Promise.all(tasks.map(async tid => ({
       tid: Number(tid), name: await read(`${base}/task/${tid}/comm`),
+      // Raw kernel counters preserve CPU execution, runnable queue delay and
+      // context switches even when the browser's main thread cannot respond.
+      schedstat: await read(`${base}/task/${tid}/schedstat`),
+      status: await read(`${base}/task/${tid}/status`),
       wait: await read(`${base}/task/${tid}/wchan`),
       syscall: await read(`${base}/task/${tid}/syscall`),
       stack: await read(`${base}/task/${tid}/stack`),

@@ -7,3 +7,11 @@ export function requireHardwareRenderer(renderer) {
   }
   return renderer;
 }
+
+// Chromium needs the full browser channel and the same ANGLE path as GPU CI.
+// WebKit keeps its native backend; its reported renderer is checked separately.
+export function hardwareBrowserOptions(browserName) {
+  return browserName === 'chromium' ? { channel: 'chromium', args: process.platform === 'darwin'
+    ? ['--use-angle=metal', '--enable-gpu']
+    : ['--use-gl=angle', '--use-angle=gl', '--enable-gpu'] } : {};
+}

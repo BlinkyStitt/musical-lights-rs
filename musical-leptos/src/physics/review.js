@@ -1,6 +1,11 @@
 import { build } from './build.js';
 
-export function playbackTiming(context) {
+export function playbackTiming(context, { audible = true, diagnostics = false } = {}) {
+  // Muted playback has no audible output to locate. Avoid locking the browser's
+  // audio graph for unused output timestamps/latency on every transport update.
+  // Diagnostic captures still request the output clock, even while muted.
+  if (!audible && !diagnostics)
+    return { method: 'processing-clock', confidence: 'output muted', audioTime: context.currentTime };
   const stamp = context.getOutputTimestamp?.();
   if (stamp?.contextTime > 0 && stamp.performanceTime > 0 && Number.isFinite(stamp.contextTime) && Number.isFinite(stamp.performanceTime)) {
     return { method: 'output-timestamp', confidence: 'output clock estimate', audioTime: stamp.contextTime + (performance.now() - stamp.performanceTime) / 1000 };

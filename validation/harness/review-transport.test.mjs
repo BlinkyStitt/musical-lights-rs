@@ -19,11 +19,11 @@ before(async () => {
 });
 after(async () => { await rm(assets, { recursive: true, force: true }); });
 
-function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat = true } = {}) {
+function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat = true, audible = true, diagnostics = false } = {}) {
   const controls = Object.fromEntries(Object.entries({
     '.input-source': { value: kind }, '.tone-kind': { value: 'exercise' },
     '.tone-frequency': { value: frequency }, '.tone-level': { value: level },
-    '.tone-repeat': { checked: repeat }, '.tone-audible': { checked: false },
+    '.tone-repeat': { checked: repeat }, '.tone-audible': { checked: audible }, '.tone-trace': { checked: diagnostics },
     '.tone-pause': {}, '.review-replay': {}, '.tone-status': {},
   }).map(([key, values]) => [key, Object.assign(new EventTarget(), values)]));
   const card = Object.assign(new EventTarget(), { dataset: {}, isConnected: true,
@@ -103,6 +103,34 @@ function position(result, processing, output, state = 'playing') {
   assert.ok(Math.abs(result.outputSeconds - output) < 1e-10, JSON.stringify(result));
   assert.equal(result.state, state);
 }
+
+test('muted playback avoids output clock locks and switches back immediately when audible', async t => {
+  const f = fixture(t, { audible: false }); await acquireInput(f.context, 0);
+  let reads = 0;
+  f.context.getOutputTimestamp = () => { reads++; return { contextTime: 15.9, performanceTime: performance.now() }; };
+  Object.defineProperty(f.context, 'outputLatency', { get() { assert.fail('Muted playback must not query output latency'); } });
+  position(f.read(16.1), .1, .1);
+  assert.equal(f.read(16.1).method, 'processing-clock');
+  assert.equal(f.read(16.1).confidence, 'output muted');
+  assert.equal(reads, 0);
+  f.controls['.tone-audible'].checked = true;
+  f.controls['.tone-audible'].dispatchEvent(new Event('change'));
+  const audible = f.read(16.1);
+  assert.equal(reads, 1); assert.equal(audible.method, 'output-timestamp');
+  assert.ok(Math.abs(audible.outputSeconds - 5.9) < .001);
+  f.controls['.tone-audible'].checked = false;
+  f.controls['.tone-audible'].dispatchEvent(new Event('change'));
+  position(f.read(16.3), .3, .3); assert.equal(reads, 1);
+});
+
+test('muted diagnostic recording retains output timestamp measurements', async t => {
+  const f = fixture(t, { audible: false, diagnostics: true }); await acquireInput(f.context, 0);
+  let reads = 0;
+  f.context.getOutputTimestamp = () => { reads++; return { contextTime: 15.9, performanceTime: performance.now() }; };
+  const data = f.read(16.1);
+  assert.equal(reads, 1); assert.equal(data.method, 'output-timestamp');
+  assert.ok(Math.abs(data.outputSeconds - 5.9) < .001);
+});
 
 test('output clock crosses repeat boundaries after the audible iteration finishes', async t => {
   const f = fixture(t); await acquireInput(f.context, 0);

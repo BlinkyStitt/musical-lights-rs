@@ -72,6 +72,38 @@ async function dropQuantum(page, segment = 1, command = 'validation-drop-quantum
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState.continuity.segment)).toBe(segment);
 }
 
+test('muted generated playback avoids output clock polling and audible playback restores it', async ({ page }) => {
+  await recoveryPage(page);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.review-start').click();
+  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+  await page.evaluate(() => {
+    window.outputClockReads = 0; window.transportUpdates = 0;
+    const context = recoveryContexts[0], original = context.getOutputTimestamp;
+    if (original) context.getOutputTimestamp = function () { outputClockReads++; return original.call(this); };
+    const descriptor = Object.getOwnPropertyDescriptor(AudioContext.prototype, 'outputLatency')
+      ?? Object.getOwnPropertyDescriptor(Object.getPrototypeOf(AudioContext.prototype), 'outputLatency');
+    if (descriptor?.get) Object.defineProperty(context, 'outputLatency', {
+      get() { outputClockReads++; return descriptor.get.call(this); }, configurable: true,
+    });
+    document.querySelector('.audio-card').addEventListener('review-playback', () => transportUpdates++);
+  });
+  await expect.poll(() => page.evaluate(() => transportUpdates)).toBeGreaterThanOrEqual(10);
+  expect(await page.evaluate(() => outputClockReads)).toBe(0);
+  expect(await page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.method)).toBe('processing-clock');
+  await page.locator('.tone-audible').check();
+  await expect.poll(() => page.evaluate(() => outputClockReads)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.method)).not.toBe('processing-clock');
+  await page.locator('.tone-audible').uncheck();
+  await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').review.lastPlayback.method)).toBe('processing-clock');
+  const before = await page.evaluate(() => ({ reads: outputClockReads, updates: transportUpdates }));
+  await expect.poll(() => page.evaluate(() => transportUpdates)).toBeGreaterThanOrEqual(before.updates + 10);
+  expect(await page.evaluate(() => outputClockReads)).toBe(before.reads);
+  expect(await page.evaluate(() => captureCalls)).toBe(0);
+  await page.locator('.review-stop').click();
+});
+
 test('a real audio gap preserves playback and monitor controls while exported traces declare it', async ({ page }, info) => {
   await recoveryPage(page);
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });

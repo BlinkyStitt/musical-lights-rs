@@ -1,4 +1,5 @@
 import { runtimeRoot } from './runtime-assets.mjs';
+import { evaluatePhysicsCost } from './physics-cost-acceptance.mjs';
 import { traceLayout } from './trace-layout.mjs';
 // Deterministic 12-second generated-audio workload, including portrait/landscape
 // resize transitions. Run each engine in a separate Node process so its WASM
@@ -26,10 +27,11 @@ const palette = Float32Array.from(Array.from({ length: 24 }, (_, i) => {
   const rgb = hsluvToLinear([h,100,58]), peak = Math.max(...rgb);
   return rgb.map(v => v/peak);
 }).flat());
-for (let run = 0; run < 3; run++) {
-  const sim = new PhysicsSimulation(PhysicsSimulation.defaults(), palette);
-  const input = new Float32Array(layout[22]); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5]; input[64] = 8; input[65] = .0264; input[66] = .192;
-  let totalMs = 0, maxTickMs = 0, substeps = 0;
+for (const gapCap of [.6, 20]) for (let run = 0; run < 3; run++) {
+  const config = PhysicsSimulation.defaults(); config[11] = gapCap;
+  const sim = new PhysicsSimulation(config, palette);
+  const input = new Float32Array(layout[22]); input.set(config.slice(8, 11), 64); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5]; input[67] = gapCap;
+  let totalMs = 0, maxTickMs = 0, substeps = 0, requestedSubsteps = 0, overloadTicks = 0;
   for (let tick = 0; tick < 1440; tick++) {
     if (tick % 2 === 0) {
       input[32] = [.927803, 2.596923, .554502, 2.596923, .927803][Math.min(4, Math.floor(tick / 288))];
@@ -39,9 +41,11 @@ for (let run = 0; run < 3; run++) {
     }
     const start = performance.now(); sim.step(); const cost = performance.now() - start;
     totalMs += cost; maxTickMs = Math.max(maxTickMs, cost);
-    substeps += new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12])[layout[15]];
+    const state = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
+    substeps += state[layout[15]]; requestedSubsteps += state[layout[15]] + state[layout[15] + 1];
+    if (state[layout[15] + 1] > 0) overloadTicks++;
   }
-  runs.push({ totalMs, maxTickMs, substeps, ticks: sim.tick() }); sim.free();
+  runs.push({ gapCap, requestedSubsteps, overloadTicks, totalMs, maxTickMs, substeps, ticks: sim.tick() }); sim.free();
 }
 const result = { node: process.version, platform: process.platform, cpu: cpus()[0].model,
   paletteSha256: createHash('sha256').update(new Uint8Array(palette.buffer)).digest('hex'),
@@ -49,16 +53,16 @@ const result = { node: process.version, platform: process.platform, cpu: cpus()[
   physicsSha256: createHash('sha256').update(bytes).digest('hex'),
   pcmSha256: createHash('sha256').update(new Uint8Array(pcm.buffer)).digest('hex'),
   protocol: layout[18], bands: layout[0], balls: PhysicsSimulation.defaults()[8],
-  durationSeconds: 12, physicsHz: layout[1], runs,
-  medianCpuMs: runs.map(run => run.totalMs).sort((a, b) => a - b)[1] };
+  durationSeconds: 12, riseDurationMs: PhysicsSimulation.defaults()[6] * 1000, physicsHz: layout[1], runs,
+  cpuByCap: [.6,20].map(gapCap => ({gapCap, medianCpuMs:runs.filter(r=>r.gapCap===gapCap).map(r=>r.totalMs).sort((a,b)=>a-b)[1]})) };
 // Reproduce the full-height attack separately from the generated-audio workload.
 // Preserve real targets and the configured rise duration; record overload rather
 // than treating a capped tick as a successful performance acceptance result.
 result.fullAttacks = [];
-for (const height of [.927803, 2.596923]) {
-  const config = PhysicsSimulation.defaults(); config[0] = height;
+for (const height of [.927803, 2.596923]) for (const gapCap of [.6, 20]) {
+  const config = PhysicsSimulation.defaults(); config[0] = height; config[11] = gapCap;
   const sim = new PhysicsSimulation(config, palette);
-  const input = new Float32Array(layout[22] ?? 34); input[32] = height; input[62] = config[5]; input[64] = 8; input[65] = .0264; input[66] = .192;
+  const input = new Float32Array(layout[22] ?? 34); input.set(config.slice(8, 11), 64); input[32] = height; input[62] = config[5]; input[67] = config[11];
   sim.input(input);
   for (let tick = 0; tick < 120; tick++) sim.step();
   input.fill(1, 0, 24); sim.input(input);
@@ -66,12 +70,14 @@ for (const height of [.927803, 2.596923]) {
   for (let tick = 1; tick <= 16; tick++) {
     sim.step();
     const snapshot = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
-    trace.push({ ms: tick * 1000 / layout[1], top: snapshot[layout[9]],
-      velocity: snapshot[layout[14]], substeps: snapshot[layout[15]], excess: snapshot[layout[15] + 1] });
+    trace.push({ ms: tick * 1000 / layout[1], top: snapshot[layout[9]], baseline: snapshot[layout[17]+5], activeTop: snapshot[layout[9]]-snapshot[layout[17]+5],
+      motion: snapshot[layout[31]], travel: snapshot[layout[17]+6], velocity: snapshot[layout[14]], substeps: snapshot[layout[15]], excess: snapshot[layout[15] + 1] });
   }
-  result.fullAttacks.push({ height, overloadTicks: trace.filter(row => row.excess > 0).length,
+  result.fullAttacks.push({ height, gapCap, requestedSubsteps: trace.reduce((s,r)=>s+r.substeps+r.excess,0), overloadTicks: trace.filter(row => row.excess > 0).length,
     maxRequestedSubsteps: Math.max(...trace.map(row => row.substeps + row.excess)), trace });
   sim.free();
 }
 await writeFile(output, JSON.stringify(result, null, 2) + '\n');
 console.log(JSON.stringify({ ...result, fullAttacks: result.fullAttacks.map(({ trace, ...summary }) => summary) }));
+
+evaluatePhysicsCost(result);

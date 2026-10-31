@@ -1,5 +1,81 @@
 # Validation record
 
+## Current active-gap acceptance
+
+The [active-gap specification](active-gap-spec.md) and
+[automated performance procedure](physics.md#automated-performance-acceptance)
+supersede older mandatory phone operation, human listening and smooth-motion
+confirmation for SKI-1240 throughout this historical record. Keep their numerical
+thresholds. No owner product-use task or manual sign-off is a completion gate.
+Physical-device claims remain unavailable from desktop emulation.
+
+`just validate` runs CPU/build and offline regression checks locally. Exact-head
+GitHub GPU jobs add `active-gap.spec.mjs` and three five-minute hardware-rendered
+acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
+off). The ordinary browser inventory excludes those long GPU-only cases.
+One worker, zero retries and serial startup/crash checks remain in both configs.
+Each result attaches the full replayable report, source/build digest identity,
+collector hash, renderer and browser version, including failing numeric results.
+GPU reports upload on success and failure. The first runner then executes
+`just validate-active-gap` and `just validate-tilt` serially; timing collectors
+verify the served build and retain strict transition predicates. Any failure
+blocks the existing validated-site/Pages barrier.
+
+Failed five-minute captures retain timestamped audio session transitions, the
+final audio continuity state, and the first state associated with each
+invalidation. Per-second render counters distinguish animation callbacks,
+submitted frames, GPU backpressure and submission delay. These counters observe
+the existing loop; only actual submitted frames enter FPS acceptance.
+`performance-processes.jsonl` records native process/thread CPU and runnable-queue
+counters, wait states and cgroup limits/pressure before, every ten seconds during,
+and after the same capture. Each sample is saved immediately, including its own
+sampling duration. Unreadable kernel fields remain explicit errors in the
+evidence. Use these artifacts with the existing server request log to diagnose
+the failing operation; do not infer that audio gaps and slow frames share a cause
+from timing summaries alone. The collector's added sources are included in its
+provenance hashes. No resource limits, workload settings or acceptance thresholds
+change when collecting this evidence.
+
+GPU jobs preload `validation/runner-network.cjs` after checkout. It records the
+actual Node/libc DNS lookup start, duration, returned address families and errors
+for external hosts during dependency downloads and artifact transfers. Resolver
+configuration, routes and native UDP counters accompany the first lookup and
+failures; unreadable files are explicit errors. `RUNNER_NETWORK` JSON lines go
+directly to job stderr so an artifact upload outage cannot lose this evidence.
+The recorder adds no DNS probes, timers, retries or resolver changes. Local app
+traffic is excluded. It cannot observe action acquisition before checkout or
+non-Node clients, and it does not establish why a remote resolver dropped a
+request. Correlate it with the failing transfer's existing error log before
+changing runner networking. Missing browser downloads or artifact uploads still
+fail the job and the validated-site/Pages barrier.
+
+Before the GPU browser jobs, `gpu-runner-network.yml` performs one HTTPS GET of
+the checkout archive on each named GPU runner pool. It has no remote actions,
+checkout or package installation: the runner's
+[initialization downloads remote actions before steps execute](https://github.com/actions/runner/blob/v2.338.1/src/Runner.Worker/JobExtension.cs).
+This observes a transfer without depending on checkout. The inline Python
+probe logs the actual libc lookup, returned families or error number, elapsed
+time, resolver configuration, routes and UDP counters, plus native thread wait
+states during the transfer. Logs go directly to the job output; no artifact
+upload is required. Missing tools, failed transfers and the bounded command
+deadline fail the job. It adds no retries or resolver changes and finishes before
+browser measurements begin. The offline tooling tests execute its exact payload
+with injected DNS/transfer failures. This is a separate Python/libc request on
+the GPU runner pool, not a trace of the earlier .NET runner request or proof of
+a network repair. Successful probes cannot replace GPU/browser acceptance.
+
+The approved integrated lighting comparison retains hardware shading ≥59 FPS
+and p95 ≤18.5 ms. Software uses its matched same-run baseline with no absolute
+FPS floor. A shading slowdown over 10% in both orders fails on either renderer;
+regressions accept matched software 5/8/25 FPS and reject repeatable 20% slowdowns.
+This resolves the earlier software-floor question without changing the gate.
+
+The shared `physics/performance.js` evaluator retains frame/debt/drift/age limits
+and also rejects missing samples or truncated captures. The diagnostic UI keeps
+its optional device declarations and human feedback; automation bypasses neither
+by inventing metadata. Instrumented packet latency is separate from diagnostics-off
+FPS. Production verification remains a later automated delivery step after merge.
+
 ## Website deployment
 
 Website validation builds physics, the worklet and Leptos once. The build job
@@ -136,6 +212,9 @@ Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
 `python3 validation/install_tools.py ci`, then run
 `.tools/bin/actionlint .github/workflows/*.yml`.
+`just validate` and `just check-ci` run that installer automatically when the
+local `.tools/bin/actionlint` executable is missing. Installation errors stop
+the recipe; workflow lint still runs on every invocation.
 Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`; the reference
 target includes their lint/type checks.
@@ -763,8 +842,8 @@ Cortex-M4 targets. Browser and physics adapters retain their own platform work.
 Use [PR #40](https://github.com/BlinkyStitt/musical-lights-rs/pull/40) and its CI
 runs for shared delivery evidence.
 
-Physical iPhone playback and capture, human listening, and five-minute
-physical-phone FPS acceptance remain pending. Desktop WebKit and its iPhone
+Physical iPhone playback/capture, human listening and physical-phone FPS
+were not measured at this checkpoint. Desktop WebKit and its iPhone
 profile cannot establish those results. Routine recognition uses mocks; this
 change makes no live AudD request.
 
@@ -1342,7 +1421,7 @@ does not enable auto-merge on every pull request.
 ## Tempo regression acceptance
 
 From the repository root, install the pinned web tools with
-`python3 validation/install_tools.py web` and `python3 validation/install_tools.py ci`,
+`python3 validation/install_tools.py web`,
 add `.tools/bin` to `PATH`, then run `just validate`.
 The recipe runs workflow lint and tooling regressions, then the core feature
 matrix, worklet, physics and Leptos checks/builds, benchmark correctness smoke
@@ -1504,13 +1583,9 @@ distributions, GPU duration where available, and simulation delay/discarded time
 then reassess the fallback against the 60 FPS target. Software timings and
 correctness passes do not establish hardware acceptance.
 
-Physical-phone performance is separate. Before
-claiming phone acceptance, perform the existing fifteen-second warmup and
-five-minute normal, portrait-expanded and landscape-expanded device runs with
-diagnostics off, and confirm real sensor flips, motion shutdown and visual
-smoothness. Desktop WebKit, including an iPhone profile, is browser evidence
-only. Linux CI and production deployment are not established by these local
-measurements.
+These desktop captures do not establish physical-phone performance. The
+current automated acceptance procedure above supersedes the former manual gate.
+Linux CI and production deployment are not established by these local measurements.
 
 Historical initial-implementation evidence (not a current-head browser result):
 local `PATH="$PWD/.tools/bin:$PATH" just validate` exited 0: workflow/tooling
@@ -1619,8 +1694,8 @@ hardware WebGL, not a missing application or a sandbox access failure.
 **Hardware acceptance remains incomplete:** execute the complete GPU suite and
 the six hardware timing samples on a verified GPU with matching artifact and
 instrumentation, then assess the 60 FPS target. No hardware result is inferred
-from software correctness. Physical-phone acceptance still requires the device
-procedure above. No Linux CI, live provider, human-listening, physical-device or
+from software correctness. The former manual device gate is superseded by
+the current automated active-gap procedure above. No Linux CI, live provider, human-listening, physical-device or
 production-deployment acceptance is claimed by this local checkpoint.
 
 ### Hardware review follow-up, 2026-10-30
@@ -1788,10 +1863,9 @@ Native/WASM and rendered acceptance evidence above comes from the completed
 checkpoint CI; this documentation-only follow-up does not claim a new local
 browser or hardware measurement.
 
-Physical-phone acceptance remains separate: perform the existing fifteen-second
-warmup and five-minute normal/portrait-expanded/landscape-expanded runs with
-diagnostics off, plus real sensor flips, motion shutdown and visual-smoothness
-checks, before claiming device performance. No new live-provider or
+Physical-phone performance is not established by these host results. The
+current automated active-gap procedure supersedes the former manual gate.
+No new live-provider or
 human-listening result is claimed. The CI Pages job was skipped; production
 deployment and live tilt verification remain pending the authorized delivery
 process.

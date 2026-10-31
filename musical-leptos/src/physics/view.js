@@ -58,7 +58,7 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(67);
+    this.input = new Float32Array(68);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
@@ -70,6 +70,7 @@ export class PhysicsView {
     this.cameraPan.onStop = () => {
       if (this.cameraDirty) { presentation?.persist(); this.cameraDirty = false; }
     };
+    this.input[67] = (this.settings.activeGapCap ?? 60) / 100;
     this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
@@ -141,7 +142,7 @@ export class PhysicsView {
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
     this.measure();
-    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics ? [...this.settings.physics, this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100] : undefined, danceOptions: this.danceOptions() });
+    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics ? [...this.settings.physics, this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100] : undefined, gapCap: this.input[67], danceOptions: this.danceOptions() });
     this.graph.physics = this;
     this.animate = frameTime => {
       this.request = null;
@@ -221,6 +222,7 @@ export class PhysicsView {
       this.lighting.configure(detail); this.resizePending = true;
       if (detail.physics) this.input[62] = detail.physics[5];
       this.input.set([detail.balls[0], detail.balls[1] / 100, detail.balls[2] / 100], 64);
+      this.input[67] = (detail.activeGapCap ?? 60) / 100;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
@@ -386,7 +388,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout.length !== 31 || data.layout[18] !== 21 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 32 || data.layout[18] !== 22 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];
@@ -407,6 +409,7 @@ export class PhysicsView {
       this.config.splice(8, 3, ...this.current.slice(this.layout[30], this.layout[30] + 3));
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
       this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
+      this.metrics.requestedSubstepTotal = data.requestedSubstepTotal;
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
       // Geometry and accessible surfaces must describe the newly published room,
       // even when a worker message arrives between animation frames.
@@ -415,8 +418,8 @@ export class PhysicsView {
       if ((this.report?.active || this.card.dataset.toneDiagnostics === 'true' || this.recordTiming) && this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
       this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
-      this.config = data.config; this.input[62] = this.config[5]; this.input.set(this.config.slice(8, 11), 64);
-      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config).slice(0, 8); this.card.preferences.balls = [data.config[8], Math.round(data.config[9] * 10000) / 100, Math.round(data.config[10] * 10000) / 100]; this.card.presentation.save(); }
+      this.config = data.config; this.input[62] = this.config[5]; this.input[67] = this.config[11]; this.input.set(this.config.slice(8, 11), 64);
+      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config).slice(0, 8); this.card.preferences.balls = [data.config[8], Math.round(data.config[9] * 10000) / 100, Math.round(data.config[10] * 10000) / 100]; this.card.preferences.activeGapCap = Math.round(data.config[11] * 100); this.card.presentation.save(); }
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
       // The layout and GPU resources stay fixed across a physics reset.
       // Only snapshot interpolation and local event history belong to the old world.
@@ -541,6 +544,8 @@ export class PhysicsView {
       this.canvas.setAttribute('aria-label', `${active} rigid balls, matching top and bottom audio bars, inside a box with eight side banks`);
     }
     this.renderedDepth = depth; this.barRoof.value = height;
+    this.renderedBaseline = previous[geometry + 5] + (current[geometry + 5] - previous[geometry + 5]) * alpha;
+    this.renderedTravel = previous[geometry + 6] + (current[geometry + 6] - previous[geometry + 6]) * alpha;
     for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
       const attr = this.balls.geometry.attributes[name];
       for (let i = 0; i < active; i++) {
@@ -568,8 +573,9 @@ export class PhysicsView {
     }
     for (let i = 0; i < count; i++) {
       const top = this.renderedTops[i] = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
-      const maximum = previous[geometry + 1] + (current[geometry + 1] - previous[geometry + 1]) * alpha;
-      const wave = this.waveLight(i, top, maximum, now / 1000, !this.listening);
+      const motion = this.layout[31] + i;
+      const level = previous[motion] + (current[motion] - previous[motion]) * alpha;
+      const wave = this.waveLight(i, level, 1, now / 1000, !this.listening);
       const edge = this.listening ? this.edges[i] : wave * (this.reduced.matches ? .5 : 1);
       // Shared display levels contain audio loudness; physical travel also
       // includes the decorative listening floor and must not set brightness.
@@ -622,7 +628,7 @@ export class PhysicsView {
     this.camera.updateMatrixWorld();
     const height = this.current?.[this.layout?.[17]] ?? this.height;
     const maximum = this.current?.[this.layout?.[17] + 1] ?? this.height / 4;
-    for (const [property, y] of [['--balloon-headroom', maximum], ['--plot-baseline', .003]]) {
+    for (const [property, y] of [['--balloon-headroom', maximum], ['--plot-baseline', this.current?.[this.layout?.[17] + 5] ?? .003]]) {
       this.pointerPoint.set(0, y, frontDepth).project(this.camera);
       const top = (1 - this.pointerPoint.y) * 50;
       this.graph.style.setProperty(property, `${property === '--plot-baseline' ? 100 - top : top}%`);

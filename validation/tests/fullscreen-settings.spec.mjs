@@ -564,7 +564,7 @@ test('ball settings transitions render the room and bodies from the same applied
       const sim = new PhysicsSimulation(config, new Float32Array(v.palette));
       try {
         const previous = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), v.layout[12]).slice();
-        const input = new Float32Array(v.layout[22]); input[32] = .4; input[62] = .2; input.set([16, .192, .192], 64);
+        const input = new Float32Array(v.layout[22]); input[32] = .4; input[62] = .2; input.set([16, .192, .192], 64); input[67] = config[11];
         sim.input(input); sim.step();
         v.previous = previous;
         v.current = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), v.layout[12]).slice();

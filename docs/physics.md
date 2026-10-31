@@ -25,6 +25,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved space between paired bars | Larger of the packed stack or largest sphere + hop allowance, plus 4 mm |
 | Minimum enclosure height | 0.40 m, expanded when the selected balls require more packing space |
+| Active gap cap | 0.60 m reference enclosure (0.40–20 m); ball packing remains reserved |
 
 Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
@@ -68,7 +69,7 @@ disables it. The physics worker records the combined targets for exact replay,
 while the audio meters and trace retain the measured values. Protocol 10 marks
 the faster release policy; older recordings need their matching engine.
 
-Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess outward release velocity is dissipated. The default flight budget is 30% of available enclosure space after maximum ball clearance; Reduced Motion halves it and caps it at 2.5 cm. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle bar end sits 3 mm inside its active floor or ceiling base.
+Lower targets are consumed on the next outer tick. Ball load cannot slow prescribed bars, and contacts alone launch balls. On separation from a bar-driven support chain, excess outward release velocity is dissipated. The default flight budget is 30% of the capped active opening after maximum ball clearance; Reduced Motion halves it and caps it at 2.5 cm. Support propagates through stacked balls. Carrying motion is not clamped; ordinary drops, lateral/angular motion, and external forces retain their behavior. This energy limit is an animation choice, not a measured material property. The idle bar end sits 3 mm inside its active floor or ceiling base.
 
 Large attacks from rest must arrive within 1% of a stable target within 50 ms
 of physics receipt. Stable corrections up to 1% must settle within 150 ms.
@@ -90,7 +91,7 @@ the solver and re-enabled before they can contact a ball. Rendering clips
 copies to the enclosure. The 24 accessible meters keep
 source identity while their pointer regions and keyboard focus follow the bars.
 
-The enclosure uses six half-spaces, including a real downward-facing ceiling. Each source has a 48 mm flat top with a straight 2 mm join to the next source. The closed prisms extend beyond the active floor or ceiling base. Shared edges have no buried collision walls; the renderer uses the same flat tops and joins, with one outer coating. Size-sorted initial rows fit inside the minimum enclosure without overlaps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize preserves ball state and scales the normalized musical trajectory through a separate 300 ms enclosure transition; it never retargets music. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
+The enclosure uses six half-spaces, including a real downward-facing ceiling. Each source has a 48 mm flat top with a straight 2 mm join to the next source. The closed prisms extend beyond the active floor or ceiling base. Shared edges have no buried collision walls; the renderer uses the same flat tops and joins, with one outer coating. Size-sorted initial rows fit inside the active opening without overlaps, including restored caps. Staggered horizontal and depth positions let stacks spread when all bars rise together. Resize and cap changes preserve ball state and scale the normalized musical trajectory through a separate 300 ms request transition; they never retarget music. Applied bases move at most 2 m/s through bounded contact steps. Reopening grants travel only after the applied bases have retreated far enough. The ceiling expands immediately, but only shrinks through vacant ball/bar clearance. The camera fits the entire transitional enclosure, and DOM guides and hit regions follow that projection.
 
 Browser camera controls use the stable `cameraAngle`, `cameraZoom`, `cameraX` and `cameraY` parameter IDs in `physics/camera-pan.js`. Their metadata defines defaults, bounds, steps and units; `CameraParameters.set()` rejects unknown IDs, nonnumeric/nonfinite values and out-of-range values. Position is the bounded camera anchor in percent (0–100, default 50); zoom is 25–200% (default 100); angle is −40° to +40° (default 0). Manual editors step by one unit, while elapsed-time WASD movement uses continuous values through the same setter. `effective()` accepts validated temporary angle overrides for the existing sweep without changing stored manual values. This is a parameter interface for future modulation, not a modulation engine.
 
@@ -160,14 +161,11 @@ help explains site settings and potentially separate browser/Home Screen grants.
 These checks follow the [Permissions API](https://w3c.github.io/permissions/)
 and [media capture permission semantics](https://w3c.github.io/mediacapture-main/#permissions-integration).
 
-Physical-phone motion acceptance remains a separate check: after turning on Phone motion
-and allowing access, try left/right, up/down, and toward/away shakes in
-portrait and landscape. Repeat with music driving the bars; both sources must
-move the balls together. Hold still to check that shaking stops, then turn off Phone motion
-to check that sensor forces stop while gravity continues. Side impacts should
-rebound, and balls pressed against vertical walls should still fall when they
-have no support underneath. Synthetic browser events do not verify the phone's
-actual sensors or permission prompts.
+Motion regression tests inject acceleration, gravity and orientation events in
+portrait and landscape, including generated audio, stopped motion, wall rebound
+and unsupported drops. They preserve sensor-force behavior without requiring
+physical gestures. Synthetic events do not measure a phone's actual sensors or
+permission prompts; that is an evidence limit, not a manual completion gate.
 
 ## Engine selection and limits
 
@@ -214,7 +212,7 @@ contact impulses, and each sphere's total normal contact impulse in N·s.
 Independent device gravity uses input[34..36], enabled by input[37]. Protocol 12
 adds audio attack edges at input[38..61] and publishes the 62-value input length
 at layout[22]. SI shake magnitudes and the separate contact speed bounds stay unchanged.
-The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 21 reserves sixteen body/contact/pigment slots; `layout[21]` is capacity, and `snapshot[layout[30]]` is the active physical count. Inactive body slots are zeroed. Inputs 64–66 carry count and minimum/maximum diameters in metres; the eleven-value initial configuration ends with the same settings. The original eight-index size profile repeats deterministically for indices 8–15. Core owns the interval mapping and minimum packing height. Count changes remove actual bodies/colliders; survivors keep their handles, velocities and pigments. Size changes recompute mass/inertia and all radius-dependent calculations. When growing spheres overlap, a deterministic six-column packing preserves velocities and colors while relocating the bodies. Short rooms reserve enough height for that packing. Rendering allocates sixteen instances once, draws only active bodies, initializes new instances without interpolating from empty slots and clears inactive lighting. Count and size changes render bodies and enclosure from the same applied tick; ordinary motion interpolation resumes afterwards. Protocol 21 uses 67 held inputs and phone report v7; incompatible historical reports require their matching engine and are rejected explicitly. Geometry at `layout[17]` publishes actual ceiling, maximum bar top, hop allowance, minimum height and depth.
+The WASM wrapper exposes numeric arrays and the snapshot memory location. Protocol 22 reserves sixteen body/contact/pigment slots; `layout[21]` is capacity, and `snapshot[layout[30]]` is the active physical count. Inactive body slots are zeroed. Inputs 64–66 carry count and minimum/maximum diameters in metres; the twelve-value initial configuration carries those settings at indices 8–10 and the cap at index 11. The original eight-index size profile repeats deterministically for indices 8–15. Core owns the interval mapping and minimum packing height. Count changes remove actual bodies/colliders; survivors keep their handles, velocities and pigments. Size changes recompute mass/inertia and all radius-dependent calculations. When growing spheres overlap, a deterministic six-column packing preserves velocities and colors while relocating the bodies. Short rooms reserve enough height for that packing. Rendering allocates sixteen instances once, draws only active bodies, initializes new instances without interpolating from empty slots and clears inactive lighting. Count and size changes render bodies and enclosure from the same applied tick; ordinary motion interpolation resumes afterwards. Protocol 22 uses 68 held inputs and phone report v8; incompatible historical reports require their matching engine and are rejected explicitly. Geometry at `layout[17]` publishes actual ceiling, maximum bar top, hop allowance, minimum height, depth, applied baseline and travel.
 
 The worker clock runs independently of render frames. Each batch processes at
 most eight fixed steps. Overdue batches yield through MessageChannel without a
@@ -243,14 +241,15 @@ to a stop in place; Reduced Motion disables automatic travel. Source colors,
 contacts, accessible labels and audio data keep their source identity.
 
 The separate tempo setter leaves the held physical input and audio transport
-unchanged. The 64-value physics input contains 38 motion values, 24 current audio
-attack edges, enclosure depth and the attack-only paint policy. Recording retains
+unchanged. The 68-value physics input contains 38 motion values, 24 current audio
+attack edges, enclosure depth, the attack-only paint policy, three ball settings
+and the active gap cap. Recording retains
 those edges separately from decorative bar travel.
 New reports include the random seed, starting accent
 ordinal and tempo, dance settings, and tick-stamped input events with their
-tempo and accent in worker application order. Phone report v6 replay applies
+tempo and accent in worker application order. Phone report v8 replay applies
 each input and its cue together before stepping, including inputs at the same
-tick, then verifies the full snapshot and all 72 visible regional pigment values. Older report formats and physics protocols require their historical replay tool.
+tick, then verifies the full snapshot and all 144 reserved regional pigment values. Older report formats and physics protocols require their historical replay tool.
 
 The fixed-memory estimator, recent-peak gate, direction policy, flight math, quadratic sphere drag,
 continuous contact-color fill, and quintic bar motion are hardware-neutral
@@ -258,7 +257,7 @@ continuous contact-color fill, and quintic bar motion are hardware-neutral
 Web APIs, recording ownership and Three.js shading remain application adapters.
 See [implementation and evidence](musical-motion-results/README.md).
 
-Normal flight reserves 30% of available enclosure space after maximum ball
+Normal flight reserves 30% of the capped active opening after maximum ball
 clearance. The slider allows 0–50%. Reduced Motion halves the flight budget and
 caps it at 2.5 cm. Existing support-release limiting uses the shared core's
 `sqrt(2gh)` release speed. A floor/ceiling change retracts the bars, switches
@@ -271,7 +270,7 @@ ratio at 2 and uses simple lighting, modest meshes, and no dynamic shadows or
 bloom. Bars meet edge to edge with flat tips in both the colliders and the
 rendered geometry. This removes the rounded seam trough that let the smallest
 sphere settle below adjacent tips. Sphere sizes remain based on 48 mm.
-Physics protocol 21 starts each ball uniformly in the source color at its actual
+Physics protocol 22 starts each ball uniformly in the source color at its actual
 spawn X coordinate. It rejects replays from previous engines. Physical rolling
 reveals three soft swirl regions. A contact adds its bar color at the ball's
 material contact point, and each visible region fills toward its own target
@@ -310,51 +309,48 @@ and page listeners, disconnects the observer, cancels the animation loop, and
 disposes the WebGL context and resources. Async sensor permission and module
 loading cannot recreate resources after cleanup.
 
-## iPhone 16e acceptance
+## Automated performance acceptance
 
-Use the `/advanced` page in Safari. A Mac browser or an emulated
-iPhone does not establish the phone result.
+The current [active-gap specification](active-gap-spec.md) supersedes the former
+mandatory iPhone procedure and human smooth-motion confirmation. No physical
+operation, listening, or owner sign-off is an acceptance or delivery gate.
+The diagnostic phone-report UI remains available for optional investigation;
+its device fields and smooth-motion checkbox are never fabricated by automation.
 
-The FPS display counts actual animation-frame intervals. The app has no 30 FPS
-limit. WebKit intentionally limits animation to 30 FPS in Low Power Mode; see
-the [WebKit explanation](https://bugs.webkit.org/show_bug.cgi?id=215745).
-If the phone stays near 30 FPS, first check that Low Power Mode is off and Safari
-is in the foreground. If it remains slow, compare normal and fullscreen views
-and export timing data. A 30-second run ended early can help diagnose frame
-intervals, render cost, and physics delay; it is not a five-minute acceptance
-result. Do not infer a phone performance improvement from a Mac measurement.
+GitHub's verified hardware-rendered Chromium suite measures normal,
+portrait-expanded and landscape-expanded views at mobile viewport sizes. Each
+run uses the repeating generated PCM → AudioWorklet → loudness WASM exercise,
+diagnostics off, 15 seconds of warmup, and five minutes of recorded submissions.
+The shared numeric evaluator requires average FPS ≥59, p95 interval ≤18.5 ms,
+less than 1% of intervals over 25 ms, and at least 299,000 ms of frame intervals.
+At 120 Hz, final debt must be less than two steps, maximum debt below 100 ms,
+and mean debt growth from the first to last ten progress samples at most one
+step. Simulation lag must be at least minus one step and below three steps;
+absolute displayed-tick drift must be below three steps and maximum snapshot
+age below 100 ms. Discarded time, overflow, page errors, changed/interrupted
+audio, hidden pages, context loss, changed view/camera, and early termination fail.
+Only actual submitted draws count; GPU queue deferrals remain in frame intervals.
+CPU submission cost is separate from GPU completion.
 
-1. Turn Low Power Mode off. Enter the actual model, browser and iOS version.
-2. Select Test tones and click **Play audio**. It sends PCM
-   directly through the real AudioWorklet/loudness WASM pipeline. Keep Repeat
-   on and Diagnostic recording off; digital review files do not qualify.
-3. Select **Normal view** and start the test. Keep the page visible for the
-   15-second warmup and the complete five-minute measurement.
-4. Confirm smooth motion only if it looked smooth. Export the JSON report.
-5. Repeat in portrait fullscreen and landscape fullscreen. Rotate before
-   starting each run. Use **Exit** after each fullscreen run to export it.
-
-The report includes the Git build, device/browser details, configuration,
-camera, viewport, pixel ratio, frame intervals, render submission cost,
-physics step cost, recorded inputs, final state, and simulation progress.
-Render cost measures CPU work through draw submission, not GPU completion.
-
-Each run requires average FPS ≥59, p95 frame interval ≤18.5 ms, fewer than 1%
-of intervals over 25 ms, no growing simulation delay, no discarded simulation
-time, and the user's smooth-motion confirmation. Hidden pages, context loss,
-audio stopping, view/camera changes, early completion, or report overflow
-invalidate a run. A low FPS value remains visible even when physics catches up.
-
-Keep the matching build when replaying a report:
+Run `just validate` locally. GitHub runs `just validate-gpu --shard=1/2` and
+`--shard=2/2`, then serial evidence collectors and `just validate-tilt` on the
+first runner. Hardware rejects software fallback. The unchanged strict transition
+checks require debt below two steps and snapshot age below 100 ms as well as
+the frame limits. The integrated lighting comparison uses a matched same-run
+software baseline without an absolute software FPS floor; a shading slowdown
+over 10% in both orders fails on either renderer. Hardware shading retains
+59 FPS and 18.5 ms p95 limits. Reports bind artifact digests, instrumentation and browser
+identity. Automated recordings can be replayed with:
 
 ```sh
 export PATH="$PWD/.tools/bin:$PATH"
 node validation/replay-physics.mjs /path/to/exported-report.json
 ```
 
-Merge and Pages deployment require local checks, CI, and all three physical
-phone reports to pass. The Pages job depends on core, web and loudness-reference
-validation and runs only on `main`. A preview is not a production deployment.
+These measurements establish their desktop hardware/browser environment, not
+physical-iPhone performance. That evidence limit creates no manual acceptance
+item. Merge and Pages retain the exact-head validation and artifact barriers,
+serialized publication and latest-main check. A preview is not production.
 
 ## Local verification
 
@@ -387,7 +383,7 @@ saturation, and scales each linear RGB fill until its brightest channel reaches
 one. This uses the full display gamut instead of holding every hue at the same
 muted lightness. Adjacent fills meet without a gap or dark outline. A narrow
 white attack flash sits inside each bar boundary.
-Bar height remains the loudness measure. Source labels, numeric
+Audio meters and filtered targets remain the loudness measures; permanent base height is excluded. Source labels, numeric
 meters, keyboard focus and pointer readouts remain available independently of
 color. LED palettes and acoustic analysis are unchanged.
 
@@ -461,3 +457,44 @@ continuous gradient attached to the rolling ball. Contact does not replace
 visible color bands. Repeated resting pressure does not change the target.
 The visible surface mean also drives ball lighting, so it does not jump ahead
 of the fill. Spawn colors still match each ball's actual X coordinate.
+
+## Active gap cap
+
+The shared Display settings include **Active gap cap (cm)**: 60 cm by default,
+40–2,000 cm in 1 cm steps. This is a reference enclosure height, not a stroke.
+For packed opening `P`, actual enclosure height `H ≥ P` and reference cap `C`,
+core and its physics adapter use `A = min(H, max(C, P))` and add `(H - A) / 2`
+to each permanent base, retaining the 3 mm idle inset at each end. Ball diameter,
+flight allowance and clearance reduce inward bar travel. At the default flight setting, the
+60 cm reference retains 13.84 cm of travel per end, above the 3 mm baseline.
+All nine banks use the applied physical endpoints, including during transitions.
+
+Changing the cap applies live and preserves ball handles, pigments and normalized
+musical trajectories. The existing 36-tick size request transition is followed
+by bounded contact movement; occupied clearance can defer applied surfaces.
+Both bases and ceiling displacement contribute to integration predictions.
+Physics retains every elapsed tick and reports overloads and backlog normally.
+The cap changes neither loudness nor filtered audio targets, meters or attacks.
+Wave lighting uses normalized displacement above the applied permanent base.
+
+The cap is saved separately from the eight material/motion preferences. Missing
+or invalid cap preferences fall back to 60 cm without dropping other fields.
+Reset display restores 60 cm. Worker construction includes the cap before ball
+placement; live changes use the timestamped input queue and remain editable
+while recording. Engine layout 22 has twelve configuration floats (cap in metres
+at index 11), 68 input floats (cap at index 67), and seven geometry floats
+(applied baseline/travel at offsets 5/6). Layout index 31 locates 24
+normalized motion values for wave lighting, independent of moving bases. Replay requires the entire matching
+layout and rejects recordings from older engines.
+
+Run `just check` for native, produced-WASM, benchmark correctness and full
+rendered checks. `just validate` runs the CPU and offline checks. See [active-gap evidence](active-gap-results.md) for comparison
+methods and the limits of host measurements.
+
+The capped geometry retains variable-ball packing clearance. When the selected
+balls need a taller packed opening than the cap, that minimum opening takes
+precedence, just as it does for the minimum enclosure height. Changing the cap
+does not change the ball count or diameter settings. Protocol 22 appends the cap
+at input 67/config 11 and normalized musical motion at layout entry 31; existing
+ball fields remain at inputs 64–66/config 8–10 and layout entry 30. Phone reports
+use v8 and reject older layouts/formats before replay.
