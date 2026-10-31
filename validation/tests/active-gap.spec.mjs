@@ -1,8 +1,47 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { physicsReady, normalView, syntheticAudio, startFrozen } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 const sliderName = 'Active gap cap (cm)';
 test.use({ hasTouch: true });
+
+test('active gap collector snapshots live audio metadata and rejects incomplete captures', async ({ page }) => {
+  const sampler = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/active-gap-sampler.mjs', route => route.fulfill({ body: sampler, contentType: 'text/javascript' }));
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.review-start').click();
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
+  // Publish another real session event after the processor has been attached.
+  await page.locator('.tone-pause').click();
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.report.audioState.state === 'paused');
+  await page.locator('.tone-pause').click();
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = false; });
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  const result = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics, report = view.report;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const { evaluatePerformance } = await import(base + 'physics/performance.js');
+    const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
+    const hooks = [report.frame, report.receive, report.invalidate];
+    const resources = { restart: typeof report.audioState.restart, processor: report.audioState.node instanceof AudioWorkletNode };
+    const pending = collectActiveGapPerformance(view, 'normal', evaluatePerformance);
+    // This is a serialization smoke check, not five-minute performance evidence.
+    // FIFO worker messages finish it early; the numeric gate must reject it.
+    view.worker.postMessage({ type: 'report' });
+    const data = structuredClone(await pending);
+    return { resources, workload: data.workload, numericPass: data.numericPass,
+      restored: hooks.every((hook, i) => hook === [report.frame, report.receive, report.invalidate][i]) };
+  });
+  expect(result.resources).toEqual({ restart: 'function', processor: true });
+  expect(result.workload).toMatchObject({ source: 'generated', kind: 'exercise', state: 'playing',
+    repeat: true, diagnostics: false, continuity: { segment: 0 } });
+  expect(result.workload).not.toHaveProperty('restart'); expect(result.workload).not.toHaveProperty('node');
+  expect(result.numericPass).toBe(false); expect(result.restored).toBe(true);
+});
 
 test('active gap cap edits, validates, restores and resets without acquiring audio', async ({ page }) => {
   await page.addInitScript(() => { window.captureRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.captureRequests++; throw new Error('Unexpected capture'); }; });

@@ -4,7 +4,13 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
   return new Promise((resolve, reject) => {
     const report = view.report, intervals = [], renderCosts = [], progress = [], invalid = new Set();
     const viewport = [innerWidth, innerHeight], camera = JSON.stringify(view.cameraParameters.values);
-    const workload = structuredClone(report.audioState), scrolling = view.card.querySelector('.scroll-lights').checked;
+    const workloadKeys = ['source', 'kind', 'state', 'repeat', 'diagnostics', 'sampleRate', 'dbfs', 'frequency', 'channel', 'pascalsPerUnit'];
+    // Audio session events also contain the restart callback and live processor.
+    // Snapshot evidence fields only, detaching continuity from later mutations.
+    const workload = structuredClone(Object.fromEntries([...workloadKeys, 'sessionId', 'continuity',
+      'peakAmplitude', 'audioStart', 'calibrated', 'selectedChannel'].filter(key => key in report.audioState)
+      .map(key => [key, report.audioState[key]])));
+    const scrolling = view.card.querySelector('.scroll-lights').checked;
     const cameraMotion = view.settings.cameraMotion, cameraBase = view.cameraBase;
     const config = report.readConfig(), layout = [...view.layout], palette = Array.from(view.palette);
     const oldFrame = report.frame, oldReceive = report.receive, oldInvalidate = report.invalidate;
@@ -14,7 +20,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       if (!report.acceptanceWorkload() || report.audioState.sessionId !== workload.sessionId
         || report.audioState.continuity?.segment !== workload.continuity?.segment)
         invalidate('Audio interrupted or changed');
-      for (const key of ['source', 'kind', 'state', 'repeat', 'diagnostics', 'sampleRate', 'dbfs', 'frequency', 'channel', 'pascalsPerUnit'])
+      for (const key of workloadKeys)
         if (report.audioState[key] !== workload[key]) invalidate('Audio workload changed');
       if (document.hidden) invalidate('Page hidden during test');
       if (view.lost || view.closed) invalidate('Renderer stopped during test');
