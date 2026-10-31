@@ -21,6 +21,12 @@ GPU reports upload on success and failure. The first runner then executes
 verify the served build and retain strict transition predicates. Any failure
 blocks the existing validated-site/Pages barrier.
 
+The approved integrated lighting comparison retains hardware shading ≥59 FPS
+and p95 ≤18.5 ms. Software uses its matched same-run baseline with no absolute
+FPS floor. A shading slowdown over 10% in both orders fails on either renderer;
+regressions accept matched software 5/8/25 FPS and reject repeatable 20% slowdowns.
+This resolves the earlier software-floor question without changing the gate.
+
 The shared `physics/performance.js` evaluator retains frame/debt/drift/age limits
 and also rejects missing samples or truncated captures. The diagnostic UI keeps
 its optional device declarations and human feedback; automation bypasses neither

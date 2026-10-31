@@ -52,7 +52,7 @@ layouts explicitly. Do not change versions without a semantic/layout change.
 | Long-run performance | Hardware CI `just validate-gpu --shard=1/2` and `--shard=2/2`: all three `active-gap-performance.spec.mjs` views pass the predicates below and recordings replay exactly. Reject software fallback. |
 | Cost, transition and packet latency | GPU runner `just validate-active-gap`: verified build origin, serial collectors, cost acceptance and existing `--expect-clean` transition assertions pass. Latency reports first corresponding 10% active-travel crossings after subtracting interpolated bases; missed/already-visible/capture-ended responses stay separate. No invented latency budget. |
 | Statistical CPU comparison | When physics/build/workload inputs change, idle-host `cargo +nightly-2026-09-10 bench --locked --manifest-path validation/benchmarks/Cargo.toml --bench production -- production_physics`: 20 samples, one-second warmup, at least three seconds of measurement, zero benchmark overloads. Run separately from browser checks; reuse only applicable provenance-bound evidence. |
-| Integrated lighting comparison | `just validate-tilt`: hardware shading ≥59 FPS, p95 ≤18.5 ms; reject shading slowdown >10% in both orders. The software-floor policy conflict below remains unresolved. |
+| Integrated lighting comparison | `just validate-tilt`: hardware shading ≥59 FPS, p95 ≤18.5 ms; matched same-run software baseline with no absolute software FPS floor. Reject shading slowdown >10% in both orders on either renderer. Retain regressions accepting matched software 5/8/25 FPS and rejecting repeatable 20% slowdowns. |
 
 Compare explicit 60 cm and 2,000 cm caps in the same production engine. The
 latter reproduces uncapped geometry over supported heights. Keep PCM, settings,
@@ -99,11 +99,9 @@ verify successful deployment, matching build identity, `/`, `/advanced`, normal
 not-found behavior for `/phone`, cap restore/reset and live edits without audio
 acquisition. A queued job or accepted notification proves no deployment.
 
-## Unresolved requirement decision
+## Approved software comparison policy
 
-The supplied approved criterion requires a 7 FPS software floor, while the
-protected human-published integration deliberately removes it and accepts matched
-5 FPS runs. Both cannot be preserved simultaneously. Its relative-only gate and
-regression test remain intact pending the requested policy decision; the rest
-of this revision proceeds independently. This is a requirement-authority conflict,
-not a request for manual performance validation.
+The revised approval preserves the published integration's relative-only software
+gate. It supersedes the former 7 FPS floor and resolves the previously recorded
+policy question. Hardware retains its absolute frame limits; both renderers
+retain the repeatable slowdown rejection. No further requirement decision is pending.

@@ -554,6 +554,51 @@ hardware shading measured 60 FPS in both orders with p95 16.7/16.8 ms. Its build
 was `74999855b09f8c2297613821`, artifact-tree digest
 `2e5265577769bc3e02a97c44fc20f61b3c251f55c45bf2bd031c5757ed320220`.
 That short, fixed-camera comparison is historical evidence, not the new five-minute
-active-gap acceptance. The protected relative-only software policy is unchanged;
-the conflicting 7 FPS specification clause awaits the requirement decision in
-[the canonical contract](active-gap-spec.md#unresolved-requirement-decision).
+active-gap acceptance. At that checkpoint the conflicting 7 FPS specification
+clause was recorded as awaiting a requirement decision. The revised approval
+now resolves that historical question in favor of the protected relative-only
+software policy, with no absolute software FPS floor; see
+[the canonical contract](active-gap-spec.md#approved-software-comparison-policy).
+
+## Approved policy and PCM boundary reconciliation (2026-10-31)
+
+The revised approval retains the existing relative-only software comparison,
+including matched 5/8/25 FPS regressions and repeatable 20% slowdown rejection.
+Hardware keeps its 59 FPS / 18.5 ms limits. No software-floor decision or manual
+acceptance item remains. Read-only inspection confirmed PR #95 still publishes
+the preserved integration `3e93d8cd52039ed751e5a0a1b2686cc496ea53fc`; the local
+revision descends from it. Its existing Chromium-3 website failure and skipped
+validated-site/Pages jobs remain baseline evidence, not current acceptance.
+
+The live PCM test now waits for the worker's applied permanent base and records
+the audio sample boundary before requiring 200 later analysis rows. The final
+Chromium capture had 448 rows before editing, demonstrating why the former
+first-400-only check could miss the change. Both browsers compared exactly 200
+post-application rows; neither dropped diagnostic rows.
+
+The first focused run passed Chromium and failed WebKit: after longer collection,
+WebKit's audio render thread flushed a subnormal value to zero while Node retained
+`1.1694459262607223e-38`. The independent decoded-PCM oracle now also runs on an
+audio render thread after live collection. Every captured row must match exactly;
+the original Node comparison remains for the first 400 rows. No rounding or
+tolerance was added. Both browsers then passed. Batching the 24 exact filtered-band
+comparisons per row retained all values while reducing the final run to 11.8 s
+in Chromium and 10.9 s in WebKit (24.8 s overall), with the serial startup guard,
+one worker and zero retries.
+
+Root `PATH="$PWD/.tools/bin:$PATH" just validate` exited 0: 42 tooling tests,
+the core feature matrix, 78 native physics tests, produced-WASM/application
+builds, benchmark correctness smoke cases and 210 offline harness tests passed.
+Dioxus again logged its existing `wasm-opt` SIGABRT while returning success;
+optimization remains unverified. The later changes were confined to browser
+test support and documentation; focused browser and Node syntax checks passed.
+
+The produced-WASM cost command passed twice. The first run overlapped the focused
+browser check, so its wall-clock measurements are excluded. A subsequent serial
+run passed the saved-data predicates: tall-attack work was 106 versus 462 requested
+substeps, with zero capped overloads, matching normalized timing and deadline.
+Both retained manifests verified (83 and 283 entries). Statistical evidence is
+reused only for its original host: core/physics/benchmark sources, manifests,
+lockfiles and the pinned compiler match that checkpoint, as do both WASM digests.
+No new statistical CPU, hardware GPU, physical-iPhone or deployment claim is made.
+Exact-head rendered acceptance and production delivery remain orchestrator checks.
