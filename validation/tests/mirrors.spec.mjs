@@ -1130,3 +1130,56 @@ test('active microphone PCM reaches the BPM counter, rejects stale packets and r
     }))), contentType: 'application/json' });
   }
 });
+
+
+test('scrolling background updates reuse attributes and preserve all copied data without temporary views', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const samples = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, side = v.sideBars;
+    const current = v.current, previous = v.previous;
+    v.current = current.slice(); v.previous = (previous ?? current).slice();
+    const arrays = [side.mesh.instanceMatrix.array, side.mesh.instanceColor.array, side.geometry.attributes.rampHeights.array];
+    const results = [];
+    try {
+      for (const phase of [.001, .5, 23.999]) {
+        v.current[v.layout[20]] = v.previous[v.layout[20]] = phase;
+        v.updateScene(performance.now());
+        const source = [v.bars.instanceMatrix.array, v.bars.instanceColor.array, v.bars.geometry.attributes.rampHeights.array];
+        const descriptors = source.map(array => Object.getOwnPropertyDescriptor(array, 'subarray'));
+        let temporaryViews = 0;
+        try {
+          for (const array of source) Object.defineProperty(array, 'subarray', { configurable: true,
+            value(...args) { temporaryViews++; return Float32Array.prototype.subarray.apply(this, args); } });
+          side.update(v.layout);
+        } finally {
+          source.forEach((array, i) => { if (descriptors[i]) Object.defineProperty(array, 'subarray', descriptors[i]); else delete array.subarray; });
+        }
+        let matched = 0;
+        for (let n = 0; n < side.mesh.count; n++) {
+          let index;
+          const offset = Math.round(side.offsets[n] / v.layout[2]) * v.layout[2];
+          for (let i = 0; i < v.bars.count; i++) {
+            let matches = true;
+            for (let component = 0; component < 16; component++) {
+              const expected = component === 12 ? Math.fround(source[0][i * 16 + component] + offset) : source[0][i * 16 + component];
+              if (arrays[0][n * 16 + component] !== expected) { matches = false; break; }
+            }
+            if (matches) { index = i; break; }
+          }
+          if (index === undefined) continue;
+          if ([0, 1, 2].every(component => arrays[1][n * 3 + component] === source[1][index * 3 + component]
+            && arrays[2][n * 3 + component] === source[2][index * 3 + component])
+            && side.sourceBands[n] === index % v.layout[0]) matched++;
+        }
+        results.push({ phase, temporaryViews, matched, count: side.mesh.count,
+          reused: arrays[0] === side.mesh.instanceMatrix.array && arrays[1] === side.mesh.instanceColor.array
+            && arrays[2] === side.geometry.attributes.rampHeights.array });
+      }
+    } finally { v.current = current; v.previous = previous; }
+    return results;
+  });
+  for (const sample of samples) {
+    expect(sample.count).toBeGreaterThan(0); expect(sample.matched, JSON.stringify(sample)).toBe(sample.count);
+    expect(sample.reused).toBe(true); expect(sample.temporaryViews).toBe(0);
+  }
+});

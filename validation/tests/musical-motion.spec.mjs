@@ -100,7 +100,7 @@ test('lit geometry and gradual contact pigments use the physical scene with Redu
     lights.forEach((n, i) => { n.intensity = intensities[i]; }); v.renderer.setRenderTarget(null); target.dispose();
     return { lit, dark, attackOnly, frontBrightness, barsLit: v.bars.material.isMeshLambertMaterial, walls: v.enclosure.geometry.groups.length,
       attacks: u.stripState.value.length, pointLights: lights.filter(n => n.isPointLight).length, shadows: v.renderer.shadowMap.enabled, pigments: Array.from(v.pigments),
-      color: Array.from(v.current.slice(18, 21)), lightColor: v.lighting.uniforms.glowBallColor.value[0].toArray(), expectedPattern: Array.from(new Float32Array(linearToHsluv(v.pigments.slice(0, 3)))), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
+      color: Array.from(v.current.slice(18, 21)), lightColor: v.lighting.uniforms.glowBallColor.value[0].toArray(), expectedPattern: Array.from(linearToHsluv(v.pigments, 0, new Float32Array(3), 0)), pattern: Array.from(v.balls.geometry.attributes.pigmentA.array.slice(0, 3)) };
   });
   expect(state.barsLit).toBe(true); expect(state.walls).toBe(6); expect(state.attacks).toBe(24); expect(state.pointLights).toBe(0); expect(state.shadows).toBe(false);
   expect(state.lit).toBeGreaterThan(state.dark * 1.5);

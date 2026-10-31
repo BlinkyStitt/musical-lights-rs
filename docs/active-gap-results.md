@@ -9,6 +9,148 @@ they do not establish current-head CI or physical-iPhone performance.
 
 ## GPU recovery evidence (2026-10-31)
 
+### Matched runner investigation
+
+The post-network-repair [attempt 2 of run 41216197000](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41216197000/attempts/2)
+failed all three five-minute cases at `cfe49d7f8569406427860e2da3266614b5f31333`.
+Normal, portrait and landscape maximum debt was 161.97, 90.17 and 495.43 ms;
+maximum snapshot age was 91.4, 144.8 and 240.6 ms. Average FPS passed in all
+three captures. These remain failed captures under the approved limits.
+
+A serial repeat used the unchanged commit, source tree
+`e6b6422d96b6dda6a64d709c33f9bae456135922`, original verified `site-build-1`
+artifact (runtime `cbe5230ff74c859b0dc35c99`), Node 26.12.1 and Chromium
+156.0.8078.4. Both runners used virgl on their Intel GPUs. Host and guest
+kernel counters ran beside the original one-worker, zero-retry workload.
+The NUC1 repeat failed all three cases:
+
+| View | FPS | Maximum debt (ms) | Maximum snapshot age (ms) |
+| --- | ---: | ---: | ---: |
+| Normal | 59.14 | 234.13 | 167.4 |
+| Portrait fullscreen | 59.27 | 305.33 | 119.9 |
+| Landscape fullscreen | 59.39 | 365.63 | 149.0 |
+
+Normal also exceeded the 1% limit for intervals above 25 ms (1.31%). The
+other views' FPS summaries did not turn their debt/age failures into passes.
+
+NUC3 then passed the same three case recipes serially, including exact replay at
+30, 60 and 120 Hz:
+
+| View | FPS | Maximum debt (ms) | Maximum snapshot age (ms) |
+| --- | ---: | ---: | ---: |
+| Normal | 59.59 | 19.90 | 19.9 |
+| Portrait fullscreen | 59.75 | 18.70 | 21.1 |
+| Landscape fullscreen | 59.82 | 20.10 | 20.6 |
+
+The original test chose a fresh physics seed on each page. This initial
+cross-host repeat therefore matched the audio recipe, geometry and settings,
+but not the exact ball trajectories. These results remain preliminary for
+the controlled comparison. The regression fixture now retains NUC1's actual
+failed seeds: normal `3086797548`, portrait `4156900579` and landscape
+`1360618947`. It checks the seed before measurement and in the worker report,
+using the existing fullscreen collector's single-word seed control. The
+controlled NUC3 repeat and NUC1 scheduling trial use these failed inputs;
+they do not select seeds from passing captures or change numerical limits.
+
+The controlled NUC3 repeat passed all three cases and exact replay. Its
+recorded parameters, including each seed, matched the failed NUC1 captures:
+
+| View | FPS | Maximum debt (ms) | Maximum snapshot age (ms) |
+| --- | ---: | ---: | ---: |
+| Normal | 59.63 | 20.10 | 21.7 |
+| Portrait fullscreen | 59.76 | 22.73 | 22.2 |
+| Landscape fullscreen | 59.85 | 18.30 | 25.5 |
+
+The served application and WASM stayed at the original checkpoint. Only the
+test's initial seed control, assertions and instrumentation identity changed
+for this repeat. Live packet scheduling can still change trajectories;
+matching initial seeds and recipe parameters is not an identical-input replay.
+Each capture separately passed replay against its own recorded inputs.
+
+Normal-view guest CPU usage was approximately 0.91/0.92 core on NUC1/NUC3,
+while guest CPU pressure was 24.78%/2.55% and steal time was 3.34%/0.022%.
+The host QEMU vCPU runnable waits were approximately ten seconds each on
+NUC1, versus 61–81 ms each on NUC3, over the same 315-second capture window.
+This establishes a scheduling contribution to the large stalls, with
+comparable average guest CPU work and unchanged application code. It does not
+identify every main-thread or worker stall.
+
+The largest landscape stall coincided with a host Lighthouse CPU burst at
+19:18:01 UTC. In that second, Lighthouse used approximately 3.1 CPU cores,
+the guest recorded approximately 12% CPU steal, and QEMU's two vCPU threads
+waited 132/121 ms on the host runnable queue. Its emulator thread waited
+127 ms. The physics worker accumulated 809 ms of CPU execution and 678 ms
+of runnable wait over the surrounding two seconds. The slowest physics
+tick used four substeps with no overload; four-substep ticks had a 1.7 ms
+median wall cost, versus 65.7 ms for that tick. Thermal throttle counters
+did not increase at that stall. These counters establish a host scheduling
+contribution; they do not attribute every slow frame to the same event.
+
+NUC1 had two guest vCPUs and ran existing Ethereum services on its host;
+NUC3 had six guest vCPUs and a different host workload. This comparison is
+not an isolated processor benchmark. Supplemental thread and thermal
+sampling started later in the NUC1 run; NUC3 sampling started before its
+suite. An earlier partial NUC1 capture used the image's Node 24 in error.
+That capture was retained, stopped, and excluded from the pinned comparison.
+The required baseline was then started with verified Node 26.12.1.
+Measured NUC3 observer CPU usage was about 0.047 core in the guest and
+0.017 core on the host; these counters include trace preservation after
+measurement. Final CI acceptance does not include the supplemental observers.
+
+A source-owned, reversible trial increased the physical host's `machine.slice`
+CPU weight from its original effective 100 to 1,000. The VM kept its two vCPUs,
+16 GiB memory, disk, quotas and CPU set. Ethereum services, other cgroup
+settings and running jobs stayed in place. The same application artifact and
+failed seeds produced these results:
+
+| View | FPS | Maximum debt (ms) | Maximum snapshot age (ms) |
+| --- | ---: | ---: | ---: |
+| Normal | 59.69 | 38.27 | 284.9 |
+| Portrait fullscreen | 59.64 | 449.53 | 216.7 |
+| Landscape fullscreen | 59.33 | 541.43 | 180.1 |
+
+All three cases failed. Normal debt improved in this capture, but snapshot age
+still failed. This trial does not establish an effective repair. The Dockerfiles
+controller verified service health and fixed-block RPC parity, then restored
+the original unset/effective-100 weight and removed the trial's runtime file.
+No durable weight policy was enabled.
+
+A diagnostic-only normal capture then used a 1 ms browser CPU sampling interval,
+long-animation-frame entries and 20 ms targeted kernel thread counters. At
+21:07:38.629 UTC, a 163.6 ms frame contained 159.2 ms of sampled garbage
+collection. Over its 178 ms kernel-counter bracket, renderer-main CPU execution
+was 152.0 ms and runnable wait was 19.8 ms. This establishes a memory-management
+stall in addition to host scheduling delays. Profiling added overhead; this
+capture's 153.6 ms maximum snapshot age and 30.17 ms debt are not acceptance.
+The analysis excludes the large report-serialization task after measurement.
+
+A separate 15 + 300 second diagnostic used 32 KiB sampled heap allocations,
+including objects removed by minor and major collection. Its estimated totals
+include 94 MB of background-bar temporary views, 131 MB in HSLuv conversion
+and 102 MB in meter positioning. The whole profile also contains report
+evaluation and Playwright serialization after measurement; those stacks are
+separate from these animation paths. These are sampled estimates, not live
+heap sizes or a leak claim.
+
+The candidate replaces background-bar views with bounded copies into existing
+attributes. HSLuv conversion keeps the same coefficients and writes packed
+regions directly into persistent pigment attributes. Scalar chroma loops and
+cached attribute references remove their temporary arrays and iterators. The
+reference-color tests retain the official HSLuv vectors; packed-offset and
+background-copy regressions check data boundaries, colors, all matrix components
+and absence of temporary source views. Build identity also checks the served
+pigment and background-bar modules against source. The approved unprofiled
+performance cases and exact-head CI remain required.
+
+Raw reports, traces, host/guest counters and command logs are retained outside
+Git in `/Volumes/Sabrent4TB/agent-work/musical-lights-rs/pr95-performance-20261031/`.
+`active-gap-performance.json` now survives cleanup and assertion failures
+beside the native process log. After a verified site build, CI collects the
+active-gap and tilt exports even if its browser suite fails. These retention
+changes do not alter the acceptance evaluator or application behavior.
+
+### Earlier GPU recovery
+
 [Run 41193507076](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41193507076)
 tested `f9c51d5fb67c0eebdb4e542cce9e8087309af14a` on Chromium 156.0.8078.4,
 ANGLE/virgl on Intel Iris Plus 655. All three five-minute captures failed:

@@ -439,6 +439,7 @@ export class PhysicsView {
     const [count, , , pitch, joinWidth] = this.layout;
     const ballGeometry = sphereGeometry(7);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
+    this.pigmentAttributes = ['pigmentA', 'pigmentB', 'pigmentC'].map(name => ballGeometry.attributes[name]);
     const ballMaterial = new THREE.MeshLambertMaterial({ transparent: false, opacity: 1, depthWrite: true });
     ballMaterial.onBeforeCompile = shader => {
       this.lighting.apply(shader);
@@ -546,11 +547,12 @@ export class PhysicsView {
     this.renderedDepth = depth; this.barRoof.value = height;
     this.renderedBaseline = previous[geometry + 5] + (current[geometry + 5] - previous[geometry + 5]) * alpha;
     this.renderedTravel = previous[geometry + 6] + (current[geometry + 6] - previous[geometry + 6]) * alpha;
-    for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
-      const attr = this.balls.geometry.attributes[name];
+    for (let k = 0; k < this.pigmentAttributes.length; k++) {
+      const attr = this.pigmentAttributes[k];
       for (let i = 0; i < active; i++) {
-        if (this.pigments) attr.array.set(linearToHsluv(this.pigments.subarray(i * 9 + k * 3, i * 9 + k * 3 + 3)), i * 3);
-        else attr.array.set(linearToHsluv(current.subarray(3 + i * stride + 15, 3 + i * stride + 18)), i * 3);
+        const source = this.pigments ?? current;
+        const offset = this.pigments ? i * 9 + k * 3 : 3 + i * stride + 15;
+        linearToHsluv(source, offset, attr.array, i * 3);
       }
       attr.needsUpdate = true;
     }

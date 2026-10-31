@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function activeGapIdentity() {
   const identity = await timingIdentity(root), runtime = await runtimeRoot(`${root}/musical-leptos/dist`);
-  for (const path of ['report.js', 'performance.js']) {
+  for (const path of ['report.js', 'performance.js', 'pigment.js', 'side-bars.js']) {
     const source = await readFile(`${root}/musical-leptos/src/physics/${path}`);
     assert.deepEqual(await readFile(`${runtime}/physics/${path}`), source, `Rebuild before measuring: stale ${path}`);
     identity.sources[`physics/${path}`] = digest(source);

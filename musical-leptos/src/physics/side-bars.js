@@ -43,6 +43,9 @@ export class SideBars {
       this.frustum.setFromProjectionMatrix(this.projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     }
     const source = this.bars.instanceMatrix.array, target = this.mesh.instanceMatrix.array;
+    const sourceColors = this.bars.instanceColor.array, targetColors = this.mesh.instanceColor.array;
+    const sourceRamps = this.bars.geometry.attributes.rampHeights.array;
+    const targetRamps = this.geometry.attributes.rampHeights.array;
     const height = source[count * 3 * 16 + 13] + Math.abs(source[count * 3 * 16 + 5]) / 2;
     let n = 0;
     for (const box of BOX_OFFSETS) {
@@ -69,14 +72,17 @@ export class SideBars {
           if (!this.frustum.intersectsBox(this.bounds)) continue;
         }
         if (n >= this.capacity) throw Error('Background bars exceed the bounded seam capacity');
-        target.set(source.subarray(i * 16, i * 16 + 16), n * 16);
+        // Copy bounded rows into persistent attributes instead of creating three
+        // temporary views for every background post on every frame.
+        for (let component = 0; component < 16; component++) target[n * 16 + component] = source[i * 16 + component];
         target[n * 16 + 12] += offset;
-        this.mesh.instanceColor.array.set(this.bars.instanceColor.array.subarray(i * 3, i * 3 + 3), n * 3);
+        for (let component = 0; component < 3; component++) {
+          targetColors[n * 3 + component] = sourceColors[i * 3 + component];
+          targetRamps[n * 3 + component] = sourceRamps[i * 3 + component];
+        }
         this.edges[n] = this.bars.geometry.attributes.edge.array[i];
         this.pulses[n] = this.bars.geometry.attributes.pulse.array[i];
         this.offsets[n] = offset; this.sourceBands[n] = i % count;
-        this.geometry.attributes.rampHeights.array.set(
-          this.bars.geometry.attributes.rampHeights.array.subarray(i * 3, i * 3 + 3), n * 3);
         n++;
       }
     }
