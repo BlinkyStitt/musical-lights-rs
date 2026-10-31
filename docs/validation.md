@@ -36,6 +36,19 @@ from timing summaries alone. The collector's added sources are included in its
 provenance hashes. No resource limits, workload settings or acceptance thresholds
 change when collecting this evidence.
 
+GPU jobs preload `validation/runner-network.cjs` after checkout. It records the
+actual Node/libc DNS lookup start, duration, returned address families and errors
+for external hosts during dependency downloads and artifact transfers. Resolver
+configuration, routes and native UDP counters accompany the first lookup and
+failures; unreadable files are explicit errors. `RUNNER_NETWORK` JSON lines go
+directly to job stderr so an artifact upload outage cannot lose this evidence.
+The recorder adds no DNS probes, timers, retries or resolver changes. Local app
+traffic is excluded. It cannot observe action acquisition before checkout or
+non-Node clients, and it does not establish why a remote resolver dropped a
+request. Correlate it with the failing transfer's existing error log before
+changing runner networking. Missing browser downloads or artifact uploads still
+fail the job and the validated-site/Pages barrier.
+
 The approved integrated lighting comparison retains hardware shading ≥59 FPS
 and p95 ≤18.5 ms. Software uses its matched same-run baseline with no absolute
 FPS floor. A shading slowdown over 10% in both orders fails on either renderer;

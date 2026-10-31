@@ -642,3 +642,35 @@ reused only for its original host: core/physics/benchmark sources, manifests,
 lockfiles and the pinned compiler match that checkpoint, as do both WASM digests.
 No new statistical CPU, hardware GPU, physical-iPhone or deployment claim is made.
 Exact-head rendered acceptance and production delivery remain orchestrator checks.
+
+## GPU transfer evidence (2026-10-31)
+
+Website run [41196595491](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/41196595491)
+tested published head `a1fc752fd42bd0b8ed9ee39e6ac36acc2fe7901b`.
+Build, native/reference checks and all eighteen ordinary browser groups passed;
+the retained inventory/reports passed the complete-coverage verifier for 929
+scheduled cases. GPU shard 1 failed installing Chrome Headless Shell with
+`getaddrinfo EAI_AGAIN storage.googleapis.com`, before browser acceptance began.
+Shard 2 passed 31 tests, then failed uploading its report with
+`getaddrinfo EAI_AGAIN productionresultssa1.blob.core.windows.net`. Transition
+and tilt artifacts were absent following shard 1's installation failure.
+The required website barrier failed and Pages was skipped.
+
+The same transfer logs include IPv6 `ENETUNREACH`, but do not contain resolver
+configuration or returned lookup families. They cannot establish whether IPv4
+answers were missing or locate the DNS failure within the runner network.
+The new opt-in Node preload records these details from the actual transfer
+process into job stderr, independently of artifact upload availability. It
+preserves native errors and uncaught rejection failures and adds no retries,
+DNS probes or networking changes. This is evidence instrumentation, not a
+demonstrated repair of the runner's resolver. Application performance and
+continuity acceptance remain unproved by this failed run.
+
+Local `PATH="$PWD/.tools/bin:$PATH" just validate` exited 0, including 42 tooling
+tests, the core feature matrix, 78 native physics tests, WASM/application builds,
+benchmark smoke cases and 223 harness tests. Seven recorder regressions passed,
+as did workflow lint and a real preloaded lookup of `storage.googleapis.com`
+on the implementation host. That lookup proves recorder operation only, not GPU
+runner recovery. Dioxus retained its pre-existing `wasm-opt` SIGABRT while the
+CLI returned success; optimization remains unverified. No GPU or production
+deployment was performed locally.
