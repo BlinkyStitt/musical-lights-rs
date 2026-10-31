@@ -474,3 +474,64 @@ pending under [Remaining acceptance and delivery](#remaining-acceptance-and-deli
 with every warmup, duration, diagnostics, Low Power Mode and performance criterion
 unchanged. No physical-phone run, Linux CI, live-provider check or production
 verification was performed in this checkpoint.
+
+## Matched build and browser checkpoint (2026-10-31)
+
+The review's artifact mismatch is addressed by a fresh build followed immediately
+by the complete browser suite. Both commands ran at clean source checkpoint
+`3f7149721332df11996085c88ebdd62e2fc21c40`, tree
+`541043d475107ab273d485dc2927ee48d92e3e3b`, from the repository root with
+`.tools/bin` prepended to `PATH`. The build replaced the review-time artifact
+`69fd65930181d2f7820e9f51`; the earlier `1fff442b86d72138748f078c` browser pass
+was not reused.
+
+| Command | Exit | Result |
+|---|---:|---|
+| `python3 validation/validate.py leptos` | 0 | Formatting, WASM/test Clippy, one native test and release build with worklet/physics WASM hooks passed. |
+| `python3 validation/validate.py browser` | 0 | 202 offline harness tests and 920 browser tests passed; two existing opt-in skips (review-preview generation and live YouTube). |
+| `python3 .ci/ski1240-review-checkpoint-20261031/verify.py` | 0 | All 922 scheduled results appeared exactly once; all nine active-gap cases passed; all 98 captured build-file digests matched. |
+| `sha256sum --quiet -c .ci/ski1240-review-checkpoint-20261031/SHA256SUMS` | 0 | All 283 retained evidence-file digests matched. |
+
+The browser command ran from 00:34:00 to 01:34:21 UTC using pinned Node 26.8.2
+and Playwright 1.64.1. Source files and served artifacts remained unchanged
+throughout. The serial startup/crash guard, one worker, zero retries and all
+assertions were preserved. The existing `just check` still requires the full
+browser suite and both hardware phases after CPU/build validation.
+
+Evidence is retained outside Git in `.ci/ski1240-review-checkpoint-20261031/`.
+Build/browser command receipts record source identity, commands, UTC times and
+exit results. `before.json`, `after.json` and `verification.json` bind the same
+artifact to the entire run. `test-results/` preserves native browser-process
+and server-request logs; `tested-site.tar.gz` preserves the tested site.
+
+| Evidence | Identity / SHA-256 |
+|---|---|
+| Served build | `84ba3f435da2ae0b3c72a0e3` |
+| Served file-tree digest (`timingIdentity`) | `d069e3c2a0627e655bbc4d571dbd657fc00294fec30c9d2b5ba8b9e95c09487b` |
+| Full browser log | `dac1f8ceb784ceb4ade70fef9e51e7dc62e9ed229a1aefda3a4bd79f4c183e85` |
+| Tested site archive | `44d58026a0d8972a881bb95cd8efe159359c9cf3fa12d299d6c4463e3dd56215` |
+| Evidence digest manifest | `176a15523982b5fee7b4f60d0ae03070afa1e5cdcfaa8bf278b8a67cc87cb1da` |
+
+This documentation update records that specific source/artifact checkpoint. It
+does not establish equivalence for another build or authorize CI artifact reuse
+across source trees. The exact-tree, trusted-producer and digest validation
+barrier remains required.
+
+**Hardware and physical-phone acceptance remain pending.** The fresh
+`physical-access.json` receipt again shows no PCI graphics device or `/dev/dri`
+nodes, only USB root hubs and no `usbmuxd` connection. The prior hardware-suite
+exit 1 (`GPU validation requires a WebGL2 hardware renderer`) and
+`just validate-tilt` exit 1 (zero hardware samples; no completed comparison)
+remain failed evidence. Those unchanged failures were not retried on this host.
+Run both commands serially on an idle hardware-WebGL2 host and retain passing
+results with matching source, artifact and instrumentation provenance.
+
+Normal, portrait-fullscreen and landscape-fullscreen physical-phone runs still
+require device/iOS/Safari/build identities, a 15-second warmup and five-minute
+measurements with diagnostics and Low Power Mode off. Each must show average
+FPS ≥59, p95 interval ≤18.5 ms, fewer than 1% of intervals over 25 ms, no growing
+simulation delay and zero discarded time, plus human smooth-motion confirmation.
+Browser emulation does not satisfy these checks. Linux CI, live-provider checks
+and production verification were not run. The orchestrator owns PR evidence
+attachment and subsequent delivery; no push, PR update, merge or deployment was
+performed.
