@@ -531,20 +531,27 @@ test('phone acceptance rejects frozen snapshots despite 60 FPS and a current wor
     const report = document.querySelector('#dancinglights').physics.report;
     report.intervals = new Float32Array(60000); report.renderCosts = new Float32Array(60000);
     report.intervals.fill(1000 / 60); report.count = 18000;
+    // A complete capture includes a render cost for every submitted frame,
+    // including the first frame before an interval can be measured.
+    report.renderCosts.fill(.5); report.costCount = report.count + 1;
     report.invalid = []; report.maxSnapshotAgeMs = 10;
     report.progress = Array.from({ length: 300 }, (_, i) => ({ elapsedMs: i * 1000, tick: 1800 + i * 120, debtMs: 0 }));
     const data = { type: 'report', physicsCosts: Array(37800).fill(.25),
       elapsedMs: 315000, initialTick: 0, finalTick: 37800, debt: 0, maxDebt: 0,
       discardedSimulationMs: 0, recordingOverflow: false };
     report.receive(data); const moving = report.result.numericPass;
+    const renderCount = report.result.summary.renderCostMs.count;
+    report.costCount = 0;
+    report.receive(data); const missingRenderCosts = report.result.numericPass;
+    report.costCount = report.count + 1;
     for (const sample of report.progress) sample.tick = 1800;
     report.receive(data); const frozen = report.result.numericPass;
     report.progress.forEach((sample, i) => { sample.tick = 1800 + i * 120; });
     report.maxSnapshotAgeMs = 350;
     report.receive(data); const stale = report.result.numericPass;
-    return { moving, frozen, stale };
+    return { moving, renderCount, missingRenderCosts, frozen, stale };
   });
-  expect(results).toEqual({ moving: true, frozen: false, stale: false });
+  expect(results).toEqual({ moving: true, renderCount: 18001, missingRenderCosts: false, frozen: false, stale: false });
 });
 
 test('wrapped pointer surfaces and keyboard focus retain the source frequency', async ({ page }) => {

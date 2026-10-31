@@ -31,6 +31,7 @@ test('five-minute numeric acceptance retains every frame, debt, lag and invalida
     f => { f.data.recordingOverflow = true; },
     f => { f.invalid.push('Page hidden'); },
     f => { f.progress = []; },
+    f => { f.renderCosts = []; },
     f => { f.data.physicsCosts = []; },
     f => { f.data.elapsedMs = 314999; },
   ];
