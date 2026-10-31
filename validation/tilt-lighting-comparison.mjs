@@ -20,8 +20,30 @@ function distribution(value, label) {
   return ['mean', 'p50', 'p95', 'max'].map(key => value[key].toFixed(2)).join(' / ');
 }
 
-// Completeness/provenance gate, not a substitute for assessing the 60 FPS target.
-// No software performance threshold or material-regression tolerance is invented.
+// Limits apply to the shipped shading mode. The shadow candidate is informative.
+// The software floor covers both current GPU runners, whose CPUs differ greatly.
+const hardwareMinFps = 59;
+const hardwareMaxP95FrameMs = 18.5;
+const softwareMinFps = 7;
+const maxRepeatableShadingRegression = 0.10;
+
+export function performanceFailures(software, hardware) {
+  const failures = [];
+  for (const [kind, rows] of [['software', software], ['hardware', hardware]]) {
+    const regressions = [];
+    for (const round of ['forward', 'reverse']) {
+      const baseline = rows.find(row => row.round === round && row.mode === 'baseline');
+      const shading = rows.find(row => row.round === round && row.mode === 'shading');
+      const minimum = kind === 'hardware' ? hardwareMinFps : softwareMinFps;
+      if (shading.submittedFps < minimum) failures.push(`${kind} ${round} shading: ${shading.submittedFps.toFixed(2)} FPS is below ${minimum} FPS`);
+      if (kind === 'hardware' && shading.frameMs.p95 > hardwareMaxP95FrameMs) failures.push(`${kind} ${round} shading: p95 frame ${shading.frameMs.p95.toFixed(2)} ms exceeds ${hardwareMaxP95FrameMs} ms`);
+      regressions.push(shading.submittedFps / baseline.submittedFps < 1 - maxRepeatableShadingRegression);
+    }
+    if (regressions.every(Boolean)) failures.push(`${kind} shading is more than ${maxRepeatableShadingRegression * 100}% slower than baseline in both orders`);
+  }
+  return failures;
+}
+
 export function compareTimings(software, hardware) {
   const reference = software?.[0];
   assert(reference, 'Missing software comparison');
@@ -76,7 +98,11 @@ export function compareTimings(software, hardware) {
     }
     lines.push('');
   }
-  lines.push('Assess the 60 FPS target and repeatable regressions from both orders before finalizing the fallback decision. These host samples do not establish physical-phone acceptance.', '');
+  const failures = performanceFailures(software, hardware);
+  lines.push('## Performance gate', '',
+    `Shading must reach ${hardwareMinFps} FPS with p95 frame intervals at most ${hardwareMaxP95FrameMs} ms on hardware, and ${softwareMinFps} FPS on software. A shading slowdown over ${maxRepeatableShadingRegression * 100}% in both orders fails on either renderer.`, '',
+    failures.length ? `FAILED:\n${failures.map(failure => `- ${failure}`).join('\n')}` : 'PASSED', '',
+    'The shadow candidate is informational. These host samples do not establish physical-phone acceptance.', '');
   return lines.join('\n');
 }
 
@@ -85,7 +111,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   assert(software && hardware && output, 'Usage: node validation/tilt-lighting-comparison.mjs SOFTWARE.json HARDWARE.json OUTPUT.md');
   // A failed comparison must not leave a stale successful assessment behind.
   await writeFile(output, 'Renderer comparison incomplete.\n');
-  const summary = compareTimings(JSON.parse(await readFile(software, 'utf8')), JSON.parse(await readFile(hardware, 'utf8')));
+  const softwareRows = JSON.parse(await readFile(software, 'utf8'));
+  const hardwareRows = JSON.parse(await readFile(hardware, 'utf8'));
+  const summary = compareTimings(softwareRows, hardwareRows);
   await writeFile(output, summary);
   console.log(summary);
+  assert.equal(performanceFailures(softwareRows, hardwareRows).length, 0, 'Tilt lighting performance gate failed; see comparison report');
 }

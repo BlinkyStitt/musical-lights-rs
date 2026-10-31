@@ -8,7 +8,7 @@ check: validate
     just validate-tilt
 
 # Collect both renderer comparisons serially against one already-built artifact.
-# A missing GPU, incomplete samples or mismatched provenance fails this recipe.
+# Missing or mismatched evidence and performance below the documented limits fail.
 validate-tilt:
     mkdir -p .ci/tilt-lighting
     rm -f .ci/tilt-lighting/software.json .ci/tilt-lighting/software.json.failure.json .ci/tilt-lighting/hardware.json .ci/tilt-lighting/hardware.json.failure.json .ci/tilt-lighting/comparison.md

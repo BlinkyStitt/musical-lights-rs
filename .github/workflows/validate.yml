@@ -294,7 +294,12 @@ jobs:
           set -o pipefail
           mkdir -p .ci/tilt-lighting
           just validate-tilt 2>&1 | tee .ci/tilt-lighting/commands.log
-          cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish tilt timing summary
+        if: always() && matrix.shard == 1
+        run: |
+          if test -f .ci/tilt-lighting/comparison.md; then
+            cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v7.0.1
         if: always() && matrix.shard == 1
         with:
