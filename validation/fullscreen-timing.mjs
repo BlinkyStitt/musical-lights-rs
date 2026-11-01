@@ -3,7 +3,7 @@ assertBrowserEnvironment();
 // Measure the transition itself, not just the warmed-up fullscreen view.
 // Host browser measurements are not physical-phone acceptance.
 import { chromium, webkit, devices } from '@playwright/test';
-import { writeFile } from 'node:fs/promises';
+import { retainFullscreenResult } from './fullscreen-evidence.mjs';
 import assert from 'node:assert/strict';
 import { hardwareBrowserOptions, requireHardwareRenderer } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
@@ -63,20 +63,12 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
       return{seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
     });
     assert.equal(data.seed,1,'Comparison seed must be identical');
-    const windows=data.marks.map(({event,t})=>{
-      const points=data.samples.filter(p=>p.t>=t&&p.t<t+2000),before=data.samples.findLast(p=>p.t<t);
-      const frames=points.map(p=>p.frame).sort((a,b)=>a-b);
-      return{event,fps:1000*frames.length/frames.reduce((a,b)=>a+b,0),p95:frames[Math.ceil(frames.length*.95)-1],maxFrame:frames.at(-1),
-        over25Fraction:frames.filter(x=>x>25).length/frames.length,maxDebt:Math.max(...points.map(p=>p.debt)),maxSnapshotAge:Math.max(...points.map(p=>p.age)),
-        overloadTicks:points.at(-1).overload-before.overload,substeps:points.at(-1).substepTotal-before.substepTotal,requestedSubsteps:points.at(-1).requestedSubstepTotal-before.requestedSubstepTotal,fromHeight:before.height,toHeight:points.at(-1).height};
-    });
     const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
-    const result={gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,origin,build,errors,windows,...data};
-    results.push(result);console.log(JSON.stringify({gapCapCm:gapCap,browser:name,windows,errors}));
+    const result=await retainFullscreenResult(output,results,{gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,origin,build,errors,...data});
+    console.log(JSON.stringify({gapCapCm:gapCap,browser:name,windows:result.windows,errors}));
     await context.close();
   } finally {await browser.close();}
 }
-await writeFile(output,JSON.stringify(results,null,2)+'\n');
 if(clean==='--expect-clean')for(const result of results){
   assert.equal(result.errors.length,0);assert.equal(result.discardedSimulationMs,0);
   assert.equal(result.workload.state,'playing');assert.equal(result.workload.diagnostics,false);

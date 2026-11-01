@@ -25,6 +25,12 @@ collector hash, renderer and browser version, including failing numeric results.
 Each capture also saves `active-gap-performance.json` beside its process log
 before cleanup or acceptance assertions. An interrupted capture records
 `complete: false` and its error; it cannot pass numeric acceptance.
+Fullscreen collection saves each raw browser/cap capture before deriving transition windows.
+A missing preceding frame or empty window records an incomplete result and its
+error, retains the samples and prior captures, and fails acceptance. Each cost,
+fullscreen and latency command also retains a separate native process log before,
+every ten seconds during, and after execution, including command failures.
+
 GPU reports upload on success and failure. When the compiled site verifies,
 the first shard on each NUC executes `just validate-active-gap` and `just validate-tilt`
 serially even if its browser suite failed; timing collectors

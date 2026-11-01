@@ -6,6 +6,7 @@ import { mkdir, open, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { activeGapIdentity } from './active-gap-identity.mjs';
+import { recordPerformanceProcesses } from './performance-processes.mjs';
 
 assert.equal(process.cwd(), fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, ''), 'Invoke from repository root');
 const output = resolve(process.argv[2] ?? '.ci/active-gap');
@@ -20,12 +21,16 @@ async function command(name, args) {
   const log = await open(`${output}/${name}.log`, 'w');
   const receipt = { name, args, started: new Date().toISOString() };
   console.log(`Collecting ${name}`);
+  let stopProcesses;
   try {
+    stopProcesses = await recordPerformanceProcesses(`${output}/${name}-processes.jsonl`);
     Object.assign(receipt, await exited(spawn(process.execPath, args, { stdio: ['ignore', log.fd, log.fd] })));
     assert.equal(receipt.code, 0, `${name} failed; see ${output}/${name}.log`);
   } finally {
-    await log.close(); receipt.ended = new Date().toISOString(); commands.push(receipt);
-    await writeFile(`${output}/commands.json`, JSON.stringify(commands, null, 2));
+    try { await stopProcesses?.(); } finally {
+      await log.close(); receipt.ended = new Date().toISOString(); commands.push(receipt);
+      await writeFile(`${output}/commands.json`, JSON.stringify(commands, null, 2));
+    }
   }
 }
 await command('cost', ['validation/physics-cost.mjs', 'musical-lights-physics/pkg/physics_bg.wasm', `${output}/cost.json`]);
