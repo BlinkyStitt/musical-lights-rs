@@ -160,13 +160,13 @@ test('ball preferences migrate independently and reject malformed diameter inter
   const read = saved => readSettings({ getItem: () => JSON.stringify(saved) });
   const physics = [.6, 12, 16, .6, .4, .5, .04, .7];
   const migrated = read({ version: 1, physics, cameraAngle: 12, cameraZoom: 135, cameraX: 20, cameraY: 80 });
-  assert.deepEqual(migrated.balls, [8, 2.64, 19.2]);
+  assert.deepEqual(migrated.balls, [2, 2.64, 19.2]);
   assert.deepEqual(migrated.physics, physics); assert.equal(migrated.cameraAngle, 12);
   assert.deepEqual([migrated.cameraZoom, migrated.cameraX, migrated.cameraY], [135, 20, 80]);
-  for (const balls of [[0, 2.64, 19.2], [16, 19.2, 19.2], [1, 2.64, 2.64]])
+  for (const balls of [[8, 2.64, 19.2], [0, 2.64, 19.2], [16, 19.2, 19.2], [1, 2.64, 2.64]])
     assert.deepEqual(read({ version: 1, balls, cameraZoom: 135 }).balls, balls);
   for (const balls of [[17, 2.64, 19.2], [1.5, 2.64, 19.2], [8, 10, 9], [8, 2.63, 19.2], [8, 2.64, 19.21], [8, null, 19.2]])
-    assert.deepEqual(read({ version: 1, balls }).balls, [8, 2.64, 19.2]);
+    assert.deepEqual(read({ version: 1, balls }).balls, [2, 2.64, 19.2]);
 });
 
 test('saved sones gate recovers independently from each gain field and other preferences', async () => {

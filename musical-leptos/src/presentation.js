@@ -5,7 +5,7 @@ import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, recoverVisual, RENDER_CONTRO
 export const SETTINGS_KEY = 'musical-lights-display-v1';
 export const DEFAULT_SETTINGS = Object.freeze({ version: 1, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30, activeGapCap: 60,
   cameraMotion: true, ...CAMERA_DEFAULTS, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
-  ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, balls: Object.freeze([8, 2.64, 19.2]), youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
+  ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, balls: Object.freeze([2, 2.64, 19.2]), youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL], balls: [...DEFAULT_SETTINGS.balls] };
   try {

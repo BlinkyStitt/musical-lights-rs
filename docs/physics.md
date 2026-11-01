@@ -1,6 +1,6 @@
 # Rigid-body prototype
 
-The Leptos visualizer runs 0–16 spheres (eight by default) and 24 prescribed bars in Rapier 3D.
+The Leptos visualizer runs 0–16 spheres (two by default) and 24 prescribed bars in Rapier 3D.
 The display target is smooth 60 FPS; 120 FPS is optional. Physics retains a
 fixed 120 Hz clock with collision substeps and no discarded simulation time.
 `musical-lights-physics` contains the same simulation for native tests and WASM.
@@ -16,7 +16,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | --- | --- |
 | Width / depth | 1.2 m / 0.48 m |
 | Bar pitch / gap / top corner radius | 50 mm / 0 mm / 0 mm |
-| Ball count / sphere diameters | Eight / original size ratios × 48 mm, mapped into the selected 2.64–19.2 cm interval |
+| Ball count / sphere diameters | Two / original size ratios × 48 mm, mapped into the selected 2.64–19.2 cm interval |
 | Density | 8 kg/m³ |
 | Gravity | 9.81 m/s² |
 | Ball, bar, floor and ceiling restitution / friction | 0.72 / 0.12 |
@@ -338,7 +338,8 @@ first runner. Hardware rejects software fallback. The unchanged strict transitio
 checks require debt below two steps and snapshot age below 100 ms on both
 renderers. Hardware also retains the frame limits. Software frame timing remains
 reported without a blocking FPS, p95 or slow-frame limit, as approved on
-2026-11-01 in the [active-gap specification](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01). The integrated lighting comparison uses a matched same-run
+2026-11-01 in the [active-gap specification](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
+The integrated lighting comparison uses a matched same-run
 software baseline without an absolute software FPS floor; a shading slowdown
 over 10% in both orders fails on either renderer. Hardware shading retains
 59 FPS and 18.5 ms p95 limits. Reports bind artifact digests, instrumentation and browser

@@ -63,7 +63,7 @@ export class PhysicsView {
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
-    this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0, balls: [8, 2.64, 19.2] };
+    this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0, balls: [2, 2.64, 19.2] };
     this.cameraParameters = this.card.presentation?.cameraParameters ?? new CameraParameters(this.settings);
     this.cameraPan = new CameraPan(this.cameraParameters);
     const presentation = this.card.presentation;

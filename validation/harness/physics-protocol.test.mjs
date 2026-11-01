@@ -158,7 +158,8 @@ test('built WASM records live enclosure depth and replays shrink and expansion',
 
 test('built WASM starts every ball uniformly in its actual spawn-X band', () => {
   const layout=PhysicsSimulation.layout(), palette=Array.from({length:72},(_,i)=>i%3===0?Math.floor(i/3)/24:.2);
-  const sim=new PhysicsSimulation(PhysicsSimulation.defaults(),new Float32Array(palette));
+  const config=PhysicsSimulation.defaults(); config[8]=8;
+  const sim=new PhysicsSimulation(config,new Float32Array(palette));
   try {
     const initial=new Float32Array(wasm.memory.buffer,sim.snapshot_ptr(),layout[12]);
     const pigments=new Float32Array(wasm.memory.buffer,sim.pigments_ptr(),layout[21]*9);
@@ -174,6 +175,7 @@ test('built WASM starts every ball uniformly in its actual spawn-X band', () => 
 
 test('built WASM records attack-only paint policy and preserves physical replay', async () => {
   const layout = Array.from(PhysicsSimulation.layout()), config = Array.from(PhysicsSimulation.defaults());
+  config[8] = 8; // Preserve the original eight-ball paint-policy fixture.
   const palette = Array.from({ length: 72 }, (_, i) => i % 3 === 0 ? Math.floor(i / 3) / 24 : .2);
   const runs = [];
   for (const [required, attacking] of [[false, false], [true, false], [true, true]]) {
@@ -290,4 +292,20 @@ test('capped tall full-band attacks request less integration without changing no
   // the normalized spline sample by an ulp. The attack deadline stays exact.
   for (let i = 0; i < runs[0].motion.length; i++) assert(Math.abs(runs[0].motion[i] - runs[1].motion[i]) < 1e-6);
   assert.equal(runs[0].motion[4], 1);
+});
+
+
+test('produced WASM and browser preferences share the reduced default and retain saved eight-ball settings', async () => {
+  const { DEFAULT_SETTINGS, readSettings } = await import('../../musical-leptos/src/presentation.js');
+  const config = PhysicsSimulation.defaults(), layout = PhysicsSimulation.layout();
+  assert.equal(config[8], 2);
+  assert.equal(DEFAULT_SETTINGS.balls[0], config[8]);
+  assert.equal(layout[21], 16);
+  assert.deepEqual(readSettings({ getItem: () => JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] }) }).balls, [8, 2.64, 19.2]);
+  const sim = new PhysicsSimulation(config, new Float32Array(72).fill(.5));
+  try {
+    const state = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]);
+    assert.equal(state[layout[30]], 2);
+    assert(state.slice(3 + 2 * layout[8], layout[9]).every(value => value === 0));
+  } finally { sim.free(); }
 });

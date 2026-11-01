@@ -167,7 +167,7 @@ test('worker constructs the restored cap and records same-tick cap edits during 
     assert.equal(report.requestedSubstepTotal, report.substepCosts.reduce((sum, [, steps, excess]) => sum + steps + excess, 0));
     assert.equal(report.substepTotal, report.substepCosts.reduce((sum, [, steps]) => sum + steps, 0));
     assert.deepEqual(report.inputs.map(e => Math.round(e.values[67] * 100)), [60, 200, 40]);
-    assert.deepEqual(report.inputs.map(e => e.values[64]), [8, 16, 8]);
+    assert.deepEqual(report.inputs.map(e => e.values[64]), [2, 16, 8]);
     assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
   } finally { w.close(); }
 });

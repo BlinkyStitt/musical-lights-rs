@@ -36,7 +36,7 @@ pub struct BallSettings {
 impl Default for BallSettings {
     fn default() -> Self {
         Self {
-            count: 8,
+            count: 2,
             small: MIN_DIAMETER,
             big: MAX_DIAMETER,
         }

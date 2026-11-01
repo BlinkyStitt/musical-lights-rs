@@ -36,6 +36,8 @@ try {
       for (const mode of modes) {
         const context = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 });
         await context.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+        // Keep the approved lighting comparison at its original eight-ball load.
+        await context.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
         await staticPreview(context, 'https://musical-lights.test');
         await context.route('**/tilt-shadow-candidate.mjs', route => route.fulfill({ path: new URL('./tilt-shadow-candidate.mjs', import.meta.url).pathname, contentType: 'text/javascript' }));
         const page = await context.newPage(), errors = [];

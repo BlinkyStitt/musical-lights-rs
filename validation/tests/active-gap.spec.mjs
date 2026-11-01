@@ -96,14 +96,14 @@ test('live gap edits preserve measured meters and filtered targets while physics
       return { targets: Array.from(v.input.slice(0, 24)), tick: v.current[2], balls: v.balls.count };
     });
     expect(state.targets).toEqual(Array(24).fill(Math.fround(.6)));
-    expect(state.tick).toBeGreaterThan(tick); expect(state.balls).toBe(8);
+    expect(state.tick).toBeGreaterThan(tick); expect(state.balls).toBe(2);
   }
 });
 
 test('restored cap constructs active placement and live geometry reaches all banks in shared fullscreen Settings', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, activeGapCap: 40, flight: 35 })));
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, activeGapCap: 40, flight: 35, balls: [8, 2.64, 19.2] })));
   await page.goto(origin + '/advanced/'); await physicsReady(page);
   const before = await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return { tick: v.current[2], height: v.canvasHeight }; });
   await page.getByRole('button', { name: 'Settings', exact: true }).click();

@@ -485,7 +485,7 @@ for (const path of ['/', '/advanced/']) {
     const big = page.getByRole('slider', { name: 'Big ball (cm)', exact: true });
     // Camera and ball preferences share the relocated controls and reset owner.
     await page.locator('.camera-zoom').fill('135');
-    await expect(count).toHaveValue('8'); await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2');
+    await expect(count).toHaveValue('2'); await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2');
     for (const n of [0, 16, 8, 0, 16, 8]) {
       await count.fill(String(n));
       // Normal-page settings can scroll the scene out of view. Return to the
@@ -543,7 +543,7 @@ for (const path of ['/', '/advanced/']) {
     await expect(small).toHaveValue('19.2'); await expect(count).toHaveValue('8');
     await expect(page.locator('.camera-zoom')).toHaveValue('135');
     await page.locator('.display-controls > summary').click(); await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Reset display', exact: true }));
-    await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2'); await expect(count).toHaveValue('8');
+    await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2'); await expect(count).toHaveValue('2');
     await expect(page.locator('.camera-zoom')).toHaveValue('100');
     expect(errors).toEqual([]);
   });

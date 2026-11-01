@@ -5,6 +5,12 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
+// Retain the original eight-size physical regression workload explicitly.
+// Default-count and live 0–16 transitions have separate browser coverage.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
+});
+
 test('idle contacts fill ball colors without inventing audio attacks', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');

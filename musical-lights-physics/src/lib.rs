@@ -22,7 +22,6 @@ pub const PAINT_INPUT: usize = DEPTH_INPUT + 1;
 pub const BALL_INPUT: usize = PAINT_INPUT + 1;
 pub const GAP_INPUT: usize = BALL_INPUT + 3;
 pub const INPUT_LEN: usize = GAP_INPUT + 1;
-pub const BALL_COUNT: usize = 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
 pub const WIDTH: f32 = 1.2;

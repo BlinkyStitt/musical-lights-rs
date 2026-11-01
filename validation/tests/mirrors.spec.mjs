@@ -411,7 +411,7 @@ test('physical depth changes preserve active audio and reset to the default with
     await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(cm/100,5);
     expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;
       return {balls:v.balls.count,capacity:v.sideBars.capacity,same:[v.balls,v.bars,v.sideBars.mesh,v.enclosure].every((mesh,i)=>mesh===window.depthMeshes[i])};
-    })).toEqual({balls:8,capacity:400,same:true});
+    })).toEqual({balls:2,capacity:400,same:true});
   }
   await expect.poll(()=>page.evaluate(()=>window.depthAudioFrames)).toBeGreaterThan(5);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
@@ -479,7 +479,7 @@ test('full-size background boxes repeat all source bands beside the physical cen
     return results;
   });
   for (const result of results) {
-    expect(result.banks).toEqual([24,24,24,24,24,24,24,24]); expect(result.balls).toBe(8);
+    expect(result.banks).toEqual([24,24,24,24,24,24,24,24]); expect(result.balls).toBe(2);
     expect(result.boxes).toBe(1); expect(result.depth).toBeCloseTo(result.physicalDepth,6);
     expect(result.width).toBe(result.sourceWidth);
     expect(result.outerChanged,JSON.stringify(result)).toBeGreaterThan(16);
@@ -510,7 +510,7 @@ test('center supports and neighboring bars fill the same physical depth', async 
   expect(result.coatings).toBe(1);
   expect(result.outerWidth).toBeCloseTo(9*result.width,6);
   expect(result.outerCenter).toBeCloseTo(result.width/2,6);
-  expect(result.bodyCount).toBe(8); expect(result.physicalBalls).toBe(8);
+  expect(result.bodyCount).toBe(2); expect(result.physicalBalls).toBe(2);
   expect(result.sideCount).toBe(24 * 2 * 8); // zero-area columns at the box edges do not draw
 });
 
@@ -609,7 +609,7 @@ test('full-size background bands show lit faces and physical depth at oblique an
   for (const result of results) {
     expect(result.fills.length).toBeGreaterThanOrEqual(192);
     for (const brightness of result.fills) expect(brightness, JSON.stringify(result)).toBeGreaterThan(70);
-    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(24);
+    expect(result.physicalBalls).toBe(2); expect(result.triangles).toBe(24);
     expect(Math.abs(result.depths[0][0] - result.depths[1][0])).toBeGreaterThan(.01);
     expect(Math.abs(result.depths[1][0] - result.depths[2][0])).toBeGreaterThan(.01);
   }
@@ -823,7 +823,7 @@ test('physical depth drawing reuses geometry and bounded GPU buffers', async ({ 
   });
   for(const record of evidence){
     expect(record.retained).toBe(true);expect(record.releases).toBe(0);expect(record.geometries).toBeLessThanOrEqual(6);
-    expect(record.balls).toBe(8);expect(record.boxes).toBe(1);expect(record.uploads.length).toBeGreaterThanOrEqual(2);
+    expect(record.balls).toBe(2);expect(record.boxes).toBe(1);expect(record.uploads.length).toBeGreaterThanOrEqual(2);
     for(const upload of record.uploads){expect(upload.actual).toBeGreaterThan(0);expect(upload.actual).toBeLessThanOrEqual(upload.capacity);}
   }
 });
@@ -853,7 +853,7 @@ test('WASD pans the website camera within the main box and preserves its audio w
       audioSession: !!v.card.dataset.audioSession, keys: v.cameraPan.keys.size, reduced: v.reduced.matches };
   });
   expect(state.x).toBe(0); expect(state.y).toBe(0); expect(state.world).toBe(true);
-  expect(state.balls).toBe(8); expect(state.meters).toBe(24); expect(state.keys).toBe(0);
+  expect(state.balls).toBe(2); expect(state.meters).toBe(24); expect(state.keys).toBe(0);
   expect(state.audioSession).toBe(false); expect(state.reduced).toBe(true);
   await page.locator('.display-controls > summary').click();
   await page.getByRole('button', { name: 'Reset display', exact: true }).click();
