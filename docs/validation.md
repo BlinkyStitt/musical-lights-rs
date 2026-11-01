@@ -183,9 +183,10 @@ The workspace Cargo configuration keeps test code and dependencies at optimizati
 level 2 even when a user-wide profile sets level 0. The test profiles retain debug
 assertions and overflow checks.
 
-For local checks, `just validate` runs workflow lint, tooling regressions, the
-native/WASM feature matrix and app builds, benchmark smoke cases and the offline
-harness. It needs no physical GPU and no published branch. After the site is built,
+For local checks, `just validate` runs workflow lint, pinned Python lint,
+format and type checks, tooling regressions, the native/WASM feature matrix and
+app builds, benchmark smoke cases and the offline harness. It needs no physical
+GPU and no published branch. After the site is built,
 `just validate-gpu` runs the renderer and pixel checks in Chromium on a verified
 hardware WebGL2 renderer. It fails if the browser selects software rendering.
 GitHub runs the complete software browser suite and two hardware GPU shards for
@@ -234,8 +235,11 @@ workflow syntax, install the pinned checker with
 local `.tools/bin/actionlint` executable is missing. Installation errors stop
 the recipe; workflow lint still runs on every invocation.
 Run provenance, coverage, change-selector, installer and publication regressions
-with `python3 -m unittest discover -s validation/tooling -v`; the reference
-target includes their lint/type checks.
+with `python3 -m unittest discover -s validation/tooling -v`.
+`python3 validation/validate.py python` installs the locked reference environment
+and runs Ruff lint, Ruff format checks and ty on the shared Python source list.
+`just validate`, `just check-ci` and the CI `reference` target use these same
+checks. A failed check stops validation before the builds.
 
 ## Investigating intermittent browser failures
 
@@ -344,7 +348,7 @@ Use the pinned tools in the README. The ISO validator requires Python 3.13 or ne
 python3 validation/validate.py all
 ```
 
-Individual targets are `core`, `worklet`, `physics`, `terminal`, `leptos`, `dioxus`, `wasm`, `feather`, `stm32`, `esp-embassy`, `esp-idf`, `reference`, and `browser`. Build the three web applications before running browser tests. `reference` installs its locked Python environment, checks the validation tools, builds `loudness_trace`, and runs the ISO and MoSQITo comparisons.
+Individual targets are `core`, `worklet`, `physics`, `terminal`, `leptos`, `dioxus`, `wasm`, `feather`, `stm32`, `esp-embassy`, `esp-idf`, `python`, `reference`, and `browser`. Build the three web applications before running browser tests. `reference` installs its locked Python environment, checks the validation tools, builds `loudness_trace`, and runs the ISO and MoSQITo comparisons.
 
 The current [rigid-body prototype and phone acceptance](physics.md) replace the
 older custom-ball solver results below. Its local browser checks do not certify

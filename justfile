@@ -25,6 +25,7 @@ validate-active-gap:
 # Verify delivered, exact-commit CI and run local demo checks.
 check-ci: _ci-tools
     .tools/bin/actionlint .github/workflows/*.yml
+    python3 validation/validate.py python
     python3 -m unittest discover -s validation/tooling -v
     python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm
     python3 validation/ci_browser.py
@@ -33,6 +34,7 @@ check-ci: _ci-tools
 # Run CPU-only validation. GitHub runs the complete browser suite and GPU checks.
 validate: _ci-tools
     .tools/bin/actionlint .github/workflows/*.yml
+    python3 validation/validate.py python
     python3 -m unittest discover -s validation/tooling -v
     python3 validation/validate.py core worklet physics leptos benchmarks dioxus wasm
     cd validation && npm ci --ignore-scripts && node --test harness/*.test.mjs
