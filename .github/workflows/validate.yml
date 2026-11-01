@@ -258,17 +258,18 @@ jobs:
     if: needs.plan.outputs.site_required == 'true'
     uses: ./.github/workflows/gpu-runner-network.yml
   gpu:
-    name: GPU browser (${{ matrix.shard }})
+    name: GPU browser (${{ matrix.host }}, ${{ matrix.shard }})
     timeout-minutes: 60
     needs: [plan, web, gpu-network]
     if: needs.plan.outputs.site_required == 'true'
-    runs-on: ci-musical-gpu
+    runs-on: ${{ format('ci-musical-gpu-{0}', matrix.host) }}
     strategy:
       fail-fast: false
       matrix:
+        host: [nuc1, nuc3]
         shard: [1, 2]
     concurrency:
-      group: site-gpu-${{ matrix.shard }}-${{ github.ref }}
+      group: site-gpu-${{ matrix.host }}-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7.0.1
@@ -311,13 +312,13 @@ jobs:
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
-          name: active-gap-evidence
+          name: active-gap-evidence-${{ matrix.host }}
           path: .ci/active-gap/
           include-hidden-files: true
           retention-days: 7
           overwrite: true
           if-no-files-found: error
-      # Each host runs one worker. Measure on one runner after its browser suite,
+      # Each host runs one worker. Measure after its first browser shard,
       # with the same downloaded site and instrumentation for both renderers.
       - name: Compare tilt lighting on software and hardware
         if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
@@ -338,7 +339,7 @@ jobs:
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
-          name: tilt-lighting-comparison
+          name: tilt-lighting-comparison-${{ matrix.host }}
           path: .ci/tilt-lighting/
           include-hidden-files: true
           retention-days: 7
@@ -349,7 +350,7 @@ jobs:
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
-          name: gpu-browser-report-${{ matrix.shard }}
+          name: gpu-browser-report-${{ matrix.host }}-${{ matrix.shard }}
           path: validation/test-results/
           retention-days: 7
           overwrite: true

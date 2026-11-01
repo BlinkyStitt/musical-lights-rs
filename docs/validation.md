@@ -12,7 +12,10 @@ Physical-device claims remain unavailable from desktop emulation.
 `just validate` runs CPU/build and offline regression checks locally. Exact-head
 GitHub GPU jobs add `active-gap.spec.mjs` and three five-minute hardware-rendered
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
-off). The ordinary browser inventory excludes those long GPU-only cases.
+off). Both NUC1 and NUC3 run both GPU shards against the same verified build.
+Each host must pass the three long cases; the remote validation gate requires
+all four host/shard jobs exactly once. The ordinary browser inventory excludes
+those long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
 The five-minute views retain the seeds from the failed NUC1 captures in
 `active-gap-workload.mjs`, so runners use the same per-view initial seed.
@@ -23,7 +26,7 @@ Each capture also saves `active-gap-performance.json` beside its process log
 before cleanup or acceptance assertions. An interrupted capture records
 `complete: false` and its error; it cannot pass numeric acceptance.
 GPU reports upload on success and failure. When the compiled site verifies,
-the first runner executes `just validate-active-gap` and `just validate-tilt`
+the first shard on each NUC executes `just validate-active-gap` and `just validate-tilt`
 serially even if its browser suite failed; timing collectors
 verify the served build and retain strict transition predicates. Any failure
 blocks the existing validated-site/Pages barrier.

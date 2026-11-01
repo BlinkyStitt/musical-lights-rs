@@ -48,8 +48,11 @@ VALIDATORS = {
     "rust (core)",
     "loudness-reference",
     "Build website",
-    "GPU browser (1)",
-    "GPU browser (2)",
+    *(
+        f"GPU browser ({host}, {shard})"
+        for host in ("nuc1", "nuc3")
+        for shard in (1, 2)
+    ),
     "Validated website",
     "Required website checks",
 }

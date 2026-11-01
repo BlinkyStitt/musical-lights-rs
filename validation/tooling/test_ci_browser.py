@@ -96,7 +96,12 @@ class BrowserGateTests(unittest.TestCase):
 
     def test_rejects_missing_or_failed_gpu_shards(self):
         original = self.jobs.copy()
-        for name in ("GPU browser (1)", "GPU browser (2)"):
+        for name in (
+            "GPU browser (nuc1, 1)",
+            "GPU browser (nuc1, 2)",
+            "GPU browser (nuc3, 1)",
+            "GPU browser (nuc3, 2)",
+        ):
             for conclusion in (None, "failure"):
                 with self.subTest(name=name, conclusion=conclusion):
                     self.jobs = [job for job in original if job["name"] != name]
