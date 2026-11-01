@@ -1532,7 +1532,9 @@ digests. It checks these identities again after each sample, asserts matching
 render/audio settings across variants, and checks the actual renderer class.
 A requested hardware run cannot pass on software. Failure reports retain the
 build, native GPU information, page errors and failed requests in
-`OUTPUT.json.failure.json`; `DEBUG=pw:browser` also retains native process output
+`OUTPUT.json.failure.json`. Each command writes `OUTPUT.json.processes.jsonl`
+with start, ten-second and final native process samples, including on failure.
+`DEBUG=pw:browser` also retains native process output
 when redirected to a log. The serial startup guard remains in use.
 
 The comparison uses the original fixed global rig, rotating
