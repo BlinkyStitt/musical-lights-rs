@@ -105,3 +105,19 @@ The revised approval preserves the published integration's relative-only softwar
 gate. It supersedes the former 7 FPS floor and resolves the previously recorded
 policy question. Hardware retains its absolute frame limits; both renderers
 retain the repeatable slowdown rejection. No further requirement decision is pending.
+
+## Software fullscreen timing policy (2026-11-01)
+
+Bryan accepts software rendering at approximately 20 FPS for now. Software FPS,
+p95 frame interval and the fraction of frames over 25 ms remain reported, but do
+not block fullscreen transition acceptance. This is an approximate level, not a
+new minimum. Hardware keeps the existing 59 FPS, 18.5 ms p95 and <1% over 25 ms
+limits. Both paths retain the existing audio, error, discarded-time, simulation
+debt and snapshot-age checks. One worker and zero retries remain unchanged.
+
+Linux WebKit can report a masked `Apple GPU` string while using llvmpipe. The
+collector records native software-renderer thread evidence and classifies the
+capture from that evidence. A masked Linux WebKit renderer without such evidence
+is unverified and cannot pass acceptance. Hardware-requested Chromium must still
+use verified hardware. This policy does not change the hardware five-minute
+workload or the integrated lighting comparison's relative software checks.

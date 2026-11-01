@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { fullscreenWindows, retainFullscreenResult } from '../fullscreen-evidence.mjs';
+import { fullscreenWindows, retainFullscreenResult, validateFullscreenResult } from '../fullscreen-evidence.mjs';
 
 const sample = (t, frame, substeps, height = 2) => ({ t, frame, debt: 4, age: 7,
   overload: 0, substepTotal: substeps, requestedSubstepTotal: substeps, height });
@@ -46,4 +46,37 @@ test('a transition with no observed frames cannot produce accepted timing', asyn
   assert.equal(retained.complete, false);
   assert.deepEqual(retained.marks, failed.marks);
   assert.deepEqual(retained.samples, failed.samples);
+});
+
+const measuredResult = kind => ({ complete: true, browser: 'fixture', rendering: { kind },
+  errors: [], discardedSimulationMs: 0, workload: { state: 'playing', diagnostics: false },
+  windows: [{ event: 'enter', fps: 60, p95: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8 }] });
+
+test('software frame timing is reported without applying hardware frame limits', () => {
+  const result = measuredResult('software');
+  Object.assign(result.windows[0], { fps: 20, p95: 65, over25Fraction: 1 });
+  assert.doesNotThrow(() => validateFullscreenResult(result));
+  result.rendering.kind = 'hardware';
+  assert.throws(() => validateFullscreenResult(result), /frame budget exceeded/);
+});
+
+test('hardware keeps every frame threshold and both renderers keep age and debt thresholds', () => {
+  for (const boundary of [{ fps: 58.99 }, { p95: 18.51 }, { over25Fraction: .01 }]) {
+    const result = measuredResult('hardware'); Object.assign(result.windows[0], boundary);
+    assert.throws(() => validateFullscreenResult(result), /frame budget exceeded/);
+  }
+  for (const kind of ['software', 'hardware']) {
+    assert.doesNotThrow(() => validateFullscreenResult(measuredResult(kind)));
+    for (const boundary of [{ maxDebt: 2 * 1000 / 120 }, { maxSnapshotAge: 100 }]) {
+      const result = measuredResult(kind); Object.assign(result.windows[0], boundary);
+      assert.throws(() => validateFullscreenResult(result), /lost timely updates/);
+    }
+    for (const invalid of [{ complete: false }, { errors: ['page error'] }, { discardedSimulationMs: 1 },
+      { workload: { state: 'stopped', diagnostics: false } }, { workload: { state: 'playing', diagnostics: true } }]) {
+      assert.throws(() => validateFullscreenResult({ ...measuredResult(kind), ...invalid }));
+    }
+  }
+  assert.throws(() => validateFullscreenResult(measuredResult('unverified')), /renderer is unverified/);
+  const missing = measuredResult('hardware'); delete missing.rendering;
+  assert.throws(() => validateFullscreenResult(missing), /renderer is unverified/);
 });

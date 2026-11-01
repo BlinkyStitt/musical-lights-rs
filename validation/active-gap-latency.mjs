@@ -2,8 +2,9 @@
 // acceptance; captures real worklet packets and produced-WASM surface endpoints.
 import { chromium, webkit, devices } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
-import { hardwareBrowserOptions, requireHardwareRenderer } from './gpu-renderer.mjs';
+import { hardwareBrowserOptions, requireHardwareRenderer, renderingEvidence } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
+import { nativeProcessSnapshot } from './browser-stall.mjs';
 import { openFullscreenSettings } from './physics-state.mjs';
 import { staticPreview } from './static-preview.mjs';
 import { packetRenderCrossings, packetRenderSummary } from './packet-render.mjs';
@@ -58,7 +59,9 @@ try {
           const debug = gl.getExtension('WEBGL_debug_renderer_info');
           return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null;
         });
-        if (hardware) requireHardwareRenderer(gpu);
+        if (hardware && name === 'chromium') requireHardwareRenderer(gpu);
+        const rendering = renderingEvidence(name, gpu, process.platform === 'linux' ? await nativeProcessSnapshot() : []);
+        if (hardware && name === 'chromium' && rendering.kind !== 'hardware') throw new Error('Chromium hardware rendering is required');
         await page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
           window.renders = [];
@@ -89,7 +92,7 @@ try {
           responseWindow: 'before next same-band threshold crossing', ...packetRenderSummary(crossings) };
         if (!data.chunks.length || !data.packets.length || !summary.matched) throw new Error('No complete packet/trace/render evidence: ' + JSON.stringify(summary));
         if (errors.length) throw new Error('Latency page errors: ' + JSON.stringify(errors));
-        results.push({ summary, crossings, gpu, hardwareRequested: hardware, errors, ...data }); console.log(JSON.stringify(summary));
+        results.push({ summary, crossings, gpu, rendering, hardwareRequested: hardware, errors, ...data }); console.log(JSON.stringify(summary));
         await context.close();
       } finally { await browser.close(); }
     }

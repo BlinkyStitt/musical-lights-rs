@@ -37,3 +37,22 @@ export async function retainFullscreenResult(output, results, result) {
   await save();
   return result;
 }
+
+// Software frame rates remain reported. Hardware retains the smooth-motion
+// limits; both paths must preserve live audio and timely simulation updates.
+export function validateFullscreenResult(result) {
+  assert.equal(result.complete, true, 'Incomplete fullscreen capture');
+  assert(['hardware', 'software'].includes(result.rendering?.kind), 'Fullscreen renderer is unverified');
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.discardedSimulationMs, 0);
+  assert.equal(result.workload.state, 'playing');
+  assert.equal(result.workload.diagnostics, false);
+  for (const window of result.windows) {
+    if (result.rendering.kind === 'hardware') {
+      assert(window.fps >= 59 && window.p95 <= 18.5 && window.over25Fraction < .01,
+        `${result.browser} ${window.event} frame budget exceeded`);
+    }
+    assert(window.maxSnapshotAge < 100 && window.maxDebt < 2 * 1000 / 120,
+      `${result.browser} ${window.event} lost timely updates`);
+  }
+}

@@ -36,7 +36,12 @@ every ten seconds during, and after execution, including command failures.
 GPU reports upload on success and failure. When the compiled site verifies,
 the first shard on each NUC executes `just validate-active-gap` and `just validate-tilt`
 serially even if its browser suite failed; timing collectors
-verify the served build and retain strict transition predicates. Any failure
+verify the served build and retain strict hardware transition predicates.
+Software frame timing is reported without a blocking FPS, p95 or slow-frame
+limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
+Both paths retain live-audio, error, discarded-time, debt and snapshot-age checks.
+Linux WebKit classification includes native software-renderer thread evidence;
+its masked `Apple GPU` string alone does not establish hardware rendering. Any failure
 blocks the existing validated-site/Pages barrier.
 
 Failed five-minute captures retain timestamped audio session transitions, the

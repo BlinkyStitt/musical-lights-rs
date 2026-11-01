@@ -3,10 +3,11 @@ assertBrowserEnvironment();
 // Measure the transition itself, not just the warmed-up fullscreen view.
 // Host browser measurements are not physical-phone acceptance.
 import { chromium, webkit, devices } from '@playwright/test';
-import { retainFullscreenResult } from './fullscreen-evidence.mjs';
+import { retainFullscreenResult, validateFullscreenResult } from './fullscreen-evidence.mjs';
 import assert from 'node:assert/strict';
-import { hardwareBrowserOptions, requireHardwareRenderer } from './gpu-renderer.mjs';
+import { hardwareBrowserOptions, requireHardwareRenderer, renderingEvidence } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
+import { nativeProcessSnapshot } from './browser-stall.mjs';
 import { staticPreview } from './static-preview.mjs';
 const [origin, output, clean] = process.argv.slice(2);
 if (!origin || !output) throw new Error('Usage: node validation/fullscreen-timing.mjs ORIGIN OUTPUT [--expect-clean]');
@@ -36,13 +37,15 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
       const debug = gl.getExtension('WEBGL_debug_renderer_info');
       return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null;
     });
-    if (hardware) requireHardwareRenderer(gpu);
+    if (hardware && name === 'chromium') requireHardwareRenderer(gpu);
     const exit=page.getByRole('button',{name:'Exit fullscreen',exact:true}); if(await exit.isVisible())await exit.click();
     await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
     await page.locator('.input-source').selectOption('generated');
     await page.locator('.review-start').click();
     await page.waitForFunction(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
     await page.waitForTimeout(2000);
+    const rendering = renderingEvidence(name, gpu, process.platform === 'linux' ? await nativeProcessSnapshot() : []);
+    if (hardware && name === 'chromium') assert.equal(rendering.kind, 'hardware', 'Chromium hardware rendering is required');
     await page.evaluate(()=>{
       const v=document.querySelector('#dancinglights').physics;
       window.samples=[];window.marks=[];v.recordTiming=true;window.profiling=true;let previous=performance.now();
@@ -60,21 +63,14 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
     }
     const data=await page.evaluate(()=>{
       profiling=false;const v=document.querySelector('#dancinglights').physics;
-      return{seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
+      return{ballSettings:Array.from(v.current.slice(v.layout[30],v.layout[30]+3)),seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
     });
     assert.equal(data.seed,1,'Comparison seed must be identical');
     const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
-    const result=await retainFullscreenResult(output,results,{gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,origin,build,errors,...data});
+    const result=await retainFullscreenResult(output,results,{gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,rendering,origin,build,errors,...data});
     console.log(JSON.stringify({gapCapCm:gapCap,browser:name,windows:result.windows,errors}));
     await context.close();
   } finally {await browser.close();}
 }
-if(clean==='--expect-clean')for(const result of results){
-  assert.equal(result.errors.length,0);assert.equal(result.discardedSimulationMs,0);
-  assert.equal(result.workload.state,'playing');assert.equal(result.workload.diagnostics,false);
-  for(const window of result.windows){
-    assert(window.fps>=59&&window.p95<=18.5&&window.over25Fraction<.01,`${result.browser} ${window.event} frame budget exceeded`);
-    assert(window.maxSnapshotAge<100&&window.maxDebt<2*1000/120,`${result.browser} ${window.event} lost timely updates`);
-  }
-}
+if(clean==='--expect-clean')for(const result of results)validateFullscreenResult(result);
 } finally { await finishBrowserAudit(); }

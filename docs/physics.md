@@ -335,8 +335,10 @@ CPU submission cost is separate from GPU completion.
 Run `just validate` locally. GitHub runs `just validate-gpu --shard=1/2` and
 `--shard=2/2`, then serial evidence collectors and `just validate-tilt` on the
 first runner. Hardware rejects software fallback. The unchanged strict transition
-checks require debt below two steps and snapshot age below 100 ms as well as
-the frame limits. The integrated lighting comparison uses a matched same-run
+checks require debt below two steps and snapshot age below 100 ms on both
+renderers. Hardware also retains the frame limits. Software frame timing remains
+reported without a blocking FPS, p95 or slow-frame limit, as approved on
+2026-11-01 in the [active-gap specification](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01). The integrated lighting comparison uses a matched same-run
 software baseline without an absolute software FPS floor; a shading slowdown
 over 10% in both orders fails on either renderer. Hardware shading retains
 59 FPS and 18.5 ms p95 limits. Reports bind artifact digests, instrumentation and browser
