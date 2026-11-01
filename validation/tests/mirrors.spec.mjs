@@ -988,6 +988,47 @@ for (const route of ['/', '/advanced/']) test(`shared camera sliders persist, sy
   await expect(page.locator('.camera-zoom')).toHaveValue('100'); await expect(page.locator('.camera-x')).toHaveValue('50'); await expect(page.locator('.camera-y')).toHaveValue('50');
 });
 
+test('meter hit regions follow camera and seam changes without updating hidden copies', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    v.pause();
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const point = new THREE.Vector3(), project = v.pointerPoint.project;
+    const observer = new MutationObserver(() => {});
+    for (const copy of v.copies) observer.observe(copy, { attributes: true, attributeFilter: ['style'] });
+    let projects = 0, maxProjects = 0, maxCopyWrites = 0, maxError = 0;
+    v.pointerPoint.project = function(camera) { projects++; return project.call(this, camera); };
+    try {
+      for (const depth of [.2, 2]) for (const angle of [-30, 0, 30]) for (const phase of [0, .25, 1.25, 23.75, 0]) {
+        v.config[5] = depth; v.setCamera(angle); v.meterPhase = NaN;
+        projects = 0; observer.takeRecords(); v.positionMeters(phase);
+        maxProjects = Math.max(maxProjects, projects);
+        maxCopyWrites = Math.max(maxCopyWrites, observer.takeRecords().length);
+        const height = v.current[v.layout[17]], pitch = v.layout[3], count = v.meters.length;
+        const projected = column => (point.set(column * pitch, height / 2, depth / 2).project(v.camera).x + 1) * 50;
+        for (let i = 0; i < count; i++) {
+          const column = (i + phase) % count, left = projected(column), right = projected(Math.min(count, column + 1));
+          const width = Math.max(0, projected(Math.max(0, column + 1 - count)) - projected(0));
+          maxError = Math.max(maxError, Math.abs(parseFloat(v.groups[i].style.left) - left),
+            Math.abs(parseFloat(v.groups[i].style.width) - Math.max(0, right - left)),
+            Math.abs(parseFloat(v.copies[i].style.width) - width));
+          if (width > 0) maxError = Math.max(maxError, Math.abs(parseFloat(v.copies[i].style.left) - projected(0)));
+        }
+      }
+      observer.takeRecords(); v.positionMeters(0);
+      return { maxError, maxProjects, maxCopyWrites, stationaryCopyWrites: observer.takeRecords().length,
+        accessibleMeters: v.graph.querySelectorAll('[role="meter"]').length };
+    } finally { v.pointerPoint.project = project; observer.disconnect(); }
+  });
+  expect(result.maxError, JSON.stringify(result)).toBeLessThan(.001);
+  expect(result.maxProjects).toBeLessThanOrEqual(53);
+  expect(result.maxCopyWrites).toBeLessThanOrEqual(3);
+  expect(result.stationaryCopyWrites).toBe(0);
+  expect(result.accessibleMeters).toBe(24);
+});
+
 test('zoomed-out production projection visibly includes three banks and aligns meter hit regions', async ({ page }, info) => {
   await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);

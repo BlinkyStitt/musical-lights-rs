@@ -85,6 +85,7 @@ export class PhysicsView {
     });
     this.copies = this.meters.map((meter, i) => {
       const copy = document.createElement('span'); copy.className = 'bark-copy';
+      copy.style.width = '0%';
       copy.setAttribute('aria-hidden', 'true'); copy.dataset.sourceBand = i;
       for (const type of ['pointerenter', 'pointerleave']) copy.addEventListener(type, event => meter.dispatchEvent(new PointerEvent(type, { pointerType: event.pointerType })));
       this.graph.append(copy); return copy;
@@ -630,11 +631,10 @@ export class PhysicsView {
     this.camera.updateMatrixWorld();
     const height = this.current?.[this.layout?.[17]] ?? this.height;
     const maximum = this.current?.[this.layout?.[17] + 1] ?? this.height / 4;
-    for (const [property, y] of [['--balloon-headroom', maximum], ['--plot-baseline', this.current?.[this.layout?.[17] + 5] ?? .003]]) {
-      this.pointerPoint.set(0, y, frontDepth).project(this.camera);
-      const top = (1 - this.pointerPoint.y) * 50;
-      this.graph.style.setProperty(property, `${property === '--plot-baseline' ? 100 - top : top}%`);
-    }
+    this.pointerPoint.set(0, maximum, frontDepth).project(this.camera);
+    this.graph.style.setProperty('--balloon-headroom', `${(1 - this.pointerPoint.y) * 50}%`);
+    this.pointerPoint.set(0, this.current?.[this.layout?.[17] + 5] ?? .003, frontDepth).project(this.camera);
+    this.graph.style.setProperty('--plot-baseline', `${(1 + this.pointerPoint.y) * 50}%`);
     this.pointerPoint.set(0, height / 2, frontDepth).project(this.camera);
     const inset = (this.pointerPoint.x + 1) * 50;
     this.graph.style.setProperty('--plot-side-inset', `${inset}%`);
@@ -651,14 +651,26 @@ export class PhysicsView {
     }
     // One accessible node per source; only the pointer surface is copied at
     // the seam. Stationary frames do not repeat layout/style writes.
+    let seamCopy = null;
+    const seamLeft = this.projectMeter(0, height, frontDepth);
     for (let i = 0; i < count; i++) {
       const column = (i + phase) % count, group = this.groups[i], copy = this.copies[i];
-      const projected = x => { this.pointerPoint.set(x * pitch, height / 2, frontDepth).project(this.camera); return (this.pointerPoint.x + 1) * 50; };
-      const left = projected(column), right = projected(Math.min(count, column + 1));
+      const left = this.projectMeter(column * pitch, height, frontDepth), right = this.projectMeter(Math.min(count, column + 1) * pitch, height, frontDepth);
       group.style.left = `${left}%`; group.style.width = `${Math.max(0, right - left)}%`;
-      const seamLeft = projected(0), seamRight = projected(Math.max(0, column + 1 - count));
-      copy.style.left = `${seamLeft}%`; copy.style.width = `${Math.max(0, seamRight - seamLeft)}%`;
+      // Only one source crosses the seam. Hidden copies retain zero width;
+      // do not allocate and parse two CSS strings per hidden band per frame.
+      if (column + 1 > count) {
+        const seamRight = this.projectMeter((column + 1 - count) * pitch, height, frontDepth);
+        copy.style.left = `${seamLeft}%`; copy.style.width = `${Math.max(0, seamRight - seamLeft)}%`;
+        seamCopy = copy;
+      }
     }
+    if (this.seamCopy && this.seamCopy !== seamCopy) this.seamCopy.style.width = '0%';
+    this.seamCopy = seamCopy;
+  }
+  projectMeter(x, height, depth) {
+    this.pointerPoint.set(x, height / 2, depth).project(this.camera);
+    return (this.pointerPoint.x + 1) * 50;
   }
   push(levels, edges, scrolling = false) {
     // One owner updates accessible values for both live audio and idle PCM.
