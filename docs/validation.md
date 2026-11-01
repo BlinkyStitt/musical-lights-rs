@@ -12,9 +12,11 @@ Physical-device claims remain unavailable from desktop emulation.
 `just validate` runs CPU/build and offline regression checks locally. Exact-head
 GitHub GPU jobs add `active-gap.spec.mjs` and three five-minute hardware-rendered
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
-off). Both NUC1 and NUC3 run both GPU shards against the same verified build.
-Each host must pass the three long cases; the remote validation gate requires
-all four host/shard jobs exactly once. The ordinary browser inventory excludes
+off). NUC3 runs both GPU shards against the same verified build. NUC1 is retired
+from CI; its earlier captures remain historical comparison evidence. The remote
+validation gate requires both NUC3 shards and all three long cases to pass.
+General self-hosted jobs can use NUC3 and the two existing Lambo workers.
+The ordinary browser inventory excludes
 those long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
 The five-minute views retain the seeds from the failed NUC1 captures in

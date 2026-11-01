@@ -13,8 +13,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: gpu-nuc1
-            runner: ci-musical-gpu-nuc1
           - label: gpu-nuc3
             runner: ci-musical-gpu-nuc3
     runs-on: ${{ matrix.runner }}

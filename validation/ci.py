@@ -50,7 +50,7 @@ VALIDATORS = {
     "Build website",
     *(
         f"GPU browser ({host}, {shard})"
-        for host in ("nuc1", "nuc3")
+        for host in ("nuc3",)
         for shard in (1, 2)
     ),
     "Validated website",

@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ci-musical-gpu-nuc1, ci-musical-gpu-nuc3]
+        runner: [ci-musical-gpu-nuc3]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:

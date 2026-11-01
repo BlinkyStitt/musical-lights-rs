@@ -266,7 +266,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host: [nuc1, nuc3]
+        host: [nuc3]
         shard: [1, 2]
     concurrency:
       group: site-gpu-${{ matrix.host }}-${{ matrix.shard }}-${{ github.ref }}
@@ -318,7 +318,7 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: error
-      # Each host runs one worker. Measure after its first browser shard,
+      # NUC3 runs one worker. Measure after its first browser shard,
       # with the same downloaded site and instrumentation for both renderers.
       - name: Compare tilt lighting on software and hardware
         if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
