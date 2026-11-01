@@ -632,6 +632,30 @@ test('small balls, paired bar tips and light sources share the same interpolated
   }
 });
 
+test('saved ball settings apply before the first physics snapshot without stored physics overrides', async ({ page }, info) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.initialBallSnapshots = [];
+    window.Worker = class extends NativeWorker {
+      constructor(...args) {
+        super(...args);
+        if (!String(args[0]).endsWith('/physics/worker.js')) return;
+        let layout;
+        this.addEventListener('message', ({ data }) => {
+          if (data.type === 'ready') layout = data.layout;
+          if (data.type === 'snapshot' && layout && initialBallSnapshots.length < 8)
+            initialBallSnapshots.push(new Float32Array(data.buffer)[layout[30]]);
+        });
+      }
+    };
+  });
+  await page.goto(url); await physicsReady(page);
+  const counts = await page.evaluate(() => initialBallSnapshots);
+  await info.attach('initial-ball-snapshots.json', { body: JSON.stringify({ counts }), contentType: 'application/json' });
+  expect(counts.length).toBeGreaterThan(0);
+  expect(counts.every(count => count === 8), JSON.stringify(counts)).toBe(true);
+});
+
 test('leftward scrolling interpolates through the seam without sweeping the pattern right', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   const samples = await page.evaluate(() => {

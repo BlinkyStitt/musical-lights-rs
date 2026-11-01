@@ -122,9 +122,15 @@ self.onmessage = async ({ data }) => {
       case 'init': {
         palette = data.palette;
         const defaults = Array.from(PhysicsSimulation.defaults());
-        config = new Float32Array(defaults); config[0] = data.height;
-        if ([11, 12].includes(data.config?.length)) { config.set(data.config); config[0] = data.height; }
-        if (data.gapCap !== undefined) config[11] = data.gapCap;
+        config = new Float32Array(defaults);
+        if (data.physics !== undefined) {
+          if (data.physics.length !== 8) throw new Error('Expected eight physical settings');
+          config.set(data.physics);
+        }
+        // Ball preferences apply even when no physical overrides were saved.
+        if (data.balls?.length !== 3) throw new Error('Expected count and both ball diameters');
+        config.set(data.balls, 8);
+        config[0] = data.height; config[11] = data.gapCap;
         danceOptions = data.danceOptions ?? { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1, scrollSpeed: 2 };
         reset(config); paused = data.paused;
         buffer = null;

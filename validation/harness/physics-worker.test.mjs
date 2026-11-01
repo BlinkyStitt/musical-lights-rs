@@ -16,7 +16,7 @@ async function worker(config = Array.from(PhysicsSimulation.defaults())) {
     setTimeout() {}, clearTimeout() {}, postMessage: data => messages.push(structuredClone(data)) };
   runInNewContext(source, context);
   const send = data => self.onmessage({ data });
-  await send({ type: 'init', height: .6, config, palette: new Float32Array(72).fill(.5),
+  await send({ type: 'init', height: .6, physics: config.slice(0, 8), balls: config.slice(8, 11), gapCap: config[11], palette: new Float32Array(72).fill(.5),
     danceOptions: { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1, scrollSpeed: 2 }, paused: false });
   const ready = messages.at(-1);
   return { ready, send, messages,
@@ -169,5 +169,24 @@ test('worker constructs the restored cap and records same-tick cap edits during 
     assert.deepEqual(report.inputs.map(e => Math.round(e.values[67] * 100)), [60, 200, 40]);
     assert.deepEqual(report.inputs.map(e => e.values[64]), [2, 16, 8]);
     assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
+  } finally { w.close(); }
+});
+
+
+test('worker creates saved ball settings before any pulse without stored physics overrides', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'init', height: .6, balls: [8, .0264, .192], gapCap: .6,
+      palette: new Float32Array(72).fill(.5), paused: true });
+    const ready = w.messages.at(-1);
+    assert.equal(ready.type, 'ready');
+    assert.equal(ready.config[8], 8);
+    assert.equal(ready.defaults[8], 2);
+    await w.send({ type: 'snapshot', buffer: new ArrayBuffer(ready.layout[12] * 4) });
+    const first = w.messages.at(-1);
+    assert.equal(first.type, 'snapshot');
+    const state = new Float32Array(first.buffer);
+    assert.equal(state[2], 0, 'Ball settings apply during world creation, before any physics tick');
+    assert.equal(state[ready.layout[30]], 8);
   } finally { w.close(); }
 });

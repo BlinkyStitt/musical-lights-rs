@@ -143,7 +143,7 @@ export class PhysicsView {
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
     this.measure();
-    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics ? [...this.settings.physics, this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100] : undefined, gapCap: this.input[67], danceOptions: this.danceOptions() });
+    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, physics: this.settings.physics, balls: [this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100], gapCap: this.input[67], danceOptions: this.danceOptions() });
     this.graph.physics = this;
     this.animate = frameTime => {
       this.request = null;
