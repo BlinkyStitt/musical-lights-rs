@@ -1,9 +1,9 @@
 import { assertBrowserEnvironment } from './browser-environment.mjs';
 assertBrowserEnvironment();
-// Measure the transition itself, not just the warmed-up fullscreen view.
+// Measure the full transition and a fixed two-second recovery period.
 // Host browser measurements are not physical-phone acceptance.
 import { chromium, webkit, devices } from '@playwright/test';
-import { retainFullscreenResult, validateFullscreenResult } from './fullscreen-evidence.mjs';
+import { fullscreenRecovery, retainFullscreenResult, validateFullscreenResult } from './fullscreen-evidence.mjs';
 import assert from 'node:assert/strict';
 import { hardwareBrowserOptions, requireHardwareRenderer, renderingEvidence } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
@@ -59,7 +59,7 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
       if(event==='landscape')await page.setViewportSize({width:844,height:390});
       if(event==='portrait')await page.setViewportSize({width:390,height:844});
       if(event==='exit')await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
-      await page.waitForTimeout(2200);
+      await page.waitForTimeout(fullscreenRecovery.afterMs + fullscreenRecovery.durationMs + 200);
     }
     const data=await page.evaluate(()=>{
       profiling=false;const v=document.querySelector('#dancinglights').physics;

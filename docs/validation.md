@@ -39,10 +39,17 @@ every ten seconds during, and after execution, including command failures.
 GPU reports upload on success and failure. When the compiled site verifies,
 the first shard on each NUC executes `just validate-active-gap` and `just validate-tilt`
 serially even if its browser suite failed; timing collectors
-verify the served build and retain strict hardware transition predicates.
+verify the served build and apply the bounded transition recovery policy.
 Software frame timing is reported without a blocking FPS, p95 or slow-frame
 limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
-Both paths retain live-audio, error, discarded-time, debt and snapshot-age checks.
+The [2026-11-02 recovery policy](active-gap-spec.md#fullscreen-transition-recovery-policy-2026-11-02)
+allows a one-second transition, then requires two complete seconds at the existing
+steady-state hardware frame and both-renderer debt/age limits. Full transitions
+remain reported, bounded to debt/age below 100 ms and frame intervals below
+100 ms on hardware or 1,000 ms on software. The first frame crossing the end
+boundary is included; missing recovery coverage fails. This changes transition
+acceptance, not application speed or five-minute limits.
+Both paths retain live-audio, error and discarded-time checks.
 Linux WebKit classification includes native software-renderer thread evidence;
 its masked `Apple GPU` string alone does not establish hardware rendering. Any failure
 blocks the existing validated-site/Pages barrier.

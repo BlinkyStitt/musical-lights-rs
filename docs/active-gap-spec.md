@@ -121,3 +121,29 @@ capture from that evidence. A masked Linux WebKit renderer without such evidence
 is unverified and cannot pass acceptance. Hardware-requested Chromium must still
 use verified hardware. This policy does not change the hardware five-minute
 workload or the integrated lighting comparison's relative software checks.
+
+
+## Fullscreen transition recovery policy (2026-11-02)
+
+Bryan accepts a brief slowdown while fullscreen entry, exit or orientation changes
+resize the scene, provided motion recovers. This supersedes the requirement to
+meet steady-state frame and debt limits during the transition itself.
+
+Measure from the input mark, without waiting for a favorable frame: allow at most
+1,000 ms for the transition, then require a complete 2,000 ms recovery window.
+Hardware must recover to at least 59 FPS, p95 intervals at most 18.5 ms and fewer
+than 1% of intervals over 25 ms. Both renderers must recover to debt below
+`2 * 1000/120 ms` and snapshot age below 100 ms. Software FPS remains reported
+without an absolute floor. The five-minute and tilt gates do not change.
+
+Keep the complete three-second transition capture and all worker/process timings.
+During the whole capture, debt and snapshot age must stay below 100 ms. Reject
+any hardware frame interval of 100 ms or more and any software interval of
+1,000 ms or more. These bounds prevent accepting a freeze during the allowance.
+Include the first frame across the end boundary, so a late freeze cannot vanish
+from the capture. Missing coverage, audio failure, page errors and discarded
+simulation time still fail. Keep one worker, zero retries and failed exports.
+
+This is a changed acceptance policy, not an application speedup. Earlier strict
+transition failures remain historical failures. Existing two-second captures do
+not prove the new full two-second recovery hold after its one-second deadline.

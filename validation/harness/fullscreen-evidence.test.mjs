@@ -8,13 +8,17 @@ import { fullscreenWindows, retainFullscreenResult, validateFullscreenResult } f
 const sample = (t, frame, substeps, height = 2) => ({ t, frame, debt: 4, age: 7,
   overload: 0, substepTotal: substeps, requestedSubstepTotal: substeps, height });
 const capture = () => ({ browser: 'webkit', gpu: 'fixture GPU', build: { version: 'fixture' },
-  marks: [{ event: 'enter', t: 1000 }], samples: [sample(990, 16, 10, 1), sample(1006, 16, 12), sample(1022, 16, 15)],
+  marks: [{ event: 'enter', t: 1000 }], samples: Array.from({ length: 202 }, (_, i) => sample(990 + i * 16, 16, 10 + i, i ? 2 : 1)),
   snapshots: [{ at: 1006, debt: 4 }], discardedSimulationMs: 0 });
 
-test('transition windows retain the measured frame, work and geometry boundaries', () => {
-  assert.deepEqual(fullscreenWindows(capture()), [{ event: 'enter', fps: 62.5,
-    p95: 16, maxFrame: 16, over25Fraction: 0, maxDebt: 4, maxSnapshotAge: 7,
-    overloadTicks: 0, substeps: 5, requestedSubsteps: 5, fromHeight: 1, toHeight: 2 }]);
+test('transition and fixed recovery windows retain timing, work and geometry boundaries', () => {
+  const [window] = fullscreenWindows(capture());
+  assert.equal(window.event, 'enter'); assert.equal(window.durationMs, 3000);
+  assert.equal(window.fps, 62.5); assert.equal(window.p95, 16);
+  assert.equal(window.fromHeight, 1); assert.equal(window.toHeight, 2);
+  assert.equal(window.substeps, 189); assert.equal(window.requestedSubsteps, 189);
+  assert.equal(window.recovery.afterMs, 1000); assert.equal(window.recovery.durationMs, 2000);
+  assert(window.recovery.measuredMs >= 2000); assert.equal(window.recovery.fps, 62.5);
 });
 
 test('a fourth capture without a baseline retains all earlier results and its raw evidence', async t => {
@@ -50,26 +54,65 @@ test('a transition with no observed frames cannot produce accepted timing', asyn
 
 const measuredResult = kind => ({ complete: true, browser: 'fixture', rendering: { kind },
   errors: [], discardedSimulationMs: 0, workload: { state: 'playing', diagnostics: false },
-  windows: [{ event: 'enter', fps: 60, p95: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8 }] });
+  windows: [{ event: 'enter', fps: 60, p95: 16.7, maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8,
+    recovery: { afterMs: 1000, durationMs: 2000, measuredMs: 2000, fps: 60, p95: 16.7,
+      maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8 } }] });
 
 test('software frame timing is reported without applying hardware frame limits', () => {
   const result = measuredResult('software');
-  Object.assign(result.windows[0], { fps: 20, p95: 65, over25Fraction: 1 });
+  for (const phase of [result.windows[0], result.windows[0].recovery])
+    Object.assign(phase, { fps: 20, p95: 65, maxFrame: 80, over25Fraction: 1 });
   assert.doesNotThrow(() => validateFullscreenResult(result));
   result.rendering.kind = 'hardware';
-  assert.throws(() => validateFullscreenResult(result), /frame budget exceeded/);
+  assert.throws(() => validateFullscreenResult(result), /did not recover frame budget/);
 });
 
-test('hardware keeps every frame threshold and both renderers keep age and debt thresholds', () => {
+test('a brief slow transition passes only with a full fixed recovery period', () => {
+  const data = capture();
+  const burst = data.samples.find(p => p.t >= 1100);
+  Object.assign(burst, { debt: 40, frame: 60 });
+  const result = { ...measuredResult('hardware'), windows: fullscreenWindows(data) };
+  assert.equal(result.windows[0].maxDebt, 40);
+  assert.doesNotThrow(() => validateFullscreenResult(result));
+  // Reclassify the same bad debt after the fixed deadline; it must fail even
+  // if a later frame recovers before export.
+  data.samples.find(p => p.t >= 2100).debt = 40;
+  result.windows = fullscreenWindows(data);
+  assert.throws(() => validateFullscreenResult(result), /did not recover timely updates/);
+});
+
+test('missing tail frames and a freeze across the end boundary cannot pass recovery', () => {
+  const data = capture();
+  data.samples = data.samples.filter(p => p.t < 3900);
+  assert.throws(() => fullscreenWindows(data), /incomplete recovery coverage/);
+  const frozen = capture();
+  frozen.samples.find(p => p.t >= 4000).frame = 1100;
+  const result = { ...measuredResult('software'), windows: fullscreenWindows(frozen) };
+  assert.throws(() => validateFullscreenResult(result), /froze during transition/);
+});
+
+test('recovery keeps frame, age and debt limits; transients and freezes remain bounded', () => {
   for (const boundary of [{ fps: 58.99 }, { p95: 18.51 }, { over25Fraction: .01 }]) {
-    const result = measuredResult('hardware'); Object.assign(result.windows[0], boundary);
-    assert.throws(() => validateFullscreenResult(result), /frame budget exceeded/);
+    const result = measuredResult('hardware'); Object.assign(result.windows[0].recovery, boundary);
+    assert.throws(() => validateFullscreenResult(result), /did not recover frame budget/);
   }
   for (const kind of ['software', 'hardware']) {
     assert.doesNotThrow(() => validateFullscreenResult(measuredResult(kind)));
     for (const boundary of [{ maxDebt: 2 * 1000 / 120 }, { maxSnapshotAge: 100 }]) {
+      const result = measuredResult(kind); Object.assign(result.windows[0].recovery, boundary);
+      assert.throws(() => validateFullscreenResult(result), /did not recover timely updates/);
+    }
+    for (const boundary of [{ maxDebt: 100 }, { maxSnapshotAge: 100 }]) {
       const result = measuredResult(kind); Object.assign(result.windows[0], boundary);
-      assert.throws(() => validateFullscreenResult(result), /lost timely updates/);
+      assert.throws(() => validateFullscreenResult(result), /exceeded transient debt or age bound/);
+    }
+    const frozen = measuredResult(kind);
+    frozen.windows[0].maxFrame = kind === 'hardware' ? 100 : 1000;
+    assert.throws(() => validateFullscreenResult(frozen), /froze during transition/);
+    for (const recovery of [undefined, { afterMs: 1001 }, { durationMs: 1999 }, { measuredMs: 1999 }]) {
+      const result = measuredResult(kind);
+      result.windows[0].recovery = recovery && { ...result.windows[0].recovery, ...recovery };
+      assert.throws(() => validateFullscreenResult(result), /incomplete recovery evidence/);
     }
     for (const invalid of [{ complete: false }, { errors: ['page error'] }, { discardedSimulationMs: 1 },
       { workload: { state: 'stopped', diagnostics: false } }, { workload: { state: 'playing', diagnostics: true } }]) {
