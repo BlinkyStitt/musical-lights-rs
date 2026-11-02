@@ -46,14 +46,18 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
     await page.locator('.input-source').selectOption('generated');
     await page.locator('.review-start').click();
     await page.waitForFunction(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
+    await page.locator('.diagnostics-controls').evaluate(node=>{node.open=false;});
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+    await page.waitForFunction(()=>document.querySelector('#dancinglights').physics.sceneVisible);
     await page.waitForTimeout(2000);
     const rendering = renderingEvidence(name, gpu, process.platform === 'linux' ? await nativeProcessSnapshot() : []);
     if (hardware && name === 'chromium') assert.equal(rendering.kind, 'hardware', 'Chromium hardware rendering is required');
     await page.evaluate(async()=>{
       const v=document.querySelector('#dancinglights').physics;
       const {recordFullscreenFrames}=await import('/fullscreen-sampler.mjs');
-      window.marks=[];window.stopFullscreenFrames=recordFullscreenFrames(v);
+      window.marks=[];window.stopFullscreenFrames=recordFullscreenFrames(v);window.fullscreenBaselineFrame=v.metrics.frames;
     });
+    await page.waitForFunction(()=>document.querySelector('#dancinglights').physics.metrics.frames>fullscreenBaselineFrame+1);
     await page.waitForTimeout(500);
     for (const event of ['enter','landscape','portrait','exit']) {
       await page.evaluate(event=>marks.push({event,t:performance.now()}),event);

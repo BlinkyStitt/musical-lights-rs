@@ -46,6 +46,8 @@ The [2026-11-02 recovery policy](active-gap-spec.md#fullscreen-transition-recove
 allows a one-second transition, then requires two complete seconds at the existing
 steady-state hardware frame and both-renderer debt/age limits. Fullscreen FPS
 counts the existing submitted-frame hook; skipped animation callbacks do not count.
+The collector closes its audio configuration, scrolls the scene into view and
+waits for fresh submitted frames before marking the first transition.
 Full transitions
 remain reported, bounded to debt/age below 100 ms and frame intervals below
 100 ms on hardware or 1,000 ms on software. The first frame crossing the end
