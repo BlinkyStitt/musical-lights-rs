@@ -8,6 +8,7 @@ import { nativeProcessSnapshot } from './browser-stall.mjs';
 import { openFullscreenSettings } from './physics-state.mjs';
 import { staticPreview } from './static-preview.mjs';
 import { packetRenderCrossings, packetRenderSummary } from './packet-render.mjs';
+import { captureLatencyEvidence } from './latency-evidence.mjs';
 const [origin, output, reanalyzedOutput] = process.argv.slice(2);
 if (origin === '--reanalyze') {
   if (!output || !reanalyzedOutput) throw new Error('Usage: node validation/active-gap-latency.mjs --reanalyze CAPTURE_JSON OUTPUT_JSON');
@@ -21,11 +22,13 @@ if (origin === '--reanalyze') {
 } else {
 if (!origin || !output) throw new Error('Usage: node validation/active-gap-latency.mjs ORIGIN OUTPUT_JSON');
 const hardware = process.argv.includes('--hardware');
-const finish = await startup({ filteredProjects: ['chromium', 'webkit'].map(browserName => ({ name: browserName, use: { browserName, launchOptions: hardware ? hardwareBrowserOptions(browserName) : {} } })) });
 const results = [];
+await writeFile(output, '[]\n');
+const finish = await startup({ filteredProjects: ['chromium', 'webkit'].map(browserName => ({ name: browserName, use: { browserName, launchOptions: hardware ? hardwareBrowserOptions(browserName) : {} } })) });
 try {
   for (const [name, engine, profile] of [['chromium', chromium, {}], ['webkit', webkit, devices['iPhone 13']]]) {
     for (const cap of [60, 2000]) {
+      await captureLatencyEvidence(output, results, { browser: name, capCm: cap, physicalPhone: false, hardwareRequested: hardware }, async result => {
       const browser = await engine.launch(hardware ? hardwareBrowserOptions(name) : {});
       try {
         const context = await browser.newContext({ ...profile, hasTouch: true, viewport: { width: 390, height: 844 } });
@@ -51,6 +54,7 @@ try {
           };
         }, cap);
         const page = await context.newPage(), errors = [];
+        result.errors = errors;
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(origin + '/advanced/');
         await page.waitForFunction(() => document.querySelector('#dancinglights')?.physics?.current);
@@ -59,8 +63,10 @@ try {
           const debug = gl.getExtension('WEBGL_debug_renderer_info');
           return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null;
         });
+        result.gpu = gpu;
         if (hardware && name === 'chromium') requireHardwareRenderer(gpu);
         const rendering = renderingEvidence(name, gpu, process.platform === 'linux' ? await nativeProcessSnapshot() : []);
+        result.rendering = rendering;
         if (hardware && name === 'chromium' && rendering.kind !== 'hardware') throw new Error('Chromium hardware rendering is required');
         await page.evaluate(() => {
           const v = document.querySelector('#dancinglights').physics;
@@ -86,17 +92,19 @@ try {
           const v = document.querySelector('#dancinglights').physics;
           return { seed: v.seed, packets, renders, chunks: v.report.toneChunks.map(({ values, ...chunk }) => ({ ...chunk, values: Array.from(values) })), layout: v.layout, metrics: v.metrics, audio: v.report.audioState };
         });
+        Object.assign(result, data);
         if (data.seed !== 1) throw new Error('Comparison seed must be identical');
         const crossings = packetRenderCrossings(data.packets, data.renders);
         const summary = { browser: name, capCm: cap, physicalPhone: false, diagnostics: true, threshold: .1, crossings: crossings.length,
           responseWindow: 'before next same-band threshold crossing', ...packetRenderSummary(crossings) };
+        Object.assign(result, { summary, crossings });
         if (!data.chunks.length || !data.packets.length || !summary.matched) throw new Error('No complete packet/trace/render evidence: ' + JSON.stringify(summary));
         if (errors.length) throw new Error('Latency page errors: ' + JSON.stringify(errors));
-        results.push({ summary, crossings, gpu, rendering, hardwareRequested: hardware, errors, ...data }); console.log(JSON.stringify(summary));
+        console.log(JSON.stringify(summary));
         await context.close();
       } finally { await browser.close(); }
+      });
     }
   }
-  await writeFile(output, JSON.stringify(results, null, 2) + '\n');
 } finally { await finish(); }
 }

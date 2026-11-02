@@ -29,7 +29,10 @@ before cleanup or acceptance assertions. An interrupted capture records
 `complete: false` and its error; it cannot pass numeric acceptance.
 Fullscreen collection saves each raw browser/cap capture before deriving transition windows.
 A missing preceding frame or empty window records an incomplete result and its
-error, retains the samples and prior captures, and fails acceptance. Each cost,
+error, retains the samples and prior captures, and fails acceptance. Latency collection
+saves each browser/cap case before startup and after completion. A failed case
+keeps its error, any collected raw samples and all earlier cases, even if
+validation or browser cleanup fails. Each cost,
 fullscreen and latency command also retains a separate native process log before,
 every ten seconds during, and after execution, including command failures.
 
