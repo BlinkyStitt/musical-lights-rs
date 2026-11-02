@@ -57,6 +57,7 @@ export async function retainFullscreenResult(output, results, result) {
 // limits, but must stay bounded and recover by the fixed deadline on both paths.
 export function validateFullscreenResult(result) {
   assert.equal(result.complete, true, 'Incomplete fullscreen capture');
+  assert.equal(result.timingSource, 'submitted-frames', 'Fullscreen recovery needs submitted frames');
   assert(['hardware', 'software'].includes(result.rendering?.kind), 'Fullscreen renderer is unverified');
   assert.equal(result.errors.length, 0);
   assert.equal(result.discardedSimulationMs, 0);

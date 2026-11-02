@@ -136,7 +136,9 @@ than 1% of intervals over 25 ms. Both renderers must recover to debt below
 `2 * 1000/120 ms` and snapshot age below 100 ms. Software FPS remains reported
 without an absolute floor. The five-minute and tilt gates do not change.
 
-Keep the complete three-second transition capture and all worker/process timings.
+Count actual submitted frames with the existing renderer report hook; animation
+callbacks with skipped draws do not establish recovery. Keep the complete
+three-second transition capture and all worker/process timings.
 During the whole capture, debt and snapshot age must stay below 100 ms. Reject
 any hardware frame interval of 100 ms or more and any software interval of
 1,000 ms or more. These bounds prevent accepting a freeze during the allowance.

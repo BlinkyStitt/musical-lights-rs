@@ -52,7 +52,7 @@ test('a transition with no observed frames cannot produce accepted timing', asyn
   assert.deepEqual(retained.samples, failed.samples);
 });
 
-const measuredResult = kind => ({ complete: true, browser: 'fixture', rendering: { kind },
+const measuredResult = kind => ({ complete: true, timingSource: 'submitted-frames', browser: 'fixture', rendering: { kind },
   errors: [], discardedSimulationMs: 0, workload: { state: 'playing', diagnostics: false },
   windows: [{ event: 'enter', fps: 60, p95: 16.7, maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8,
     recovery: { afterMs: 1000, durationMs: 2000, measuredMs: 2000, fps: 60, p95: 16.7,
@@ -114,7 +114,7 @@ test('recovery keeps frame, age and debt limits; transients and freezes remain b
       result.windows[0].recovery = recovery && { ...result.windows[0].recovery, ...recovery };
       assert.throws(() => validateFullscreenResult(result), /incomplete recovery evidence/);
     }
-    for (const invalid of [{ complete: false }, { errors: ['page error'] }, { discardedSimulationMs: 1 },
+    for (const invalid of [{ complete: false }, { timingSource: 'animation-callbacks' }, { errors: ['page error'] }, { discardedSimulationMs: 1 },
       { workload: { state: 'stopped', diagnostics: false } }, { workload: { state: 'playing', diagnostics: true } }]) {
       assert.throws(() => validateFullscreenResult({ ...measuredResult(kind), ...invalid }));
     }

@@ -44,7 +44,9 @@ Software frame timing is reported without a blocking FPS, p95 or slow-frame
 limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
 The [2026-11-02 recovery policy](active-gap-spec.md#fullscreen-transition-recovery-policy-2026-11-02)
 allows a one-second transition, then requires two complete seconds at the existing
-steady-state hardware frame and both-renderer debt/age limits. Full transitions
+steady-state hardware frame and both-renderer debt/age limits. Fullscreen FPS
+counts the existing submitted-frame hook; skipped animation callbacks do not count.
+Full transitions
 remain reported, bounded to debt/age below 100 ms and frame intervals below
 100 ms on hardware or 1,000 ms on software. The first frame crossing the end
 boundary is included; missing recovery coverage fails. This changes transition

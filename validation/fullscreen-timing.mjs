@@ -5,6 +5,7 @@ assertBrowserEnvironment();
 import { chromium, webkit, devices } from '@playwright/test';
 import { fullscreenRecovery, retainFullscreenResult, validateFullscreenResult } from './fullscreen-evidence.mjs';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { hardwareBrowserOptions, requireHardwareRenderer, renderingEvidence } from './gpu-renderer.mjs';
 import startup from './browser-startup.mjs';
 import { nativeProcessSnapshot } from './browser-stall.mjs';
@@ -30,6 +31,8 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
       };
     }, gapCap);
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const sampler=await readFile(new URL('./fullscreen-sampler.mjs',import.meta.url));
+    await page.route('**/fullscreen-sampler.mjs',route=>route.fulfill({body:sampler,contentType:'text/javascript'}));
     await page.goto(`${origin}/advanced/`);
     await page.waitForFunction(()=>document.querySelector('#dancinglights')?.physics?.current);
     const gpu = await page.evaluate(() => {
@@ -46,11 +49,10 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
     await page.waitForTimeout(2000);
     const rendering = renderingEvidence(name, gpu, process.platform === 'linux' ? await nativeProcessSnapshot() : []);
     if (hardware && name === 'chromium') assert.equal(rendering.kind, 'hardware', 'Chromium hardware rendering is required');
-    await page.evaluate(()=>{
+    await page.evaluate(async()=>{
       const v=document.querySelector('#dancinglights').physics;
-      window.samples=[];window.marks=[];v.recordTiming=true;window.profiling=true;let previous=performance.now();
-      const sample=t=>{const g=v.layout[17];samples.push({t,frame:t-previous,debt:v.metrics.debt,age:v.metrics.snapshotAgeMs,overload:v.metrics.overloadTicks,substepTotal:v.metrics.substepTotal,requestedSubstepTotal:v.metrics.requestedSubstepTotal,height:v.current[g],baseline:v.current[g+5],travel:v.current[g+6],configuredHeight:v.current[1],requested:v.input[32]});previous=t;if(profiling)requestAnimationFrame(sample)};
-      requestAnimationFrame(sample);
+      const {recordFullscreenFrames}=await import('/fullscreen-sampler.mjs');
+      window.marks=[];window.stopFullscreenFrames=recordFullscreenFrames(v);
     });
     await page.waitForTimeout(500);
     for (const event of ['enter','landscape','portrait','exit']) {
@@ -62,12 +64,12 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
       await page.waitForTimeout(fullscreenRecovery.afterMs + fullscreenRecovery.durationMs + 200);
     }
     const data=await page.evaluate(()=>{
-      profiling=false;const v=document.querySelector('#dancinglights').physics;
+      const samples=stopFullscreenFrames();const v=document.querySelector('#dancinglights').physics;
       return{ballSettings:Array.from(v.current.slice(v.layout[30],v.layout[30]+3)),seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
     });
     assert.equal(data.seed,1,'Comparison seed must be identical');
     const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
-    const result=await retainFullscreenResult(output,results,{gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,rendering,origin,build,errors,...data});
+    const result=await retainFullscreenResult(output,results,{gapCapCm:gapCap,browser:name,version:browser.version(),physicalPhone:false,hardwareRequested:hardware,gpu,rendering,origin,build,errors,timingSource:'submitted-frames',...data});
     console.log(JSON.stringify({gapCapCm:gapCap,browser:name,windows:result.windows,errors}));
     await context.close();
   } finally {await browser.close();}
