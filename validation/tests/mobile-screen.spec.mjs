@@ -28,6 +28,14 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await page.locator('.tone-level').fill('-20');
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.previewLevels))).toBeGreaterThan(0);
+  // Check denied-sensor mouse input before playback. A steady tone can launch
+  // a ball only once; moving the pointer after observing that flight can consume
+  // the sole free-fall opportunity before the Stop observer is installed.
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  const box = await page.locator('#dancinglights canvas').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
+  await page.mouse.move(0, 0);
   await page.locator('.review-start').click();
   await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
@@ -35,19 +43,6 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
-  // Match the paired stroke instead of assuming the former 10 cm single-bank
-  // lift. Observe every frame; sparse protocol polling can miss a short flight.
-  await page.waitForFunction(() => {
-    const { current, layout } = document.querySelector('#dancinglights').physics;
-    const clearance = current[layout[17] + 5] + current[layout[17] + 6] * .5;
-    return Array.from({ length: current[layout[30]] }, (_, i) => 3 + i * layout[8])
-      .some(offset => current[offset + 1] > current[offset + 7] + clearance);
-  }, null, { timeout: 5000 });
-  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
-  const box = await page.locator('#dancinglights canvas').boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
-  await page.mouse.move(0, 0);
   const stop = page.locator('.review-stop');
   await stop.evaluate(button => button.addEventListener('click', () => {
     // Capture at the actual Stop event so protocol latency cannot consume the
@@ -65,7 +60,9 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
     // Reduced Motion fixes the core preview's phase. Stop only above that
     // pattern: a ball resting on its bars cannot demonstrate a free fall.
     const idlePeak = Math.max(...document.querySelector('#dancinglights').physics.previewLevels);
-    const clearance = current[layout[17] + 5] + current[layout[17] + 6] * idlePeak + .01;
+    const travel = current[layout[17] + 6];
+    // Keep both original lift conditions, observed in this same browser turn.
+    const clearance = current[layout[17] + 5] + Math.max(travel * .5, travel * idlePeak + .01);
     const elevated = Array.from({ length: current[layout[30]] }, (_, i) => 3 + i * layout[8])
       .some(offset => current[offset + 1] > current[offset + 7] + clearance);
     if (!elevated) return false;
@@ -74,7 +71,7 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   }, await stop.elementHandle(), { timeout: 5000 });
   const stopped = await page.evaluate(() => window.physicsAtStop);
   expect(stopped.barMax).toBeGreaterThan(0);
-  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.baseline + stopped.travel * stopped.idlePeak + .01)).toBe(true);
+  expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.baseline + Math.max(stopped.travel * .5, stopped.travel * stopped.idlePeak + .01))).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
   try {
     await expect.poll(async () => (await physicsState(page)).balls.some((ball, i) => ball.position[1] < stopped.balls[i].y - .005)).toBe(true);
@@ -357,7 +354,9 @@ test('fullscreen transitions keep live audio and bounded simulation delay', asyn
 test.afterEach(async ({ page }, info) => {
   const timing = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights')?.physics;
-    return { layout: v?.layout, timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames };
+    return { layout: v?.layout, timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames,
+      current: v?.current && Array.from(v.current), input: v?.input && Array.from(v.input),
+      audio: v?.report?.audioState, idle: v?.idle, preview: v?.previewLevels && Array.from(v.previewLevels) };
   }).catch(error => ({ error: String(error) }));
   const path = info.outputPath('physics-timing.json');
   await writeFile(path, JSON.stringify(timing));
