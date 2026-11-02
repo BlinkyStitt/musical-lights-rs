@@ -45,6 +45,48 @@ test('active gap collector snapshots live audio metadata and rejects incomplete 
   expect(result.numericPass).toBe(false); expect(result.restored).toBe(true);
 });
 
+test('cap edits invalidate phone and automated performance captures even after restoring the cap', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sampler = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url));
+  await page.route('**/active-gap-sampler.mjs', route => route.fulfill({ body: sampler, contentType: 'text/javascript' }));
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.review-start').click();
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.report.acceptanceWorkload());
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = false; });
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('#dancinglights').physics.sceneVisible !== false);
+  const result = await page.evaluate(async () => {
+    const view = document.querySelector('#dancinglights').physics, report = view.report, worker = view.worker;
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const { evaluatePerformance } = await import(base + 'physics/performance.js');
+    const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
+    const edit = cm => {
+      const node = view.card.querySelector('.active-gap-cap'); node.value = String(cm);
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    // Exercise the phone report's real invalidation listener without inventing
+    // device declarations or claiming a short fixture as phone acceptance.
+    report.active = true; report.invalid = [];
+    edit(60); const unchangedPhone = [...report.invalid];
+    edit(40); edit(60); const changedPhone = [...report.invalid];
+    report.active = false;
+    const pending = collectActiveGapPerformance(view, 'normal', evaluatePerformance);
+    edit(60); edit(40); edit(60);
+    // The short FIFO report tests invalidation and replay availability only.
+    view.worker.postMessage({ type: 'report' });
+    const data = await pending;
+    return { unchangedPhone, changedPhone, invalidReasons: data.invalidReasons, numericPass: data.numericPass,
+      restoredCap: view.input[67], sameWorker: view.worker === worker };
+  });
+  expect(result.unchangedPhone).toEqual([]);
+  expect(result.changedPhone).toEqual(['Active gap cap changed during test']);
+  expect(result.invalidReasons).toEqual(['Active gap cap changed during test']);
+  expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(.6, 6); expect(result.sameWorker).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(0);
+});
+
 test('active gap cap edits, validates, restores and resets without acquiring audio', async ({ page }) => {
   await page.addInitScript(() => { window.captureRequests = 0; MediaDevices.prototype.getUserMedia = async () => { window.captureRequests++; throw new Error('Unexpected capture'); }; });
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);

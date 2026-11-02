@@ -190,3 +190,22 @@ test('worker creates saved ball settings before any pulse without stored physics
     assert.equal(state[ready.layout[30]], 8);
   } finally { w.close(); }
 });
+
+
+test('unchanged dance settings preserve recording while actual dance edits remain rejected', async () => {
+  const w = await worker();
+  const options = { scrollSpeed: 2, seed: 1, flight: .3, odds: [60, 200, .05, .5, 1] };
+  try {
+    await w.send({ type: 'record', config: w.ready.config });
+    await w.send({ type: 'dance', options });
+    assert(!w.messages.some(message => message.type === 'error'));
+    await w.send({ type: 'report' });
+    const report = w.messages.at(-1);
+    assert.equal(report.type, 'report'); assert.deepEqual(report.inputs, []);
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout })).every(row => row.matches));
+    await w.send({ type: 'record', config: w.ready.config });
+    await w.send({ type: 'dance', options: { ...options, flight: .4 } });
+    assert.equal(w.messages.at(-1).type, 'error');
+    assert.match(w.messages.at(-1).message, /Finish recording before changing dance settings/);
+  } finally { w.close(); }
+});

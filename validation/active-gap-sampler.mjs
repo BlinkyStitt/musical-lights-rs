@@ -30,6 +30,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
         invalidate('Audio interrupted or changed');
       for (const key of workloadKeys)
         if (report.audioState[key] !== workload[key]) invalidate('Audio workload changed');
+      if (config && view.input[67] !== Math.fround(config[11])) invalidate('Active gap cap changed during test');
       if (document.hidden) invalidate('Page hidden during test');
       if (view.lost || view.closed) invalidate('Renderer stopped during test');
       if (view.sceneVisible === false) invalidate('Visualizer left viewport');

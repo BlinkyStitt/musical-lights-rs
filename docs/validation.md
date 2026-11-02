@@ -51,7 +51,10 @@ Failed five-minute captures retain timestamped audio session transitions, the
 final audio continuity state, and the first state associated with each
 invalidation. Per-second render counters distinguish animation callbacks,
 submitted frames, GPU backpressure and submission delay. These counters observe
-the existing loop; only actual submitted frames enter FPS acceptance.
+the existing loop; only actual submitted frames enter FPS acceptance. A live cap
+edit invalidates both the phone performance verdict and automated five-minute
+capture, including when the original cap is restored. The recording and physics
+continue for replay; saving an unchanged cap does not invalidate the run.
 `performance-processes.jsonl` records native process/thread CPU and runnable-queue
 counters, wait states, VM CPU/steal counters, load and cgroup limits/pressure before, every ten seconds during,
 and after the same capture. Each sample is saved immediately, including its own

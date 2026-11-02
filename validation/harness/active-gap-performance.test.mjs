@@ -43,7 +43,7 @@ test('five-minute numeric acceptance retains every frame, debt, lag and invalida
 
 test('automated collector counts only submitted frames, catches interruptions and restores hooks', async () => {
   const source = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url), 'utf8');
-  for (const interruption of [null, 'visibility', 'continuity', 'session', 'workload', 'backpressure', 'audio-event-overflow']) {
+  for (const interruption of [null, 'visibility', 'continuity', 'session', 'workload', 'backpressure', 'audio-event-overflow', 'cap']) {
     let now = 0;
     const doc = Object.assign(new EventTarget(), { hidden: false });
     const context = { performance: { now: () => now, timeOrigin: 0 }, innerWidth: 390, innerHeight: 844,
@@ -54,7 +54,7 @@ test('automated collector counts only submitted frames, catches interruptions an
     const view = { card: Object.assign(new EventTarget(), { hasAttribute: () => false, querySelector: () => ({ checked: true }) }),
       onFrame: originalOnFrame, gpuFrames: { ready: originalReady },
       canvas: new EventTarget(), layout: [24, 120], palette: [.5], cameraBase: 0, cameraParameters: { values: { zoom: 100 } },
-      settings: { cameraMotion: true }, metrics: { physicsSteps: 0, debt: 0, snapshotAgeMs: 1 },
+      input: new Float32Array(68), settings: { cameraMotion: true }, metrics: { physicsSteps: 0, debt: 0, snapshotAgeMs: 1 },
       report: { frame: originalFrame, receive: originalReceive, invalidate: originalInvalidate,
         audioState: { sessionId: 1, source: 'generated', kind: 'exercise', state: 'playing', repeat: true,
           diagnostics: false, sampleRate: 48000, dbfs: -34, frequency: 1000, channel: 0, pascalsPerUnit: 2,
@@ -65,6 +65,7 @@ test('automated collector counts only submitted frames, catches interruptions an
           node: { port: { postMessage() { assert.fail('Collector must not command the audio processor'); } } } },
         acceptanceWorkload: () => true,
         readConfig: () => Array.from({ length: 12 }, (_, i) => i === 11 ? .6 : 0) } };
+    view.input[67] = .6;
     view.worker = { postMessage(data) {
       if (data.type === 'record') view.report.receive({ type: 'recording', timestamp: 0 });
       else view.report.receive({ ...fixture().data, type: 'report', config: [], finalTick: now * 120 / 1000, elapsedMs: now });
@@ -93,6 +94,9 @@ test('automated collector counts only submitted frames, catches interruptions an
           }
         }
       }
+      // Change the cap during measurement, then restore it before reporting.
+      if (interruption === 'cap' && tick === 2000) view.input[67] = .4;
+      if (interruption === 'cap' && tick === 2001) view.input[67] = .6;
       view.onFrame(now, false);
       if (view.gpuFrames.ready()) view.report.frame(now, .2);
     }
@@ -111,6 +115,7 @@ test('automated collector counts only submitted frames, catches interruptions an
     if (interruption === 'visibility') assert(data.invalidReasons.includes('Page hidden during test'));
     if (interruption === 'continuity' || interruption === 'session') assert(data.invalidReasons.includes('Audio interrupted or changed'));
     if (interruption === 'workload') assert(data.invalidReasons.includes('Audio workload changed'));
+    if (interruption === 'cap') assert(data.invalidReasons.includes('Active gap cap changed during test'));
     if (interruption === 'continuity') {
       assert.equal(data.audioTransitions.length, 1);
       assert.equal(data.audioTransitions[0].atMs, 100 * 1000 / 60);

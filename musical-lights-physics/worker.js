@@ -152,6 +152,12 @@ self.onmessage = async ({ data }) => {
         break;
       }
       case 'dance':
+        // Display controls can resend the same dance settings while editing
+        // recorded geometry inputs. A no-op must not stop that recording.
+        if (data.options.flight === danceOptions.flight && data.options.seed === danceOptions.seed
+          && data.options.scrollSpeed === danceOptions.scrollSpeed
+          && data.options.odds.length === danceOptions.odds.length
+          && data.options.odds.every((value, i) => value === danceOptions.odds[i])) break;
         if (recording) throw new Error('Finish recording before changing dance settings');
         danceOptions = data.options;
         simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);
