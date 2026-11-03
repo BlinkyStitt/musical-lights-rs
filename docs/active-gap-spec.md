@@ -25,13 +25,16 @@ All nine banks and their colliders use the same applied bar endpoints.
 
 The browser sends the actual inward left/right camera-frustum planes as held
 physics inputs. They replace the center box's side walls and follow viewport,
-zoom, camera position and rotation. Kinematic walls sweep through the same fixed
-substeps as bars; their contact speed contributes to the existing bounded work
-estimate. The top/bottom surfaces and selected physical depth remain authoritative.
+zoom, camera position and rotation. Kinematic walls blend signed plane coefficients through the same fixed
+substeps as bars, then normalize the whole plane. This preserves shared free
+space; rotating closest-point rigid frames can cut through it. Reject near-antipodal
+normal changes, where the normalized blend is not bounded. The signed-clearance
+derivative contributes to the existing contact-work estimate only for reachable
+walls. The top/bottom surfaces and selected physical depth remain authoritative.
 A bounded pool covers all nine rendered banks and their scrolling seams. Disable
 posts outside the conservative viewport/ball reach, without removing collisions
 from a visible bank. Keep rendering, contacts and source pigments aligned.
-Protocol 24 and phone report v10 include both side planes in every recorded input;
+Protocol 25 and phone report v11 include both side planes in every recorded input;
 reject older recordings with the matching-engine error.
 
 Worker recordings retain initial cap and applied edits in FIFO order, including

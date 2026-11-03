@@ -702,10 +702,14 @@ impl Simulation {
     pub fn apply(&mut self, input: SimulationInput) -> Result<(), &'static str> {
         if !input.balls.valid()
             || !valid_gap_cap(input.gap_cap)
-            || input.side_planes.iter().any(|p| {
+            || input.side_planes.iter().enumerate().any(|(i, p)| {
                 p.iter().any(|v| !v.is_finite())
                     || (Vector::new(p[0], p[1], p[2]).length_squared() - 1.0).abs() > 0.0001
                     || p[3].abs() > 1000.0
+                    // Near-antipodal normals have no bounded normalized blend.
+                    || (self.world.bodies[self.side_walls[i]].rotation()
+                        * if i == 0 { Vector::X } else { -Vector::X })
+                        .dot(Vector::new(p[0], p[1], p[2])) < -0.999
             })
             || input.tick != self.tick
             || input
@@ -946,26 +950,26 @@ impl Simulation {
         // Adding all three speeds double-counts the ball for post contacts and
         // makes unrelated ball-ball contacts pay for the fastest nearby post.
         // Recompute deterministically each outer tick, never from wall-clock cost.
-        let side_from = self.side_walls.map(|h| *self.world.bodies[h].position());
-        let side_targets: [Pose; 2] = std::array::from_fn(|i| {
-            let p = self.input.side_planes[i];
-            let n = Vector::new(p[0], p[1], p[2]).normalize();
-            let local = if i == 0 { Vector::X } else { -Vector::X };
-            Pose::from_parts(-n * p[3], Rotation::from_rotation_arc(local, n))
+        let side_from: [[f32; 4]; 2] = std::array::from_fn(|i| {
+            let pose = self.world.bodies[self.side_walls[i]].position();
+            let n = pose.rotation * if i == 0 { Vector::X } else { -Vector::X };
+            [n.x, n.y, n.z, -n.dot(pose.translation)]
+        });
+        let side_targets = self.input.side_planes.map(|p| {
+            let length = Vector::new(p[0], p[1], p[2]).length();
+            p.map(|v| v / length)
         });
         let wall_speed = side_from
             .iter()
             .zip(&side_targets)
-            .enumerate()
-            .map(|(side, (from, to))| {
+            .map(|(from, to)| {
                 if from == to {
                     return 0.0;
                 }
-                let local = if side == 0 { Vector::X } else { -Vector::X };
-                let from_normal = from.rotation * local;
-                let to_normal = to.rotation * local;
-                let translation = (to.translation - from.translation).length();
-                let angle = from.rotation.angle_between(to.rotation).abs();
+                let n0 = Vector::new(from[0], from[1], from[2]);
+                let n1 = Vector::new(to[0], to[1], to[2]);
+                let dn = n1 - n0;
+                let minimum_length = ((1.0 + n0.dot(n1)) * 0.5).sqrt();
                 self.balls
                     .iter()
                     .enumerate()
@@ -975,16 +979,20 @@ impl Simulation {
                             return None;
                         }
                         let radius = self.config.balls.diameter(i) / 2.0;
-                        let reach = (body.translation() - from.translation).length()
-                            + radius
-                            + ball_reach as f32
-                            + translation;
-                        let before = from_normal.dot(body.translation() - from.translation);
-                        let after = to_normal.dot(body.translation() - to.translation);
-                        // Include angular curvature in this conservative swept bound.
-                        // Distant walls moving away cannot create a contact this tick.
-                        (before.min(after) <= radius + ball_reach as f32 + angle * reach)
-                            .then_some(f64::from(translation + angle * reach) / f64::from(DT))
+                        let before = n0.dot(body.translation()) + from[3];
+                        let after = n1.dot(body.translation()) + to[3];
+                        // A convex blend of halfspaces preserves shared free space.
+                        // Normalizing can only increase positive clearance, so these
+                        // endpoints conservatively exclude every unreachable wall.
+                        if before.min(after) > radius + ball_reach as f32 {
+                            return None;
+                        }
+                        // Bound d/dt[(n(t)·p + d(t)) / |n(t)|] over the entire tick,
+                        // including the sphere's conservative force/velocity reach.
+                        let q = before.abs().max(after.abs()) + ball_reach as f32;
+                        let dq = (after - before).abs() + dn.length() * ball_reach as f32;
+                        let speed = dq / minimum_length + q * dn.length() / minimum_length.powi(2);
+                        Some(f64::from(speed) / f64::from(DT))
                     })
                     .fold(0.0_f64, f64::max)
             })
@@ -1039,19 +1047,19 @@ impl Simulation {
         });
         let mut painted = [[false; COUNT]; MAX_BALLS];
         for substep in 0..substeps {
-            // Sweep real kinematic walls through the fixed physics substeps.
-            // Their contact velocity participates in the same work budget as bars.
+            // Interpolate plane coefficients, then normalize the whole plane.
+            // Interpolating closest-point poses rotates through shared free
+            // space and can launch a sphere that neither endpoint touches.
             let fraction = (substep + 1) as f32 / substeps as f32;
             for i in 0..2 {
+                let p: [f32; 4] = std::array::from_fn(|j| {
+                    side_from[i][j] + (side_targets[i][j] - side_from[i][j]) * fraction
+                });
+                let length = Vector::new(p[0], p[1], p[2]).length();
+                let n = Vector::new(p[0], p[1], p[2]) / length;
+                let local = if i == 0 { Vector::X } else { -Vector::X };
                 self.world.bodies[self.side_walls[i]].set_next_kinematic_position(
-                    Pose::from_parts(
-                        side_from[i]
-                            .translation
-                            .lerp(side_targets[i].translation, fraction),
-                        side_from[i]
-                            .rotation
-                            .slerp(side_targets[i].rotation, fraction),
-                    ),
+                    Pose::from_parts(-n * (p[3] / length), Rotation::from_rotation_arc(local, n)),
                 );
             }
             let previous_surface = self.surface;
@@ -1718,7 +1726,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            24.0, // viewport side planes and full resting opening
+            25.0, // normalized plane sweeps preserve shared free space
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,

@@ -3312,6 +3312,7 @@ fn invalid_viewport_planes_do_not_change_held_inputs_or_snapshots() {
     let mut sim = world(Default::default());
     for plane in [
         [0.0; 4],
+        [-1.0, 0.0, 0.0, 0.0],
         [2.0, 0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0, f32::NAN],
         [1.0, 0.0, 0.0, 1001.0],
@@ -3369,4 +3370,41 @@ fn growing_a_ball_in_a_side_bank_does_not_restore_the_old_center_wall() {
     .unwrap();
     sim.step();
     assert!((position(&sim, 0).x - 2.1).abs() < 0.0001);
+}
+
+#[test]
+fn wall_rotation_keeps_the_shared_free_space_free_of_phantom_contacts() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        depth: 2.0,
+        ..Default::default()
+    });
+    isolate(&mut sim, &[0]);
+    let sides = [[1.0, 0.0, 0.0, 1.0], [-1.0, 0.0, 0.0, 3.0]];
+    sim.apply(SimulationInput {
+        side_planes: sides,
+        depth: 2.0,
+        ..Default::default()
+    })
+    .unwrap();
+    sim.step();
+    let p = Vector::new(-0.9, 0.3, -0.9);
+    place(&mut sim, 0, p, Vector::ZERO);
+    // The sphere has 10cm clearance at both ends of this wall rotation.
+    // Rotating the closest-point rigid frame cuts through that shared free space.
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        side_planes: [[0.0, 0.0, 1.0, 1.0], sides[1]],
+        ..sim.input
+    })
+    .unwrap();
+    sim.step();
+    assert!(
+        (position(&sim, 0) - p).length() < 0.001,
+        "phantom wall contact moved the sphere: {:?}",
+        position(&sim, 0)
+    );
+    assert!(velocity(&sim, 0).length() < 0.001);
+    assert!(sim.snapshot.values[COST_OFFSET] <= 3.0);
+    assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
 }
