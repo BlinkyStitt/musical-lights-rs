@@ -84,6 +84,8 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   }
   const stopped = await page.evaluate(() => window.physicsAtStop);
   expect(await page.evaluate(() => window.playbackAtStop)).toEqual({ state: 'playing', kind: 'exercise', listening: false });
+  await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').dataset.audioState)).toBe('stopped');
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.idle)).toBe(true);
   await expect(page.locator('.mic-status')).toBeEmpty();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
