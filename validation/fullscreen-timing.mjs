@@ -69,7 +69,7 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
     }
     const data=await page.evaluate(()=>{
       const samples=stopFullscreenFrames();const v=document.querySelector('#dancinglights').physics;
-      return{ballSettings:Array.from(v.current.slice(v.layout[30],v.layout[30]+3)),seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
+      return{ballMesh:{vertices:v.balls.geometry.attributes.position.count,triangles:v.balls.geometry.index.count/3},ballSettings:Array.from(v.current.slice(v.layout[30],v.layout[30]+3)),seed:v.seed,layout:v.layout,samples,marks,snapshots:v.timing.snapshots,discardedSimulationMs:v.metrics.discardedSimulationMs,workload:v.report.audioState};
     });
     assert.equal(data.seed,1,'Comparison seed must be identical');
     const build=await page.evaluate(()=>import(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/build.js').then(module=>module.build));
