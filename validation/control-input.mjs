@@ -14,11 +14,16 @@ export async function controlHitPoint(control, { nativeScroll = false } = {}) {
     let before = node.getBoundingClientRect();
     for (;;) {
       await new Promise(requestAnimationFrame);
+      // A newly queued animation can leave two initial rectangles unchanged.
+      // Wait for it to start before judging geometry, including parent motion.
+      let pendingAnimation = false;
+      for (let target = node; target; target = target.parentElement)
+        pendingAnimation ||= target.getAnimations().some(animation => animation.pending);
       const after = node.getBoundingClientRect();
-      if (['x', 'y', 'width', 'height'].every(key => before[key] === after[key])) break;
+      if (!pendingAnimation && ['x', 'y', 'width', 'height'].every(key => before[key] === after[key])) break;
       if (performance.now() >= deadline) {
         throw new Error('Mouse input requires a stable control after scrolling: ' + JSON.stringify({
-          before: before.toJSON(), after: after.toJSON(), scroll: [scrollX, scrollY],
+          before: before.toJSON(), after: after.toJSON(), pendingAnimation, scroll: [scrollX, scrollY],
         }));
       }
       before = after;
