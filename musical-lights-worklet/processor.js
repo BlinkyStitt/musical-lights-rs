@@ -1,8 +1,62 @@
+// One worklet owns digital PCM output and its analysis. Count the samples that
+// this producer actually renders; the browser's worklet currentFrame can lag a
+// quantum when its audio-graph lock is busy, despite continuous PCM. Anchor this
+// sequence to the suspended context clock before playback starts.
+class PCMPlayback {
+    constructor({ pcm, repeat, frame, sessionId, positionFrame = 0, paused = false, ended = false }, port) {
+        this.port = port;
+        this.sessionId = sessionId;
+        if (!Number.isSafeInteger(frame) || frame < 0) throw Error('Invalid playback clock');
+        this.frame = frame;
+        if (!(pcm instanceof Float32Array) || !pcm.length || sampleRate !== 48000) throw Error('Invalid playback PCM');
+        this.pcm = pcm;
+        if (!Number.isInteger(positionFrame) || positionFrame < 0 || positionFrame > pcm.length) throw Error('Invalid playback position');
+        this.cursor = positionFrame === pcm.length && repeat && !ended ? 0 : positionFrame;
+        this.repeat = Boolean(repeat);
+        this.paused = Boolean(paused);
+        this.ended = Boolean(ended) || this.cursor === pcm.length;
+        this.sequence = 0;
+        this.pending = true;
+    }
+    command(data) {
+        this.sequence = data.sequence;
+        if (data.type === 'restart') { this.cursor = 0; this.paused = false; this.ended = false; }
+        else if (data.type === 'pause') this.paused = true;
+        else if (data.type === 'resume') this.paused = false;
+        else if (data.type === 'repeat') this.repeat = Boolean(data.repeat);
+        else return;
+        this.pending = true;
+    }
+
+    publish(frame) {
+        this.port.postMessage({ type: 'transport', sessionId: this.sessionId, sequence: this.sequence, frame,
+            positionFrame: this.cursor, repeat: this.repeat,
+            state: this.ended ? 'ended' : this.paused ? 'paused' : 'playing' });
+    }
+    render(output) {
+        const firstSample = this.frame;
+        if (this.pending) { this.publish(firstSample); this.pending = false; }
+        // Keep one connected mono source during pauses and after completion.
+        // Transport commands never replace nodes or stop the analysis clock.
+        for (let i = 0; i < output.length; i++) {
+            output[i] = this.paused || this.ended ? 0 : this.pcm[this.cursor++];
+            if (this.cursor === this.pcm.length && !this.ended) {
+                if (this.repeat) this.cursor = 0;
+                else { this.ended = true; this.publish(firstSample + i + 1); }
+            }
+        }
+        this.frame += output.length;
+        return firstSample;
+    }
+}
+
+
 class LoudnessProcessor extends AudioWorkletProcessor {
     constructor({ processorOptions }) {
         super();
-        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics, sessionId, settings, visual, microphone } = processorOptions;
+        const { module, pascalsPerUnit, channel, reducedMotion, diagnostics, sessionId, settings, visual, microphone, playback } = processorOptions;
         this.sessionId = sessionId;
+        this.playback = playback ? new PCMPlayback({ ...playback, sessionId }, this.port) : null;
         this.wasm = new WebAssembly.Instance(module).exports;
         this.processor = this.wasm.processor_create(pascalsPerUnit === undefined ? 0 : 1, pascalsPerUnit ?? 2, Number(reducedMotion));
         if (!this.processor) throw new Error('Invalid microphone calibration');
@@ -29,6 +83,9 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         this.failed = false;
         this.lastSent = -Infinity;
         this.port.onmessage = ({ data }) => {
+            if (data.type === 'restart' || data.type === 'pause' || data.type === 'resume' || data.type === 'repeat') {
+                this.playback?.command(data); return;
+            }
             if (data.type === 'settings') {
                 if (data.sessionId !== this.sessionId || !Number.isInteger(data.revision)
                     || data.revision <= this.requestedRevision || data.revision > 0xffffffff) return;
@@ -52,8 +109,13 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         };
     }
 
-    process(inputs) {
+    process(inputs, outputs) {
         if (this.failed) return false;
+        if (this.playback) {
+            const samples = outputs[0][0];
+            const firstSample = this.playback.render(samples);
+            return this.analyze(samples, firstSample);
+        }
         const channels = inputs[0];
         // Before the graph connects there is no input stream yet. Once capture
         // starts, a missing channel is a discontinuity, not measured silence.
@@ -63,12 +125,16 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         }
         const samples = channels[this.channel];
         if (!samples) { this.fail(`Input channel ${this.channel + 1} is unavailable.`); return false; }
-        if (!this.started) this.inputStartSample = currentFrame;
+        return this.analyze(samples, currentFrame);
+    }
+
+    analyze(samples, blockStartSample) {
+        if (!this.started) this.inputStartSample = blockStartSample;
         this.started = true;
         for (let offset = 0; offset < samples.length;) {
             const length = Math.min(samples.length - offset, this.input.length);
             for (let i = 0; i < length; i++) this.input[i] = samples[offset + i];
-            const firstSample = BigInt(currentFrame + offset);
+            const firstSample = BigInt(blockStartSample + offset);
             if (!this.wasm.processor_process(this.processor, length, firstSample)) {
                 // Reject the discontinuous block first, then explicitly start a
                 // new analysis segment at that same sample index. Playback and
@@ -93,7 +159,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
         }
         // At most one snapshot waits on the UI. The processor still consumes
         // every sample and every loudness frame while drawing is delayed.
-        if (!this.pending && currentFrame - this.lastSent >= sampleRate / this.messageHz) {
+        if (!this.pending && blockStartSample - this.lastSent >= sampleRate / this.messageHz) {
             this.wasm.processor_snapshot(this.processor);
             const state = this.snapshot.slice();
             const readouts = new Float64Array(this.wasm.memory.buffer, this.wasm.processor_readouts(this.processor), 4).slice();
@@ -104,7 +170,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
                 extra.traceVersion = this.wasm.processor_trace_version(this.processor);
                 extra.trace = trace; extra.traceStride = stride;
                 extra.traceDropped = this.wasm.processor_trace_dropped(this.processor);
-                extra.audioTime = currentFrame / sampleRate;
+                extra.audioTime = blockStartSample / sampleRate;
                 extra.inputStartSample = this.inputStartSample;
                 this.wasm.processor_trace_clear(this.processor);
                 transfer.push(trace.buffer);
@@ -119,7 +185,7 @@ class LoudnessProcessor extends AudioWorkletProcessor {
             };
             this.port.postMessage({ type: 'frame', sessionId: this.sessionId, ...extra, continuity, state, sones: this.wasm.processor_sones(this.processor), clipped: this.wasm.processor_clipped(this.processor), calibration: this.wasm.processor_calibration_result(this.processor) }, transfer);
             this.pending = true;
-            this.lastSent = currentFrame;
+            this.lastSent = blockStartSample;
         }
         return true;
     }

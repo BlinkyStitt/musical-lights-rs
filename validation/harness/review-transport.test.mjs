@@ -1,16 +1,17 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, copyFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, copyFile, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { acquireInput, releaseInput } from '../../musical-leptos/src/audio_setup.js';
+import { acquireInput, prepareProcessor, releaseProcessor, releaseInput } from '../../musical-leptos/src/audio_setup.js';
 import { playbackFixture } from '../pcm-playback-fixture.mjs';
 
 // Load the production modules through the same runtime asset URLs as the app.
 // Only the generated build metadata and browser/audio dependencies are fixtures.
-let assets;
+let assets, wasm;
 before(async () => {
+  wasm = await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url));
   assets = await mkdtemp(join(tmpdir(), 'musical-review-transport-'));
   await mkdir(join(assets, 'physics'));
   await copyFile(new URL('../../musical-leptos/src/tones.js', import.meta.url), join(assets, 'physics/tones.js'));
@@ -33,7 +34,7 @@ function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat 
   let decodes = 0, microphoneRequests = 0;
   card.review = { decode: async () => { decodes++; return { buffer: decoded, identity: { name: 'Six second clip' } }; } };
   const baseURI = pathToFileURL(assets + '/').href;
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({}) }));
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({}), arrayBuffer: async () => Uint8Array.from(wasm).buffer }));
   const global = (key, value) => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
     Object.defineProperty(globalThis, key, { value, configurable: true });
@@ -45,7 +46,8 @@ function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat 
   t.mock.method(globalThis, 'setInterval', callback => { timers.add(callback); return callback; });
   t.mock.method(globalThis, 'clearInterval', callback => timers.delete(callback));
   const node = () => ({ gain: { value: 1 }, offset: { value: 0 }, playbackRate: { value: 1 }, connect() {}, disconnect() {}, start() {}, stop() {} });
-  const stream = {}, sources = [];
+  const track = Object.assign(new EventTarget(), { getSettings: () => ({ sampleRate: 48000, channelCount: 2 }) });
+  const stream = { getAudioTracks: () => [track] }, sources = [];
   const context = Object.assign(new EventTarget(), {
     currentTime: 10, sampleRate: 48000, state: 'running', baseLatency: 0, outputLatency: .2,
     destination: node(), createGain: node, createConstantSource: node,
@@ -54,11 +56,15 @@ function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat 
     createBuffer: (channels, length, rate) => ({ duration: length / rate, getChannelData: () => pcm, copyToChannel: data => assert.deepEqual(data, pcm) }),
     createBufferSource: () => { const source = node(); sources.push(source); return source; },
   });
-  global('AudioWorkletNode', class {
+  global('AudioWorkletNode', class extends EventTarget {
     constructor(context, name, { processorOptions }) {
-      assert.equal(name, 'pcm-playback');
-      this.port = { close() {}, postMessage: data => { this.advance(); this.player.command(data); this.player.render(0); } };
-      this.player = playbackFixture(processorOptions.pcm, processorOptions.repeat, Math.round(context.currentTime * context.sampleRate), data => this.port.onmessage?.({ data }));
+      super();
+      assert.equal(name, 'loudness-processor');
+      assert.ok(processorOptions.playback);
+      this.connections = new Set();
+      this.port = Object.assign(new EventTarget(), { close() {}, postMessage: data => { this.advance(); this.player.command(data); this.player.render(0); } });
+      const playback = processorOptions.playback;
+      this.player = playbackFixture(playback.pcm, playback.repeat, playback.frame, data => this.port.dispatchEvent(new MessageEvent('message', { data })), { sessionId: processorOptions.sessionId, positionFrame: playback.positionFrame, paused: playback.paused, ended: playback.ended });
       this.advance = () => {
         const end = Math.round(context.currentTime * context.sampleRate);
         while (this.player.frame < end) this.player.render(Math.min(128, end - this.player.frame));
@@ -66,13 +72,15 @@ function fixture(t, { kind = 'music', frequency = '1000', level = '-34', repeat 
       };
       sources.push(this);
     }
-    connect() {}
-    disconnect() {}
+    connect(target) { this.connections.add(target); }
+    disconnect() { this.connections.clear(); }
   });
   let playback;
   card.addEventListener('review-playback', ({ detail }) => { playback = detail; });
-  t.after(() => { releaseInput(stream); assert.equal(timers.size, 0); });
+  const close = () => { releaseProcessor(sources.at(-1)); releaseInput(stream); };
+  t.after(() => { close(); assert.equal(timers.size, 0); });
   return { context, card, sources, controls, decodes: () => decodes, microphoneRequests: () => microphoneRequests,
+    start: async () => { const input = await acquireInput(context, 0); await prepareProcessor(context, input, 0, false); return input; }, close,
     click: selector => controls[selector].dispatchEvent(new Event('click')),
     read: time => { context.currentTime = time; for (const source of sources) source.advance(); for (const timer of timers) timer(); return playback; } };
 }
@@ -81,10 +89,10 @@ for (const kind of ['music', 'trumpet', 'local']) {
   test(`${kind} ignores empty and invalid generated-tone parameters and preserves decoded PCM`, async t => {
     for (const [frequency, level] of [['', ''], ['NaN', 'NaN'], ['19', '0']]) {
       const f = fixture(t, { kind, frequency, level });
-      const stream = await acquireInput(f.context, 0);
+      const stream = await f.start();
       assert.equal(f.decodes(), 1); assert.equal(f.microphoneRequests(), 0);
       assert.equal(f.read(10).state, 'playing');
-      releaseInput(stream);
+      f.close();
     }
   });
 }
@@ -105,7 +113,7 @@ function position(result, processing, output, state = 'playing') {
 }
 
 test('muted playback avoids output clock locks and switches back immediately when audible', async t => {
-  const f = fixture(t, { audible: false }); await acquireInput(f.context, 0);
+  const f = fixture(t, { audible: false }); await f.start();
   let reads = 0;
   f.context.getOutputTimestamp = () => { reads++; return { contextTime: 15.9, performanceTime: performance.now() }; };
   Object.defineProperty(f.context, 'outputLatency', { get() { assert.fail('Muted playback must not query output latency'); } });
@@ -124,7 +132,7 @@ test('muted playback avoids output clock locks and switches back immediately whe
 });
 
 test('muted diagnostic recording retains output timestamp measurements', async t => {
-  const f = fixture(t, { audible: false, diagnostics: true }); await acquireInput(f.context, 0);
+  const f = fixture(t, { audible: false, diagnostics: true }); await f.start();
   let reads = 0;
   f.context.getOutputTimestamp = () => { reads++; return { contextTime: 15.9, performanceTime: performance.now() }; };
   const data = f.read(16.1);
@@ -133,7 +141,7 @@ test('muted diagnostic recording retains output timestamp measurements', async t
 });
 
 test('output clock crosses repeat boundaries after the audible iteration finishes', async t => {
-  const f = fixture(t); await acquireInput(f.context, 0);
+  const f = fixture(t); await f.start();
   position(f.read(10), 0, 0);
   position(f.read(16.1), .1, 5.9);
   position(f.read(16.3), .3, .1);
@@ -149,7 +157,7 @@ test('output clock crosses repeat boundaries after the audible iteration finishe
 });
 
 test('natural end allows output to drain to the endpoint without sticking at duration minus latency', async t => {
-  const f = fixture(t, { repeat: false }); await acquireInput(f.context, 0);
+  const f = fixture(t, { repeat: false }); await f.start();
   f.read(16);
   position(f.read(16.1), 6, 5.9, 'ended');
   position(f.read(16.3), 6, 6, 'ended');
@@ -160,7 +168,7 @@ test('natural end allows output to drain to the endpoint without sticking at dur
 });
 
 test('output follows the preceding timeline segment during pause, resume, replay and repeat changes', async t => {
-  const f = fixture(t); await acquireInput(f.context, 0);
+  const f = fixture(t); await f.start();
   f.context.currentTime = 12; f.click('.tone-pause');
   position(f.read(12.1), 2, 1.9, 'paused');
   position(f.read(13), 2, 2, 'paused');

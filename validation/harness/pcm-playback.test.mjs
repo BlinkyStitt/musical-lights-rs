@@ -19,7 +19,7 @@ test('pause holds the integer cursor, resume continues, replay rewinds and end s
   assert.deepEqual(player.render(1), Float32Array.of(.25));
   player.command({ type: 'pause', sequence: 1 });
   assert.deepEqual(player.render(128), new Float32Array(128));
-  assert.deepEqual(states.at(-1), { type: 'transport', sequence: 1, frame: 769, positionFrame: 1, repeat: false, state: 'paused' });
+  assert.deepEqual(states.at(-1), { type: 'transport', sessionId: 1, sequence: 1, frame: 769, positionFrame: 1, repeat: false, state: 'paused' });
   player.command({ type: 'resume', sequence: 2 });
   assert.deepEqual(player.render(4), Float32Array.of(-.5, .125, 0, 0));
   assert.equal(states.at(-1).frame, 899); assert.equal(states.at(-1).state, 'ended');

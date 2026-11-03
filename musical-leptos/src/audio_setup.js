@@ -21,6 +21,7 @@ function beginSession(context, card, source) {
     if (context.audioRetired) throw new Error('Audio session has closed');
     const session = { sessionId: ++nextSession, source, sampleRate: context.sampleRate,
         diagnostics: card.querySelector('.tone-trace')?.checked === true, state: 'starting', repeat: false,
+        sampleClock: source === 'microphone' ? 'browser-capture' : 'owned-pcm',
         continuity: { segment: 0, missingSamples: 0, overlapSamples: 0, expectedSample: 0, receivedSample: 0, calibrationCancellations: 0 } };
     const analysisNotice = card.querySelector('.analysis-status');
     if (analysisNotice) analysisNotice.textContent = '';
@@ -128,9 +129,10 @@ export async function prepareProcessor(context, stream, channel, reducedMotion) 
     if (session.closed) throw new Error('Audio session has closed');
     const node = new AudioWorkletNode(context, 'loudness-processor', {
         channelCountMode: 'max', channelInterpretation: 'discrete',
-        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+        numberOfInputs: session.source === 'microphone' ? 1 : 0, numberOfOutputs: 1, outputChannelCount: [1],
         processorOptions: { module, pascalsPerUnit, channel: session.source === 'microphone' ? channel : 0, reducedMotion,
-            settings: context.requestedAudio, visual: context.requestedVisual, microphone: session.source === 'microphone', diagnostics: session.diagnostics, sessionId: session.sessionId },
+            settings: context.requestedAudio, visual: context.requestedVisual, microphone: session.source === 'microphone', diagnostics: session.diagnostics, sessionId: session.sessionId,
+            playback: generatedSources.get(stream)?.options },
     });
     const card = document.querySelector('.audio-card');
     session.node = node;
@@ -201,17 +203,15 @@ ${data.readouts[1].toFixed(1)} dBFS RMS`;
     track.addEventListener('ended', ended);
     track.addEventListener('mute', muted);
     node.addEventListener('processorerror', crashed);
-    const digitalSource = generatedSources.get(stream)?.source;
-    digitalSource?.addEventListener('processorerror', crashed);
     const monitor = setInterval(() => {
         if (JSON.stringify(track.getSettings()) !== JSON.stringify(settings)) {
             fail('Microphone settings changed. Restart and calibrate this input again.');
         }
     }, 500);
     profiles.set(node, { key, settings, track, raw, session, calibrated: pascalsPerUnit !== undefined,
-        release: () => { context.removeEventListener('statechange', contextChanged); node.port.removeEventListener('message', trace); clearInterval(monitor); track.removeEventListener('ended', ended); track.removeEventListener('mute', muted); node.removeEventListener('processorerror', crashed); digitalSource?.removeEventListener('processorerror', crashed); },
+        release: () => { context.removeEventListener('statechange', contextChanged); node.port.removeEventListener('message', trace); clearInterval(monitor); track.removeEventListener('ended', ended); track.removeEventListener('mute', muted); node.removeEventListener('processorerror', crashed); },
     });
-    if (session.source !== 'microphone') generatedSources.get(stream)?.playback.connect(node);
+    if (session.source !== 'microphone') connectPlayback(context, stream, node);
     return node;
 }
 
@@ -287,6 +287,96 @@ export class InputControls {
         delete this.card.audioRestart;
     }
 }
+function connectPlayback(context, stream, source) {
+    const digital = generatedSources.get(stream);
+    const { session, buffer, identity, resume, kind, frequency, db, destination, playbackTiming, toneState, toneCases } = digital;
+    const sourceKind = session.source, generated = sourceKind === 'generated';
+    const card = document.querySelector('.audio-card'), query = selector => card.querySelector(selector);
+    const monitor = context.createGain(); monitor.gain.value = query('.tone-audible')?.checked ? 1 : 0;
+    monitor.connect(context.destination); source.connect(monitor); source.connect(destination);
+    let paused = resume?.paused ?? false, ended = resume?.ended ?? false, sequence = 0, acknowledged = -1, acknowledgedFrame = -1;
+    // Output may still be in a preceding loop or transport state. Map its
+    // context clock through the timeline before wrapping/clamping position.
+    const timeline = [];
+    const markPosition = (position, time, running, repeat) => timeline.push({ time, position, running, repeat });
+    const positionAt = time => {
+        const segment = timeline.findLast(segment => segment.time <= time);
+        if (!segment) return 0;
+        const elapsed = segment.position + (segment.running ? time - segment.time : 0);
+        return segment.repeat && segment.running ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
+    };
+    const transport = ({ data }) => {
+        if (!isCurrentProcessorMessage(source, data) || data.type !== 'transport' || data.sequence < acknowledged || data.frame < acknowledgedFrame) return;
+        acknowledged = data.sequence; acknowledgedFrame = data.frame;
+        markPosition(data.positionFrame / context.sampleRate, data.frame / context.sampleRate, data.state === 'playing', data.repeat);
+        if (data.sequence !== sequence || data.state !== 'ended') return;
+        ended = true;
+        session.publish('ended', 'natural end');
+        query('.tone-pause').textContent = 'Replay';
+    };
+    source.port.addEventListener('message', transport);
+    const command = (type, detail = {}) => source.port.postMessage({ type, ...detail, sequence: ++sequence });
+    const start = () => {
+        command('restart');
+        session.publish(context.state === 'running' ? 'playing' : 'starting', 'source start');
+    };
+    const listeners = [];
+    const listen = (selector, type, callback) => {
+        const node = query(selector); if (!node) return;
+        node.addEventListener(type, callback); listeners.push(() => node.removeEventListener(type, callback));
+    };
+    listen('.tone-pause', 'click', () => {
+        if (ended) {
+            paused = false; ended = false;
+            start();
+        } else if (paused) {
+            paused = false;
+            command('resume');
+            session.publish(context.state === 'running' ? 'playing' : 'interrupted', 'resume');
+        } else {
+            paused = true; command('pause');
+            session.publish('paused', 'pause');
+        }
+        query('.tone-pause').textContent = paused ? 'Resume playback' : 'Pause playback';
+    });
+    listen('.review-replay', 'click', () => {
+        paused = false; ended = false; start();
+        query('.tone-pause').textContent = 'Pause playback';
+    });
+    listen('.tone-repeat', 'change', () => {
+        session.repeat = query('.tone-repeat').checked; command('repeat', { repeat: session.repeat });
+        session.publish(session.state, 'repeat changed');
+    });
+    listen('.tone-audible', 'change', () => { monitor.gain.value = query('.tone-audible').checked ? 1 : 0; });
+    // The constructor starts at sample zero. Do not send an initial restart
+    // that could arrive after the first render quantum and duplicate PCM.
+    const initialPosition = (resume?.positionFrame ?? 0) / context.sampleRate;
+    markPosition(initialPosition, context.currentTime, !paused && !ended, session.repeat);
+    session.restart = () => ({ source: sourceKind, buffer, identity,
+        positionFrame: Math.min(buffer.length, Math.round(positionAt(context.currentTime) * context.sampleRate)), paused, ended, repeat: session.repeat });
+    session.publish(ended ? 'ended' : paused ? 'paused' : context.state === 'running' ? 'playing' : 'starting', 'source start');
+    query('.tone-pause').textContent = ended ? 'Replay' : paused ? 'Resume playback' : 'Pause playback';
+    query('.tone-pause').disabled = false; query('.review-replay').disabled = false;
+    const timer = setInterval(() => {
+        if (session.closed) return;
+        const at = positionAt(context.currentTime);
+        const state = generated ? toneState(kind, at, frequency, 10 ** (db / 20)) : null;
+        const timing = playbackTiming(context, { audible: monitor.gain.value !== 0, diagnostics: session.diagnostics });
+        card.dispatchEvent(new CustomEvent('review-playback', { detail: { sessionId: session.sessionId, recordedAt: new Date().toISOString(), processingSeconds: at, outputSeconds: positionAt(timing.audioTime), state: session.state, ...timing } }));
+        const status = query('.tone-status');
+        if (status) status.textContent = state ? `${kind}: ${state.frequencies.map(f => f.toFixed(1)).join(' + ') || 'no tone'} Hz, ${state.amplitude ? (20 * Math.log10(state.amplitude)).toFixed(1) : '−∞'} dBFS peak, ${at.toFixed(1)} / ${toneCases[kind]} s (${session.state})` : `${identity.name}: ${at.toFixed(2)} / ${buffer.duration.toFixed(2)} s (${session.state}) · ${timing.confidence}`;
+    }, 100);
+    digital.release = () => {
+        clearInterval(timer); for (const remove of listeners) remove();
+        source.port.removeEventListener('message', transport);
+        monitor.disconnect(); destination.disconnect();
+        if (card.dataset.audioSession === String(session.sessionId) && query('.tone-pause')) {
+            query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause playback'; query('.review-replay').disabled = true;
+            card.review.buffer = null;
+        }
+    };
+}
+
 export async function acquireInput(context, selectedChannel) {
     const card = /** @type {HTMLElement} */ (document.querySelector('.audio-card'));
     const resume = context.inputResume;
@@ -353,105 +443,15 @@ export async function acquireInput(context, selectedChannel) {
         if (context.audioRetired || context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
         const { playbackTiming } = await import(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'physics/review.js', document.baseURI));
         if (context.audioRetired || context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
-        const destination = context.createMediaStreamDestination();
-        const playback = context.createGain(); playback.connect(destination);
-        const monitor = context.createGain(); monitor.gain.value = query('.tone-audible')?.checked ? 1 : 0;
-        monitor.connect(context.destination); playback.connect(monitor);
+        const destination = context.createMediaStreamDestination(), stream = destination.stream;
         Object.assign(session, generated ? { kind, frequency, dbfs: db, peakAmplitude: 10 ** (db / 20) } : { clip: identity });
-        Object.assign(session, {
-            audioStart: context.currentTime, repeat: resume?.repeat ?? query('.tone-repeat')?.checked ?? true });
-        await context.audioWorklet.addModule(new URL(document.querySelector('meta[name="musical-lights-assets"]').content + 'loudness/pcm-playback.js', document.baseURI)).catch(async error => {
-            await requireCurrentRuntime(context);
-            throw error;
-        });
-        if (context.audioRetired || context.state === 'closed' || !card.isConnected) throw new Error('Audio session has closed');
-        const source = new AudioWorkletNode(context, 'pcm-playback', {
-            numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
-            processorOptions: { pcm: buffer.getChannelData(0), repeat: session.repeat, positionFrame: resume?.positionFrame ?? 0, paused: resume?.paused ?? false, ended: resume?.ended ?? false },
-        });
-        source.connect(playback);
-        let paused = resume?.paused ?? false, ended = resume?.ended ?? false, sequence = 0, acknowledged = -1, acknowledgedFrame = -1;
-        // Output may still be in a preceding loop or transport state. Map its
-        // context clock through the timeline before wrapping/clamping position.
-        const timeline = [];
-        const markPosition = (position, time, running, repeat) => timeline.push({ time, position, running, repeat });
-        const positionAt = time => {
-            const segment = timeline.findLast(segment => segment.time <= time);
-            if (!segment) return 0;
-            const elapsed = segment.position + (segment.running ? time - segment.time : 0);
-            return segment.repeat && segment.running ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
-        };
-        source.port.onmessage = ({ data }) => {
-            if (session.closed || data.type !== 'transport' || data.sequence < acknowledged || data.frame < acknowledgedFrame) return;
-            acknowledged = data.sequence; acknowledgedFrame = data.frame;
-            markPosition(data.positionFrame / context.sampleRate, data.frame / context.sampleRate, data.state === 'playing', data.repeat);
-            if (data.sequence !== sequence || data.state !== 'ended') return;
-            ended = true;
-            session.publish('ended', 'natural end');
-            query('.tone-pause').textContent = 'Replay';
-        };
-        const command = (type, detail = {}) => source.port.postMessage({ type, ...detail, sequence: ++sequence });
-        const start = () => {
-            command('restart');
-            session.publish(context.state === 'running' ? 'playing' : 'starting', 'source start');
-        };
-        const listeners = [];
-        const listen = (selector, type, callback) => {
-            const node = query(selector); if (!node) return;
-            node.addEventListener(type, callback); listeners.push(() => node.removeEventListener(type, callback));
-        };
-        listen('.tone-pause', 'click', () => {
-            if (ended) {
-                paused = false; ended = false;
-                start();
-            } else if (paused) {
-                paused = false;
-                command('resume');
-                session.publish(context.state === 'running' ? 'playing' : 'interrupted', 'resume');
-            } else {
-                paused = true; command('pause');
-                session.publish('paused', 'pause');
-            }
-            query('.tone-pause').textContent = paused ? 'Resume playback' : 'Pause playback';
-        });
-        listen('.review-replay', 'click', () => {
-            paused = false; ended = false; start();
-            query('.tone-pause').textContent = 'Pause playback';
-        });
-        listen('.tone-repeat', 'change', () => {
-            session.repeat = query('.tone-repeat').checked; command('repeat', { repeat: session.repeat });
-            session.publish(session.state, 'repeat changed');
-        });
-        listen('.tone-audible', 'change', () => { monitor.gain.value = query('.tone-audible').checked ? 1 : 0; });
-        // The constructor starts at sample zero. Do not send an initial restart
-        // that could arrive after the first render quantum and duplicate PCM.
-        const initialPosition = (resume?.positionFrame ?? 0) / context.sampleRate;
-        markPosition(initialPosition, context.currentTime, !paused && !ended, session.repeat);
-        session.restart = () => ({ source: sourceKind, buffer, identity,
-            positionFrame: Math.min(buffer.length, Math.round(positionAt(context.currentTime) * context.sampleRate)), paused, ended, repeat: session.repeat });
-        session.publish(ended ? 'ended' : paused ? 'paused' : context.state === 'running' ? 'playing' : 'starting', 'source start');
-        query('.tone-pause').textContent = ended ? 'Replay' : paused ? 'Resume playback' : 'Pause playback';
-        query('.tone-pause').disabled = false; query('.review-replay').disabled = false;
-        const timer = setInterval(() => {
-            if (session.closed) return;
-            const at = positionAt(context.currentTime);
-            const state = generated ? toneState(kind, at, frequency, 10 ** (db / 20)) : null;
-            const timing = playbackTiming(context, { audible: monitor.gain.value !== 0, diagnostics: session.diagnostics });
-            card.dispatchEvent(new CustomEvent('review-playback', { detail: { sessionId: session.sessionId, recordedAt: new Date().toISOString(), processingSeconds: at, outputSeconds: positionAt(timing.audioTime), state: session.state, ...timing } }));
-            const status = query('.tone-status');
-            if (status) status.textContent = state ? `${kind}: ${state.frequencies.map(f => f.toFixed(1)).join(' + ') || 'no tone'} Hz, ${state.amplitude ? (20 * Math.log10(state.amplitude)).toFixed(1) : '−∞'} dBFS peak, ${at.toFixed(1)} / ${toneCases[kind]} s (${session.state})` : `${identity.name}: ${at.toFixed(2)} / ${buffer.duration.toFixed(2)} s (${session.state}) · ${timing.confidence}`;
-        }, 100);
-        const stream = destination.stream;
+        Object.assign(session, { audioStart: context.currentTime, repeat: resume?.repeat ?? query('.tone-repeat')?.checked ?? true });
         sessions.set(stream, session);
-        generatedSources.set(stream, { source, playback, release: () => {
-            clearInterval(timer); for (const remove of listeners) remove();
-            source.port.onmessage = null; source.port.close();
-            source.disconnect(); playback.disconnect(); monitor.disconnect(); destination.disconnect();
-            if (card.dataset.audioSession === String(session.sessionId) && query('.tone-pause')) {
-                query('.tone-pause').disabled = true; query('.tone-pause').textContent = 'Pause playback'; query('.review-replay').disabled = true;
-                card.review.buffer = null;
-            }
-        } });
+        generatedSources.set(stream, { session, buffer, identity, resume, kind, frequency, db, destination, playbackTiming, toneState, toneCases,
+            options: { pcm: buffer.getChannelData(0), repeat: session.repeat,
+                frame: Math.round(session.audioStart * context.sampleRate), positionFrame: resume?.positionFrame ?? 0,
+                paused: resume?.paused ?? false, ended: resume?.ended ?? false },
+            release: () => destination.disconnect() });
         return stream;
     } catch (error) { session.close(); throw error; }
 }

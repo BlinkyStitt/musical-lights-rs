@@ -6,7 +6,7 @@ async function recoveryPage(page, microphone = false) {
   await page.addInitScript(microphone => {
     const Context = window.AudioContext, Node = window.AudioWorkletNode;
     window.recoveryContexts = []; window.recoveryNodes = []; window.captureCalls = 0; window.recoveryFrames = 0; window.recoveryInjected = 0;
-    window.recoveryTransport = [];
+    window.recoveryTransport = []; window.recoveryBrowserClocks = [];
     window.AudioContext = class extends Context {
       constructor(...args) {
         super(...args); recoveryContexts.push(this);
@@ -14,14 +14,30 @@ async function recoveryPage(page, microphone = false) {
         prototype.addModule = async function(url, options) {
           if (!new URL(url, document.baseURI).pathname.endsWith('/loudness/processor.js')) return load.call(this, url, options);
           // Mutate only the test-loaded module: drop one analysis callback while
-          // the real browser clock and independent PCM playback advance.
+          // the real browser clock and owned PCM producer advance.
           const response = await fetch(url); if (!response.ok) throw new Error('Cannot load test worklet');
           let source = await response.text();
           const port = 'this.port.onmessage = ({ data }) => {';
-          const process = '    process(inputs) {';
+          const process = '    analyze(samples, blockStartSample) {';
+          const callback = '    process(inputs, outputs) {';
           if (!source.includes(port) || !source.includes(process)) throw new Error('Worklet fault injection no longer matches source');
-          source = source.replace(port, `${port}\n            if (data.type === 'validation-drop-quantum') { this.validationDrop = true; return; }\n            if (data.type === 'validation-clock-backstep') { this.validationClockShift = -128; return; }`);
-          source = source.replace(process, `${process}\n        const currentFrame = globalThis.currentFrame + (this.validationClockShift ?? 0);\n        if (this.validationDrop) { this.validationDrop = false; return true; }`);
+          source = source.replace(port, `const post = this.port.postMessage.bind(this.port);
+        this.port.postMessage = (message, transfer) => {
+          if (message.type === 'frame' && this.validationBrowserFrames?.length === 2) {
+            message.browserClockProbe = this.validationBrowserFrames;
+            this.validationBrowserFrames = null;
+          }
+          post(message, transfer);
+        };
+        ${port}\n            if (data.type === 'validation-drop-quantum') { this.validationDrop = true; return; }\n            if (data.type === 'validation-clock-backstep') { this.validationClockShift = -128; return; }\n            if (data.type === 'validation-browser-clock-stall') { this.validationBrowserStall = 2; this.validationBrowserFrames = []; return; }`);
+          source = source.replace(callback, `${callback}
+        const nativeFrame = globalThis.currentFrame;
+        const currentFrame = nativeFrame - (this.validationBrowserStall === 2 ? 128 : 0);
+        if (this.validationBrowserStall > 0) {
+          this.validationBrowserFrames.push({ nativeFrame, observedFrame: currentFrame, producedFrame: this.playback?.frame });
+          this.validationBrowserStall--;
+        }`);
+          source = source.replace(process, `${process}\n        blockStartSample += this.validationClockShift ?? 0;\n        if (this.validationDrop) { this.validationDrop = false; return true; }`);
           const modified = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
           try { await load.call(this, modified, options); recoveryInjected++; } finally { URL.revokeObjectURL(modified); }
         };
@@ -29,15 +45,17 @@ async function recoveryPage(page, microphone = false) {
     };
     window.AudioWorkletNode = class extends Node {
       constructor(context, name, options) {
-        super(context, name, options); recoveryNodes.push({ node: this, name, options });
+        super(context, name, options); this.validationConnections = []; recoveryNodes.push({ node: this, name, options });
         this.port.addEventListener('message', ({ data }) => {
           if (name === 'loudness-processor' && data.type === 'frame') recoveryFrames++;
-          if (name === 'pcm-playback' && data.type === 'transport') {
+          if (data.browserClockProbe) recoveryBrowserClocks.push(...data.browserClockProbe);
+          if (data.type === 'transport') {
             recoveryTransport.push({ ...data, receivedAudioTime: context.currentTime });
             if (recoveryTransport.length > 64) recoveryTransport.shift();
           }
         });
       }
+      connect(...args) { this.validationConnections.push(args[0]); return super.connect(...args); }
     };
     if (microphone) {
       const settings = { autoGainControl: false, echoCancellation: false, noiseSuppression: false, deviceId: 'recovery-test-input', sampleRate: 48000 };
@@ -228,5 +246,35 @@ test('a backward analysis clock keeps the same playback position and declares it
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeInViewport();
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await page.locator('.review-stop').click(); await expect(page.locator('.analysis-status')).toBeEmpty();
+  await expect.poll(() => page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
+});
+
+
+test('owned digital PCM survives a stale browser clock without resetting analysis', async ({ page }, info) => {
+  await recoveryPage(page);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
+  await page.locator('.input-source').selectOption('generated');
+  await page.locator('.tone-trace').check(); await page.locator('.review-start').click();
+  await expect.poll(() => page.evaluate(() => recoveryFrames)).toBeGreaterThan(10);
+  expect(await page.evaluate(() => recoveryNodes.length)).toBe(1);
+  const before = await page.evaluate(() => recoveryFrames);
+  await page.evaluate(() => recoveryNodes[0].node.port.postMessage({ type: 'validation-browser-clock-stall' }));
+  await expect.poll(() => page.evaluate(() => recoveryBrowserClocks.length)).toBe(2);
+  await expect.poll(() => page.evaluate(() => recoveryFrames)).toBeGreaterThan(before + 10);
+  const result = await page.evaluate(() => ({ clocks: recoveryBrowserClocks,
+    audio: document.querySelector('#dancinglights').physics.report.audioState,
+    contexts: recoveryContexts.length, nodes: recoveryNodes.length, requests: captureCalls,
+    directOutput: recoveryNodes[0].node.validationConnections.includes(recoveryContexts[0].destination),
+    outputConnections: recoveryNodes[0].node.validationConnections.length }));
+  await info.attach('owned-pcm-clock-evidence', { body: JSON.stringify(result), contentType: 'application/json' });
+  expect(result.clocks[0].observedFrame).toBe(result.clocks[0].nativeFrame - 128);
+  expect(result.clocks[1].observedFrame).toBe(result.clocks[1].nativeFrame);
+  expect(result.clocks[1].producedFrame - result.clocks[0].producedFrame).toBe(128);
+  expect(result.audio.sampleClock).toBe('owned-pcm'); expect(result.audio.state).toBe('playing');
+  expect(result.audio.continuity).toMatchObject({ segment: 0, missingSamples: 0, overlapSamples: 0 });
+  expect(result.contexts).toBe(1); expect(result.nodes).toBe(1); expect(result.requests).toBe(0);
+  expect(result.directOutput).toBe(false); expect(result.outputConnections).toBe(2);
+  await expect(page.locator('.analysis-status')).toBeEmpty(); await expect(page.locator('.audio-error')).toBeEmpty();
+  await page.locator('.review-stop').click();
   await expect.poll(() => page.evaluate(() => recoveryContexts[0].state)).toBe('closed');
 });

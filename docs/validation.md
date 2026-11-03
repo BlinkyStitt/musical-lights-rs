@@ -1345,6 +1345,35 @@ output timing, electrical load, thermal behavior and runtime need physical accep
 The current GPS board timing profile has unknown uncertainty, so it cannot report
 Locked. No battery measurement profile exists; battery state remains Unknown.
 
+## Digital PCM ownership
+
+Digital playback and analysis now run in one AudioWorklet. Its PCM producer owns
+an integer output-sample sequence anchored to the suspended AudioContext before
+playback. It renders each block and passes that same block and index directly to
+the unchanged loudness WASM. Pause emits measured zero samples without moving the
+file cursor; resume, repeat and replay preserve the output-sample sequence. The
+session records `sampleClock: owned-pcm`. Microphone input retains its browser
+capture clock and records `sampleClock: browser-capture`.
+
+A pinned Chromium 156 NUC3 diagnostic reproduced repeated and skipped
+`AudioWorkletGlobalScope.currentFrame` values while every PCM block advanced once
+and generated output matched analysis input exactly. Native output-timestamp
+queries induced 36 clock segments with 2,432 reported missing and overlapping
+samples, although no producer block or PCM sample was lost. The previous separate
+playback/analysis graph treated this browser timestamp as the owned PCM sequence
+and unnecessarily reset analysis. The new graph removes that clock dependency;
+it does not retimestamp received microphone data or synthesize missing PCM.
+
+Offline production-WASM coverage compares exact PCM, raw loudness and filtered
+state with an independent input-driven processor under stale browser timestamps.
+A skipped analysis call after PCM production must still report the missing
+128-sample block. Browser fault injection retains the existing real-gap and
+backward-analysis-clock checks at the analysis boundary, after production advances.
+A separate stale-browser-clock check requires one live worklet, advancing analysis,
+unchanged session and no recovery reset. These correctness tests do not replace
+the three five-minute cases or strict transition/latency checks. All performance
+limits, invalidation rules, one worker, zero retries and failed exports remain.
+
 ## Audio sample gaps
 
 A sample-clock discontinuity starts a new analysis segment at the real received
