@@ -440,7 +440,8 @@ export class PhysicsView {
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, joinWidth] = this.layout;
-    const ballGeometry = sphereGeometry(7);
+    // Keep closed smooth spheres with less per-vertex lighting work.
+    const ballGeometry = sphereGeometry(4);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
     this.pigmentAttributes = ['pigmentA', 'pigmentB', 'pigmentC'].map(name => ballGeometry.attributes[name]);
     const ballMaterial = new THREE.MeshLambertMaterial({ transparent: false, opacity: 1, depthWrite: true });

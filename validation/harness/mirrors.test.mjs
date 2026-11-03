@@ -22,7 +22,7 @@ test('culling bounds contain the flat cap and both straight half-joins', () => {
 });
 
 test('sphere meshes have a closed outward surface, unit normals and shared vertices', () => {
-  for (const detail of [2, 7]) {
+  for (const detail of [2, 4, 7]) {
     const geometry = sphereGeometry(detail), points = geometry.attributes.position, normals = geometry.attributes.normal;
     const index = geometry.index.array, edges = new Map(), seen = new Set();
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), normal = new THREE.Vector3();
