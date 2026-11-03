@@ -7,12 +7,13 @@ product-use sign-off is a completion gate. Existing diagnostic UI is unchanged.
 
 ## Geometry and behavior
 
-The 2026-11-02 view correction supersedes the permanent-base geometry. For the
-core-calculated packed opening `P`, enclosure height `H ≥ P` and reference cap
+The half-gap adjustment splits the difference between the permanent-base and
+full-opening views. For the core-calculated packed opening `P`, enclosure height `H ≥ P` and reference cap
 `C`, use `A = min(H, max(C, P))` to calculate travel and flight. Keep the resting
-baseline at 3 mm at each end. Extra enclosure height remains open space; it does
-not become permanent bar base. Above `max(C, P)`, settled musical travel stays
-constant as enclosure height increases. Preserve ball packing, flight clearance,
+baseline at `3 mm + (H − A) / 4` at each end. Half the extra enclosure height
+remains open space and half becomes permanent bar base. The resting opening is
+the arithmetic midpoint of the two earlier views. Above `max(C, P)`, settled
+musical travel stays constant as enclosure height increases. Preserve ball packing, flight clearance,
 normalized musical trajectories, pigments and the loudness model.
 
 The shared Home/Advanced **Bar travel cap (cm)** control retains its saved value,
@@ -34,8 +35,9 @@ walls. The top/bottom surfaces and selected physical depth remain authoritative.
 A bounded pool covers all nine rendered banks and their scrolling seams. Disable
 posts outside the conservative ball reach and reactivate them before contact in
 any visible bank. Keep rendering, contacts and source pigments aligned.
-Protocol 26 and phone report v13 include both side planes in every recorded input;
-reject older recordings with the matching-engine error.
+Protocol 27 and phone report v14 identify the half-gap geometry and retain both
+side planes in every recorded input. Reject older recordings with the
+matching-engine error.
 
 Worker recordings retain initial cap and applied edits in FIFO order, including
 same-tick edits during playback/resizing. Replay must match final snapshots,

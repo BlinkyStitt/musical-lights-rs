@@ -71,10 +71,18 @@ test.beforeEach(async ({ page }, info) => {
       constructor(context, name, options) {
         // Bound only the end-test fixture duration; retain the real processor,
         // output graph and natural completion message.
-        if (name === 'pcm-playback' && shortEnd)
-          options.processorOptions.pcm = options.processorOptions.pcm.slice(0, 96000);
+        if (name === 'loudness-processor' && options.processorOptions.playback && shortEnd)
+          options.processorOptions.playback.pcm = options.processorOptions.playback.pcm.slice(0, 96000);
         super(context, name, options);
-        if (name === 'pcm-playback') window.exerciseSource = this;
+        if (name === 'loudness-processor' && options.processorOptions.playback) {
+          window.exerciseSource = this;
+          this.validationMessageListeners = [];
+          const add = this.port.addEventListener.bind(this.port);
+          this.port.addEventListener = (type, listener, ...args) => {
+            if (type === 'message') this.validationMessageListeners.push(listener);
+            return add(type, listener, ...args);
+          };
+        }
       }
     };
     window.audioEvents = [];
@@ -177,11 +185,11 @@ for (const kind of ['stationary', 'stepped', 'sweep', 'two', 'volume', 'bursts',
 
 test('a stale completion message cannot end a resumed session', async ({ page }) => {
   await acceptancePage(page);
-  await page.evaluate(() => { window.oldCompletion = window.exerciseSource.port.onmessage; });
+  await page.evaluate(() => { window.oldTransportSession = Number(document.querySelector('.audio-card').dataset.audioSession); const listeners = [...window.exerciseSource.validationMessageListeners]; window.oldCompletion = event => listeners.forEach(listener => listener(event)); });
   await page.locator('.tone-pause').click();
   await page.locator('.tone-pause').click();
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
-  await page.evaluate(() => window.oldCompletion({ data: { type: 'transport', sequence: 0, frame: 0, positionFrame: 0, state: 'ended', repeat: false } }));
+  await page.evaluate(() => window.oldCompletion({ data: { type: 'transport', sessionId: window.oldTransportSession, sequence: 0, frame: 0, positionFrame: 0, state: 'ended', repeat: false } }));
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await page.locator('.phone-start').click();
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.report.active)).toBe(true);
@@ -240,11 +248,11 @@ test('repeated pauses preserve recording continuity and resume audible tone outp
 
 test('a naturally ended tone restarts and ignores the preceding completion', async ({ page }) => {
   await acceptancePage(page, false);
-  await page.evaluate(() => { window.oldCompletion = window.exerciseSource.port.onmessage; });
+  await page.evaluate(() => { window.oldTransportSession = Number(document.querySelector('.audio-card').dataset.audioSession); const listeners = [...window.exerciseSource.validationMessageListeners]; window.oldCompletion = event => listeners.forEach(listener => listener(event)); });
   await expect(page.locator('.tone-pause')).toHaveText('Replay');
   await page.locator('.tone-repeat').check();
   await page.locator('.tone-pause').press('Enter');
-  await page.evaluate(() => window.oldCompletion({ data: { type: 'transport', sequence: 0, frame: 0, positionFrame: 0, state: 'ended', repeat: false } }));
+  await page.evaluate(() => window.oldCompletion({ data: { type: 'transport', sessionId: window.oldTransportSession, sequence: 0, frame: 0, positionFrame: 0, state: 'ended', repeat: false } }));
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.audioState?.state)).toBe('playing');
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)))).toBeGreaterThan(.1);
   await expect(page.getByRole('alert')).toBeEmpty();

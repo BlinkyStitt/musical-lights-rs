@@ -29,7 +29,6 @@ def main():
         output / "loudness.wasm",
     )
     shutil.copyfile(root / "processor.js", output / "processor.js")
-    shutil.copyfile(root / "pcm-playback.js", output / "pcm-playback.js")
     shutil.copyfile(
         root.parent / "THIRD_PARTY_NOTICES.md", output / "THIRD_PARTY_NOTICES.md"
     )

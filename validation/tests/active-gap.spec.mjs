@@ -130,8 +130,9 @@ test('live gap edits preserve measured meters and filtered targets while physics
     await page.getByRole('slider', { name: sliderName, exact: true }).fill(String(cap));
     await expect.poll(() => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      return { baseline: v.current[v.layout[17] + 5], travel: v.current[v.layout[17] + 6] };
-    }).then(s => Math.abs(s.baseline - .003) < 1e-5 && Math.abs(s.travel - previousTravel) > 1e-4)).toBe(true);
+      return { baseline: v.current[v.layout[17] + 5], travel: v.current[v.layout[17] + 6],
+        expectedBase: .003 + Math.max(0, v.current[v.layout[17]] - v.input[67]) / 4 };
+    }).then(s => Math.abs(s.baseline - s.expectedBase) < 1e-5 && Math.abs(s.travel - previousTravel) > 1e-4)).toBe(true);
     expect(await measured()).toEqual(before);
     const state = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
@@ -160,7 +161,7 @@ test('restored cap constructs active placement and live geometry reaches all ban
       tops, source: Array.from(v.bars.instanceMatrix.array), side: Array.from(v.sideBars.mesh.instanceMatrix.array), sideCount: v.sideBars.mesh.count, sideBands: Array.from(v.sideBars.sourceBands.slice(0, v.sideBars.mesh.count)), offsets: Array.from(v.sideBars.offsets.slice(0, v.sideBars.mesh.count)), input: v.input[67], report: v.report.readConfig()[11] };
   });
   expect(state.tick).toBeGreaterThan(before.tick); expect(state.canvasHeight).toBe(before.height); expect(state.balls).toBe(8); expect(state.audio).toBe(false);
-  expect(state.base).toBeCloseTo(.003, 6); expect(state.report).toBeCloseTo(.6, 6);
+  expect(state.base).toBeCloseTo(.003 + Math.max(0, state.height - .6) / 4, 6); expect(state.report).toBeCloseTo(.6, 6);
   for (let i = 0; i < 144; i++) expect(Math.abs(state.source[i * 16 + 5])).toBeCloseTo(state.tops[i % 24], 5);
   expect(new Set(state.offsets).size).toBe(8);
   for (let i = 0; i < state.sideCount; i++) expect(Math.abs(state.side[i * 16 + 5])).toBeCloseTo(state.tops[state.sideBands[i]], 5);

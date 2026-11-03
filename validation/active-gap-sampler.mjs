@@ -4,7 +4,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
   return new Promise((resolve, reject) => {
     const report = view.report, intervals = [], renderCosts = [], progress = [], invalid = new Set();
     const viewport = [innerWidth, innerHeight], camera = JSON.stringify(view.cameraParameters.values);
-    const workloadKeys = ['source', 'kind', 'state', 'repeat', 'diagnostics', 'sampleRate', 'dbfs', 'frequency', 'channel', 'pascalsPerUnit'];
+    const workloadKeys = ['source', 'kind', 'state', 'repeat', 'diagnostics', 'sampleRate', 'dbfs', 'frequency', 'channel', 'pascalsPerUnit', 'sampleClock'];
     // Audio session events also contain the restart callback and live processor.
     // Snapshot evidence fields only, detaching continuity from later mutations.
     const audioSnapshot = (state = report.audioState) => structuredClone(Object.fromEntries([...workloadKeys, 'sessionId', 'continuity', 'reason',
@@ -90,7 +90,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       const evaluation = evaluatePerformance({ intervals, renderCosts, progress, maxSnapshotAgeMs,
         invalid: invalidReasons, hz: layout[1], data });
       cleanup();
-      resolve({ ...data, type: 'musical-lights-phone-report-v13', layout, palette, config: data.config,
+      resolve({ ...data, type: 'musical-lights-phone-report-v14', layout, palette, config: data.config,
         mode, viewport, camera: JSON.parse(camera), cameraBase, cameraMotion, scrolling, workload,
         physicalPhone: false, evidenceEnvironment: 'hardware-rendered desktop Chromium with mobile viewport',
         warmupSeconds: 15, measurementSeconds: 300, frameIntervalsMs: intervals, renderCostsMs: renderCosts,

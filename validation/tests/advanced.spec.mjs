@@ -313,7 +313,7 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
   await page.waitForFunction(() => {
     const v = document.querySelector('#dancinglights').physics;
     return Math.abs(v.input[67] - .4) < 1e-6
-      && Math.abs(v.current[v.layout[17] + 5] - .003) < 1e-5
+      && Math.abs(v.current[v.layout[17] + 5] - (.003 + Math.max(0, v.current[v.layout[17]] - v.input[67]) / 4)) < 1e-5
       && Math.abs(v.current[v.layout[17] + 6] - .11208) < 1e-5;
   });
   const appliedSample = await page.evaluate(() => {

@@ -67,14 +67,13 @@ export async function observePCM(page, source) {
           post(message, transfer);
         };
       }
-      process(inputs) {
-        const samples = inputs[0]?.[this.channel];
+      analyze(samples, firstSample) {
         if (samples && !this.observationSent && this.observedLength < this.observedInput.length) {
           const n = Math.min(samples.length, this.observedInput.length - this.observedLength);
           this.observedInput.set(samples.subarray(0, n), this.observedLength);
           this.observedLength += n;
         }
-        return super.process(inputs);
+        return super.analyze(samples, firstSample);
       }
     }
     registerProcessor('loudness-processor', ObservedProcessor);

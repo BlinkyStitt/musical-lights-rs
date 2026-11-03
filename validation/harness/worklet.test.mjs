@@ -26,6 +26,11 @@ function processor(channel = 0, diagnostics = false, options = {}) {
     const ok = value.process([extra ? [samples, extra] : [samples]]);
     scope.currentFrame += samples.length;
     return ok;
+  }, render(length) {
+    const samples = new Float32Array(length);
+    const ok = value.process([], [[samples]]);
+    scope.currentFrame += length;
+    return { ok, samples };
   }, snapshot() {
     value.wasm.processor_snapshot(value.processor);
     return [...value.snapshot];
@@ -677,4 +682,44 @@ test('produced WASM distinguishes equal-RMS spectra by raw sones and opens at eq
   }
   // Replay reaches exactly the selected measured total at the accepted floor.
   assert.equal(run(signals[1], raw[1].sones, true).gate, 1);
+});
+
+
+test('one PCM owner keeps exact samples and loudness when browser currentFrame overlaps and skips', () => {
+  const pcm = tone(4800, 1000, .02), frame = 768;
+  const owned = processor(0, true, { playback: { pcm, repeat: true, frame } });
+  const reference = processor(0, true); reference.scope.currentFrame = frame;
+  const memory = owned.value.wasm.memory.buffer.byteLength;
+  let produced = 0;
+  for (let block = 0; block < 400; block++) {
+    // Reproduce the browser's single-quantum stale currentFrame, followed by
+    // its catch-up. The producer still renders each real PCM sample once.
+    owned.scope.currentFrame = frame + produced - (block % 17 === 9 ? 128 : 0);
+    const { ok, samples } = owned.render(128); assert.equal(ok, true);
+    for (let i = 0; i < samples.length; i++) assert.equal(samples[i], pcm[(produced + i) % pcm.length]);
+    assert.equal(reference.push(samples), true); produced += samples.length;
+    assert.deepEqual(owned.snapshot(), reference.snapshot());
+    owned.value.port.onmessage({ data: { type: 'ack' } });
+    reference.value.port.onmessage({ data: { type: 'ack' } });
+  }
+  assert.equal(owned.value.playback.frame, frame + produced);
+  assert.equal(owned.value.wasm.processor_segment(owned.value.processor), 0);
+  assert.equal(owned.value.wasm.memory.buffer.byteLength, memory);
+});
+
+test('skipping analysis after real PCM production still declares and counts the missing block', () => {
+  const pcm = tone(4800, 1000, .02), frame = 768;
+  const owned = processor(0, true, { playback: { pcm, repeat: true, frame } });
+  assert.equal(owned.render(128).ok, true);
+  const analyze = owned.value.analyze;
+  owned.value.analyze = () => true;
+  const skipped = owned.render(128); assert.deepEqual(skipped.samples, pcm.slice(128, 256));
+  owned.value.analyze = analyze;
+  assert.equal(owned.render(128).ok, true);
+  const w = owned.value.wasm, h = owned.value.processor;
+  assert.equal(w.processor_segment(h), 1);
+  assert.equal(w.processor_missing_samples(h), 128n);
+  assert.equal(w.processor_gap_expected(h), BigInt(frame + 128));
+  assert.equal(w.processor_gap_received(h), BigInt(frame + 256));
+  assert.equal(owned.value.playback.frame, frame + 384);
 });

@@ -9,7 +9,7 @@ export async function staticPreview(context, url) {
   // AudioWorklet module fetches bypass Playwright routing. Supply the exact
   // built script through a Blob URL; its actual processor and WASM still run.
   const runtime = await runtimeRoot(root);
-  const sources = Object.fromEntries(await Promise.all(['processor.js', 'pcm-playback.js'].map(async name => [name, await readFile(resolve(runtime, 'loudness', name), 'utf8')])));
+  const sources = Object.fromEntries(await Promise.all(['processor.js'].map(async name => [name, await readFile(resolve(runtime, 'loudness', name), 'utf8')])));
   await context.addInitScript(sources => {
     const prototype=AudioWorklet.prototype, add=prototype.addModule;
     prototype.addModule=async function(url,options) {

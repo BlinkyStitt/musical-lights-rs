@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, physicsState } from '../physics-state.mjs';
+import { openFullscreenSettings, closeFullscreenSettings, normalView, physicsReady, physicsState, syntheticAudio } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
 
 test('iPhone sensor denial preserves mouse input and gravity continues after Stop', async ({ page }, info) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await syntheticAudio(page, 'denied');
   await page.addInitScript(() => {
     window.sensorRequests = [];
     for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
@@ -16,9 +17,9 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       } });
     }
   });
-  // Retain the original eight-ball gravity fixture. Repeated all-band audio
-  // gives moving balls another lift opportunity without assuming they remain
-  // above a single source frequency while the controls initialize.
+  // Keep eight physical balls and a real generated-playback context. A controlled
+  // analysis frame lifts every source together; moving balls must not need to
+  // find a strong tone before this Stop/physics ownership test can run.
   await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1',
     JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
   await page.goto('http://127.0.0.1:8101/advanced/');
@@ -41,13 +42,14 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   const stop = page.locator('.review-stop');
   await stop.evaluate(button => button.addEventListener('click', () => {
     // Capture at the actual Stop event so protocol latency cannot consume the
-    // fall before its starting height is measured.
+    // fall before its starting height is measured. Capture before the normal
+    // Stop handler clears the controlled source input.
     const { current, layout } = document.querySelector('#dancinglights').physics;
-    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], baseline: current[layout[17] + 5], travel: current[layout[17] + 6], idlePeak: Math.max(...document.querySelector('#dancinglights').physics.previewLevels), balls: Array.from({ length: current[layout[30]] }, (_, i) => {
+    window.physicsAtStop = { tick: current[2], barMax: current[layout[17] + 1], baseline: current[layout[17] + 5], travel: current[layout[17] + 6], idlePeak: Math.max(...document.querySelector('#dancinglights').physics.previewLevels), sources: Array.from(document.querySelector('#dancinglights').physics.input.slice(0, 24)), balls: Array.from({ length: current[layout[30]] }, (_, i) => {
       const offset = 3 + i * layout[8];
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
-  }, { once: true }));
+  }, { once: true, capture: true }));
   // Observe authoritative snapshots before Play. A slow action receipt or
   // render callback must not consume the flight before this test can see it.
   await stop.evaluate(button => {
@@ -67,9 +69,11 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       });
       if (window.stopFlightObservations.length < 1000)
         window.stopFlightObservations.push({ tick: current[2], clearance, balls, levels: Array.from(view.input.slice(0, 24)) });
-      if (button.disabled || !balls.some(ball => ball.y > ball.radius + clearance)) return;
+      // Observe the held controller input, never an incidental real-PCM flight.
+      if (button.disabled || !view.input.subarray(0, 24).every(level => level === 1)
+          || !balls.some(ball => ball.y > ball.radius + clearance)) return;
       window.playbackAtStop = { state: view.card.dataset.audioState,
-        kind: view.report.audioState.kind, listening: view.card.querySelector('input.listening-toggle').checked };
+        kind: view.report.audioState.kind, context: window.testContext.state, listening: view.card.querySelector('input.listening-toggle').checked };
       view.worker.removeEventListener('message', observe);
       button.click();
     };
@@ -78,18 +82,27 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   });
   try {
     await page.locator('.review-start').click();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    await page.evaluate(() => {
+      // Use the existing controller fixture. Keep its real AudioContext running
+      // and the physics clock live; replace only incoming analysis frames.
+      window.freezeClock = true; window.audioNow = window.testContext.currentTime;
+      window.sendBars(Array(24).fill(1));
+    });
     await page.waitForFunction(() => !!window.physicsAtStop, undefined, { timeout: 5000 });
   } finally {
     await page.evaluate(() => window.cancelStopFlightObserver?.());
   }
   const stopped = await page.evaluate(() => window.physicsAtStop);
-  expect(await page.evaluate(() => window.playbackAtStop)).toEqual({ state: 'playing', kind: 'exercise', listening: false });
+  expect(await page.evaluate(() => window.playbackAtStop)).toEqual({ state: 'playing', kind: 'exercise', context: 'running', listening: false });
   await expect.poll(() => page.evaluate(() => document.querySelector('.audio-card').dataset.audioState)).toBe('stopped');
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.idle)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.testContext.state)).toBe('closed');
   await expect(page.locator('.mic-status')).toBeEmpty();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
   expect(calls.every(call => call.active)).toBe(true);
+  expect(stopped.sources).toEqual(Array(24).fill(1));
   expect(stopped.barMax).toBeGreaterThan(0);
   expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.baseline + Math.max(stopped.travel * .5, stopped.travel * stopped.idlePeak + .01))).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);

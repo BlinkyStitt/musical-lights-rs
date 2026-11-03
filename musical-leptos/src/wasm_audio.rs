@@ -246,7 +246,7 @@ impl AudioSession {
                     }
                     let _ = callback_port.post_message(&ack);
                 }
-                Some("settings-ack") => {}
+                Some("settings-ack" | "transport") => {}
                 Some("error") => {
                     let message = Reflect::get(&data, &"message".into())
                         .ok()
@@ -270,7 +270,9 @@ impl AudioSession {
             if let Some(input) = &resources.input {
                 input.connect_with_audio_node(&worklet)?;
             }
-            worklet.connect_with_audio_node(&context.destination())?;
+            if !input_is_generated(&stream) {
+                worklet.connect_with_audio_node(&context.destination())?;
+            }
             resources.worklet = Some(worklet);
             resources.callback = Some(callback);
             resources.reduced_motion
