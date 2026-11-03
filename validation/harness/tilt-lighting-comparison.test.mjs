@@ -76,20 +76,20 @@ test('comparison CLI fails closed and replaces stale success when hardware produ
 
 test('hardware gate rejects slow shipped shading, including a shared baseline slowdown', () => {
   const software = samples('software'), hardware = samples('hardware');
-  for (const row of hardware) row.submittedFps = 58;
-  assert.match(performanceFailures(software, hardware).join('\n'), /hardware forward shading: 58.00 FPS/);
-  assert.match(performanceFailures(software, hardware).join('\n'), /hardware reverse shading: 58.00 FPS/);
+  for (const row of hardware) row.submittedFps = 29;
+  assert.match(performanceFailures(software, hardware).join('\n'), /hardware forward shading: 29.00 FPS/);
+  assert.match(performanceFailures(software, hardware).join('\n'), /hardware reverse shading: 29.00 FPS/);
 });
 
 test('performance gate checks hardware frame p95 and tolerates its exact limits', () => {
   const software = samples('software'), hardware = samples('hardware');
-  for (const row of hardware.filter(row => row.mode === 'shading')) {
-    row.submittedFps = 59;
-    row.frameMs.p95 = 18.5;
+  for (const row of hardware.filter(row => row.mode !== 'shadows')) {
+    row.submittedFps = 30;
+    row.frameMs.p95 = 37;
   }
   assert.deepEqual(performanceFailures(software, hardware), []);
-  hardware.find(row => row.mode === 'shading').frameMs.p95 = 18.51;
-  assert.match(performanceFailures(software, hardware).join('\n'), /p95 frame 18.51 ms exceeds 18.5 ms/);
+  hardware.find(row => row.mode === 'shading').frameMs.p95 = 37.01;
+  assert.match(performanceFailures(software, hardware).join('\n'), /p95 frame 37.01 ms exceeds 37 ms/);
 });
 
 test('software gate follows matched cost across host speeds and still rejects a repeatable regression', () => {
@@ -121,11 +121,11 @@ test('performance failure exits nonzero and retains the measured report', async 
   const software = join(directory, 'software.json'), hardware = join(directory, 'hardware.json');
   const output = join(directory, 'comparison.md');
   const gpu = samples('hardware');
-  gpu.find(row => row.mode === 'shading').submittedFps = 40;
+  gpu.find(row => row.mode === 'shading').submittedFps = 29;
   await writeFile(software, JSON.stringify(samples('software')));
   await writeFile(hardware, JSON.stringify(gpu));
   const result = spawnSync(process.execPath, [new URL('../tilt-lighting-comparison.mjs', import.meta.url).pathname, software, hardware, output], { encoding: 'utf8' });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /performance gate failed/);
-  assert.match(await readFile(output, 'utf8'), /hardware forward shading: 40.00 FPS/);
+  assert.match(await readFile(output, 'utf8'), /hardware forward shading: 29.00 FPS/);
 });

@@ -34,7 +34,7 @@ walls. The top/bottom surfaces and selected physical depth remain authoritative.
 A bounded pool covers all nine rendered banks and their scrolling seams. Disable
 posts outside the conservative viewport/ball reach, without removing collisions
 from a visible bank. Keep rendering, contacts and source pigments aligned.
-Protocol 25 and phone report v11 include both side planes in every recorded input;
+Protocol 25 and phone report v12 include both side planes in every recorded input;
 reject older recordings with the matching-engine error.
 
 Worker recordings retain initial cap and applied edits in FIFO order, including
@@ -154,3 +154,22 @@ simulation time still fail. Keep one worker, zero retries and failed exports.
 This is a changed acceptance policy, not an application speedup. Earlier strict
 transition failures remain historical failures. Existing two-second captures do
 not prove the new full two-second recovery hold after its one-second deadline.
+
+
+## Temporary 30 FPS hardware acceptance (2026-11-02)
+
+Bryan approved a temporary 30 FPS requirement if frame timing still blocks delivery.
+The corrected wall sweep removed the measured contact overloads, but a local stock
+WebKit capture near 60 FPS still failed the former 18.5 ms p95 limit at 19 ms.
+Use the shared hardware frame budget: FPS at least 30, p95 intervals at most 37 ms,
+and fewer than 1% of submitted intervals over 50 ms. The interval allowances scale
+the former 60 Hz budget to 30 Hz. These values supersede the earlier absolute
+59 FPS / 18.5 ms / 25 ms values for long captures, fullscreen recovery and hardware
+lighting comparisons. Rendering continues at the available cadence; this is a test
+acceptance policy, not a renderer cap. Software FPS remains non-blocking.
+
+Keep every debt, snapshot-age, recovery-duration, discarded-time, audio, provenance,
+coverage and zero-retry requirement unchanged. Keep the relative lighting slowdown
+gate. Report v12 uses `slowFrameFraction` with its explicit 50 ms threshold. Retain
+all older failed captures with their original verdicts; acceptance under this new
+policy does not prove the former 60 FPS workload passes.

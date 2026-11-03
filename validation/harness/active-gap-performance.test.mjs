@@ -16,9 +16,9 @@ test('five-minute numeric acceptance retains every frame, debt, lag and invalida
   const mutations = [
     f => { f.intervals = []; },
     f => { f.intervals = Array(17900).fill(1000 / 60); },
-    f => { f.intervals.fill(1000 / 58); },
-    f => { f.intervals.fill(19, 0, 1000); },
-    f => { f.intervals.fill(26, 0, 180); },
+    f => { f.intervals.fill(1000 / 29); },
+    f => { f.intervals.fill(38, 0, 1000); },
+    f => { f.intervals.fill(51, 0, 180); },
     f => { f.intervals[0] = NaN; },
     f => { f.data.debt = 2 * 1000 / 120; },
     f => { f.data.maxDebt = 100; },
@@ -39,6 +39,14 @@ test('five-minute numeric acceptance retains every frame, debt, lag and invalida
     const f = fixture(); mutate(f);
     assert.equal(evaluatePerformance(f).numericPass, false, mutate.toString());
   }
+});
+
+test('temporary 30 FPS acceptance keeps full cadence and physics evidence', () => {
+  const f=fixture();f.intervals=Array.from({length:9000},(_,i)=>[33,33,34][i%3]);
+  const result=evaluatePerformance(f);
+  assert.equal(result.summary.fps,30);assert.equal(result.numericPass,true);
+  assert.equal(result.summary.slowFrameMs,50);assert.equal(result.summary.slowFrameFraction,0);
+  f.data.maxDebt=100;assert.equal(evaluatePerformance(f).numericPass,false);
 });
 
 test('automated collector counts only submitted frames, catches interruptions and restores hooks', async () => {

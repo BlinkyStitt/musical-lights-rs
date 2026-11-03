@@ -8,9 +8,16 @@ check travel and flight against the same reference at every supported height.
 `box-depth.spec.mjs` checks actual live balls at both screen edges after viewport
 changes. Native tests cover each of the nine banks, moving side planes, source
 pigments, invalid inputs and exact replay. The browser supplies its actual camera
-frustum planes; it does not clamp rendered ball positions. Protocol 25/report v11
+frustum planes; it does not clamp rendered ball positions. Protocol 25/report v12
 record the planes with all other fixed-tick inputs. The selected depth and the
 top/bottom bar surfaces still constrain physical motion.
+
+The approved temporary frame requirement is 30 FPS, p95 at most 37 ms and fewer
+than 1% of submitted intervals over 50 ms. The shared `hardwareFrameBudget` in
+`physics/performance.js` supplies the long-capture, recovery and lighting gates.
+This changes acceptance only; it does not cap rendering or relax physics/audio
+limits. The later policy section in the active-gap specification supersedes the
+historical 59 FPS values below. Older failed captures keep their original verdicts.
 
 ## Current active-gap acceptance
 
