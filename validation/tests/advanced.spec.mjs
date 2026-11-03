@@ -7,8 +7,8 @@ async function advanced(page) {
   await page.goto(`${origin}/advanced/`); await physicsReady(page);
 }
 async function start(page) { await listening(page).check(); await expect(listening(page)).toBeEnabled(); await expect(listening(page)).toBeChecked(); }
-function stereoWave() {
-  const rate = 48000, samples = 48000, bytes = Buffer.alloc(44 + samples * 4);
+function stereoWave(seconds = 1) {
+  const rate = 48000, samples = rate * seconds, bytes = Buffer.alloc(44 + samples * 4);
   bytes.write('RIFF'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
   bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(2, 22);
   bytes.writeUInt32LE(rate, 24); bytes.writeUInt32LE(rate * 4, 28); bytes.writeUInt16LE(4, 32); bytes.writeUInt16LE(16, 34);
@@ -54,8 +54,8 @@ test('idle-to-listening transition clears preview meter values for microphone si
   await expect.poll(() => page.getByRole('meter').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-valuenow') === '0'))).toBe(true);
   const wave = () => page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
-    const travel = v.current[v.layout[17] + 1] - v.layout[13];
-    return Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.layout[13]) / travel);
+    const travel = v.renderedTravel;
+    return Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.renderedBaseline) / travel);
   });
   await expect.poll(async () => Math.max(...await wave())).toBeGreaterThan(.12);
   // Wait for the taller idle preview to retract to the listening floor.
@@ -284,7 +284,7 @@ test('file picker shares the source row; selecting and replacing files starts au
 
 test('identical decoded PCM produces identical raw loudness and filtered targets in the live worklet', async ({ page }, info) => {
   const { flashTrace } = await import('../partial/flash-fixtures.mjs');
-  const { observePCM } = await import('../pcm-probe.mjs');
+  const { observePCM, workletPCMTrace } = await import('../pcm-probe.mjs');
   await observePCM(page, await readFile(new URL('../../musical-lights-worklet/pkg/processor.js', import.meta.url), 'utf8'));
   const module = new WebAssembly.Module(await readFile(new URL('../../musical-lights-worklet/pkg/loudness.wasm', import.meta.url)));
   await advanced(page); await page.locator('.diagnostics-controls > summary').click();
@@ -297,38 +297,83 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
       if (detail.observedPCM) window.observedPCM = Array.from(detail.observedPCM);
     });
   });
-  await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave() });
+  await page.locator('.review-file').setInputFiles({ name: 'channel-equality.wav', mimeType: 'audio/wav', buffer: stereoWave(6) });
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.report.toneRows)).toBeGreaterThan(200);
+  // A live cap edit must leave the same continuous PCM analysis authoritative.
+  const editSample = await page.evaluate(() => {
+    const context = document.querySelector('.audio-card').activeAudioContext;
+    const sample = Math.ceil(context.currentTime * context.sampleRate);
+    const node = document.querySelector('.active-gap-cap'); node.value = '40';
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    return sample;
+  });
+  // Requested settings can precede safely applied surfaces. Wait for the
+  // worker snapshot's permanent base, then use the audio clock to exclude
+  // queued pre-edit traces even if more than 400 rows already arrived.
+  await page.waitForFunction(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    const expectedBase = (v.current[v.layout[17]] - .4) / 2 + .003;
+    return Math.abs(v.input[67] - .4) < 1e-6
+      && Math.abs(v.current[v.layout[17] + 5] - expectedBase) < 1e-5;
+  });
+  const appliedSample = await page.evaluate(() => {
+    const context = document.querySelector('.audio-card').activeAudioContext;
+    return Math.ceil(context.currentTime * context.sampleRate);
+  });
+  await page.waitForFunction(sample => {
+    let count = 0;
+    for (const chunk of document.querySelector('#dancinglights').physics.report.toneChunks)
+      for (let i = 0; i < chunk.values.length; i += chunk.stride)
+        if (chunk.values[i] >= sample) count++;
+    return count >= 200;
+  }, appliedSample);
   await page.waitForFunction(() => window.observedPCM);
-  const data = await page.evaluate(() => {
+  const data = await page.evaluate(({ editSample, appliedSample }) => {
     const card = document.querySelector('.audio-card'), report = document.querySelector('#dancinglights').physics.report;
     const rows = report.toneChunks.flatMap(chunk => {
       const out = [];
       for (let i = 0; i < chunk.values.length; i += chunk.stride) out.push(Array.from(chunk.values.subarray(i, i + chunk.stride)));
       return out;
     });
-    return { pcm: Array.from(card.review.buffer.getChannelData(1)), observedPCM: window.observedPCM, rows: rows.slice(0, 200), dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
-  });
+    const firstApplied = rows.findIndex(row => row[0] >= appliedSample);
+    return { pcm: Array.from(card.review.buffer.getChannelData(1)), observedPCM: window.observedPCM,
+      rows: rows.slice(0, firstApplied + 200), editSample, appliedSample,
+      dropped: report.toneWorkletDropped, firstSample: report.toneChunks[0].inputStartSample };
+  }, { editSample, appliedSample });
   const { writeFile } = await import('node:fs/promises');
   await writeFile(info.outputPath('pcm-boundary.json'), JSON.stringify(data));
   expect(data.observedPCM).toEqual(data.pcm.slice(0, data.observedPCM.length));
   expect(Number.isSafeInteger(data.firstSample)).toBe(true);
-  const expected = flashTrace(module, Float32Array.from(data.pcm), false, { firstSample: data.firstSample });
-  expect(data.rows).toHaveLength(200);
+  // Keep the original Node oracle for its first 400 rows. The additional
+  // post-edit rows also get an exact oracle on an audio render thread, where
+  // WebKit flushes subnormal f32 values that Node retains. No tolerances apply.
+  const pcm = data.pcm.slice(0, data.rows.at(-1)[0] - data.firstSample + 256);
+  const nodeExpected = flashTrace(module, Float32Array.from(pcm), false, { firstSample: data.firstSample });
+  const expected = await workletPCMTrace(page, pcm, data.firstSample);
+  expect(data.appliedSample).toBeGreaterThanOrEqual(data.editSample);
+  expect(data.rows.filter(row => row[0] < data.editSample).length).toBeGreaterThanOrEqual(200);
+  expect(data.rows.filter(row => row[0] >= data.appliedSample)).toHaveLength(200);
   // Diagnostic delivery has bounded storage and can report dropped rows.
   // Match the original audio sample timestamps, never shifted traces or IPC
   // array positions. Raw loudness and filtered targets must remain exact.
   const bySample = new Map(expected.map(row => [row[0], row]));
+  const nodeBySample = new Map(nodeExpected.map(row => [row[0], row]));
   let previous = data.firstSample - 96, missing = 0;
-  for (const row of data.rows) {
+  for (const [index, row] of data.rows.entries()) {
     expect(row[0]).toBeGreaterThan(previous);
     expect((row[0] - previous) % 96).toBe(0);
     missing += (row[0] - previous) / 96 - 1; previous = row[0];
     const reference = bySample.get(row[0]);
     expect(reference, `audio sample ${row[0]}`).toBeDefined();
-    expect(row.slice(1, 266)).toEqual(Array.from(reference.slice(1, 266)));
-    expect(row.slice(267, 316)).toEqual(Array.from(reference.slice(267, 316)));
-    for (let b = 0; b < 24; b++) expect(row[319 + b * 4]).toBe(reference[319 + b * 4]);
+    for (const oracle of index < 400 ? [reference, nodeBySample.get(row[0])] : [reference]) {
+      expect(oracle, `oracle for audio sample ${row[0]}`).toBeDefined();
+      expect(row.slice(1, 266)).toEqual(Array.from(oracle.slice(1, 266)));
+      expect(row.slice(267, 316)).toEqual(Array.from(oracle.slice(267, 316)));
+      // One exact array comparison avoids thousands of separately reported
+      // assertions while checking every filtered band at every sample.
+      expect(Array.from({ length: 24 }, (_, b) => row[319 + b * 4]))
+        .toEqual(Array.from({ length: 24 }, (_, b) => oracle[319 + b * 4]));
+    }
   }
   expect(data.dropped).toBeGreaterThanOrEqual(missing);
   const raw = data.rows.at(-1).slice(242, 266);

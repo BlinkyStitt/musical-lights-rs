@@ -1,5 +1,43 @@
 use super::*;
 
+// Preserve the original full eight-size stress workload independently of the
+// shipped default. Count-transition tests also cover the full 0–16 range.
+const BALL_COUNT: usize = SIZE_RATIOS.len();
+fn eight_ball_config() -> SimulationConfig {
+    SimulationConfig {
+        balls: BallSettings {
+            count: BALL_COUNT,
+            ..BallSettings::default()
+        },
+        ..SimulationConfig::default()
+    }
+}
+
+fn eight_ball_input() -> SimulationInput {
+    SimulationInput {
+        balls: eight_ball_config().balls,
+        ..SimulationInput::default()
+    }
+}
+
+#[test]
+fn default_count_creates_only_two_bodies_and_retains_sixteen_slot_capacity() {
+    let config = SimulationConfig::default();
+    assert_eq!(config.balls.count, 2);
+    let mut sim = world(config);
+    assert_eq!(sim.balls.len(), 2);
+    assert_eq!(sim.snapshot.values[ACTIVE_OFFSET], 2.0);
+    for _ in 0..HZ {
+        sim.step();
+    }
+    assert_eq!(sim.tick, u64::from(HZ));
+    assert!(
+        sim.snapshot.values[3 + 2 * BODY_STRIDE..BAR_OFFSET]
+            .iter()
+            .all(|&value| value == 0.0)
+    );
+}
+
 fn surface_clearance(sim: &Simulation, collider: ColliderHandle, point: Vector) -> f32 {
     // Exact distance to the extruded quadrilateral. Convex support-map point
     // projection can choose an adjacent face at a thin prism's boundary.
@@ -179,7 +217,8 @@ fn changing_ramp_length_preserves_material_horizontal_velocity() {
 fn a_symmetric_rising_peak_has_no_lateral_launch() {
     let mut sim = world(SimulationConfig {
         height: 1.2,
-        ..SimulationConfig::default()
+        gap_cap: 20.0,
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0]);
     place(
@@ -206,7 +245,7 @@ fn a_symmetric_rising_peak_has_no_lateral_launch() {
 #[test]
 fn passive_flat_joins_cannot_accelerate_or_bump_a_rolling_ball() {
     for roof in [false, true] {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         isolate(&mut sim, &[0]);
         input(&mut sim, [0.15; COUNT]);
         for _ in 0..HZ {
@@ -252,7 +291,7 @@ fn neighboring_band_rises_obey_the_configured_zero_release_hop() {
     for height in [MIN_HEIGHT, 0.6, 2.596923] {
         let mut sim = world(SimulationConfig {
             height,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         sim.configure_dance(DirectionOdds::default().values(), 0.0, 1, 2.0)
@@ -321,7 +360,7 @@ fn neighboring_band_rises_obey_the_configured_zero_release_hop() {
 fn stationary_ramp_endpoints_do_not_gain_horizontal_velocity_when_slopes_change() {
     let mut sim = world(SimulationConfig {
         height: 2.596923,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[]);
     input(
@@ -355,7 +394,7 @@ fn stationary_ramp_endpoints_do_not_gain_horizontal_velocity_when_slopes_change(
 fn ramp_colliders_meet_at_the_published_render_vertices_on_both_ends() {
     let mut sim = world(SimulationConfig {
         height: 2.596923,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[]);
     input(
@@ -417,7 +456,7 @@ fn startup_waves_with_all_balls_do_not_trap_the_smallest_in_posts_or_walls() {
             for listening in [false, true] {
                 let mut sim = world(SimulationConfig {
                     height,
-                    ..SimulationConfig::default()
+                    ..eight_ball_config()
                 });
                 let mut peak = IdlePeak::default();
                 let mut sequence = 0;
@@ -441,7 +480,7 @@ fn startup_waves_with_all_balls_do_not_trap_the_smallest_in_posts_or_walls() {
                                     idle_wave(band, COUNT, phase, false) as f32
                                 }
                             }),
-                            ..SimulationInput::default()
+                            ..eight_ball_input()
                         })
                         .unwrap();
                         if !listening && peak.push(seconds, false) {
@@ -512,7 +551,7 @@ fn startup_waves_with_all_balls_do_not_trap_the_smallest_in_posts_or_walls() {
 #[test]
 fn smallest_ball_rests_on_bar_seams_without_sinking_between_tips() {
     for ceiling in [false, true] {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         isolate(&mut sim, &[0]);
         input(&mut sim, [0.65; COUNT]);
         for _ in 0..HZ {
@@ -553,13 +592,14 @@ fn smallest_ball_clears_seams_after_spikes_and_motion_restarts() {
     for height in [0.6, 2.596923] {
         let mut sim = world(SimulationConfig {
             height,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
+        let baseline = sim.baseline;
         place(
             &mut sim,
             0,
-            Vector::new(PITCH * 12.0, BASELINE + radius(0) + 0.01, 0.0),
+            Vector::new(PITCH * 12.0, baseline + radius(0) + 0.01, 0.0),
             Vector::ZERO,
         );
         for tick in 0..HZ * 6 {
@@ -582,7 +622,7 @@ fn smallest_ball_clears_seams_after_spikes_and_motion_restarts() {
                 },
                 gravity: motion_on.then_some([0.0, sign * sim.config.gravity, 0.0]),
                 scrolling: motion_on,
-                ..SimulationInput::default()
+                ..eight_ball_input()
             })
             .unwrap();
             sim.step();
@@ -620,9 +660,10 @@ fn smallest_ball_does_not_pass_through_moving_staggered_posts() {
         for ceiling in [false, true] {
             let mut sim = world(SimulationConfig {
                 height,
-                ..SimulationConfig::default()
+                ..eight_ball_config()
             });
             isolate(&mut sim, &[0]);
+            let baseline = sim.baseline;
             let inward = if ceiling { -1.0 } else { 1.0 };
             let mut worst = 0.0_f32;
             place(
@@ -630,7 +671,11 @@ fn smallest_ball_does_not_pass_through_moving_staggered_posts() {
                 0,
                 Vector::new(
                     PITCH * 12.0,
-                    if ceiling { height - 0.03 } else { 0.03 },
+                    if ceiling {
+                        height - baseline - 0.03
+                    } else {
+                        baseline + 0.03
+                    },
                     0.0,
                 ),
                 Vector::ZERO,
@@ -649,7 +694,7 @@ fn smallest_ball_does_not_pass_through_moving_staggered_posts() {
                     levels,
                     gravity: Some([0.0, -inward * sim.config.gravity, 0.0]),
                     scrolling: true,
-                    ..SimulationInput::default()
+                    ..eight_ball_input()
                 })
                 .unwrap();
                 sim.step();
@@ -676,8 +721,9 @@ fn input(sim: &mut Simulation, levels: [f32; COUNT]) {
     sim.apply(SimulationInput {
         tick: sim.tick,
         levels,
+        gap_cap: sim.config.gap_cap,
         height: sim.config.height,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
 }
@@ -693,11 +739,11 @@ fn attack(sim: &mut Simulation, band: usize) {
 }
 #[test]
 fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[]);
     sim.apply(SimulationInput {
         scrolling: true,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     for _ in 0..HZ * 110 {
@@ -773,8 +819,8 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
 
 #[test]
 fn empty_space_strokes_skip_contact_work_but_nearby_strokes_keep_it() {
-    let mut quiet = world(SimulationConfig::default());
-    let mut distant = world(SimulationConfig::default());
+    let mut quiet = world(eight_ball_config());
+    let mut distant = world(eight_ball_config());
     for sim in [&mut quiet, &mut distant] {
         isolate(sim, &[0]);
         place(sim, 0, Vector::new(PITCH / 2.0, 0.15, 0.0), Vector::ZERO);
@@ -813,9 +859,10 @@ fn gravity_with_drag_matches_closed_form_position_and_velocity() {
         let mut sim = world(SimulationConfig {
             gravity,
             height: 5.0,
+            gap_cap: 20.0,
             // Dense fixture isolates ideal gravity/contact laws from air drag.
             density: 20000.0,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         place(&mut sim, 0, Vector::new(0.6, 4.0, 0.0), Vector::ZERO);
@@ -832,7 +879,7 @@ fn gravity_with_drag_matches_closed_form_position_and_velocity() {
 }
 #[test]
 fn density_sets_sphere_mass_and_rotational_inertia() {
-    let sim = world(SimulationConfig::default());
+    let sim = world(eight_ball_config());
     for i in 0..BALL_COUNT {
         let body = &sim.world.bodies[sim.balls[i].0];
         let expected = 4.0 / 3.0 * std::f32::consts::PI * radius(i).powi(3) * sim.config.density;
@@ -843,12 +890,12 @@ fn density_sets_sphere_mass_and_rotational_inertia() {
 }
 #[test]
 fn rebound_height_matches_restitution_squared() {
-    for restitution in [0.4, SimulationConfig::default().restitution, 0.85] {
+    for restitution in [0.4, eight_ball_config().restitution, 0.85] {
         let mut sim = world(SimulationConfig {
             restitution,
             // Dense fixture isolates ideal gravity/contact laws from air drag.
             density: 20000.0,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         // Centre over the flat bar top, 3 mm above the floor.
@@ -887,10 +934,11 @@ fn vertical_walls_rebound_without_grabbing_tangential_motion() {
             let mut sim = world(SimulationConfig {
                 gravity: 0.0,
                 height: 5.0,
+                gap_cap: 20.0,
                 // Dense fixture isolates ideal gravity/contact laws from air drag.
                 density: 20000.0,
                 restitution: 0.55,
-                ..SimulationConfig::default()
+                ..eight_ball_config()
             });
             isolate(&mut sim, &[0]);
             let mut p = Vector::new(0.6, 2.0, 0.0);
@@ -924,9 +972,10 @@ fn pressure_against_a_wall_does_not_hold_a_ball_above_the_bars() {
     for axis in [0, 2] {
         let mut sim = world(SimulationConfig {
             height: 5.0,
+            gap_cap: 20.0,
             // Dense fixture isolates ideal gravity/contact laws from air drag.
             density: 20000.0,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         let mut p = Vector::new(0.6, 2.0, 0.0);
@@ -941,7 +990,8 @@ fn pressure_against_a_wall_does_not_hold_a_ball_above_the_bars() {
         sim.apply(SimulationInput {
             acceleration,
             height: 5.0,
-            ..SimulationInput::default()
+            gap_cap: 20.0,
+            ..eight_ball_input()
         })
         .unwrap();
         for _ in 0..HZ / 4 {
@@ -961,7 +1011,8 @@ fn moderate_wall_impacts_do_not_skip_ccd_or_pass_the_inner_surface() {
         let mut sim = world(SimulationConfig {
             gravity: 0.0,
             height: 5.0,
-            ..SimulationConfig::default()
+            gap_cap: 20.0,
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         place(
@@ -992,7 +1043,7 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
     for height in [0.4, 0.6, 2.0] {
         let mut sim = world(SimulationConfig {
             height,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[]);
         for level in [1.0, 0.0, 1.0, 0.0] {
@@ -1007,7 +1058,7 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
                 );
                 assert!(sim.snapshot.values[COST_OFFSET] <= MAX_SUBSTEPS as f32);
             }
-            let target = BASELINE + level * (sim.config.bar_max() - BASELINE);
+            let target = sim.baseline + level * sim.config.geometry(0.3).travel;
             assert!((sim.snapshot.values[BAR_OFFSET] - target).abs() < height * 0.01);
             assert!(sim.bar_velocities[0].abs() < 1e-6);
         }
@@ -1035,13 +1086,13 @@ fn attacks_arrive_within_50_ms_and_releases_brake_before_gravity() {
         for _ in 0..160 {
             sim.step();
         }
-        assert!((sim.snapshot.values[BAR_OFFSET] - BASELINE).abs() < height * 0.01);
+        assert!((sim.snapshot.values[BAR_OFFSET] - sim.baseline).abs() < height * 0.01);
     }
 }
 #[test]
 fn all_rises_start_continuously_and_settle_within_fifty_ms() {
     for amplitude in [0.001, 0.01, 0.1, 0.5, 1.0] {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         isolate(&mut sim, &[]);
         for level in [amplitude, 0.0] {
             input(&mut sim, [level; COUNT]);
@@ -1067,7 +1118,7 @@ fn all_rises_start_continuously_and_settle_within_fifty_ms() {
 
 #[test]
 fn tiny_bar_corrections_do_not_launch_resting_balls_high() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
@@ -1097,7 +1148,7 @@ fn tiny_bar_corrections_do_not_launch_resting_balls_high() {
 
 #[test]
 fn small_repeated_fluctuations_do_not_build_up_bar_speed() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[]);
     input(&mut sim, [0.4; COUNT]);
     for _ in 0..12 {
@@ -1121,12 +1172,12 @@ fn small_repeated_fluctuations_do_not_build_up_bar_speed() {
 
 #[test]
 fn reduced_motion_uses_a_slower_stroke() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[]);
     sim.apply(SimulationInput {
         levels: [1.0; COUNT],
         reduced_motion: true,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     for _ in 0..12 {
@@ -1143,9 +1194,10 @@ fn unequal_masses_transfer_linear_and_angular_momentum() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
         height: 5.0,
+        gap_cap: 20.0,
         restitution: 1.0,
         friction: 0.4,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0, 1]);
     place(
@@ -1184,7 +1236,8 @@ fn unequal_masses_transfer_linear_and_angular_momentum() {
 fn sustained_stroke_moves_each_of_six_stacked_balls() {
     let mut sim = world(SimulationConfig {
         height: 1.2,
-        ..SimulationConfig::default()
+        gap_cap: 20.0,
+        ..eight_ball_config()
     });
     let indices = [0, 3, 5, 1, 2, 7];
     isolate(&mut sim, &indices);
@@ -1231,7 +1284,8 @@ fn sustained_stroke_moves_each_of_six_stacked_balls() {
 fn short_stroke_transfers_only_contact_impulses() {
     let mut sim = world(SimulationConfig {
         height: 1.2,
-        ..SimulationConfig::default()
+        gap_cap: 20.0,
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0, 1]);
     place(
@@ -1282,7 +1336,8 @@ fn side_front_and_back_walls_rebound_without_tunneling() {
         let mut sim = world(SimulationConfig {
             gravity: 0.0,
             height: 5.0,
-            ..SimulationConfig::default()
+            gap_cap: 20.0,
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         place(&mut sim, 0, start, speed);
@@ -1309,7 +1364,7 @@ fn side_front_and_back_walls_rebound_without_tunneling() {
 }
 #[test]
 fn ceiling_bounces_and_shrinks_without_teleporting_balls() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
@@ -1322,7 +1377,7 @@ fn ceiling_bounces_and_shrinks_without_teleporting_balls() {
     sim.apply(SimulationInput {
         tick: 0,
         height: MIN_HEIGHT,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     assert_eq!(position(&sim, 0), p);
@@ -1352,11 +1407,11 @@ fn recorded_inputs_replay_identically_at_all_render_rates() {
             }),
             acceleration: [((tick / 5) % 3) as f32 - 1.0, 0.0, 0.0],
             scrolling: (tick / 50) % 3 != 0,
-            ..SimulationInput::default()
+            ..eight_ball_input()
         })
         .collect();
     let replay = |fps| {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         for _ in 0..5 * fps {
             for _ in 0..HZ / fps {
                 if let Some(input) = records.iter().find(|input| input.tick == sim.tick) {
@@ -1372,7 +1427,7 @@ fn recorded_inputs_replay_identically_at_all_render_rates() {
 }
 #[test]
 fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     let mut worst_penetration = 0.0_f32;
     let mut worst_fraction = 0.0_f32;
     let mut impulses = [0.0; BALL_COUNT];
@@ -1462,16 +1517,16 @@ fn all_balls_remain_contained_and_settle_after_dense_full_height_peaks() {
 #[test]
 fn invalid_inputs_and_configuration_leave_state_unchanged() {
     assert!(SimulationConfig::from_values(&[f32::NAN; 8]).is_err());
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     let before = sim.snapshot.clone();
     let input = SimulationInput {
         tick: 1,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     };
     assert!(sim.apply(input).is_err());
     assert_eq!(before, sim.snapshot);
     for value in [f32::NAN, -0.1, 1.1] {
-        let mut input = SimulationInput::default();
+        let mut input = eight_ball_input();
         input.attacks[6] = value;
         assert!(sim.apply(input).is_err());
         assert_eq!(before, sim.snapshot);
@@ -1480,7 +1535,7 @@ fn invalid_inputs_and_configuration_leave_state_unchanged() {
 
 #[test]
 fn sloped_band_join_deflects_a_ball_and_reports_the_bar_impulse() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     let top = 0.1;
     let mut levels = [0.0; COUNT];
@@ -1514,16 +1569,18 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
         height: 5.0,
+        gap_cap: 20.0,
         // Dense fixture isolates ideal gravity/contact laws from air drag.
         density: 20000.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0]);
     place(&mut sim, 0, Vector::new(0.625, 2.0, 0.0), Vector::ZERO);
     sim.apply(SimulationInput {
         acceleration: [0.0, 2.0, 0.0],
         height: 5.0,
-        ..SimulationInput::default()
+        gap_cap: 20.0,
+        ..eight_ball_input()
     })
     .unwrap();
     for _ in 0..HZ / 2 {
@@ -1532,7 +1589,7 @@ fn acceleration_is_a_force_over_time_and_resting_contact_does_not_recolor() {
     assert!((velocity(&sim, 0).y - 1.0).abs() < 0.001);
     let mut sim = world(SimulationConfig {
         restitution: 0.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0]);
     place(&mut sim, 0, Vector::new(0.625, 0.3, 0.0), Vector::ZERO);
@@ -1557,11 +1614,12 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
         height: 5.0,
+        gap_cap: 20.0,
         restitution: 1.0,
         friction: 0.0,
         // Dense fixture isolates ideal gravity/contact laws from air drag.
         density: 20000.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     // Make the second fixture sphere identical to the first; the production
     // palette no longer needs duplicate sizes just to exercise equal-mass CCD.
@@ -1597,7 +1655,7 @@ fn ccd_resolves_two_fast_spheres_before_they_cross() {
 
 #[test]
 fn all_six_enclosure_planes_contain_fast_launches() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
@@ -1620,7 +1678,7 @@ fn all_six_enclosure_planes_contain_fast_launches() {
 }
 #[test]
 fn substep_overload_is_visible_without_discarding_a_tick() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
@@ -1637,7 +1695,7 @@ fn substep_overload_is_visible_without_discarding_a_tick() {
 
 #[test]
 fn beach_balls_rebound_with_quadratic_drag_and_settle_on_quiet_bars() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
@@ -1674,7 +1732,7 @@ fn beach_balls_rebound_with_quadratic_drag_and_settle_on_quiet_bars() {
 fn initial_placement_fits_the_minimum_closed_enclosure_without_overlap() {
     let sim = world(SimulationConfig {
         height: MIN_HEIGHT,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     for i in 0..BALL_COUNT {
         let p = position(&sim, i);
@@ -1692,7 +1750,7 @@ fn simultaneous_full_strokes_do_not_push_stacks_through_the_ceiling() {
         for warmup in [0, HZ / 8, HZ / 4, HZ] {
             let mut sim = world(SimulationConfig {
                 height,
-                ..SimulationConfig::default()
+                ..eight_ball_config()
             });
             for _ in 0..warmup {
                 sim.step();
@@ -1719,13 +1777,14 @@ fn strong_bar_launches_have_small_release_hops_in_both_motion_modes() {
         for reduced in [false, true] {
             let mut sim = world(SimulationConfig {
                 height,
-                ..SimulationConfig::default()
+                ..eight_ball_config()
             });
             isolate(&mut sim, &[0]);
+            let baseline = sim.baseline;
             place(
                 &mut sim,
                 0,
-                Vector::new(PITCH / 2.0, BASELINE + radius(0), 0.0),
+                Vector::new(PITCH / 2.0, baseline + radius(0), 0.0),
                 Vector::ZERO,
             );
             for _ in 0..HZ {
@@ -1738,7 +1797,7 @@ fn strong_bar_launches_have_small_release_hops_in_both_motion_modes() {
                 levels: values,
                 height,
                 reduced_motion: reduced,
-                ..SimulationInput::default()
+                ..eight_ball_input()
             })
             .unwrap();
             let mut worst = 0.0_f32;
@@ -1764,14 +1823,14 @@ fn fullscreen_resize_is_bounded_and_repeated_packets_do_not_restart_it() {
     ] {
         let mut sim = world(SimulationConfig {
             height: 0.927803,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         for _ in 0..2 * HZ {
             sim.apply(SimulationInput {
                 tick: sim.tick,
                 levels,
                 height: 0.927803,
-                ..SimulationInput::default()
+                ..eight_ball_input()
             })
             .unwrap();
             sim.step();
@@ -1784,7 +1843,7 @@ fn fullscreen_resize_is_bounded_and_repeated_packets_do_not_restart_it() {
                 tick: sim.tick,
                 levels,
                 height,
-                ..SimulationInput::default()
+                ..eight_ball_input()
             })
             .unwrap();
             assert_eq!(position(&sim, 0), p);
@@ -1795,7 +1854,7 @@ fn fullscreen_resize_is_bounded_and_repeated_packets_do_not_restart_it() {
                     tick: sim.tick,
                     levels,
                     height,
-                    ..SimulationInput::default()
+                    ..eight_ball_input()
                 })
                 .unwrap();
                 sim.step();
@@ -1824,7 +1883,7 @@ fn fullscreen_resize_is_bounded_and_repeated_packets_do_not_restart_it() {
 #[test]
 fn resize_reversal_starts_at_applied_height_and_replays_at_all_frame_rates() {
     let replay = |fps| {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         for _ in 0..fps {
             for _ in 0..HZ / fps {
                 let height = if sim.tick < 18 { 2.596923 } else { MIN_HEIGHT };
@@ -1832,7 +1891,7 @@ fn resize_reversal_starts_at_applied_height_and_replays_at_all_frame_rates() {
                 sim.apply(SimulationInput {
                     tick: sim.tick,
                     height,
-                    ..SimulationInput::default()
+                    ..eight_ball_input()
                 })
                 .unwrap();
                 assert_eq!(sim.config.height, previous);
@@ -1851,7 +1910,7 @@ fn resize_reversal_starts_at_applied_height_and_replays_at_all_frame_rates() {
 
 #[test]
 fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     // Source 23 is now across the left seam; the collider copy at x=0.025
     // must retain source 23's impulse column and palette entry.
@@ -1901,7 +1960,7 @@ fn scrolling_contacts_keep_source_impulses_and_color_at_the_wrap() {
 fn rapid_reversals_with_scrolling_keep_balls_inside_the_enclosure() {
     let mut sim = world(SimulationConfig {
         height: MIN_HEIGHT,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     for tick in 0..HZ {
         if tick % 3 == 0 {
@@ -1928,7 +1987,7 @@ fn rapid_reversals_with_scrolling_keep_balls_inside_the_enclosure() {
 
 #[test]
 fn unchanged_direction_stays_contained_when_balls_reach_the_wall() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     input(&mut sim, [0.3; COUNT]);
     for _ in 0..HZ * 2 {
         sim.step();
@@ -1961,13 +2020,13 @@ fn unchanged_direction_stays_contained_when_balls_reach_the_wall() {
 fn measured_gravity_can_point_up_or_through_the_screen_and_is_not_reduced() {
     for gravity in [[0.0, 9.81, 0.0], [0.0, 0.0, -9.81], [0.0, 0.0, 9.81]] {
         for reduced_motion in [false, true] {
-            let mut sim = world(SimulationConfig::default());
+            let mut sim = world(eight_ball_config());
             isolate(&mut sim, &[0]);
             place(&mut sim, 0, Vector::new(0.6, 0.3, 0.0), Vector::ZERO);
             sim.apply(SimulationInput {
                 gravity: Some(gravity),
                 reduced_motion,
-                ..SimulationInput::default()
+                ..eight_ball_input()
             })
             .unwrap();
             for _ in 0..6 {
@@ -1985,7 +2044,7 @@ fn measured_gravity_can_point_up_or_through_the_screen_and_is_not_reduced() {
 
 #[test]
 fn turning_over_wakes_settled_balls_and_stopping_restores_default_gravity() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     for _ in 0..HZ * 4 {
         sim.step();
@@ -1993,7 +2052,7 @@ fn turning_over_wakes_settled_balls_and_stopping_restores_default_gravity() {
     sim.apply(SimulationInput {
         tick: sim.tick,
         gravity: Some([0.0, 9.81, 0.0]),
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     for _ in 0..HZ / 5 {
@@ -2006,7 +2065,7 @@ fn turning_over_wakes_settled_balls_and_stopping_restores_default_gravity() {
     assert!(position(&sim, 0).y > 0.15);
     sim.apply(SimulationInput {
         tick: sim.tick,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     let before = velocity(&sim, 0).y;
@@ -2021,7 +2080,7 @@ fn air_drag_dissipates_fast_free_motion_without_changing_gravity() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
         height: 3.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0]);
     place(
@@ -2037,7 +2096,7 @@ fn air_drag_dissipates_fast_free_motion_without_changing_gravity() {
 
 #[test]
 fn quiet_bar_contacts_pick_up_the_contacted_color() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     attack(&mut sim, 7); // An unrelated attack must not choose the painted source.
     place(
@@ -2063,7 +2122,7 @@ fn quiet_bar_contacts_pick_up_the_contacted_color() {
 fn idle_and_listening_contacts_pick_up_colors_without_audio_attacks() {
     use musical_lights_core::lights::musical_motion::{idle_wave, listening_level};
     for listening in [false, true] {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         isolate(&mut sim, &[0]);
         place(
             &mut sim,
@@ -2109,7 +2168,7 @@ fn both_bar_ends_pick_up_the_contacted_color_at_every_audio_attack_strength() {
         for strength in [0.0, 0.001, 1.0] {
             let mut sim = world(SimulationConfig {
                 gravity: 0.0,
-                ..SimulationConfig::default()
+                ..eight_ball_config()
             });
             isolate(&mut sim, &[0]);
             let mut levels = [0.0; COUNT];
@@ -2154,7 +2213,7 @@ fn both_bar_ends_pick_up_the_contacted_color_at_every_audio_attack_strength() {
 
 #[test]
 fn contact_fill_continues_while_resting_without_repainting_the_target() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
 
     place(
@@ -2189,11 +2248,11 @@ fn contact_fill_continues_while_resting_without_repainting_the_target() {
 
 #[test]
 fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[]);
     sim.apply(SimulationInput {
         scrolling: true,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     for _ in 0..(HZ / 4) as usize {
@@ -2204,11 +2263,11 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
     assert_eq!(sim.scroll_phase, phase);
     sim.step();
     let faster = sim.scroll_phase - phase;
-    let mut slow = world(SimulationConfig::default());
+    let mut slow = world(eight_ball_config());
     isolate(&mut slow, &[]);
     slow.apply(SimulationInput {
         scrolling: true,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     for _ in 0..(HZ / 4) as usize {
@@ -2232,12 +2291,12 @@ fn tempo_updates_preserve_scroll_position_and_scale_signed_travel() {
 
 #[test]
 fn paired_bars_move_inward_together_and_leave_ball_clearance() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     sim.apply(SimulationInput {
         levels: [0.7; COUNT],
         height: 0.6,
         scrolling: true,
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     let gravity = sim.world.gravity;
@@ -2266,14 +2325,14 @@ fn paired_bars_move_inward_together_and_leave_ball_clearance() {
 #[test]
 fn reduced_motion_and_scrolling_off_consume_accents_without_flips() {
     for reduced in [true, false] {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         sim.configure_dance(DirectionOdds::default().values(), 0.3, 42, 2.0)
             .unwrap();
         sim.apply(SimulationInput {
             reduced_motion: reduced,
             scrolling: reduced,
             height: 0.6,
-            ..SimulationInput::default()
+            ..eight_ball_input()
         })
         .unwrap();
         sim.accent(1000).unwrap();
@@ -2286,7 +2345,7 @@ fn reduced_motion_and_scrolling_off_consume_accents_without_flips() {
 fn roof_bar_deflects_inward_and_reports_its_source_pigment() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0]);
     let mut levels = [0.0; COUNT];
@@ -2324,7 +2383,7 @@ fn default_full_attacks_stay_within_the_work_cap_in_tall_phone_rooms() {
     for height in [0.927803, 2.596923, 2.75] {
         let mut sim = world(SimulationConfig {
             height,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         input(&mut sim, [0.0; COUNT]);
         for _ in 0..HZ {
@@ -2343,7 +2402,7 @@ fn default_full_attacks_stay_within_the_work_cap_in_tall_phone_rooms() {
 fn initial_ball_colors_match_spawn_x_and_stay_uniform_without_contacts() {
     let mut sim = world(SimulationConfig {
         gravity: 0.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     // Expected source columns for the existing size-sorted spawn rows.
     let sources = [6, 18, 10, 2, 6, 22, 2, 14];
@@ -2366,7 +2425,7 @@ fn initial_ball_colors_match_spawn_x_and_stay_uniform_without_contacts() {
 
 #[test]
 fn live_depth_resizes_walls_and_posts_without_resetting_state() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     let tick = sim.tick;
     let pigments = sim.pigments;
     let ball = sim.balls[0].0;
@@ -2411,7 +2470,7 @@ fn live_depth_resizes_walls_and_posts_without_resetting_state() {
 
 #[test]
 fn invalid_live_depth_keeps_the_current_room_and_input() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     for depth in [f32::NAN, 0.0, 0.199, 2.001, f32::INFINITY] {
         assert!(
             sim.apply(SimulationInput {
@@ -2428,7 +2487,7 @@ fn invalid_live_depth_keeps_the_current_room_and_input() {
 
 #[test]
 fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     isolate(&mut sim, &[0]);
     place(
         &mut sim,
@@ -2463,7 +2522,7 @@ fn contact_color_spreads_without_jumps_even_when_impacts_retarget_the_fill() {
 fn both_halves_of_each_flat_top_transfer_the_same_source_color() {
     for end in 0..2 {
         for offset in [-CAP_WIDTH / 4.0, CAP_WIDTH / 4.0] {
-            let mut sim = world(SimulationConfig::default());
+            let mut sim = world(eight_ball_config());
             isolate(&mut sim, &[0]);
             input(&mut sim, [0.3; COUNT]);
             for _ in 0..HZ {
@@ -2519,7 +2578,7 @@ fn both_halves_of_each_flat_top_transfer_the_same_source_color() {
 fn active_audio_requires_attacking_contacts_and_a_new_attack_can_light_resting_balls() {
     let mut sim = world(SimulationConfig {
         restitution: 0.0,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     isolate(&mut sim, &[0]);
     place(
@@ -2598,7 +2657,7 @@ fn physical_contact_injects_color_at_the_rolling_balls_material_point() {
     let run = |angle| {
         let mut sim = world(SimulationConfig {
             restitution: 0.0,
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         isolate(&mut sim, &[0]);
         place(
@@ -2631,8 +2690,8 @@ fn pigment_palette_does_not_change_any_physical_field() {
         let peak = c.red.max(c.green).max(c.blue);
         [c.red / peak, c.green / peak, c.blue / peak]
     });
-    let mut vivid = Simulation::new(SimulationConfig::default(), rainbow).unwrap();
-    let mut grey = Simulation::new(SimulationConfig::default(), [[0.5; 3]; COUNT]).unwrap();
+    let mut vivid = Simulation::new(eight_ball_config(), rainbow).unwrap();
+    let mut grey = Simulation::new(eight_ball_config(), [[0.5; 3]; COUNT]).unwrap();
     for tick in 0..240 {
         let input = SimulationInput {
             tick,
@@ -2665,7 +2724,7 @@ fn pigment_palette_does_not_change_any_physical_field() {
 
 #[test]
 fn live_ball_settings_preserve_survivors_and_remove_real_bodies() {
-    let mut sim = world(SimulationConfig::default());
+    let mut sim = world(eight_ball_config());
     let base_bodies = sim.world.bodies.len() - BALL_COUNT;
     let base_colliders = sim.world.colliders.len() - BALL_COUNT;
     let survivor = sim.balls[0];
@@ -2680,7 +2739,7 @@ fn live_ball_settings_preserve_survivors_and_remove_real_bodies() {
         sim.apply(SimulationInput {
             tick: sim.tick,
             balls,
-            ..SimulationInput::default()
+            ..eight_ball_input()
         })
         .unwrap();
         sim.update_balls();
@@ -2710,7 +2769,7 @@ fn removing_a_ball_preserves_survivors_with_settled_contacts() {
             count: 16,
             ..BallSettings::default()
         },
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     for _ in 0..600 {
         sim.step();
@@ -2775,7 +2834,7 @@ fn ball_changes_repack_only_new_or_deeper_intersections() {
                 small: 0.1,
                 big: 0.1,
             },
-            ..SimulationConfig::default()
+            ..eight_ball_config()
         });
         // The survivors share a shallow contact, away from the next spawn.
         let positions = [Vector::new(0.3, 0.3, 0.0), Vector::new(0.3999, 0.3, 0.0)];
@@ -2824,7 +2883,7 @@ fn maximum_equal_balls_fit_short_shallow_room_and_update_mass() {
     let mut sim = world(SimulationConfig {
         height: MIN_HEIGHT,
         depth: 0.2,
-        ..SimulationConfig::default()
+        ..eight_ball_config()
     });
     let balls = BallSettings {
         count: 16,
@@ -2836,7 +2895,7 @@ fn maximum_equal_balls_fit_short_shallow_room_and_update_mass() {
         depth: 0.2,
         balls,
         levels: [1.0; COUNT],
-        ..SimulationInput::default()
+        ..eight_ball_input()
     })
     .unwrap();
     sim.update_balls();
@@ -2875,7 +2934,7 @@ fn maximum_equal_balls_fit_short_shallow_room_and_update_mass() {
 #[test]
 fn changing_ball_inputs_replay_and_reject_invalid_settings() {
     let replay = || {
-        let mut sim = world(SimulationConfig::default());
+        let mut sim = world(eight_ball_config());
         for (count, small, big) in [
             (0, 0.0264, 0.192),
             (1, 0.1, 0.1),
@@ -2885,7 +2944,7 @@ fn changing_ball_inputs_replay_and_reject_invalid_settings() {
             sim.apply(SimulationInput {
                 tick: sim.tick,
                 balls: BallSettings { count, small, big },
-                ..SimulationInput::default()
+                ..eight_ball_input()
             })
             .unwrap();
             for _ in 0..12 {
@@ -2911,7 +2970,7 @@ fn changing_ball_inputs_replay_and_reject_invalid_settings() {
                 sim.apply(SimulationInput {
                     tick: sim.tick,
                     balls,
-                    ..SimulationInput::default()
+                    ..eight_ball_input()
                 })
                 .is_err()
             );
@@ -2919,4 +2978,222 @@ fn changing_ball_inputs_replay_and_reject_invalid_settings() {
         sim.snapshot
     };
     assert_eq!(replay(), replay());
+}
+
+#[test]
+fn capped_construction_places_balls_inside_the_active_opening() {
+    for height in [0.4, 0.6, 2.596923, 20.0] {
+        for gap_cap in [0.4, 0.6, 20.0] {
+            let sim = world(SimulationConfig {
+                height,
+                gap_cap,
+                ..eight_ball_config()
+            });
+            let geometry = sim.config.geometry(0.3);
+            assert_eq!(sim.baseline, geometry.baseline);
+            for i in 0..BALL_COUNT {
+                assert!(position(&sim, i).y - radius(i) >= sim.baseline);
+                assert!(position(&sim, i).y + radius(i) <= height - sim.baseline);
+                for j in 0..i {
+                    assert!(
+                        (position(&sim, i) - position(&sim, j)).length() >= radius(i) + radius(j)
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cap_changes_preserve_motion_identity_and_replay_through_resize_reversal() {
+    let run = |fps: u32| {
+        let mut sim = world(SimulationConfig {
+            height: 2.6,
+            gap_cap: 2.6,
+            ..eight_ball_config()
+        });
+        let handles = sim.balls.clone();
+        for frame in 0..fps * 5 {
+            for _ in 0..HZ / fps {
+                let tick = sim.tick;
+                let (height, gap_cap) = match tick {
+                    0..120 => (2.6, 2.6),
+                    120..138 => (2.6, 0.4),
+                    138..180 => (0.55, 0.6),
+                    180..240 => (2.6, 0.4),
+                    240..360 => (2.6, 20.0),
+                    _ => (2.6, 0.6),
+                };
+                let previous_snapshot = sim.snapshot.clone();
+                let previous_pigments = sim.pigments;
+                sim.apply(SimulationInput {
+                    tick,
+                    height,
+                    gap_cap,
+                    levels: [if tick % 120 < 30 { 0.8 } else { 0.0 }; COUNT],
+                    ..eight_ball_input()
+                })
+                .unwrap();
+                assert_eq!(sim.snapshot, previous_snapshot);
+                assert_eq!(sim.pigments, previous_pigments);
+                if tick == 125 {
+                    sim.configure_dance([60.0, 200.0, 0.05, 0.5, 1.0], 0.5, 1, 2.0)
+                        .unwrap();
+                }
+                let before = sim.motions[0];
+                let mut expected = before;
+                expected.retarget(
+                    f64::from(sim.input.levels[0]),
+                    f64::from(sim.config.stroke_seconds),
+                    false,
+                    f64::from(sim.config.reduced_stroke_seconds),
+                );
+                expected.advance(f64::from(DT));
+                sim.step();
+                assert_eq!(sim.balls, handles);
+                assert!(
+                    (sim.motions[0].state.position - expected.state.position).abs() < 1e-6,
+                    "frame {frame}"
+                );
+                for i in 0..BALL_COUNT {
+                    assert!(
+                        position(&sim, i).y - radius(i) >= sim.baseline - 0.005,
+                        "tick {tick}, bottom {} base {}",
+                        position(&sim, i).y - radius(i),
+                        sim.baseline
+                    );
+                    assert!(
+                        position(&sim, i).y + radius(i)
+                            <= sim.ceiling_height - sim.baseline + 0.005,
+                        "tick {tick}, roof"
+                    );
+                    for &(post, collider) in &sim.bars {
+                        if sim.world.bodies[post].is_enabled() {
+                            assert!(
+                                surface_clearance(&sim, collider, position(&sim, i)) >= 0.0,
+                                "tick {tick}, ball {i} crossed a moving surface"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        sim.snapshot
+    };
+    assert_eq!(run(30), run(60));
+    assert_eq!(run(60), run(120));
+}
+
+#[test]
+fn cap_input_rejects_invalid_values_without_changing_state() {
+    let mut sim = world(Default::default());
+    for gap_cap in [f32::NAN, f32::INFINITY, 0.399, 20.001] {
+        let before = sim.snapshot.clone();
+        assert!(
+            sim.apply(SimulationInput {
+                gap_cap,
+                ..eight_ball_input()
+            })
+            .is_err()
+        );
+        assert_eq!(before, sim.snapshot);
+        assert!(
+            SimulationConfig::from_values(
+                &SimulationConfig {
+                    gap_cap,
+                    ..eight_ball_config()
+                }
+                .values()
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn settled_cap_keeps_reference_travel_and_timing_at_every_enclosure_height() {
+    let mut trajectories = Vec::new();
+    for height in [0.6, 1.2, 2.596923, 20.0] {
+        let mut sim = world(SimulationConfig {
+            height,
+            ..eight_ball_config()
+        });
+        isolate(&mut sim, &[]);
+        input(&mut sim, [1.0; COUNT]);
+        let mut trajectory = Vec::new();
+        for _ in 0..6 {
+            sim.step();
+            trajectory.push(sim.snapshot.values[MOTION_OFFSET]);
+            assert!((sim.snapshot.values[GEOMETRY_OFFSET + 6] - 0.1384).abs() < 1e-6);
+            for band in 0..COUNT {
+                let floor = sim.world.bodies[sim.bars[band * 2].0].translation().y;
+                let roof = sim.world.bodies[sim.bars[band * 2 + SURFACE_END_COUNT].0]
+                    .translation()
+                    .y;
+                assert!((floor + roof - height).abs() < 2e-6);
+                assert!((floor - sim.snapshot.values[BAR_OFFSET + band]).abs() < 2e-6);
+            }
+        }
+        assert_eq!(trajectory[4], 1.0);
+        trajectories.push(trajectory);
+    }
+    for trajectory in &trajectories[1..] {
+        assert_eq!(trajectory, &trajectories[0]);
+    }
+}
+
+#[test]
+fn capped_gap_reserves_variable_ball_packing_on_construction_and_live_edits() {
+    for count in [0, 1, 8, 16] {
+        let balls = BallSettings {
+            count,
+            small: 0.192,
+            big: 0.192,
+        };
+        let mut sim = world(SimulationConfig {
+            height: 2.6,
+            gap_cap: 0.4,
+            balls,
+            ..eight_ball_config()
+        });
+        let expected = 0.4_f32.max(balls.packed_height());
+        assert!((sim.active_height - expected).abs() < 1e-6);
+        for (i, &(handle, _)) in sim.balls.iter().enumerate() {
+            let p = sim.world.bodies[handle].translation();
+            let radius = balls.diameter(i) / 2.0;
+            assert!(p.y - radius >= sim.baseline);
+            assert!(p.y + radius <= sim.ceiling_height - sim.baseline);
+            for &(other, _) in &sim.balls[..i] {
+                assert!((p - sim.world.bodies[other].translation()).length() >= 2.0 * radius);
+            }
+        }
+        let handles = sim.balls.clone();
+        for gap_cap in [0.6, 0.4] {
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                gap_cap,
+                levels: [1.0; COUNT],
+                ..sim.input
+            })
+            .unwrap();
+            for _ in 0..120 {
+                sim.step();
+                assert_eq!(sim.balls, handles);
+                for (i, &(handle, _)) in sim.balls.iter().enumerate() {
+                    let p = sim.world.bodies[handle].translation();
+                    let radius = balls.diameter(i) / 2.0;
+                    assert!(
+                        p.y - radius >= sim.baseline - 0.005,
+                        "count {count}, tick {}",
+                        sim.tick
+                    );
+                    assert!(
+                        p.y + radius <= sim.ceiling_height - sim.baseline + 0.005,
+                        "count {count}, tick {}",
+                        sim.tick
+                    );
+                }
+            }
+        }
+    }
 }

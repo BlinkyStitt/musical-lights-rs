@@ -8,28 +8,43 @@ const M = [
 function maxChroma(l, h) {
   const sub = ((l + 16) / 116) ** 3, y = sub > 216 / 24389 ? sub : l / (24389 / 27);
   let chroma = Infinity;
-  for (const [a, b, c] of M) for (const t of [0, 1]) {
-    const top1 = (284517 * a - 94839 * c) * y;
-    const top2 = (838422 * c + 769860 * b + 731718 * a) * l * y - 769860 * t * l;
-    const bottom = (632260 * c - 126452 * b) * y + 126452 * t;
-    const length = top2 / (bottom * Math.sin(h) - top1 * Math.cos(h));
-    if (length >= 0) chroma = Math.min(chroma, length);
+  const sine = Math.sin(h), cosine = Math.cos(h);
+  for (let row = 0; row < 3; row++) {
+    const a = M[row][0], b = M[row][1], c = M[row][2];
+    for (let t = 0; t < 2; t++) {
+      const top1 = (284517 * a - 94839 * c) * y;
+      const top2 = (838422 * c + 769860 * b + 731718 * a) * l * y - 769860 * t * l;
+      const bottom = (632260 * c - 126452 * b) * y + 126452 * t;
+      const length = top2 / (bottom * sine - top1 * cosine);
+      if (length >= 0) chroma = Math.min(chroma, length);
+    }
   }
   return chroma;
 }
-export function linearToHsluv([r, g, b]) {
-  if (![r, g, b].every(v => Number.isFinite(v) && v >= 0 && v <= 1)) throw new Error('Invalid linear pigment');
+// Write packed source regions directly into the persistent GPU attribute.
+// No temporary color arrays, views or iterators enter the animation loop.
+export function linearToHsluv(source, sourceOffset, target, targetOffset) {
+  const r = source[sourceOffset], g = source[sourceOffset + 1], b = source[sourceOffset + 2];
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)
+    || r < 0 || r > 1 || g < 0 || g > 1 || b < 0 || b > 1) throw new Error('Invalid linear pigment');
   const x = .41239079926595*r + .35758433938387*g + .18048078840183*b;
   const y = .21263900587151*r + .71516867876775*g + .072192315360733*b;
   const z = .019330818715591*r + .11919477979462*g + .95053215224966*b;
   const l = y <= 216/24389 ? y*(24389/27) : 116*Math.cbrt(y)-16;
-  if (l < 1e-8) return [0, 0, 0];
-  if (l > 99.9999999) return [0, 0, 100];
-  const d = x+15*y+3*z, u = 13*l*(4*x/d-.19783000664283), v = 13*l*(9*y/d-.46831999493879);
-  const c = Math.hypot(u,v);
-  if (c < 1e-6) return [0,0,l];
-  const h = Math.atan2(v,u);
-  return [(h*180/Math.PI+360)%360, Math.min(100,Math.max(0,100*c/maxChroma(l,h))), l];
+  let hue = 0, saturation = 0, lightness = l;
+  if (l < 1e-8) lightness = 0;
+  else if (l > 99.9999999) lightness = 100;
+  else {
+    const d = x+15*y+3*z, u = 13*l*(4*x/d-.19783000664283), v = 13*l*(9*y/d-.46831999493879);
+    const c = Math.hypot(u,v);
+    if (c >= 1e-6) {
+      const h = Math.atan2(v,u);
+      hue = (h*180/Math.PI+360)%360;
+      saturation = Math.min(100,Math.max(0,100*c/maxChroma(l,h)));
+    }
+  }
+  target[targetOffset] = hue; target[targetOffset + 1] = saturation; target[targetOffset + 2] = lightness;
+  return target;
 }
 export function blendHsluv(a, b, t) {
   a = [...a]; b = [...b];

@@ -15,7 +15,11 @@ test('native sampling retains descendants and wait evidence without unrelated pr
       const task = path.join(proc, String(pid), 'task', String(pid));
       await mkdir(task, { recursive: true });
       await writeFile(path.join(proc, String(pid), 'status'), `Name:\tfixture\nPPid:\t${parent}\n`);
+      await writeFile(path.join(proc, String(pid), 'stat'), `${pid} (fixture) S ${parent}`);
+      await writeFile(path.join(proc, String(pid), 'cgroup'), '0::/test');
       await writeFile(path.join(task, 'comm'), 'web-process\n');
+      await writeFile(path.join(task, 'schedstat'), '120000 80000 4\n');
+      await writeFile(path.join(task, 'status'), 'voluntary_ctxt_switches: 3\nnonvoluntary_ctxt_switches: 1\n');
       await writeFile(path.join(task, 'wchan'), 'futex_wait');
       // Unavailable stack/syscall evidence must remain explicit in the artifact.
     }
@@ -23,6 +27,10 @@ test('native sampling retains descendants and wait evidence without unrelated pr
     assert.deepEqual(sample.map(p => p.pid).sort(), [10, 11, 12]);
     for (const p of sample) {
       assert.equal(p.tasks[0].wait, 'futex_wait');
+      assert.equal(p.cgroup, '0::/test');
+      assert.equal(p.stat, `${p.pid} (fixture) S ${p.parent}`);
+      assert.equal(p.tasks[0].schedstat, '120000 80000 4');
+      assert.match(p.tasks[0].status, /nonvoluntary_ctxt_switches: 1/);
       assert.deepEqual(p.tasks[0].stack, { error: 'ENOENT' });
       assert.deepEqual(p.tasks[0].syscall, { error: 'ENOENT' });
     }

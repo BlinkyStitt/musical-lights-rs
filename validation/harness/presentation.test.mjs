@@ -160,13 +160,13 @@ test('ball preferences migrate independently and reject malformed diameter inter
   const read = saved => readSettings({ getItem: () => JSON.stringify(saved) });
   const physics = [.6, 12, 16, .6, .4, .5, .04, .7];
   const migrated = read({ version: 1, physics, cameraAngle: 12, cameraZoom: 135, cameraX: 20, cameraY: 80 });
-  assert.deepEqual(migrated.balls, [8, 2.64, 19.2]);
+  assert.deepEqual(migrated.balls, [2, 2.64, 19.2]);
   assert.deepEqual(migrated.physics, physics); assert.equal(migrated.cameraAngle, 12);
   assert.deepEqual([migrated.cameraZoom, migrated.cameraX, migrated.cameraY], [135, 20, 80]);
-  for (const balls of [[0, 2.64, 19.2], [16, 19.2, 19.2], [1, 2.64, 2.64]])
+  for (const balls of [[8, 2.64, 19.2], [0, 2.64, 19.2], [16, 19.2, 19.2], [1, 2.64, 2.64]])
     assert.deepEqual(read({ version: 1, balls, cameraZoom: 135 }).balls, balls);
   for (const balls of [[17, 2.64, 19.2], [1.5, 2.64, 19.2], [8, 10, 9], [8, 2.63, 19.2], [8, 2.64, 19.21], [8, null, 19.2]])
-    assert.deepEqual(read({ version: 1, balls }).balls, [8, 2.64, 19.2]);
+    assert.deepEqual(read({ version: 1, balls }).balls, [2, 2.64, 19.2]);
 });
 
 test('saved sones gate recovers independently from each gain field and other preferences', async () => {
@@ -188,4 +188,11 @@ test('saved sones gate recovers independently from each gain field and other pre
     assert.deepEqual(recoverVisual([1, floor, 3, -1]), { values: [1, floor, 3, 1], gateReset: false });
   }
   assert.deepEqual(recoverVisual([9, .1, 0, 2]).values, [0, .1, 0, 2]);
+});
+test('active gap cap restores independently and invalid fields preserve other preferences', () => {
+  const read = activeGapCap => readSettings({ getItem: () => JSON.stringify({ version: 1, activeGapCap, flight: 40, cameraAngle: 12 }) });
+  for (const cm of [40, 60, 2000]) assert.equal(read(cm).activeGapCap, cm);
+  for (const cm of [undefined, null, '60', 39, 2001, 60.5]) {
+    assert.equal(read(cm).activeGapCap, 60); assert.equal(read(cm).flight, 40); assert.equal(read(cm).cameraAngle, 12);
+  }
 });

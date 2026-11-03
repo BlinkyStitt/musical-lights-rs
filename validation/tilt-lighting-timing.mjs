@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import startup from './browser-startup.mjs';
 import { staticPreview } from './static-preview.mjs';
 import { timingIdentity } from './tilt-timing-evidence.mjs';
+import { recordPerformanceProcesses } from './performance-processes.mjs';
 const output = process.argv[2];
 if (!output) throw new Error('Usage: node validation/tilt-lighting-timing.mjs OUTPUT.json [--hardware] [--build VERSION]');
 const hardware = process.argv.includes('--hardware');
@@ -15,12 +16,13 @@ const launchOptions = hardware ? { args: process.platform === 'darwin'
   ? ['--use-angle=metal', '--enable-gpu']
   : ['--use-gl=angle', '--use-angle=gl', '--enable-gpu'] } : {};
 const rows = [];
-let finish, identity, nativeGpu, browserVersion, activeSample;
+let finish, stopProcesses, identity, nativeGpu, browserVersion, activeSample;
 // Overwrite previous samples before attempting startup: a failed run must not
 // leave a prior run's success at the requested output path.
 await writeFile(output, '[]\n');
 await rm(`${output}.failure.json`, { force: true });
 try {
+  stopProcesses = await recordPerformanceProcesses(`${output}.processes.jsonl`);
   identity = await timingIdentity(process.cwd(), buildIndex === -1 ? undefined : process.argv[buildIndex + 1]);
   finish = await startup({ filteredProjects: [{ name: 'chromium', use: { browserName: 'chromium', launchOptions } }] });
   const browser = await chromium.launch(launchOptions);
@@ -34,6 +36,8 @@ try {
       for (const mode of modes) {
         const context = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 });
         await context.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
+        // Keep the approved lighting comparison at its original eight-ball load.
+        await context.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
         await staticPreview(context, 'https://musical-lights.test');
         await context.route('**/tilt-shadow-candidate.mjs', route => route.fulfill({ path: new URL('./tilt-shadow-candidate.mjs', import.meta.url).pathname, contentType: 'text/javascript' }));
         const page = await context.newPage(), errors = [];
@@ -136,4 +140,4 @@ try {
 } catch (error) {
   await writeFile(`${output}.failure.json`, JSON.stringify({ ...identity, browserVersion, nativeGpu, hardwareRequested: hardware, launchOptions, activeSample, completedSamples: rows.length, error: error.stack }, null, 2) + '\n');
   throw error;
-} finally { await finish?.(); }
+} finally { try { await finish?.(); } finally { await stopProcesses?.(); } }

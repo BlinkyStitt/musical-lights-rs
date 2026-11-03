@@ -65,6 +65,56 @@ class BrowserValidationTests(unittest.TestCase):
             self.assertFalse(any(args[0][0][0] == "dx" for args in run.call_args_list))
 
 
+class PythonValidationTests(unittest.TestCase):
+    def commands(self, name):
+        with patch.object(validate, "run") as run:
+            validate.validate(name)
+        return [entry.args for entry in run.call_args_list]
+
+    def test_local_and_reference_use_the_same_locked_python_checks(self):
+        local = self.commands("python")
+        reference = self.commands("reference")
+        self.assertEqual(local, reference[:4])
+        self.assertEqual(len(local), 4)
+        environment = validate.ROOT / "validation/loudness/.venv/bin"
+        self.assertEqual(
+            local[0],
+            (
+                ["uv", "sync", "--project", "validation/loudness", "--locked"],
+                validate.ROOT,
+            ),
+        )
+        lint, formatting, types = [args for args, _ in local[1:]]
+        self.assertEqual(lint[:2], [str(environment / "ruff"), "check"])
+        self.assertEqual(
+            formatting[:3], [str(environment / "ruff"), "format", "--check"]
+        )
+        self.assertEqual(
+            types[:4],
+            [str(environment / "ty"), "check", "--python", str(environment / "python")],
+        )
+        self.assertEqual(lint[2:], formatting[3:])
+        self.assertEqual(lint[2:], types[4:])
+        self.assertIn("validation/ci.py", formatting[3:])
+        self.assertIn("validation/tooling", formatting[3:])
+        self.assertTrue(all(directory == validate.ROOT for _, directory in local))
+        self.assertTrue(any("loudness_trace" in args for args, _ in reference[4:]))
+
+    def test_local_and_reference_stop_at_each_failed_python_check(self):
+        for name in ("python", "reference"):
+            for step in range(4):
+                error = subprocess.CalledProcessError(1, "required Python check")
+                with (
+                    self.subTest(phase=name, step=step),
+                    patch.object(
+                        validate.subprocess, "run", side_effect=[None] * step + [error]
+                    ) as run,
+                    self.assertRaises(subprocess.CalledProcessError),
+                ):
+                    validate.validate(name)
+                self.assertEqual(run.call_count, step + 1)
+
+
 class PhysicsValidationTests(unittest.TestCase):
     def commands(self, name):
         with patch.object(validate, "run") as run:

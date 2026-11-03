@@ -96,7 +96,10 @@ class BrowserGateTests(unittest.TestCase):
 
     def test_rejects_missing_or_failed_gpu_shards(self):
         original = self.jobs.copy()
-        for name in ("GPU browser (1)", "GPU browser (2)"):
+        for name in (
+            "GPU browser (nuc3, 1)",
+            "GPU browser (nuc3, 2)",
+        ):
             for conclusion in (None, "failure"):
                 with self.subTest(name=name, conclusion=conclusion):
                     self.jobs = [job for job in original if job["name"] != name]
@@ -150,6 +153,24 @@ class BrowserGateTests(unittest.TestCase):
         self.assertTrue(ci.website_required("pull_request", ["README.md"]))
         self.assertFalse(ci.website_required("push", ["README.md"]))
         self.assertTrue(ci.website_required("push", ["musical-leptos/src/app.rs"]))
+
+
+class RunnerPlacementTests(unittest.TestCase):
+    def test_gpu_workflows_and_required_checks_only_target_nuc3(self):
+        root = Path(__file__).resolve().parents[2]
+        workflows = root / ".github/workflows"
+        for name in ("validate.yml", "gpu-runner-network.yml", "gpu-runner-health.yml"):
+            source = (workflows / name).read_text()
+            with self.subTest(workflow=name):
+                self.assertNotIn("nuc1", source)
+                self.assertIn("nuc3", source)
+        validation = (workflows / "validate.yml").read_text()
+        self.assertIn("host: [nuc3]", validation)
+        self.assertIn("shard: [1, 2]", validation)
+        self.assertEqual(
+            {name for name in ci.VALIDATORS if name.startswith("GPU browser")},
+            {"GPU browser (nuc3, 1)", "GPU browser (nuc3, 2)"},
+        )
 
 
 if __name__ == "__main__":

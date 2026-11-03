@@ -27,8 +27,17 @@ simulation. Their 24 filtered targets come from that same audio processor.
 Portrait and landscape cases include scrolling, full-depth paired colliders,
 eight balls and snapshot reads. All physics fixtures use the production
 peak-scaled HSLuv rainbow (100 saturation, 58 lightness), so contact painting
-exercises chromatic hue paths instead of a uniform grey fast path. The full-attack case exercises all bands in
-the tall portrait enclosure. Setup and one second of settling are excluded
+exercises chromatic hue paths instead of a uniform grey fast path. The full-attack cases exercise all bands in
+the tall portrait enclosure. Portrait music and full attacks each compare explicit
+60 cm (`_capped`) and 2,000 cm (`_uncapped`) gap caps in the same engine, with
+identical targets, rise duration and ticks. The latter retains the previous
+full-height geometry. For a statistical geometry comparison on an idle host:
+
+```sh
+cargo +nightly-2026-09-10 bench --locked --manifest-path validation/benchmarks/Cargo.toml --bench production -- production_physics
+```
+
+Setup and one second of settling are excluded
 from the reported time. Each workload checks the substep-overload field
 before benchmarking; an overloaded run is a failure, not a speed result.
 The tempo case measures eight seconds of production novelty-envelope updates
@@ -43,7 +52,7 @@ beside compilation, native benchmarks or another browser runner.
 
 For a native stack profile on macOS, use `sample` on the benchmark binary
 printed by Cargo. Run the binary with `--bench` and a selected case, such as
-`production_physics/music_portrait --profile-time 20`. Without `--bench`,
+`production_physics/music_portrait_capped --profile-time 20`. Without `--bench`,
 Criterion runs its smoke checks instead of the timed workload. Store profiles
 and result logs outside Git. Record the compiler, features, hardware, workload
 and measurement boundary with each comparison.

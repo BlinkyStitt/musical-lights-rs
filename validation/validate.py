@@ -68,7 +68,38 @@ def cli_version(binary, version):
         raise RuntimeError(f"Expected {binary} {version}; found {found}")
 
 
+def python_checks():
+    run(["uv", "sync", "--project", "validation/loudness", "--locked"], ROOT)
+    environment = ROOT / "validation/loudness/.venv/bin"
+    paths = [
+        "validation/validate.py",
+        "validation/install_tools.py",
+        "validation/ci.py",
+        "validation/ci_browser.py",
+        "validation/firmware_artifacts.py",
+        "validation/generate-stars.py",
+        "validation/tooling",
+        "validation/loudness/validate.py",
+        "validation/loudness/tones.py",
+        "validation/lights",
+        "musical-lights-worklet/build.py",
+        "musical-lights-physics/build.py",
+        "musical-leptos/publish_routes.py",
+    ]
+    run([str(environment / "ruff"), "check"] + paths, ROOT)
+    run([str(environment / "ruff"), "format", "--check"] + paths, ROOT)
+    run(
+        [str(environment / "ty"), "check", "--python", str(environment / "python")]
+        + paths,
+        ROOT,
+    )
+    return environment
+
+
 def validate(name):
+    if name == "python":
+        python_checks()
+        return
     if name == "firmware-tools":
         run(["uv", "sync", "--project", "tools/firmware", "--locked"], ROOT)
         run(
@@ -95,30 +126,7 @@ def validate(name):
         run(["npm", "test"], ROOT / "validation")
         return
     if name == "reference":
-        run(["uv", "sync", "--project", "validation/loudness", "--locked"], ROOT)
-        environment = ROOT / "validation/loudness/.venv/bin"
-        paths = [
-            "validation/validate.py",
-            "validation/install_tools.py",
-            "validation/ci.py",
-            "validation/ci_browser.py",
-            "validation/firmware_artifacts.py",
-            "validation/generate-stars.py",
-            "validation/tooling",
-            "validation/loudness/validate.py",
-            "validation/loudness/tones.py",
-            "validation/lights",
-            "musical-lights-worklet/build.py",
-            "musical-lights-physics/build.py",
-            "musical-leptos/publish_routes.py",
-        ]
-        run([str(environment / "ruff"), "check"] + paths, ROOT)
-        run([str(environment / "ruff"), "format", "--check"] + paths, ROOT)
-        run(
-            [str(environment / "ty"), "check", "--python", str(environment / "python")]
-            + paths,
-            ROOT,
-        )
+        environment = python_checks()
         run(
             [
                 str(environment / "python"),
@@ -325,6 +333,7 @@ def main():
             *PACKAGES,
             *PHYSICS_PHASES,
             "firmware-tools",
+            "python",
             "reference",
             "browser",
             "all",

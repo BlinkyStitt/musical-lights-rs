@@ -21,7 +21,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
     // free space. Repeated blue contacts must not hide a lost swirl target.
     config[0] = 5;
     const sim = new PhysicsSimulation(config, palette), input = new Float32Array(layout[22]);
-    input[24] = 5; input[31] = v.reduced.matches ? 1 : 0; input[32] = config[0]; input[62] = config[5]; input[64] = 8; input[65] = .0264; input[66] = .192; sim.input(input);
+    input[67] = config[11]; input[24] = 5; input[31] = v.reduced.matches ? 1 : 0; input[32] = config[0]; input[62] = config[5]; input[64] = 8; input[65] = .0264; input[66] = .192; sim.input(input);
     const surface = () => new Float32Array(wasm.memory.buffer, sim.pigments_ptr(), 72).slice(0, 9);
     const mean = () => new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), layout[12]).slice(18, 21);
     const frames = [{ tick: 0, surface: Array.from(surface()), mean: Array.from(mean()) }];
@@ -30,7 +30,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
       sim.step(); const current = surface();
       maximumJump = Math.max(maximumJump, ...current.map((value, i) => Math.abs(value - previous[i])));
       for (let region=0;region<3;region++) {
-        const a=linearToHsluv(previous.slice(region*3,region*3+3)), b=linearToHsluv(current.slice(region*3,region*3+3));
+        const a=linearToHsluv(previous, region*3, new Float64Array(3), 0), b=linearToHsluv(current, region*3, new Float64Array(3), 0);
         const hue=Math.abs(((b[0]-a[0]+540)%360)-180)/180;
         maximumPerceptualJump=Math.max(maximumPerceptualJump,hue,Math.abs(b[1]-a[1])/100,Math.abs(b[2]-a[2])/100);
       }
@@ -56,7 +56,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
       v.scene.children.forEach(node => { if (node !== v.balls && !node.isLight) node.visible = false; });
       v.balls.count = 1; v.balls.setMatrixAt(0, new THREE.Matrix4().makeScale(.8, .8, .8)); v.balls.instanceMatrix.needsUpdate = true;
       for (const frame of frames) {
-        attributes.forEach((attr, region) => { attr.array.set(linearToHsluv(frame.surface.slice(region * 3, region * 3 + 3)), 0); attr.needsUpdate = true; });
+        attributes.forEach((attr, region) => { linearToHsluv(frame.surface, region * 3, attr.array, 0); attr.needsUpdate = true; });
         v.balls.instanceColor.array.set(frame.mean, 0); v.balls.instanceColor.needsUpdate = true;
         v.renderer.setRenderTarget(target); v.renderer.render(v.scene, camera);
         v.renderer.readRenderTargetPixels(target, 0, 0, 256, 256, pixels);
@@ -81,7 +81,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
     }
   });
   await info.attach('contact-fill-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.version).toBe(21); expect(result.firstContact).toBeGreaterThan(0);
+  expect(result.version).toBe(22); expect(result.firstContact).toBeGreaterThan(0);
   expect(result.maximumJump).toBeGreaterThan(.001); expect(result.maximumPerceptualJump).toBeLessThan(.047);
   expect(result.frames).toHaveLength(5);
   const [initial, impact, early, middle, late] = result.frames;
@@ -186,7 +186,7 @@ for (const route of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 
           const expected=hsluvToLinear(blendHsluv(blendHsluv(regions[0],regions[1],a),regions[2],b)).map(c=>Math.round(encode(c)*255));
           const actual=Array.from(pixels.slice((y*256+x)*4,(y*256+x)*4+3));
           maxError=Math.max(maxError,...actual.map((c,i)=>Math.abs(c-expected[i])));
-          const hsl=linearToHsluv(actual.map(c=>decode(c/255)));minSaturation=Math.min(minSaturation,hsl[1]);
+          const hsl=linearToHsluv(actual.map(c=>decode(c/255)), 0, new Float64Array(3), 0);minSaturation=Math.min(minSaturation,hsl[1]);
           if(previous)maxHueStep=Math.max(maxHueStep,Math.abs(((hsl[0]-previous[0]+540)%360)-180));previous=hsl;
           samples.push({x,hsl,actual,expected});
         }

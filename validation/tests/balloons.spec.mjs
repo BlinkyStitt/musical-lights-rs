@@ -5,6 +5,12 @@ import { meterPoint } from '../meter-input.mjs';
 
 const url = 'http://127.0.0.1:8101';
 
+// Retain the original eight-size physical regression workload explicitly.
+// Default-count and live 0–16 transitions have separate browser coverage.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
+});
+
 test('idle contacts fill ball colors without inventing audio attacks', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
   await page.locator('.depth-slider').fill('48'); await page.locator('.depth-slider').dispatchEvent('input');
@@ -56,7 +62,7 @@ test('active microphone contacts fill color only from attacking bars', async ({ 
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[63])).toBe(1);
   expect(await page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.pigments))).toEqual(before);
   await page.evaluate(() => window.sendBars(Array(24).fill(0)));
-  await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeLessThan(.0031);
+  await expect.poll(async () => { const s = await physicsState(page); return Math.max(...s.bars) - s.baseline; }).toBeLessThan(.0001);
   await page.evaluate(() => window.sendBars(Array(24).fill(1), 1));
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(38,62)))).toEqual(Array(24).fill(1));
   await expect.poll(() => page.evaluate(before => document.querySelector('#dancinglights').physics.pigments.some((value, i) => value !== before[i]), before)).toBe(true);
@@ -108,12 +114,12 @@ test('continuous scrolling carries source identity and stops in place', async ({
   const moved = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights').physics;
     return { edges: Array.from(v.edges), colors: Array.from(v.bars.instanceColor.array), palette: Array.from(v.palette),
-      phase: v.renderedPhase, x: v.bars.instanceMatrix.array[12], top: v.current[v.layout[9]], max: v.current[v.layout[17] + 1] };
+      phase: v.renderedPhase, x: v.bars.instanceMatrix.array[12], top: v.current[v.layout[9]], max: v.current[v.layout[17] + 1], baseline: v.current[v.layout[17] + 5], travel: v.current[v.layout[17] + 6] };
   });
   expect(moved.edges[0]).toBe(1); expect(moved.edges[1]).toBe(0);
   expect(moved.colors.slice(0, 3)).toEqual(moved.palette.slice(0, 3));
   expect(moved.x).toBeCloseTo((.5 + moved.phase) * .05, 5);
-  expect(moved.top).toBeCloseTo(.003 + .6 * (moved.max - .003), 4);
+  expect(moved.top).toBeCloseTo(moved.baseline + .6 * moved.travel, 4);
   await page.screenshot({ path: info.outputPath('scrolling-bands.png') });
   await page.evaluate(() => { window.audioNow += .181; });
   await expect.poll(async () => Math.max(...(await physicsState(page)).edges)).toBe(0);
@@ -196,7 +202,7 @@ for (const width of [375, 1440]) {
     render.roofExtents.forEach((extent, i) => expect(extent).toBeCloseTo(render.expected[i], 5));
     await page.screenshot({ path: info.outputPath('rigid-bodies.png'), fullPage: true });
     await page.evaluate(() => window.sendBars(Array(24).fill(0)));
-    await expect.poll(async () => Math.max(...(await physicsState(page)).bars)).toBeCloseTo(.003, 3);
+    await expect.poll(async () => { const s = await physicsState(page); return Math.max(...s.bars) - s.baseline; }).toBeCloseTo(0, 3);
     await expect.poll(async () => (await physicsState(page)).balls.filter(b => b.position[1] < raised.height).length, { timeout: 30000 }).toBe(8);
     expect(errors).toEqual([]);
   });
@@ -342,7 +348,7 @@ test('depth shakes and audio bars both move balls while tilt permission is still
   });
   expect(samples.some(s => s.input === -8)).toBe(true);
   expect(samples.some(s => s.balls.some(b => b.vz < -.1))).toBe(true);
-  expect(samples.some(s => Math.min(...s.bars) > before.barMax * .45)).toBe(true);
+  expect(samples.some(s => Math.min(...s.bars) - before.baseline > before.travel * .45)).toBe(true);
   expect(samples.some(s => s.balls.some((b, i) => b.y > before.balls[i].position[1] + .03))).toBe(true);
   await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[26])).toBe(0);
   await page.getByRole('checkbox', { name: 'Listening', exact: true }).uncheck();
@@ -531,20 +537,27 @@ test('phone acceptance rejects frozen snapshots despite 60 FPS and a current wor
     const report = document.querySelector('#dancinglights').physics.report;
     report.intervals = new Float32Array(60000); report.renderCosts = new Float32Array(60000);
     report.intervals.fill(1000 / 60); report.count = 18000;
+    // A complete capture includes a render cost for every submitted frame,
+    // including the first frame before an interval can be measured.
+    report.renderCosts.fill(.5); report.costCount = report.count + 1;
     report.invalid = []; report.maxSnapshotAgeMs = 10;
     report.progress = Array.from({ length: 300 }, (_, i) => ({ elapsedMs: i * 1000, tick: 1800 + i * 120, debtMs: 0 }));
     const data = { type: 'report', physicsCosts: Array(37800).fill(.25),
       elapsedMs: 315000, initialTick: 0, finalTick: 37800, debt: 0, maxDebt: 0,
       discardedSimulationMs: 0, recordingOverflow: false };
     report.receive(data); const moving = report.result.numericPass;
+    const renderCount = report.result.summary.renderCostMs.count;
+    report.costCount = 0;
+    report.receive(data); const missingRenderCosts = report.result.numericPass;
+    report.costCount = report.count + 1;
     for (const sample of report.progress) sample.tick = 1800;
     report.receive(data); const frozen = report.result.numericPass;
     report.progress.forEach((sample, i) => { sample.tick = 1800 + i * 120; });
     report.maxSnapshotAgeMs = 350;
     report.receive(data); const stale = report.result.numericPass;
-    return { moving, frozen, stale };
+    return { moving, renderCount, missingRenderCosts, frozen, stale };
   });
-  expect(results).toEqual({ moving: true, frozen: false, stale: false });
+  expect(results).toEqual({ moving: true, renderCount: 18001, missingRenderCosts: false, frozen: false, stale: false });
 });
 
 test('wrapped pointer surfaces and keyboard focus retain the source frequency', async ({ page }) => {
@@ -617,6 +630,30 @@ test('small balls, paired bar tips and light sources share the same interpolated
     expect(sample.lightTip).toBeCloseTo(sample.top, 6);
     expect(sample.roof).toBeCloseTo(sample.height, 6);
   }
+});
+
+test('saved ball settings apply before the first physics snapshot without stored physics overrides', async ({ page }, info) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.initialBallSnapshots = [];
+    window.Worker = class extends NativeWorker {
+      constructor(...args) {
+        super(...args);
+        if (!String(args[0]).endsWith('/physics/worker.js')) return;
+        let layout;
+        this.addEventListener('message', ({ data }) => {
+          if (data.type === 'ready') layout = data.layout;
+          if (data.type === 'snapshot' && layout && initialBallSnapshots.length < 8)
+            initialBallSnapshots.push(new Float32Array(data.buffer)[layout[30]]);
+        });
+      }
+    };
+  });
+  await page.goto(url); await physicsReady(page);
+  const counts = await page.evaluate(() => initialBallSnapshots);
+  await info.attach('initial-ball-snapshots.json', { body: JSON.stringify({ counts }), contentType: 'application/json' });
+  expect(counts.length).toBeGreaterThan(0);
+  expect(counts.every(count => count === 8), JSON.stringify(counts)).toBe(true);
 });
 
 test('leftward scrolling interpolates through the seam without sweeping the pattern right', async ({ page }) => {

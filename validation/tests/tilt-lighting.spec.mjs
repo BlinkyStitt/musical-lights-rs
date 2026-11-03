@@ -88,7 +88,7 @@ for (const options of [{ apple: false }, { apple: true }, { fallback: true }, { 
         bankChanged: diff(bankUp, bankDown), bodies, pigments,
         listening: v.listening, audio: v.card.dataset.audioState, gravity: Array.from(v.input.slice(34, 38)), balls: v.balls.count, depth: v.renderedDepth };
     }, options);
-    expect(result.listening).toBeFalsy(); expect(result.audio).not.toBe('playing'); expect(result.balls).toBe(8); expect(result.depth).toBeCloseTo(.48);
+    expect(result.listening).toBeFalsy(); expect(result.audio).not.toBe('playing'); expect(result.balls).toBe(2); expect(result.depth).toBeCloseTo(.48);
     for (const [pose, a, b] of [['upright', 0, 1], ['inverted', 1, 0], ['sideways', 2, 3], ['faceUp', 4, 5], ['faceDown', 5, 4]]) {
       expect(result.faces[pose][a], pose).toBeGreaterThan(result.faces[pose][b] * 1.15);
     }

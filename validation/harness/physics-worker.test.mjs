@@ -16,7 +16,7 @@ async function worker(config = Array.from(PhysicsSimulation.defaults())) {
     setTimeout() {}, clearTimeout() {}, postMessage: data => messages.push(structuredClone(data)) };
   runInNewContext(source, context);
   const send = data => self.onmessage({ data });
-  await send({ type: 'init', height: .6, config, palette: new Float32Array(72).fill(.5),
+  await send({ type: 'init', height: .6, physics: config.slice(0, 8), balls: config.slice(8, 11), gapCap: config[11], palette: new Float32Array(72).fill(.5),
     danceOptions: { odds: [60, 200, .05, .5, 1], flight: .3, seed: 1, scrollSpeed: 2 }, paused: false });
   const ready = messages.at(-1);
   return { ready, send, messages,
@@ -60,7 +60,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
   const w = await worker();
   try {
     await w.send({ type: 'record', config: w.ready.config });
-    const values = new Float32Array(w.ready.layout[22]); values[32] = .6; values[62] = .48; values[64] = 8; values[65] = .0264; values[66] = .192;
+    const values = new Float32Array(w.ready.layout[22]); values[32] = .6; values[62] = .48; values[67] = .6; values[64] = 8; values[65] = .0264; values[66] = .192;
     for (let frame = 0; frame < 60; frame++) {
       await w.send({ type: 'pulse', timestamp: 1000 + frame * 1000 / 60,
         input: values.slice(), listening: true, tempo: 60, accent: 0 });
@@ -77,7 +77,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
       'The decorative listening floor must not create audio attacks');
     assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
     assert(values.slice(0, 24).every(value => value === 0));
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v7',
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8',
       palette: Array(72).fill(.5), layout: w.ready.layout })).every(result => result.matches));
   } finally { w.close(); }
 });
@@ -87,7 +87,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
     const w = await worker();
     try {
       await w.send({ type: 'record', config: w.ready.config });
-      const values = Array(w.ready.layout[22]).fill(0); values[0] = .3; values[32] = .6; values[62] = .48; values[64] = 8; values[65] = .0264; values[66] = .192; values[33] = 1;
+      const values = Array(w.ready.layout[22]).fill(0); values[0] = .3; values[32] = .6; values[62] = .48; values[67] = .6; values[64] = 8; values[65] = .0264; values[66] = .192; values[33] = 1;
       const off = [...values]; off[flag] = disabled;
       await w.send({ type: 'pulse', timestamp: 1000, input: values, tempo: 160, accent: 1 });
       await w.send({ type: 'pulse', timestamp: 1000, input: off, tempo: 80, accent: 2 });
@@ -101,7 +101,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
       assert.deepEqual(recorded.inputs.map(e => e.accent), [1, 2, 3]);
       assert.deepEqual(recorded.inputs.map(e => e.tempo), [160, 80, 120]);
       assert.equal(recorded.motionEvents, undefined); assert.equal(recorded.tempoEvents, undefined);
-      const report = { ...recorded, type: 'musical-lights-phone-report-v7', palette: Array(72).fill(.5), layout: w.ready.layout };
+      const report = { ...recorded, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout };
       assert((await replayReport(report)).every(result => result.matches));
       // Losing the first eligible draw reproduces the old split-list ordering result.
       const reordered = structuredClone(report);
@@ -132,7 +132,7 @@ test('worker records same-tick ball changes in order with exact replay', async (
   const w = await worker();
   try {
     await w.send({ type: 'record', config: w.ready.config });
-    const values = new Float32Array(w.ready.layout[22]); values[32] = .4; values[62] = .2;
+    const values = new Float32Array(w.ready.layout[22]); values[32] = .4; values[62] = .2; values[67] = .6;
     for (const count of [0, 16, 8]) {
       values.set([count, .192, .192], 64);
       await w.send({ type: 'pulse', timestamp: 1000, input: values.slice(), tempo: 120, accent: 0 });
@@ -141,6 +141,71 @@ test('worker records same-tick ball changes in order with exact replay', async (
     await w.send({ type: 'report' });
     const report = w.messages.at(-1);
     assert.deepEqual(report.inputs.map(e => e.values[64]), [0, 16, 8]);
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v7', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
+  } finally { w.close(); }
+});
+
+test('worker constructs the restored cap and records same-tick cap edits during resize', async () => {
+  const config = Array.from(PhysicsSimulation.defaults()); config[11] = .4;
+  const w = await worker(config);
+  try {
+    await w.send({ type: 'snapshot', buffer: new ArrayBuffer(w.ready.layout[12] * 4) });
+    const initial = new Float32Array(w.messages.at(-1).buffer);
+    assert(Math.abs(initial[w.ready.layout[17] + 5] - .103) < 1e-6);
+    await w.send({ type: 'record', config: w.ready.config });
+    const values = new Float32Array(w.ready.layout[22]); values[32] = 2.6; values[62] = .48; values[67] = .6; values.set(config.slice(8, 11), 64);
+    await w.send({ type: 'pulse', timestamp: 1000, input: values.slice(), tempo: 120 });
+    values[67] = 2; values[64] = 16;
+    await w.send({ type: 'pulse', timestamp: 1000, input: values.slice(), tempo: 120 });
+    w.advance(1000);
+    values[67] = .4; values[32] = .55; values[64] = 8;
+    await w.send({ type: 'pulse', timestamp: 2000, input: values.slice(), tempo: 120 });
+    w.advance(1000);
+    await w.send({ type: 'report' });
+    const report = w.messages.at(-1);
+    assert.equal(report.type, 'report'); assert.equal(report.inputs[0].tick, report.inputs[1].tick);
+    assert.equal(report.requestedSubstepTotal, report.substepCosts.reduce((sum, [, steps, excess]) => sum + steps + excess, 0));
+    assert.equal(report.substepTotal, report.substepCosts.reduce((sum, [, steps]) => sum + steps, 0));
+    assert.deepEqual(report.inputs.map(e => Math.round(e.values[67] * 100)), [60, 200, 40]);
+    assert.deepEqual(report.inputs.map(e => e.values[64]), [2, 16, 8]);
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
+  } finally { w.close(); }
+});
+
+
+test('worker creates saved ball settings before any pulse without stored physics overrides', async () => {
+  const w = await worker();
+  try {
+    await w.send({ type: 'init', height: .6, balls: [8, .0264, .192], gapCap: .6,
+      palette: new Float32Array(72).fill(.5), paused: true });
+    const ready = w.messages.at(-1);
+    assert.equal(ready.type, 'ready');
+    assert.equal(ready.config[8], 8);
+    assert.equal(ready.defaults[8], 2);
+    await w.send({ type: 'snapshot', buffer: new ArrayBuffer(ready.layout[12] * 4) });
+    const first = w.messages.at(-1);
+    assert.equal(first.type, 'snapshot');
+    const state = new Float32Array(first.buffer);
+    assert.equal(state[2], 0, 'Ball settings apply during world creation, before any physics tick');
+    assert.equal(state[ready.layout[30]], 8);
+  } finally { w.close(); }
+});
+
+
+test('unchanged dance settings preserve recording while actual dance edits remain rejected', async () => {
+  const w = await worker();
+  const options = { scrollSpeed: 2, seed: 1, flight: .3, odds: [60, 200, .05, .5, 1] };
+  try {
+    await w.send({ type: 'record', config: w.ready.config });
+    await w.send({ type: 'dance', options });
+    assert(!w.messages.some(message => message.type === 'error'));
+    await w.send({ type: 'report' });
+    const report = w.messages.at(-1);
+    assert.equal(report.type, 'report'); assert.deepEqual(report.inputs, []);
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v8', palette: Array(72).fill(.5), layout: w.ready.layout })).every(row => row.matches));
+    await w.send({ type: 'record', config: w.ready.config });
+    await w.send({ type: 'dance', options: { ...options, flight: .4 } });
+    assert.equal(w.messages.at(-1).type, 'error');
+    assert.match(w.messages.at(-1).message, /Finish recording before changing dance settings/);
   } finally { w.close(); }
 });

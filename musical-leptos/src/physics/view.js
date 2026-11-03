@@ -58,18 +58,19 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(67);
+    this.input = new Float32Array(68);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
     this.seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
-    this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0, balls: [8, 2.64, 19.2] };
+    this.settings = this.card.preferences ?? { directionOdds: [60, 200, .05, .5, 1], flight: 30, cameraMotion: true, cameraAngle: 0, balls: [2, 2.64, 19.2] };
     this.cameraParameters = this.card.presentation?.cameraParameters ?? new CameraParameters(this.settings);
     this.cameraPan = new CameraPan(this.cameraParameters);
     const presentation = this.card.presentation;
     this.cameraPan.onStop = () => {
       if (this.cameraDirty) { presentation?.persist(); this.cameraDirty = false; }
     };
+    this.input[67] = (this.settings.activeGapCap ?? 60) / 100;
     this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
@@ -84,6 +85,7 @@ export class PhysicsView {
     });
     this.copies = this.meters.map((meter, i) => {
       const copy = document.createElement('span'); copy.className = 'bark-copy';
+      copy.style.width = '0%';
       copy.setAttribute('aria-hidden', 'true'); copy.dataset.sourceBand = i;
       for (const type of ['pointerenter', 'pointerleave']) copy.addEventListener(type, event => meter.dispatchEvent(new PointerEvent(type, { pointerType: event.pointerType })));
       this.graph.append(copy); return copy;
@@ -141,7 +143,7 @@ export class PhysicsView {
     this.worker.onmessage = event => this.receive(event.data);
     this.worker.onerror = event => this.fail(event.message);
     this.measure();
-    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, config: this.settings.physics ? [...this.settings.physics, this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100] : undefined, danceOptions: this.danceOptions() });
+    this.worker.postMessage({ type: 'init', palette, height: this.height, paused: document.hidden, physics: this.settings.physics, balls: [this.settings.balls[0], this.settings.balls[1] / 100, this.settings.balls[2] / 100], gapCap: this.input[67], danceOptions: this.danceOptions() });
     this.graph.physics = this;
     this.animate = frameTime => {
       this.request = null;
@@ -221,6 +223,9 @@ export class PhysicsView {
       this.lighting.configure(detail); this.resizePending = true;
       if (detail.physics) this.input[62] = detail.physics[5];
       this.input.set([detail.balls[0], detail.balls[1] / 100, detail.balls[2] / 100], 64);
+      const gapCap = Math.fround((detail.activeGapCap ?? 60) / 100);
+      if (gapCap !== this.input[67]) this.report?.invalidate('Active gap cap changed during test');
+      this.input[67] = gapCap;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
     this.listen(this.card, 'audio-tempo', ({ detail }) => {
@@ -386,7 +391,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout.length !== 31 || data.layout[18] !== 21 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 32 || data.layout[18] !== 22 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];
@@ -407,6 +412,7 @@ export class PhysicsView {
       this.config.splice(8, 3, ...this.current.slice(this.layout[30], this.layout[30] + 3));
       this.metrics.debt = data.debt; this.metrics.maxDebt = data.maxDebt;
       this.metrics.substepTotal = data.substepTotal; this.metrics.maxSubsteps = data.maxSubsteps; this.metrics.overloadTicks = data.overloadTicks;
+      this.metrics.requestedSubstepTotal = data.requestedSubstepTotal;
       this.metrics.physicsSteps = data.steps; this.metrics.physicsMs = data.totalCost;
       // Geometry and accessible surfaces must describe the newly published room,
       // even when a worker message arrives between animation frames.
@@ -415,8 +421,8 @@ export class PhysicsView {
       if ((this.report?.active || this.card.dataset.toneDiagnostics === 'true' || this.recordTiming) && this.timing.snapshots.length < 50000) this.timing.snapshots.push({ at: performance.now(), debt: data.debt, schedulingGap: data.schedulingGap, batchMs: data.batchMs, ticks: data.batchTicks, substeps: data.batchSubsteps, maxSubsteps: data.batchMaxSubsteps, height: this.current[1] });
       this.requestSnapshot();
     } else if (data.type === 'reset' || data.type === 'recording') {
-      this.config = data.config; this.input[62] = this.config[5]; this.input.set(this.config.slice(8, 11), 64);
-      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config).slice(0, 8); this.card.preferences.balls = [data.config[8], Math.round(data.config[9] * 10000) / 100, Math.round(data.config[10] * 10000) / 100]; this.card.presentation.save(); }
+      this.config = data.config; this.input[62] = this.config[5]; this.input[67] = this.config[11]; this.input.set(this.config.slice(8, 11), 64);
+      if (data.type === 'reset' && this.card.presentation) { this.card.preferences.physics = Array.from(data.config).slice(0, 8); this.card.preferences.balls = [data.config[8], Math.round(data.config[9] * 10000) / 100, Math.round(data.config[10] * 10000) / 100]; this.card.preferences.activeGapCap = Math.round(data.config[11] * 100); this.card.presentation.save(); }
       for (const snapshot of [this.previous, this.current]) if (snapshot) this.buffers.push(snapshot.buffer);
       // The layout and GPU resources stay fixed across a physics reset.
       // Only snapshot interpolation and local event history belong to the old world.
@@ -434,8 +440,10 @@ export class PhysicsView {
   makeMeshes() {
     this.disposeMeshes();
     const [count, , , pitch, joinWidth] = this.layout;
-    const ballGeometry = sphereGeometry(7);
+    // Keep closed smooth spheres with less per-vertex lighting work.
+    const ballGeometry = sphereGeometry(4);
     for (const name of ['pigmentA', 'pigmentB', 'pigmentC']) ballGeometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(this.layout[21] * 3), 3));
+    this.pigmentAttributes = ['pigmentA', 'pigmentB', 'pigmentC'].map(name => ballGeometry.attributes[name]);
     const ballMaterial = new THREE.MeshLambertMaterial({ transparent: false, opacity: 1, depthWrite: true });
     ballMaterial.onBeforeCompile = shader => {
       this.lighting.apply(shader);
@@ -541,11 +549,14 @@ export class PhysicsView {
       this.canvas.setAttribute('aria-label', `${active} rigid balls, matching top and bottom audio bars, inside a box with eight side banks`);
     }
     this.renderedDepth = depth; this.barRoof.value = height;
-    for (const [k, name] of ['pigmentA', 'pigmentB', 'pigmentC'].entries()) {
-      const attr = this.balls.geometry.attributes[name];
+    this.renderedBaseline = previous[geometry + 5] + (current[geometry + 5] - previous[geometry + 5]) * alpha;
+    this.renderedTravel = previous[geometry + 6] + (current[geometry + 6] - previous[geometry + 6]) * alpha;
+    for (let k = 0; k < this.pigmentAttributes.length; k++) {
+      const attr = this.pigmentAttributes[k];
       for (let i = 0; i < active; i++) {
-        if (this.pigments) attr.array.set(linearToHsluv(this.pigments.subarray(i * 9 + k * 3, i * 9 + k * 3 + 3)), i * 3);
-        else attr.array.set(linearToHsluv(current.subarray(3 + i * stride + 15, 3 + i * stride + 18)), i * 3);
+        const source = this.pigments ?? current;
+        const offset = this.pigments ? i * 9 + k * 3 : 3 + i * stride + 15;
+        linearToHsluv(source, offset, attr.array, i * 3);
       }
       attr.needsUpdate = true;
     }
@@ -568,8 +579,9 @@ export class PhysicsView {
     }
     for (let i = 0; i < count; i++) {
       const top = this.renderedTops[i] = previous[barOffset + i] + (current[barOffset + i] - previous[barOffset + i]) * alpha;
-      const maximum = previous[geometry + 1] + (current[geometry + 1] - previous[geometry + 1]) * alpha;
-      const wave = this.waveLight(i, top, maximum, now / 1000, !this.listening);
+      const motion = this.layout[31] + i;
+      const level = previous[motion] + (current[motion] - previous[motion]) * alpha;
+      const wave = this.waveLight(i, level, 1, now / 1000, !this.listening);
       const edge = this.listening ? this.edges[i] : wave * (this.reduced.matches ? .5 : 1);
       // Shared display levels contain audio loudness; physical travel also
       // includes the decorative listening floor and must not set brightness.
@@ -622,11 +634,10 @@ export class PhysicsView {
     this.camera.updateMatrixWorld();
     const height = this.current?.[this.layout?.[17]] ?? this.height;
     const maximum = this.current?.[this.layout?.[17] + 1] ?? this.height / 4;
-    for (const [property, y] of [['--balloon-headroom', maximum], ['--plot-baseline', .003]]) {
-      this.pointerPoint.set(0, y, frontDepth).project(this.camera);
-      const top = (1 - this.pointerPoint.y) * 50;
-      this.graph.style.setProperty(property, `${property === '--plot-baseline' ? 100 - top : top}%`);
-    }
+    this.pointerPoint.set(0, maximum, frontDepth).project(this.camera);
+    this.graph.style.setProperty('--balloon-headroom', `${(1 - this.pointerPoint.y) * 50}%`);
+    this.pointerPoint.set(0, this.current?.[this.layout?.[17] + 5] ?? .003, frontDepth).project(this.camera);
+    this.graph.style.setProperty('--plot-baseline', `${(1 + this.pointerPoint.y) * 50}%`);
     this.pointerPoint.set(0, height / 2, frontDepth).project(this.camera);
     const inset = (this.pointerPoint.x + 1) * 50;
     this.graph.style.setProperty('--plot-side-inset', `${inset}%`);
@@ -643,14 +654,26 @@ export class PhysicsView {
     }
     // One accessible node per source; only the pointer surface is copied at
     // the seam. Stationary frames do not repeat layout/style writes.
+    let seamCopy = null;
+    const seamLeft = this.projectMeter(0, height, frontDepth);
     for (let i = 0; i < count; i++) {
       const column = (i + phase) % count, group = this.groups[i], copy = this.copies[i];
-      const projected = x => { this.pointerPoint.set(x * pitch, height / 2, frontDepth).project(this.camera); return (this.pointerPoint.x + 1) * 50; };
-      const left = projected(column), right = projected(Math.min(count, column + 1));
+      const left = this.projectMeter(column * pitch, height, frontDepth), right = this.projectMeter(Math.min(count, column + 1) * pitch, height, frontDepth);
       group.style.left = `${left}%`; group.style.width = `${Math.max(0, right - left)}%`;
-      const seamLeft = projected(0), seamRight = projected(Math.max(0, column + 1 - count));
-      copy.style.left = `${seamLeft}%`; copy.style.width = `${Math.max(0, seamRight - seamLeft)}%`;
+      // Only one source crosses the seam. Hidden copies retain zero width;
+      // do not allocate and parse two CSS strings per hidden band per frame.
+      if (column + 1 > count) {
+        const seamRight = this.projectMeter((column + 1 - count) * pitch, height, frontDepth);
+        copy.style.left = `${seamLeft}%`; copy.style.width = `${Math.max(0, seamRight - seamLeft)}%`;
+        seamCopy = copy;
+      }
     }
+    if (this.seamCopy && this.seamCopy !== seamCopy) this.seamCopy.style.width = '0%';
+    this.seamCopy = seamCopy;
+  }
+  projectMeter(x, height, depth) {
+    this.pointerPoint.set(x, height / 2, depth).project(this.camera);
+    return (this.pointerPoint.x + 1) * 50;
   }
   push(levels, edges, scrolling = false) {
     // One owner updates accessible values for both live audio and idle PCM.

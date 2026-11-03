@@ -129,6 +129,26 @@ test('GPU backpressure keeps simulation and camera input active and resumes draw
   expect(result.blocked.x).toBeGreaterThan(result.start.x); expect(result.resumed).toBeGreaterThan(result.blocked.rendered); expect(result.stopped).toBe(false);
 });
 
+test('GPU backpressure releases an older frame while the newest frame is pending', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics, gl = v.renderer.getContext();
+    const wait = gl.clientWaitSync, fence = gl.fenceSync;
+    let latest;
+    v.gpuFrames.clear();
+    gl.fenceSync = function (...args) { latest = fence.apply(this, args); return latest; };
+    // A deterministic completion schedule: the preceding submission finishes
+    // while the latest stays pending. Exercise the actual render-loop gate.
+    gl.clientWaitSync = sync => sync === latest ? gl.TIMEOUT_EXPIRED : gl.CONDITION_SATISFIED;
+    const start = v.metrics.frames;
+    try {
+      for (let i = 0; i < 12; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+      return { frames: v.metrics.frames - start, queued: v.gpuFrames.queued };
+    } finally { gl.clientWaitSync = wait; gl.fenceSync = fence; v.gpuFrames.clear(); }
+  });
+  expect(result.frames).toBe(12); expect(result.queued).toBe(2);
+});
+
 test('normal scenes fill a larger centered frame before and after fullscreen', async ({ page }) => {
   await syntheticAudio(page);
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
@@ -391,7 +411,7 @@ test('physical depth changes preserve active audio and reset to the default with
     await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.renderedDepth)).toBeCloseTo(cm/100,5);
     expect(await page.evaluate(()=>{const v=document.querySelector('#dancinglights').physics;
       return {balls:v.balls.count,capacity:v.sideBars.capacity,same:[v.balls,v.bars,v.sideBars.mesh,v.enclosure].every((mesh,i)=>mesh===window.depthMeshes[i])};
-    })).toEqual({balls:8,capacity:400,same:true});
+    })).toEqual({balls:2,capacity:400,same:true});
   }
   await expect.poll(()=>page.evaluate(()=>window.depthAudioFrames)).toBeGreaterThan(5);
   await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state','playing');
@@ -459,7 +479,7 @@ test('full-size background boxes repeat all source bands beside the physical cen
     return results;
   });
   for (const result of results) {
-    expect(result.banks).toEqual([24,24,24,24,24,24,24,24]); expect(result.balls).toBe(8);
+    expect(result.banks).toEqual([24,24,24,24,24,24,24,24]); expect(result.balls).toBe(2);
     expect(result.boxes).toBe(1); expect(result.depth).toBeCloseTo(result.physicalDepth,6);
     expect(result.width).toBe(result.sourceWidth);
     expect(result.outerChanged,JSON.stringify(result)).toBeGreaterThan(16);
@@ -490,7 +510,7 @@ test('center supports and neighboring bars fill the same physical depth', async 
   expect(result.coatings).toBe(1);
   expect(result.outerWidth).toBeCloseTo(9*result.width,6);
   expect(result.outerCenter).toBeCloseTo(result.width/2,6);
-  expect(result.bodyCount).toBe(8); expect(result.physicalBalls).toBe(8);
+  expect(result.bodyCount).toBe(2); expect(result.physicalBalls).toBe(2);
   expect(result.sideCount).toBe(24 * 2 * 8); // zero-area columns at the box edges do not draw
 });
 
@@ -589,7 +609,7 @@ test('full-size background bands show lit faces and physical depth at oblique an
   for (const result of results) {
     expect(result.fills.length).toBeGreaterThanOrEqual(192);
     for (const brightness of result.fills) expect(brightness, JSON.stringify(result)).toBeGreaterThan(70);
-    expect(result.physicalBalls).toBe(8); expect(result.triangles).toBe(24);
+    expect(result.physicalBalls).toBe(2); expect(result.triangles).toBe(24);
     expect(Math.abs(result.depths[0][0] - result.depths[1][0])).toBeGreaterThan(.01);
     expect(Math.abs(result.depths[1][0] - result.depths[2][0])).toBeGreaterThan(.01);
   }
@@ -803,7 +823,7 @@ test('physical depth drawing reuses geometry and bounded GPU buffers', async ({ 
   });
   for(const record of evidence){
     expect(record.retained).toBe(true);expect(record.releases).toBe(0);expect(record.geometries).toBeLessThanOrEqual(6);
-    expect(record.balls).toBe(8);expect(record.boxes).toBe(1);expect(record.uploads.length).toBeGreaterThanOrEqual(2);
+    expect(record.balls).toBe(2);expect(record.boxes).toBe(1);expect(record.uploads.length).toBeGreaterThanOrEqual(2);
     for(const upload of record.uploads){expect(upload.actual).toBeGreaterThan(0);expect(upload.actual).toBeLessThanOrEqual(upload.capacity);}
   }
 });
@@ -833,7 +853,7 @@ test('WASD pans the website camera within the main box and preserves its audio w
       audioSession: !!v.card.dataset.audioSession, keys: v.cameraPan.keys.size, reduced: v.reduced.matches };
   });
   expect(state.x).toBe(0); expect(state.y).toBe(0); expect(state.world).toBe(true);
-  expect(state.balls).toBe(8); expect(state.meters).toBe(24); expect(state.keys).toBe(0);
+  expect(state.balls).toBe(2); expect(state.meters).toBe(24); expect(state.keys).toBe(0);
   expect(state.audioSession).toBe(false); expect(state.reduced).toBe(true);
   await page.locator('.display-controls > summary').click();
   await page.getByRole('button', { name: 'Reset display', exact: true }).click();
@@ -966,6 +986,47 @@ for (const route of ['/', '/advanced/']) test(`shared camera sliders persist, sy
   await page.locator('.display-controls > summary').click(); await page.getByRole('button', { name: 'Reset display', exact: true }).click();
   expect(await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return v.cameraParameters.values; })).toEqual({ cameraAngle: 0, cameraZoom: 100, cameraX: 50, cameraY: 50 });
   await expect(page.locator('.camera-zoom')).toHaveValue('100'); await expect(page.locator('.camera-x')).toHaveValue('50'); await expect(page.locator('.camera-y')).toHaveValue('50');
+});
+
+test('meter hit regions follow camera and seam changes without updating hidden copies', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await normal(page);
+  const result = await page.evaluate(async () => {
+    const v = document.querySelector('#dancinglights').physics;
+    v.pause();
+    const base = document.querySelector('meta[name="musical-lights-assets"]').content;
+    const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
+    const point = new THREE.Vector3(), project = v.pointerPoint.project;
+    const observer = new MutationObserver(() => {});
+    for (const copy of v.copies) observer.observe(copy, { attributes: true, attributeFilter: ['style'] });
+    let projects = 0, maxProjects = 0, maxCopyWrites = 0, maxError = 0;
+    v.pointerPoint.project = function(camera) { projects++; return project.call(this, camera); };
+    try {
+      for (const depth of [.2, 2]) for (const angle of [-30, 0, 30]) for (const phase of [0, .25, 1.25, 23.75, 0]) {
+        v.config[5] = depth; v.setCamera(angle); v.meterPhase = NaN;
+        projects = 0; observer.takeRecords(); v.positionMeters(phase);
+        maxProjects = Math.max(maxProjects, projects);
+        maxCopyWrites = Math.max(maxCopyWrites, observer.takeRecords().length);
+        const height = v.current[v.layout[17]], pitch = v.layout[3], count = v.meters.length;
+        const projected = column => (point.set(column * pitch, height / 2, depth / 2).project(v.camera).x + 1) * 50;
+        for (let i = 0; i < count; i++) {
+          const column = (i + phase) % count, left = projected(column), right = projected(Math.min(count, column + 1));
+          const width = Math.max(0, projected(Math.max(0, column + 1 - count)) - projected(0));
+          maxError = Math.max(maxError, Math.abs(parseFloat(v.groups[i].style.left) - left),
+            Math.abs(parseFloat(v.groups[i].style.width) - Math.max(0, right - left)),
+            Math.abs(parseFloat(v.copies[i].style.width) - width));
+          if (width > 0) maxError = Math.max(maxError, Math.abs(parseFloat(v.copies[i].style.left) - projected(0)));
+        }
+      }
+      observer.takeRecords(); v.positionMeters(0);
+      return { maxError, maxProjects, maxCopyWrites, stationaryCopyWrites: observer.takeRecords().length,
+        accessibleMeters: v.graph.querySelectorAll('[role="meter"]').length };
+    } finally { v.pointerPoint.project = project; observer.disconnect(); }
+  });
+  expect(result.maxError, JSON.stringify(result)).toBeLessThan(.001);
+  expect(result.maxProjects).toBeLessThanOrEqual(53);
+  expect(result.maxCopyWrites).toBeLessThanOrEqual(3);
+  expect(result.stationaryCopyWrites).toBe(0);
+  expect(result.accessibleMeters).toBe(24);
 });
 
 test('zoomed-out production projection visibly includes three banks and aligns meter hit regions', async ({ page }, info) => {
@@ -1108,5 +1169,58 @@ test('active microphone PCM reaches the BPM counter, rejects stale packets and r
     await info.attach('tempo-delivery.json', { body: JSON.stringify(await page.evaluate(() => ({
       ...tempoDelivery, packets: tempoCapture.packets, sessions: tempoCapture.nodes.length,
     }))), contentType: 'application/json' });
+  }
+});
+
+
+test('scrolling background updates reuse attributes and preserve all copied data without temporary views', async ({ page }) => {
+  await page.goto(origin + '/advanced/'); await physicsReady(page); await normal(page);
+  const samples = await page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics, side = v.sideBars;
+    const current = v.current, previous = v.previous;
+    v.current = current.slice(); v.previous = (previous ?? current).slice();
+    const arrays = [side.mesh.instanceMatrix.array, side.mesh.instanceColor.array, side.geometry.attributes.rampHeights.array];
+    const results = [];
+    try {
+      for (const phase of [.001, .5, 23.999]) {
+        v.current[v.layout[20]] = v.previous[v.layout[20]] = phase;
+        v.updateScene(performance.now());
+        const source = [v.bars.instanceMatrix.array, v.bars.instanceColor.array, v.bars.geometry.attributes.rampHeights.array];
+        const descriptors = source.map(array => Object.getOwnPropertyDescriptor(array, 'subarray'));
+        let temporaryViews = 0;
+        try {
+          for (const array of source) Object.defineProperty(array, 'subarray', { configurable: true,
+            value(...args) { temporaryViews++; return Float32Array.prototype.subarray.apply(this, args); } });
+          side.update(v.layout);
+        } finally {
+          source.forEach((array, i) => { if (descriptors[i]) Object.defineProperty(array, 'subarray', descriptors[i]); else delete array.subarray; });
+        }
+        let matched = 0;
+        for (let n = 0; n < side.mesh.count; n++) {
+          let index;
+          const offset = Math.round(side.offsets[n] / v.layout[2]) * v.layout[2];
+          for (let i = 0; i < v.bars.count; i++) {
+            let matches = true;
+            for (let component = 0; component < 16; component++) {
+              const expected = component === 12 ? Math.fround(source[0][i * 16 + component] + offset) : source[0][i * 16 + component];
+              if (arrays[0][n * 16 + component] !== expected) { matches = false; break; }
+            }
+            if (matches) { index = i; break; }
+          }
+          if (index === undefined) continue;
+          if ([0, 1, 2].every(component => arrays[1][n * 3 + component] === source[1][index * 3 + component]
+            && arrays[2][n * 3 + component] === source[2][index * 3 + component])
+            && side.sourceBands[n] === index % v.layout[0]) matched++;
+        }
+        results.push({ phase, temporaryViews, matched, count: side.mesh.count,
+          reused: arrays[0] === side.mesh.instanceMatrix.array && arrays[1] === side.mesh.instanceColor.array
+            && arrays[2] === side.geometry.attributes.rampHeights.array });
+      }
+    } finally { v.current = current; v.previous = previous; }
+    return results;
+  });
+  for (const sample of samples) {
+    expect(sample.count).toBeGreaterThan(0); expect(sample.matched, JSON.stringify(sample)).toBe(sample.count);
+    expect(sample.reused).toBe(true); expect(sample.temporaryViews).toBe(0);
   }
 });

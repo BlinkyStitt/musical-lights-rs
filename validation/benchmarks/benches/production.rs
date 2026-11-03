@@ -132,10 +132,11 @@ fn measured_levels() -> Vec<[f32; 24]> {
         .collect()
 }
 
-fn simulation(height: f32) -> Simulation {
+fn simulation(height: f32, gap_cap: f32) -> Simulation {
     let mut sim = Simulation::new(
         SimulationConfig {
             height,
+            gap_cap,
             ..Default::default()
         },
         {
@@ -166,6 +167,7 @@ fn replay(sim: &mut Simulation, levels: &[[f32; 24]], full_attack: bool) -> f32 
                 *levels
             },
             height: sim.config.height,
+            gap_cap: sim.config.gap_cap,
             scrolling: !full_attack,
             ..Default::default()
         })
@@ -182,19 +184,21 @@ fn physics(c: &mut Criterion) {
     assert_eq!(levels.len(), TICKS);
     let mut group = c.benchmark_group("production_physics");
     group.throughput(Throughput::Elements(TICKS as u64));
-    for (name, height, full_attack) in [
-        ("music_portrait", 2.596923, false),
-        ("music_landscape", 0.554502, false),
-        ("full_attack_portrait", 2.596923, true),
+    for (name, height, gap_cap, full_attack) in [
+        ("music_portrait_capped", 2.596923, 0.6, false),
+        ("music_portrait_uncapped", 2.596923, 20.0, false),
+        ("music_landscape", 0.554502, 0.6, false),
+        ("full_attack_portrait_capped", 2.596923, 0.6, true),
+        ("full_attack_portrait_uncapped", 2.596923, 20.0, true),
     ] {
         assert_eq!(
-            replay(&mut simulation(height), &levels, full_attack),
+            replay(&mut simulation(height, gap_cap), &levels, full_attack),
             0.0,
             "overload in {name}"
         );
         group.bench_function(name, |b| {
             b.iter_batched_ref(
-                || simulation(height),
+                || simulation(height, gap_cap),
                 |sim| black_box(replay(sim, black_box(&levels), full_attack)),
                 BatchSize::PerIteration,
             );

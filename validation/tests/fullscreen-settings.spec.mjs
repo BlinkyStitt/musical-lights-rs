@@ -485,7 +485,7 @@ for (const path of ['/', '/advanced/']) {
     const big = page.getByRole('slider', { name: 'Big ball (cm)', exact: true });
     // Camera and ball preferences share the relocated controls and reset owner.
     await page.locator('.camera-zoom').fill('135');
-    await expect(count).toHaveValue('8'); await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2');
+    await expect(count).toHaveValue('2'); await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2');
     for (const n of [0, 16, 8, 0, 16, 8]) {
       await count.fill(String(n));
       // Normal-page settings can scroll the scene out of view. Return to the
@@ -543,7 +543,7 @@ for (const path of ['/', '/advanced/']) {
     await expect(small).toHaveValue('19.2'); await expect(count).toHaveValue('8');
     await expect(page.locator('.camera-zoom')).toHaveValue('135');
     await page.locator('.display-controls > summary').click(); await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Reset display', exact: true }));
-    await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2'); await expect(count).toHaveValue('8');
+    await expect(small).toHaveValue('2.64'); await expect(big).toHaveValue('19.2'); await expect(count).toHaveValue('2');
     await expect(page.locator('.camera-zoom')).toHaveValue('100');
     expect(errors).toEqual([]);
   });
@@ -564,7 +564,7 @@ test('ball settings transitions render the room and bodies from the same applied
       const sim = new PhysicsSimulation(config, new Float32Array(v.palette));
       try {
         const previous = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), v.layout[12]).slice();
-        const input = new Float32Array(v.layout[22]); input[32] = .4; input[62] = .2; input.set([16, .192, .192], 64);
+        const input = new Float32Array(v.layout[22]); input[32] = .4; input[62] = .2; input.set([16, .192, .192], 64); input[67] = config[11];
         sim.input(input); sim.step();
         v.previous = previous;
         v.current = new Float32Array(wasm.memory.buffer, sim.snapshot_ptr(), v.layout[12]).slice();

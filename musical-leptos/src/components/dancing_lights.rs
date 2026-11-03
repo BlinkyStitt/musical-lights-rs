@@ -583,6 +583,9 @@ pub fn DancingLights(
                         <p class="direction-error" role="status"></p>
                     </fieldset>
                     <div class="control-row"><label for="flight-height-slider">"Flight height (% of available space)"</label><input id="flight-height-slider" aria-label="Flight height (% of available space)" class="flight-height" type="range" min="0" max="50" step="1" value="30"/></div>
+                    <div class="control-row"><label for="active-gap-cap-slider">"Active gap cap (cm)"</label><input id="active-gap-cap-slider" aria-label="Active gap cap (cm)" aria-describedby="active-gap-description" class="active-gap-cap" type="range" min="40" max="2000" step="1" value="60"/><button type="button" class="active-gap-status">"60 cm"</button></div>
+                    <p id="active-gap-description">"Limits the active opening in tall boxes. Equal permanent bases fill the extra height. Ball and flight clearance reduce actual bar travel."</p>
+                    <button type="button" class="active-gap-help" aria-label="About active gap cap" aria-expanded="false" data-explanation="The cap limits the active opening, not the stroke. Ball and flight clearance reduce actual bar travel. Equal permanent bases fill extra height; changes apply live without starting audio.">"About active gap cap"</button>
                     <label class="setting-switch"><input class="camera-motion" type="checkbox" checked/><span>"Camera motion"</span></label>
                     <p>"Smooth left-to-right rotation from the selected angle. The sweep stays within ±40°. Reduced Motion stops the automatic rotation."</p>
                     <button class="display-reset" on:click=move |_| set_scrolling.set(true)>"Reset display"</button>

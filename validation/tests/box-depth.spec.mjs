@@ -23,10 +23,10 @@ test('box depth updates physical boundaries and all nine banks without resetting
     expect(state.tick).toBeGreaterThan(before.tick);
     // Physics keeps running, so real contacts may paint during these UI actions.
     // The native depth test checks exact pigment preservation at the resize.
-    expect(state.pigments).toHaveLength(8*9);
+    expect(state.pigments).toHaveLength(2*9);
     // Continuous fill mixes validated palette colors; each linear channel stays bounded.
     for (const channel of state.pigments) { expect(channel).toBeGreaterThanOrEqual(0); expect(channel).toBeLessThanOrEqual(1); }
-    expect(state.balls).toBe(8);expect(state.copied).toBe(false);expect(state.transparent).toBe(false);expect(state.opacity).toBe(1);expect(state.depthWrite).toBe(true);
+    expect(state.balls).toBe(2);expect(state.copied).toBe(false);expect(state.transparent).toBe(false);expect(state.opacity).toBe(1);expect(state.depthWrite).toBe(true);
     expect(state.depth).toBeCloseTo(cm/100,5);expect(state.coating).toBeCloseTo(cm/100,5);expect(state.width).toBeCloseTo(10.8,5);
     for(const depth of [...state.sourceDepth,...state.sideDepth])expect(depth).toBeCloseTo(cm/100,5);
     expect(state.shifts).toHaveLength(8);
@@ -55,7 +55,7 @@ test('opaque physical balls occlude the background and depth changes retain boun
     const THREE=await import(new URL(base+'physics/three.module.js',document.baseURI));v.draw(performance.now());
     const saved=v.scene.children.map(mesh=>mesh.visible),background=v.scene.background;
     const target=new THREE.WebGLRenderTarget(320,240),pixels=new Uint8Array(320*240*4),samples=[];
-    const center=new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().fromArray(v.balls.instanceMatrix.array,6*16));
+    const center=new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().fromArray(v.balls.instanceMatrix.array,(v.balls.count-1)*16));
     const camera=new THREE.PerspectiveCamera(30,320/240,.01,20);camera.position.copy(center).add(new THREE.Vector3(0,0,1));camera.lookAt(center);camera.updateMatrixWorld();
     try {
       v.scene.children.forEach(mesh=>{if(mesh!==v.balls&&!mesh.isLight)mesh.visible=false;});
@@ -67,7 +67,7 @@ test('opaque physical balls occlude the background and depth changes retain boun
     } finally {v.scene.background=background;v.scene.children.forEach((mesh,i)=>{mesh.visible=saved[i];});v.renderer.setRenderTarget(null);target.dispose();}
   });
   expect(evidence.samples[0].center).toEqual(evidence.samples[1].center);expect(evidence.samples[0].center[3]).toBe(255);
-  expect(evidence.samples[0].corner).not.toEqual(evidence.samples[1].corner);expect(evidence.balls).toBe(8);expect(evidence.geometries).toBeLessThanOrEqual(6);
+  expect(evidence.samples[0].corner).not.toEqual(evidence.samples[1].corner);expect(evidence.balls).toBe(2);expect(evidence.geometries).toBeLessThanOrEqual(6);
   await info.attach('opaque-balls.json',{body:JSON.stringify(evidence),contentType:'application/json'});
 });
 
@@ -76,14 +76,15 @@ test('browser WASM starts balls uniformly in the source band at their spawn X',a
   const colors=await page.evaluate(async()=>{
     const v=document.querySelector('#dancinglights').physics,base=document.querySelector('meta[name="musical-lights-assets"]').content;
     const {default:init,PhysicsSimulation}=await import(new URL(base+'physics/physics.js',document.baseURI));const wasm=await init();
-    const sim=new PhysicsSimulation(PhysicsSimulation.defaults(),new Float32Array(v.palette));
+    const config=PhysicsSimulation.defaults();config[8]=8; // Retain the complete original spawn profile.
+    const sim=new PhysicsSimulation(config,new Float32Array(v.palette));
     try {
       const layout=PhysicsSimulation.layout(),state=new Float32Array(wasm.memory.buffer,sim.snapshot_ptr(),layout[12]);
       const pigments=new Float32Array(wasm.memory.buffer,sim.pigments_ptr(),layout[21]*9);
       return {version:layout[18],palette:Array.from(new Float32Array(v.palette)),balls:Array.from({length:8},(_,i)=>({x:state[3+i*layout[8]],color:Array.from(state.slice(3+i*layout[8]+15,3+i*layout[8]+18)),pigments:Array.from(pigments.slice(i*9,i*9+9))}))};
     } finally {sim.free();}
   });
-  expect(colors.version).toBe(21);
+  expect(colors.version).toBe(22);
   for(const [i,band] of [6,18,10,2,6,22,2,14].entries()) {
     const ball=colors.balls[i],expected=colors.palette.slice(band*3,band*3+3);
     expect(ball.x).toBeGreaterThanOrEqual(band*.05-1e-6);expect(ball.x).toBeLessThan((band+1)*.05+1e-6);expect(ball.color).toEqual(expected);

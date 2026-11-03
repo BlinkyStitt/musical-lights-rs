@@ -33,7 +33,7 @@ export async function timingIdentity(root = process.cwd(), expectedBuild) {
     if (bytes !== null) artifact.update(path).update('\0').update(sha256(bytes));
   }
   const instrumentation = {};
-  for (const path of ['tilt-lighting-timing.mjs', 'tilt-shadow-candidate.mjs', 'tilt-timing-evidence.mjs']) {
+  for (const path of ['tilt-lighting-timing.mjs', 'tilt-shadow-candidate.mjs', 'tilt-timing-evidence.mjs', 'performance-processes.mjs', 'browser-stall.mjs']) {
     instrumentation[path] = sha256(await readFile(resolve(root, 'validation', path)));
   }
   return { build, artifactSha256: artifact.digest('hex'), sources, instrumentation };

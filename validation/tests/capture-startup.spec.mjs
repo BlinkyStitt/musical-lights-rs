@@ -50,8 +50,8 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     const targets = () => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.input.slice(0, 24)));
     const renderedRatio = () => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      const travel = v.current[v.layout[17] + 1] - v.layout[13];
-      return Math.max(...Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.layout[13]) / travel));
+      const travel = v.renderedTravel;
+      return Math.max(...Array.from({ length: 24 }, (_, i) => (v.renderedHeight(i) - v.renderedBaseline) / travel));
     });
     await expect.poll(targets).toBe(0);
     // Check past the reported one-second shutdown, then inject actual capture
@@ -69,8 +69,8 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
       const start = performance.now(), peak = { target: 0, rendered: 0, ratio: 0 };
       const sample = () => {
         peak.target = Math.max(peak.target, ...v.input.slice(0, 24));
-        const rendered = Math.max(...Array.from({ length: 24 }, (_, i) => v.renderedHeight(i) - v.layout[13]));
-        const ratio = rendered / (v.current[v.layout[17] + 1] - v.layout[13]);
+        const rendered = Math.max(...Array.from({ length: 24 }, (_, i) => v.renderedHeight(i) - v.renderedBaseline));
+        const ratio = rendered / v.renderedTravel;
         if (ratio > peak.ratio) { peak.rendered = rendered; peak.ratio = ratio; }
         if ((peak.target > .2 && peak.rendered > .05 && peak.ratio > .2) || performance.now() - start >= 5000) {
           resolve(peak); return;

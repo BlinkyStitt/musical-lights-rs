@@ -48,8 +48,7 @@ VALIDATORS = {
     "rust (core)",
     "loudness-reference",
     "Build website",
-    "GPU browser (1)",
-    "GPU browser (2)",
+    *(f"GPU browser ({host}, {shard})" for host in ("nuc3",) for shard in (1, 2)),
     "Validated website",
     "Required website checks",
 }
@@ -393,6 +392,7 @@ def site_affected(paths):
             )
         )
         or path.startswith("docs/audio-audit-results/")
+        or path == ".github/workflows/gpu-runner-network.yml"
         for path in paths
     )
 
