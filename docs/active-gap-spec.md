@@ -32,9 +32,9 @@ normal changes, where the normalized blend is not bounded. The signed-clearance
 derivative contributes to the existing contact-work estimate only for reachable
 walls. The top/bottom surfaces and selected physical depth remain authoritative.
 A bounded pool covers all nine rendered banks and their scrolling seams. Disable
-posts outside the conservative viewport/ball reach, without removing collisions
-from a visible bank. Keep rendering, contacts and source pigments aligned.
-Protocol 25 and phone report v12 include both side planes in every recorded input;
+posts outside the conservative ball reach and reactivate them before contact in
+any visible bank. Keep rendering, contacts and source pigments aligned.
+Protocol 26 and phone report v13 include both side planes in every recorded input;
 reject older recordings with the matching-engine error.
 
 Worker recordings retain initial cap and applied edits in FIFO order, including

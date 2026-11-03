@@ -43,6 +43,24 @@ fn ramp_width(index: usize) -> f32 {
         BRIDGE_WIDTH
     }
 }
+// Disabled bodies retain old poses. Derive prescribed X from the current
+// phase both for reachable-contact speeds and for collider activation.
+fn ramp_x(index: usize, phase: f64) -> f32 {
+    let column = index / 2;
+    let x = (((column % COUNT) as f64
+        + 0.5
+        + phase
+        + (column / COUNT % SURFACE_BANKS + HALF_BANKS) as f64 * COUNT as f64)
+        .rem_euclid((COUNT * SURFACE_BANKS) as f64)
+        - (COUNT * HALF_BANKS) as f64)
+        * f64::from(PITCH);
+    x as f32 - CAP_WIDTH / 2.0
+        + if index.is_multiple_of(2) {
+            0.0
+        } else {
+            CAP_WIDTH
+        }
+}
 pub const POST_HEIGHT: f32 = 20.0;
 pub const MAX_SUBSTEPS: usize = 128;
 pub const MIN_HEIGHT: f32 = 0.40;
@@ -912,8 +930,8 @@ impl Simulation {
             .bars
             .iter()
             .enumerate()
-            .filter_map(|(copy, &(h, _))| {
-                let post = &self.world.bodies[h];
+            .filter_map(|(copy, _)| {
+                let x = ramp_x(copy, self.scroll_phase);
                 let column = copy / 2;
                 let band = column % COUNT;
                 let speed = bar_speeds[(band + COUNT - 1) % COUNT]
@@ -931,7 +949,7 @@ impl Simulation {
                         let body = &self.world.bodies[ball];
                         let radius = f64::from(self.config.balls.diameter(i) / 2.0);
                         body.is_enabled()
-                            && f64::from((body.translation().x - post.translation().x).abs())
+                            && f64::from((body.translation().x - x).abs())
                                 <= reach_x + radius + ball_reach
                             && if copy >= SURFACE_END_COUNT {
                                 f64::from(body.translation().y) + radius + ball_reach
@@ -1009,39 +1027,10 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 1] = required.saturating_sub(MAX_SUBSTEPS) as f32;
         self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
-        // Only posts inside the swept viewport/ball range can contact a ball.
-        // The pool covers every rendered bank, including both scrolling seams.
-        let mut lower = -4.0 * WIDTH;
-        let mut upper = 5.0 * WIDTH;
-        for p in self.input.side_planes {
-            if p[0].abs() < 0.00001 {
-                continue;
-            }
-            let mut lo = f32::INFINITY;
-            let mut hi = f32::NEG_INFINITY;
-            for y in [0.0, self.ceiling_height] {
-                for z in [-self.config.depth / 2.0, self.config.depth / 2.0] {
-                    let x = (-p[3] - p[1] * y - p[2] * z) / p[0];
-                    lo = lo.min(x);
-                    hi = hi.max(x);
-                }
-            }
-            if p[0] > 0.0 {
-                lower = lower.max(lo);
-            } else {
-                upper = upper.min(hi);
-            }
-        }
-        for (i, &(h, _)) in self.balls.iter().enumerate() {
-            let body = &self.world.bodies[h];
-            if body.is_enabled() {
-                let reach = self.config.balls.diameter(i) / 2.0 + ball_reach as f32;
-                lower = lower.min(body.translation().x - reach);
-                upper = upper.max(body.translation().x + reach);
-            }
-        }
-        lower = lower.max(-4.0 * WIDTH);
-        upper = upper.min(5.0 * WIDTH);
+        // Keep colliders near every ball, including its conservative velocity,
+        // force and driven-contact reach. The rendered viewport can contain
+        // many empty banks; those banks do not need collision updates.
+        let surface_speed = bar_speeds.into_iter().fold(wall_speed, f64::max);
         let new_attacks: [bool; COUNT] = std::array::from_fn(|i| {
             self.input.attacks[i] > 0.0 && self.input.attacks[i] > self.previous_attacks[i]
         });
@@ -1104,22 +1093,26 @@ impl Simulation {
                 self.bar_positions[i] = next;
             }
             self.surface = BarSurface::new(&self.bar_positions);
+            // Recompute after each contact step: an earlier impact can change
+            // a ball's velocity. Bound travel for this substep, with doubled
+            // relative speed and a full outer tick of force prediction padding.
+            let mut lower = f32::INFINITY;
+            let mut upper = f32::NEG_INFINITY;
+            for (i, &(handle, _)) in self.balls.iter().enumerate() {
+                let body = &self.world.bodies[handle];
+                if body.is_enabled() {
+                    let speed = f64::from(body.linvel().length());
+                    let reach = self.config.balls.diameter(i) / 2.0
+                        + (2.0 * (speed + surface_speed) * f64::from(dt) + margin) as f32
+                        + PITCH;
+                    lower = lower.min(body.translation().x - reach);
+                    upper = upper.max(body.translation().x + reach);
+                }
+            }
             for (index, &(handle, collider)) in self.bars.iter().enumerate() {
                 let column = index / 2;
                 let band = column % COUNT;
-                let x = ((band as f64
-                    + 0.5
-                    + self.scroll_phase
-                    + (column / COUNT % SURFACE_BANKS + HALF_BANKS) as f64 * COUNT as f64)
-                    .rem_euclid((COUNT * SURFACE_BANKS) as f64)
-                    - (COUNT * HALF_BANKS) as f64)
-                    * f64::from(PITCH);
-                let x = x as f32 - CAP_WIDTH / 2.0
-                    + if index.is_multiple_of(2) {
-                        0.0
-                    } else {
-                        CAP_WIDTH
-                    };
+                let x = ramp_x(index, self.scroll_phase);
                 let body = &mut self.world.bodies[handle];
                 let active = x + ramp_width(index) >= lower && x <= upper;
                 if !active {
@@ -1726,7 +1719,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            25.0, // normalized plane sweeps preserve shared free space
+            26.0, // conservative ball-range collider updates and current-phase reach
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,

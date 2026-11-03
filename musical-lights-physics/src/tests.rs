@@ -3118,7 +3118,20 @@ fn settled_cap_keeps_reference_travel_and_timing_at_every_enclosure_height() {
             height,
             ..eight_ball_config()
         });
-        isolate(&mut sim, &[]);
+        // Keep balls spread across the center bank so these physical surfaces
+        // remain in the collision range while we check their prescribed poses.
+        for i in 0..BALL_COUNT {
+            place(
+                &mut sim,
+                i,
+                Vector::new(
+                    (i as f32 + 0.5) * WIDTH / BALL_COUNT as f32,
+                    height / 2.0,
+                    0.0,
+                ),
+                Vector::ZERO,
+            );
+        }
         input(&mut sim, [1.0; COUNT]);
         let mut trajectory = Vec::new();
         for _ in 0..6 {
@@ -3407,4 +3420,113 @@ fn wall_rotation_keeps_the_shared_free_space_free_of_phantom_contacts() {
     assert!(velocity(&sim, 0).length() < 0.001);
     assert!(sim.snapshot.values[COST_OFFSET] <= 3.0);
     assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
+}
+
+#[test]
+fn empty_viewport_banks_do_not_add_collision_work_or_change_ball_motion() {
+    let run = |sides| {
+        let mut sim = world(SimulationConfig::default());
+        let mut snapshots = Vec::new();
+        for tick in 0..HZ * 3 {
+            sim.apply(SimulationInput {
+                tick: u64::from(tick),
+                levels: std::array::from_fn(|i| ((tick as usize / 13 + i) % 5) as f32 / 5.0),
+                side_planes: sides,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            sim.step();
+            snapshots.push(sim.snapshot.clone());
+            let enabled = sim
+                .bars
+                .iter()
+                .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
+                .count();
+            assert!(
+                enabled < SURFACE_END_COUNT / 2,
+                "{enabled} posts for two nearby balls"
+            );
+        }
+        (snapshots, sim.pigments)
+    };
+    assert_eq!(
+        run([[1.0, 0.0, 0.0, 2.4], [-1.0, 0.0, 0.0, 3.6]]),
+        run([[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]])
+    );
+}
+
+#[test]
+fn inactive_post_coordinates_cannot_change_the_contact_speed_bound() {
+    let run = |stale| {
+        let mut sim = world(eight_ball_config());
+        isolate(&mut sim, &[0]);
+        sim.apply(SimulationInput {
+            side_planes: [[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]],
+            ..eight_ball_input()
+        })
+        .unwrap();
+        sim.step();
+        if stale {
+            for &(h, _) in &sim.bars {
+                let body = &mut sim.world.bodies[h];
+                if !body.is_enabled() {
+                    body.set_translation(body.translation() + Vector::X * 100.0, false);
+                }
+            }
+        }
+        place(
+            &mut sim,
+            0,
+            Vector::new(
+                3.0 * WIDTH + 10.5 * PITCH,
+                radius(0) + BASELINE + 0.005,
+                0.0,
+            ),
+            Vector::ZERO,
+        );
+        let mut snapshots = Vec::new();
+        for _ in 0..8 {
+            let mut levels = [0.0; COUNT];
+            levels[10] = 1.0;
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels,
+                ..sim.input
+            })
+            .unwrap();
+            sim.step();
+            snapshots.push(sim.snapshot.clone());
+        }
+        snapshots
+    };
+    assert_eq!(run(false), run(true));
+}
+
+#[test]
+fn fast_wall_resize_does_not_enable_empty_banks_for_every_substep() {
+    let mut sim = world(SimulationConfig::default());
+    sim.apply(SimulationInput {
+        side_planes: [[1.0, 0.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 0.3]],
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    sim.step();
+    assert_eq!(sim.snapshot.values[COST_OFFSET], MAX_SUBSTEPS as f32);
+    let enabled = sim
+        .bars
+        .iter()
+        .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
+        .count();
+    assert!(
+        enabled < COUNT * 8,
+        "{enabled} posts for the narrow swept ball span"
+    );
+    for _ in 0..HZ {
+        sim.step();
+    }
+    for (i, &(h, _)) in sim.balls.iter().enumerate() {
+        let x = sim.world.bodies[h].translation().x;
+        let radius = sim.config.balls.diameter(i) / 2.0;
+        assert!(x >= radius - 0.004 && x <= 0.3 - radius + 0.004);
+    }
 }

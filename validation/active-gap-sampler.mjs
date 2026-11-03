@@ -90,7 +90,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       const evaluation = evaluatePerformance({ intervals, renderCosts, progress, maxSnapshotAgeMs,
         invalid: invalidReasons, hz: layout[1], data });
       cleanup();
-      resolve({ ...data, type: 'musical-lights-phone-report-v12', layout, palette, config: data.config,
+      resolve({ ...data, type: 'musical-lights-phone-report-v13', layout, palette, config: data.config,
         mode, viewport, camera: JSON.parse(camera), cameraBase, cameraMotion, scrolling, workload,
         physicalPhone: false, evidenceEnvironment: 'hardware-rendered desktop Chromium with mobile viewport',
         warmupSeconds: 15, measurementSeconds: 300, frameIntervalsMs: intervals, renderCostsMs: renderCosts,

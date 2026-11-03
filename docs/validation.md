@@ -8,9 +8,18 @@ check travel and flight against the same reference at every supported height.
 `box-depth.spec.mjs` checks actual live balls at both screen edges after viewport
 changes. Native tests cover each of the nine banks, moving side planes, source
 pigments, invalid inputs and exact replay. The browser supplies its actual camera
-frustum planes; it does not clamp rendered ball positions. Protocol 25/report v12
+frustum planes; it does not clamp rendered ball positions. Protocol 26/report v13
 record the planes with all other fixed-tick inputs. The selected depth and the
 top/bottom bar surfaces still constrain physical motion.
+
+Collision updates use the balls' conservative reach, not the width of empty
+visible banks. The worker recomputes that range after each contact step and
+retains twice the substep velocity/moving-surface reach and a whole outer tick
+of force prediction padding.
+Disabled posts use the current scroll phase when the worker bounds contact
+speeds. Native tests retain all nine banks, fast impacts and source pigments.
+The changed solver ordering can change trajectories; older reports require the
+matching historical engine. Current reports must replay exactly at 30/60/120 Hz.
 
 The approved temporary frame requirement is 30 FPS, p95 at most 37 ms and fewer
 than 1% of submitted intervals over 50 ms. The shared `hardwareFrameBudget` in

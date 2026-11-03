@@ -239,7 +239,7 @@ export class PhoneReport {
     }
     if (data.type === 'report') {
       const intervals = Array.from(this.intervals.subarray(0, this.count));
-      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v12',
+      this.result = { ...this.metadata, ...data, type: 'musical-lights-phone-report-v13',
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         invalidReasons: this.invalid, simulationProgress: this.progress, maxSnapshotAgeMs: this.maxSnapshotAgeMs,
         ...evaluatePerformance({ intervals, renderCosts: Array.from(this.renderCosts.subarray(0, this.costCount)),
