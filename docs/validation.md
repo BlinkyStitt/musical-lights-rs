@@ -152,7 +152,15 @@ Fork artifacts, failed or incomplete runs, changed inputs, corrupt files and
 expired artifacts cannot replace validation. A miss performs the complete
 pinned build and checks. Reuse does not modify the tested files or relabel their
 embedded build identity: the deployment run records its own main commit and
-links to the original producer.
+links to the original producer. This reuses the complete successful PR validation,
+including both GPU shards, fullscreen recovery, latency and tilt acceptance.
+The merge run does not repeat GPU timing on unchanged bytes. GPU transfer and
+acceptance jobs run whenever fresh validation is required. The validation barrier
+requires every fresh validator to succeed, or every reused validator to be
+explicitly skipped with an identified trusted producer and verified build.
+Missing, failed, canceled or duplicate producer validators reject reuse. This
+preserves the performance thresholds, one worker, zero retries and all required
+coverage; it does not establish more repeatable hardware frame times.
 
 Pages receives the exact validated `dist`, waits for the validation barrier,
 and checks current main before publishing. Publishing stays serialized and is

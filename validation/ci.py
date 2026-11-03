@@ -8,6 +8,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -279,7 +280,10 @@ def reusable(repository, expected, read=api, fetch=download):
             f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
         )["jobs"]
         passed = {job["name"] for job in jobs if job["conclusion"] == "success"}
-        if not VALIDATORS.issubset(passed):
+        counts = Counter(job["name"] for job in jobs)
+        if not VALIDATORS.issubset(passed) or any(
+            counts[name] != 1 for name in VALIDATORS
+        ):
             continue
         with tempfile.TemporaryDirectory() as directory:
             try:
@@ -409,6 +413,29 @@ def website_required(event_name, paths):
     return event_name == "pull_request" or site_affected(paths)
 
 
+def require_website_validation(needs):
+    """Reuse the complete trusted PR receipt, or require every fresh validator."""
+    validators = {"core", "loudness-reference", "browser", "gpu"}
+    if set(needs) != {"plan", "web", *validators}:
+        raise ValueError("Website validation dependencies are incomplete or unexpected")
+    plan = needs["plan"]
+    if plan["result"] != "success" or needs["web"]["result"] != "success":
+        raise ValueError("Website plan and verified build must succeed")
+    outputs = plan.get("outputs", {})
+    reuse = outputs.get("reuse")
+    if outputs.get("site_required") != "true" or reuse not in ("true", "false"):
+        raise ValueError("Website plan omitted its validation selection")
+    if reuse == "true" and not all(
+        isinstance(outputs.get(key), str) and outputs[key].isdecimal()
+        for key in ("run_id", "artifact_id")
+    ):
+        raise ValueError("Reused validation requires an identified trusted producer")
+    expected = "skipped" if reuse == "true" else "success"
+    for job in validators:
+        if needs[job]["result"] != expected:
+            raise ValueError(f"Website validator {job} must be {expected}")
+
+
 def require_checks(group, needs):
     """Skipped dependencies only satisfy a gate when its selector excludes them."""
     selector, jobs = {
@@ -446,6 +473,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plan")
     sub.add_parser("changes")
+    sub.add_parser("validation-barrier")
     p = sub.add_parser("required-checks")
     p.add_argument(
         "group", choices=("website", "other-apps", "firmware", "recognition")
@@ -536,6 +564,9 @@ def main():
                 }
             )
         output(result)
+    elif args.command == "validation-barrier":
+        require_website_validation(json.loads(os.environ["CI_NEEDS"]))
+        print("Complete website validation or exact trusted reuse verified.")
     elif args.command == "required-checks":
         require_checks(args.group, json.loads(os.environ["CI_NEEDS"]))
         print(f"All applicable {args.group} checks passed.")
