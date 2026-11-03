@@ -84,7 +84,7 @@ test('cap edits invalidate phone and automated performance captures even after r
   expect(result.changedPhone).toEqual(['Bar travel cap changed during test']);
   expect(result.invalidReasons).toEqual(['Bar travel cap changed during test']);
   expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(.6, 6); expect(result.sameWorker).toBe(true);
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(0);
+  await physicsReady(page);
 });
 
 test('active gap cap edits, validates, restores and resets without acquiring audio', async ({ page }) => {

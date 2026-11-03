@@ -308,13 +308,13 @@ test('identical decoded PCM produces identical raw loudness and filtered targets
     return sample;
   });
   // Requested settings can precede safely applied surfaces. Wait for the
-  // worker snapshot's permanent base, then use the audio clock to exclude
+  // worker snapshot's changed travel, then use the audio clock to exclude
   // queued pre-edit traces even if more than 400 rows already arrived.
   await page.waitForFunction(() => {
     const v = document.querySelector('#dancinglights').physics;
-    const expectedBase = (v.current[v.layout[17]] - .4) / 2 + .003;
     return Math.abs(v.input[67] - .4) < 1e-6
-      && Math.abs(v.current[v.layout[17] + 5] - expectedBase) < 1e-5;
+      && Math.abs(v.current[v.layout[17] + 5] - .003) < 1e-5
+      && Math.abs(v.current[v.layout[17] + 6] - .11208) < 1e-5;
   });
   const appliedSample = await page.evaluate(() => {
     const context = document.querySelector('.audio-card').activeAudioContext;
