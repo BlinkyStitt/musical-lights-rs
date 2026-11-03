@@ -16,10 +16,14 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       } });
     }
   });
-  // Use a strong, steady 150 Hz source beneath the largest ball. The multi-tone phone
-  // exercise does not guarantee a strong bar under any particular ball.
+  // Keep the original eight-ball gravity fixture: its largest ball starts
+  // above the strong 150 Hz source. The smaller shipped default has no such
+  // ball, and the multi-tone exercise does not guarantee a particular lift.
+  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1',
+    JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
   await page.goto('http://127.0.0.1:8101/advanced/');
   await physicsReady(page); await normalView(page);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.balls.count)).toBe(8);
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
@@ -36,13 +40,6 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[27])).toBe(1);
   await page.mouse.move(0, 0);
-  await page.locator('.review-start').click();
-  await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).not.toBeChecked();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
-  await expect(page.locator('.mic-status')).toBeEmpty();
-  const calls = await page.evaluate(() => window.sensorRequests);
-  expect(calls).toHaveLength(2);
-  expect(calls.every(call => call.active)).toBe(true);
   const stop = page.locator('.review-stop');
   await stop.evaluate(button => button.addEventListener('click', () => {
     // Capture at the actual Stop event so protocol latency cannot consume the
@@ -53,10 +50,18 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
   }, { once: true }));
+  // Install the Stop capture before playback, then observe its first flight
+  // immediately. Assertions across the browser protocol must not consume it.
+  const stopButton = await stop.elementHandle();
+  await page.locator('.review-start').click();
   // Stop in the same browser turn that observes an elevated ball. A separate
   // protocol round trip/tap can arrive after that transient has already ended.
   await page.waitForFunction(button => {
-    const { current, layout } = document.querySelector('#dancinglights').physics;
+    const view = document.querySelector('#dancinglights').physics;
+    // WebKit can return from Play before its audio context starts. Never let
+    // an elevated idle ball cancel that pending start through Stop.
+    if (view.card.dataset.audioState !== 'playing') return false;
+    const { current, layout } = view;
     // Reduced Motion fixes the core preview's phase. Stop only above that
     // pattern: a ball resting on its bars cannot demonstrate a free fall.
     const idlePeak = Math.max(...document.querySelector('#dancinglights').physics.previewLevels);
@@ -66,10 +71,18 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
     const elevated = Array.from({ length: current[layout[30]] }, (_, i) => 3 + i * layout[8])
       .some(offset => current[offset + 1] > current[offset + 7] + clearance);
     if (!elevated) return false;
+    const card = document.querySelector('.audio-card');
+    window.playbackAtStop = { state: card.dataset.audioState,
+      listening: card.querySelector('input.listening-toggle').checked };
     button.click();
     return true;
-  }, await stop.elementHandle(), { timeout: 5000 });
+  }, stopButton, { timeout: 5000 });
   const stopped = await page.evaluate(() => window.physicsAtStop);
+  expect(await page.evaluate(() => window.playbackAtStop)).toEqual({ state: 'playing', listening: false });
+  await expect(page.locator('.mic-status')).toBeEmpty();
+  const calls = await page.evaluate(() => window.sensorRequests);
+  expect(calls).toHaveLength(2);
+  expect(calls.every(call => call.active)).toBe(true);
   expect(stopped.barMax).toBeGreaterThan(0);
   expect(stopped.balls.some(ball => ball.y > ball.radius + stopped.baseline + Math.max(stopped.travel * .5, stopped.travel * stopped.idlePeak + .01))).toBe(true);
   await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(stopped.tick + 10);
