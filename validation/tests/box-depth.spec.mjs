@@ -112,6 +112,7 @@ test('live balls reach the visible side edges after viewport changes without a c
   await page.locator('.camera-motion').uncheck();
   await page.locator('.camera-rotation').fill('0');
   const observations=[];
+  try {
   for (const viewport of [{width:1440,height:1000},{width:390,height:844},{width:844,height:390}]) {
     await page.setViewportSize(viewport);
     await page.locator('#dancinglights').scrollIntoViewIfNeeded();
@@ -142,18 +143,22 @@ test('live balls reach the visible side edges after viewport changes without a c
         return {width:v.width,balls,tick:v.current[2],planes:Array.from(v.input.slice(68)),frames:v.metrics.frames,
           discarded:v.metrics.discardedSimulationMs,notice:v.notice.persistent,audio:!!v.card.activeAudioContext};
       });
+      observations.push({viewport,direction,...state});
       for(const ball of state.balls) for(const clearance of ball.clearance) expect(clearance).toBeGreaterThan(-.004);
       expect(state.discarded).toBe(0); expect(state.notice).toBeFalsy(); expect(state.audio).toBe(false); expect(state.frames).toBeGreaterThan(0);
-      if(direction>0) expect(Math.max(...state.balls.map(b=>b.position[0]))).toBeGreaterThan(state.width+.02);
-      else expect(Math.min(...state.balls.map(b=>b.position[0]))).toBeLessThan(-.02);
-      observations.push({viewport,direction,...state});
+      // Contact lies on the sphere's surface. Its center remains one radius
+      // inside the screen plane, especially for the smallest ball.
+      if(direction>0) expect(Math.max(...state.balls.map(b=>b.position[0]+b.radius))).toBeGreaterThan(state.width+.02);
+      else expect(Math.min(...state.balls.map(b=>b.position[0]-b.radius))).toBeLessThan(-.02);
     }
   }
+  } finally {
   const evidence=info.outputPath('viewport-edge-contacts.json'), image=info.outputPath('wide-opening.png');
   await writeFile(evidence,JSON.stringify(observations,null,2));
   await page.screenshot({path:image});
   await info.attach('viewport-edge-contacts.json',{path:evidence,contentType:'application/json'});
   await info.attach('wide-opening.png',{path:image,contentType:'image/png'});
+  }
 });
 
 
