@@ -19,6 +19,7 @@ test('transition and fixed recovery windows retain timing, work and geometry bou
   assert.equal(window.substeps, 189); assert.equal(window.requestedSubsteps, 189);
   assert.equal(window.recovery.afterMs, 1000); assert.equal(window.recovery.durationMs, 2000);
   assert(window.recovery.measuredMs >= 2000); assert.equal(window.recovery.fps, 62.5);
+  assert.equal(window.recovery.finalDebt, 4); assert.equal(window.recovery.debtGrowthMs, 0);
 });
 
 test('a fourth capture without a baseline retains all earlier results and its raw evidence', async t => {
@@ -56,7 +57,7 @@ const measuredResult = kind => ({ complete: true, timingSource: 'submitted-frame
   errors: [], discardedSimulationMs: 0, workload: { state: 'playing', diagnostics: false },
   windows: [{ event: 'enter', fps: 60, p95: 16.7, maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8,
     recovery: { afterMs: 1000, durationMs: 2000, measuredMs: 2000, fps: 60, p95: 16.7,
-      maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8 } }] });
+      maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8, finalDebt: 4, debtGrowthMs: 0 } }] });
 
 test('software frame timing is reported without applying hardware frame limits', () => {
   const result = measuredResult('software');
@@ -74,10 +75,24 @@ test('a brief slow transition passes only with a full fixed recovery period', ()
   const result = { ...measuredResult('hardware'), windows: fullscreenWindows(data) };
   assert.equal(result.windows[0].maxDebt, 40);
   assert.doesNotThrow(() => validateFullscreenResult(result));
-  // Reclassify the same bad debt after the fixed deadline; it must fail even
-  // if a later frame recovers before export.
+  // A later isolated peak can also catch up under the normal debt contract.
   data.samples.find(p => p.t >= 2100).debt = 40;
   result.windows = fullscreenWindows(data);
+  assert.doesNotThrow(() => validateFullscreenResult(result));
+  assert.equal(result.windows[0].recovery.maxDebt, 40);
+  assert.equal(result.windows[0].recovery.finalDebt, 4);
+  // Final backlog fails even when most recovery samples were timely.
+  data.samples.find(p => p.t >= 4000).debt = 20;
+  result.windows = fullscreenWindows(data);
+  assert.throws(() => validateFullscreenResult(result), /did not recover timely updates/);
+});
+
+test('sustained debt growth fails even below the final backlog limit', () => {
+  const data = capture();
+  for (const point of data.samples) if (point.t >= 3800) point.debt = 13;
+  const result = { ...measuredResult('hardware'), windows: fullscreenWindows(data) };
+  assert.equal(result.windows[0].recovery.finalDebt, 13);
+  assert.equal(result.windows[0].recovery.debtGrowthMs, 9);
   assert.throws(() => validateFullscreenResult(result), /did not recover timely updates/);
 });
 
@@ -98,7 +113,10 @@ test('recovery keeps frame, age and debt limits; transients and freezes remain b
   }
   for (const kind of ['software', 'hardware']) {
     assert.doesNotThrow(() => validateFullscreenResult(measuredResult(kind)));
-    for (const boundary of [{ maxDebt: 2 * 1000 / 120 }, { maxSnapshotAge: 100 }]) {
+    const growthBoundary = measuredResult(kind); growthBoundary.windows[0].recovery.debtGrowthMs = 1000 / 120;
+    assert.doesNotThrow(() => validateFullscreenResult(growthBoundary));
+    for (const boundary of [{ finalDebt: 2 * 1000 / 120 }, { debtGrowthMs: 1000 / 120 + .001 },
+      { maxDebt: 100 }, { maxSnapshotAge: 100 }, { finalDebt: undefined }, { debtGrowthMs: NaN }]) {
       const result = measuredResult(kind); Object.assign(result.windows[0].recovery, boundary);
       assert.throws(() => validateFullscreenResult(result), /did not recover timely updates/);
     }

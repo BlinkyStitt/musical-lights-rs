@@ -78,8 +78,8 @@ five-minute measurement **per view**. Count actual rendered submissions.
   samples, early termination, hidden pages, context loss, interrupted/changed
   audio and changed measured view/camera invalidate capture.
 
-Retain transition limits unchanged, including maximum debt `<2s` and snapshot
-age `<100 ms`. Hardware/browser evidence establishes its measured environment;
+The later approved fullscreen recovery policy below supersedes the original
+transition maximum-debt limit. Snapshot age remains `<100 ms`. Hardware/browser evidence establishes its measured environment;
 it does not establish physical-iPhone performance. That limit creates no manual
 acceptance item. Keep failed historical frame-budget captures as failures.
 
@@ -132,9 +132,13 @@ meet steady-state frame and debt limits during the transition itself.
 Measure from the input mark, without waiting for a favorable frame: allow at most
 1,000 ms for the transition, then require a complete 2,000 ms recovery window.
 Hardware must recover to at least 59 FPS, p95 intervals at most 18.5 ms and fewer
-than 1% of intervals over 25 ms. Both renderers must recover to debt below
-`2 * 1000/120 ms` and snapshot age below 100 ms. Software FPS remains reported
-without an absolute floor. The five-minute and tilt gates do not change.
+than 1% of intervals over 25 ms. Bryan accepts the normal steady-state catch-up
+contract for both renderers: maximum debt below 100 ms, final debt below
+`2 * 1000/120 ms`, and mean debt growth between the first and last ten recovery
+samples at most `1000/120 ms`. This replaces the every-sample 16.67 ms recovery
+debt limit; isolated peaks can pass only if the scene catches up. Snapshot age
+stays below 100 ms. Software FPS remains reported without an absolute floor.
+The five-minute and tilt gates do not change.
 
 Count actual submitted frames with the existing renderer report hook; animation
 callbacks with skipped draws do not establish recovery. Keep the complete

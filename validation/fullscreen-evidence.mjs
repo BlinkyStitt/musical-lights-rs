@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
+import { summarize as summarizeValues } from '../musical-leptos/src/physics/performance.js';
 
 // Fixed input-to-recovery deadline; do not wait for a favorable frame to start
 // the recovery window. Keep the complete transition alongside its steady period.
@@ -20,7 +21,10 @@ export function fullscreenWindows(data) {
     return { measuredMs, fps: 1000 * frames.length / measuredMs,
       p95: frames[Math.ceil(frames.length * .95) - 1], maxFrame: frames.at(-1),
       over25Fraction: frames.filter(x => x > 25).length / frames.length,
-      maxDebt: Math.max(...points.map(p => p.debt)), maxSnapshotAge: Math.max(...points.map(p => p.age)),
+      maxDebt: Math.max(...points.map(p => p.debt)), finalDebt: points.at(-1).debt,
+      debtGrowthMs: summarizeValues(points.slice(-10).map(p => p.debt)).mean
+        - summarizeValues(points.slice(0, 10).map(p => p.debt)).mean,
+      maxSnapshotAge: Math.max(...points.map(p => p.age)),
       overloadTicks: points.at(-1).overload - before.overload,
       substeps: points.at(-1).substepTotal - before.substepTotal,
       requestedSubsteps: points.at(-1).requestedSubstepTotal - before.requestedSubstepTotal,
@@ -76,7 +80,11 @@ export function validateFullscreenResult(result) {
       assert(recovery.fps >= 59 && recovery.p95 <= 18.5 && recovery.over25Fraction < .01,
         `${result.browser} ${window.event} did not recover frame budget`);
     }
-    assert(recovery.maxSnapshotAge < 100 && recovery.maxDebt < 2 * 1000 / 120,
+    // Use the existing steady-state catch-up contract: isolated debt peaks can
+    // recover, but final backlog and sustained growth cannot pass.
+    assert(recovery.maxSnapshotAge < 100 && recovery.maxDebt < 100
+      && Number.isFinite(recovery.finalDebt) && recovery.finalDebt < 2 * 1000 / 120
+      && Number.isFinite(recovery.debtGrowthMs) && recovery.debtGrowthMs <= 1000 / 120,
       `${result.browser} ${window.event} did not recover timely updates`);
   }
 }

@@ -44,7 +44,10 @@ Software frame timing is reported without a blocking FPS, p95 or slow-frame
 limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
 The [2026-11-02 recovery policy](active-gap-spec.md#fullscreen-transition-recovery-policy-2026-11-02)
 allows a one-second transition, then requires two complete seconds at the existing
-steady-state hardware frame and both-renderer debt/age limits. Fullscreen FPS
+steady-state hardware frame limits. Both renderers use the normal catch-up rule:
+peak debt below 100 ms, final debt below `2 * 1000/120 ms`, first-to-last ten-sample
+mean growth at most `1000/120 ms`, and snapshot age below 100 ms. Isolated debt
+peaks can pass if the scene catches up. Fullscreen FPS
 counts the existing submitted-frame hook; skipped animation callbacks do not count.
 The collector closes its audio configuration, scrolls the scene into view and
 waits for fresh submitted frames before marking the first transition.
