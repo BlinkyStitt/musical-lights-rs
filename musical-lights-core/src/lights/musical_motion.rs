@@ -27,7 +27,7 @@ pub fn valid_gap_cap(cap: f32) -> bool {
     cap.is_finite() && (MIN_GAP_CAP..=MAX_GAP_CAP).contains(&cap)
 }
 
-/// Cap musical travel using a reference height without closing the resting gap.
+/// Cap musical travel and divide extra height equally between bases and opening.
 /// Flight and brightness remain independent of the enclosing viewport height.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PairedBarGeometry {
@@ -50,7 +50,7 @@ impl PairedBarGeometry {
         let extent = paired_bar_extent(active_height, (diameter + hop).max(stack) + clearance);
         Self {
             active_height,
-            baseline: BAR_BASELINE,
+            baseline: BAR_BASELINE + (height - active_height) * 0.25,
             travel: (extent - BAR_BASELINE).max(0.0),
             flight: hop,
         }
@@ -504,7 +504,7 @@ mod capped_gap_tests {
     use super::*;
 
     #[test]
-    fn cap_preserves_the_full_opening_and_reference_travel() {
+    fn cap_splits_extra_height_between_bases_and_opening() {
         for cap in [0.4, 0.6, 1.0, 20.0] {
             for height in [0.4, 0.6, 1.2, 2.596923, 20.0] {
                 for flight in [0.0, 0.3, 0.5] {
@@ -514,10 +514,15 @@ mod capped_gap_tests {
                         PairedBarGeometry::new(active, active, 0.192, 0.0, 0.004, flight);
                     assert_eq!(geometry.travel, reference.travel);
                     assert_eq!(geometry.flight, reference.flight);
-                    assert_eq!(geometry.baseline, BAR_BASELINE);
+                    let old_base = BAR_BASELINE + (height - active) * 0.5;
+                    let old_opening = height - 2.0 * old_base;
+                    let full_opening = height - 2.0 * BAR_BASELINE;
+                    let resting_opening = height - 2.0 * geometry.baseline;
+                    assert!((resting_opening - (old_opening + full_opening) * 0.5).abs() < 2e-6);
                     let gap = height - 2.0 * (geometry.baseline + geometry.travel);
                     assert!(
-                        (gap - (height - active + 0.192 + 0.004 + geometry.flight)).abs() < 2e-6
+                        (gap - ((height - active) * 0.5 + 0.192 + 0.004 + geometry.flight)).abs()
+                            < 2e-6
                     );
                 }
             }

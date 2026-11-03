@@ -77,7 +77,7 @@ test('worker records listening-floor inputs for exact replay without adding acce
       'The decorative listening floor must not create audio attacks');
     assert(report.inputs.at(-1).values.slice(0, 24).every(value => value === 0));
     assert(values.slice(0, 24).every(value => value === 0));
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v13',
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v14',
       palette: Array(72).fill(.5), layout: w.ready.layout })).every(result => result.matches));
   } finally { w.close(); }
 });
@@ -101,7 +101,7 @@ for (const [name, flag, disabled] of [['scrolling', 33, 0], ['Reduced Motion', 3
       assert.deepEqual(recorded.inputs.map(e => e.accent), [1, 2, 3]);
       assert.deepEqual(recorded.inputs.map(e => e.tempo), [160, 80, 120]);
       assert.equal(recorded.motionEvents, undefined); assert.equal(recorded.tempoEvents, undefined);
-      const report = { ...recorded, type: 'musical-lights-phone-report-v13', palette: Array(72).fill(.5), layout: w.ready.layout };
+      const report = { ...recorded, type: 'musical-lights-phone-report-v14', palette: Array(72).fill(.5), layout: w.ready.layout };
       assert((await replayReport(report)).every(result => result.matches));
       // Losing the first eligible draw reproduces the old split-list ordering result.
       const reordered = structuredClone(report);
@@ -141,7 +141,7 @@ test('worker records same-tick ball changes in order with exact replay', async (
     await w.send({ type: 'report' });
     const report = w.messages.at(-1);
     assert.deepEqual(report.inputs.map(e => e.values[64]), [0, 16, 8]);
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v13', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v14', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
   } finally { w.close(); }
 });
 
@@ -151,7 +151,7 @@ test('worker constructs the restored cap and records same-tick cap edits during 
   try {
     await w.send({ type: 'snapshot', buffer: new ArrayBuffer(w.ready.layout[12] * 4) });
     const initial = new Float32Array(w.messages.at(-1).buffer);
-    assert(Math.abs(initial[w.ready.layout[17] + 5] - .003) < 1e-6);
+    assert(Math.abs(initial[w.ready.layout[17] + 5] - (.003 + (config[0] - config[11]) / 4)) < 1e-6);
     await w.send({ type: 'record', config: w.ready.config });
     const values = PhysicsSimulation.input_defaults(); values[32] = 2.6; values[62] = .48; values[67] = .6; values.set(config.slice(8, 11), 64);
     await w.send({ type: 'pulse', timestamp: 1000, input: values.slice(), tempo: 120 });
@@ -168,7 +168,7 @@ test('worker constructs the restored cap and records same-tick cap edits during 
     assert.equal(report.substepTotal, report.substepCosts.reduce((sum, [, steps]) => sum + steps, 0));
     assert.deepEqual(report.inputs.map(e => Math.round(e.values[67] * 100)), [60, 200, 40]);
     assert.deepEqual(report.inputs.map(e => e.values[64]), [2, 16, 8]);
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v13', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v14', palette: Array(72).fill(.5), layout: w.ready.layout })).every(r => r.matches));
   } finally { w.close(); }
 });
 
@@ -202,7 +202,7 @@ test('unchanged dance settings preserve recording while actual dance edits remai
     await w.send({ type: 'report' });
     const report = w.messages.at(-1);
     assert.equal(report.type, 'report'); assert.deepEqual(report.inputs, []);
-    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v13', palette: Array(72).fill(.5), layout: w.ready.layout })).every(row => row.matches));
+    assert((await replayReport({ ...report, type: 'musical-lights-phone-report-v14', palette: Array(72).fill(.5), layout: w.ready.layout })).every(row => row.matches));
     await w.send({ type: 'record', config: w.ready.config });
     await w.send({ type: 'dance', options: { ...options, flight: .4 } });
     assert.equal(w.messages.at(-1).type, 'error');
@@ -220,10 +220,10 @@ test('worker records viewport planes in FIFO order and replays the moving walls 
       await w.send({type:'pulse',timestamp:1000,input:values.slice(),tempo:120,accent:0});
     }
     w.advance(200);await w.send({type:'report'});
-    const report={...w.messages.at(-1),type:'musical-lights-phone-report-v13',palette:Array(72).fill(.5),layout:w.ready.layout};
+    const report={...w.messages.at(-1),type:'musical-lights-phone-report-v14',palette:Array(72).fill(.5),layout:w.ready.layout};
     assert.deepEqual(report.inputs.map(e=>e.values.slice(68)),planes);
     assert((await replayReport(report)).every(row=>row.matches));
-    for (const type of ['musical-lights-phone-report-v10','musical-lights-phone-report-v11','musical-lights-phone-report-v12'])
+    for (const type of ['musical-lights-phone-report-v10','musical-lights-phone-report-v11','musical-lights-phone-report-v12','musical-lights-phone-report-v13'])
       await assert.rejects(replayReport({...report,type}),/historical|format/);
   } finally {w.close();}
 });

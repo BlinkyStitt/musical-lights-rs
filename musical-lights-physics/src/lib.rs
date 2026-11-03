@@ -1719,7 +1719,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            26.0, // conservative ball-range collider updates and current-phase reach
+            27.0, // half of excess enclosure height remains in the resting opening
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,
