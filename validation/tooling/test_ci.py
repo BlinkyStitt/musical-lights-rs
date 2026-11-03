@@ -232,8 +232,116 @@ class ArtifactTests(unittest.TestCase):
         jobs.remove(native)
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
         jobs.append(native)
+        for name in ("GPU browser (nuc3, 1)", "GPU browser (nuc3, 2)"):
+            job = next(job for job in jobs if job["name"] == name)
+            jobs.remove(job)
+            self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+            jobs.append(job)
+            for conclusion in ("failure", "skipped", "cancelled"):
+                job["conclusion"] = conclusion
+                self.assertEqual(
+                    ci.reusable(repo, self.expected, read, fetch), ("", "")
+                )
+            job["conclusion"] = "success"
+            for conclusion in ("success", "failure"):
+                jobs.append({**job, "conclusion": conclusion})
+                self.assertEqual(
+                    ci.reusable(repo, self.expected, read, fetch), ("", "")
+                )
+                jobs.pop()
+        self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("123", "456"))
         (self.bundle / ci.PAYLOAD[0] / "sample.wasm").write_bytes(b"tampered")
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+
+
+class WebsiteValidationBarrierTests(unittest.TestCase):
+    def needs(self, reuse):
+        return {
+            "plan": {
+                "result": "success",
+                "outputs": {
+                    "site_required": "true",
+                    "reuse": "true" if reuse else "false",
+                    "run_id": "123" if reuse else "",
+                    "artifact_id": "456" if reuse else "",
+                },
+            },
+            "web": {"result": "success"},
+            **{
+                job: {"result": "skipped" if reuse else "success"}
+                for job in ("core", "loudness-reference", "browser", "gpu")
+            },
+        }
+
+    def test_complete_fresh_validation_and_exact_verified_reuse_pass(self):
+        for reuse in (False, True):
+            ci.require_website_validation(self.needs(reuse))
+
+    def test_failed_canceled_or_incomplete_dependencies_never_pass(self):
+        for reuse in (False, True):
+            for job in self.needs(reuse):
+                expected = self.needs(reuse)[job]["result"]
+                for result in {"success", "failure", "cancelled", "skipped"} - {
+                    expected
+                }:
+                    needs = self.needs(reuse)
+                    needs[job]["result"] = result
+                    with (
+                        self.subTest(reuse=reuse, job=job, result=result),
+                        self.assertRaises(ValueError),
+                    ):
+                        ci.require_website_validation(needs)
+                needs = self.needs(reuse)
+                del needs[job]
+                with self.assertRaises(ValueError):
+                    ci.require_website_validation(needs)
+            needs = self.needs(reuse)
+            needs["unexpected"] = {"result": "success"}
+            with self.assertRaises(ValueError):
+                ci.require_website_validation(needs)
+
+    def test_reuse_requires_the_producer_and_explicit_selection(self):
+        for key, values in {
+            "reuse": (None, "", "yes"),
+            "site_required": (None, "false"),
+            "run_id": (None, "", "unverified", 123),
+            "artifact_id": (None, "", "unverified", 456),
+        }.items():
+            for value in values:
+                needs = self.needs(True)
+                needs["plan"]["outputs"][key] = value
+                with (
+                    self.subTest(key=key, value=value),
+                    self.assertRaises(ValueError),
+                ):
+                    ci.require_website_validation(needs)
+
+    def test_workflow_reuses_gpu_acceptance_with_the_other_validators(self):
+        source = (ci.ROOT / ".github/workflows/validate.yml").read_text()
+
+        def job(name):
+            match = re.search(
+                rf"^  {name}:\n(.*?)(?=^  [\w-]+:|\Z)",
+                source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert match is not None
+            return match[1]
+
+        fresh = re.search(r"^    if: (.+)$", job("core"), re.MULTILINE)
+        assert fresh is not None
+        for name in ("gpu-network", "gpu"):
+            condition = re.search(r"^    if: (.+)$", job(name), re.MULTILINE)
+            assert condition is not None
+            self.assertEqual(condition[1], fresh[1])
+        barrier = job("validated")
+        self.assertIn("always() && !cancelled()", barrier)
+        self.assertIn("CI_NEEDS: ${{ toJSON(needs) }}", barrier)
+        self.assertIn("run: python3 validation/ci.py validation-barrier", barrier)
+        self.assertLess(
+            barrier.index("validation-barrier"),
+            barrier.index("Verify producer and byte digests"),
+        )
 
 
 class ChangeTests(unittest.TestCase):
