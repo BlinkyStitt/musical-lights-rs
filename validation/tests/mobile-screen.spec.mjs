@@ -16,9 +16,9 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       } });
     }
   });
-  // Keep the original eight-ball gravity fixture: its largest ball starts
-  // above the strong 150 Hz source. The smaller shipped default has no such
-  // ball, and the multi-tone exercise does not guarantee a particular lift.
+  // Retain the original eight-ball gravity fixture. Repeated all-band audio
+  // gives moving balls another lift opportunity without assuming they remain
+  // above a single source frequency while the controls initialize.
   await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1',
     JSON.stringify({ version: 1, balls: [8, 2.64, 19.2] })));
   await page.goto('http://127.0.0.1:8101/advanced/');
@@ -27,14 +27,12 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
   await expect(page.locator('.input-source')).toHaveValue('microphone');
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
-  await page.locator('.tone-kind').selectOption('stationary');
-  await page.locator('.tone-frequency').fill('150');
-  await page.locator('.tone-level').fill('-20');
+  await page.locator('.tone-kind').selectOption('exercise');
+  await page.locator('.tone-level').fill('-12');
   await page.getByRole('checkbox', { name: 'Phone motion', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.previewLevels))).toBeGreaterThan(0);
-  // Check denied-sensor mouse input before playback. A steady tone can launch
-  // a ball only once; moving the pointer after observing that flight can consume
-  // the sole free-fall opportunity before the Stop observer is installed.
+  // Check denied-sensor mouse input before playback so the pointer cannot
+  // consume a short free-fall opportunity after the observer sees it.
   await page.locator('#dancinglights').scrollIntoViewIfNeeded();
   const box = await page.locator('#dancinglights canvas').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -50,35 +48,42 @@ test('iPhone sensor denial preserves mouse input and gravity continues after Sto
       return { y: current[offset + 1], radius: current[offset + 7] };
     }) };
   }, { once: true }));
-  // Install the Stop capture before playback, then observe its first flight
-  // immediately. Assertions across the browser protocol must not consume it.
-  const stopButton = await stop.elementHandle();
-  await page.locator('.review-start').click();
-  // Stop in the same browser turn that observes an elevated ball. A separate
-  // protocol round trip/tap can arrive after that transient has already ended.
-  await page.waitForFunction(button => {
+  // Observe authoritative snapshots before Play. A slow action receipt or
+  // render callback must not consume the flight before this test can see it.
+  await stop.evaluate(button => {
     const view = document.querySelector('#dancinglights').physics;
-    // WebKit can return from Play before its audio context starts. Never let
-    // an elevated idle ball cancel that pending start through Stop.
-    if (view.card.dataset.audioState !== 'playing') return false;
-    const { current, layout } = view;
-    // Reduced Motion fixes the core preview's phase. Stop only above that
-    // pattern: a ball resting on its bars cannot demonstrate a free fall.
-    const idlePeak = Math.max(...document.querySelector('#dancinglights').physics.previewLevels);
-    const travel = current[layout[17] + 6];
-    // Keep both original lift conditions, observed in this same browser turn.
-    const clearance = current[layout[17] + 5] + Math.max(travel * .5, travel * idlePeak + .01);
-    const elevated = Array.from({ length: current[layout[30]] }, (_, i) => 3 + i * layout[8])
-      .some(offset => current[offset + 1] > current[offset + 7] + clearance);
-    if (!elevated) return false;
-    const card = document.querySelector('.audio-card');
-    window.playbackAtStop = { state: card.dataset.audioState,
-      listening: card.querySelector('input.listening-toggle').checked };
-    button.click();
-    return true;
-  }, stopButton, { timeout: 5000 });
+    window.stopFlightObservations = [];
+    const observe = ({ data }) => {
+      if (data.type !== 'snapshot') return;
+      // The view's earlier message handler has already published this snapshot.
+      const { current, layout } = view;
+      if (view.card.dataset.audioState !== 'playing') return;
+      const idlePeak = Math.max(...view.previewLevels);
+      const travel = current[layout[17] + 6];
+      const clearance = current[layout[17] + 5] + Math.max(travel * .5, travel * idlePeak + .01);
+      const balls = Array.from({ length: current[layout[30]] }, (_, i) => {
+        const offset = 3 + i * layout[8];
+        return { x: current[offset], y: current[offset + 1], radius: current[offset + 7] };
+      });
+      if (window.stopFlightObservations.length < 1000)
+        window.stopFlightObservations.push({ tick: current[2], clearance, balls, levels: Array.from(view.input.slice(0, 24)) });
+      if (button.disabled || !balls.some(ball => ball.y > ball.radius + clearance)) return;
+      window.playbackAtStop = { state: view.card.dataset.audioState,
+        kind: view.report.audioState.kind, listening: view.card.querySelector('input.listening-toggle').checked };
+      view.worker.removeEventListener('message', observe);
+      button.click();
+    };
+    view.worker.addEventListener('message', observe);
+    window.cancelStopFlightObserver = () => view.worker.removeEventListener('message', observe);
+  });
+  try {
+    await page.locator('.review-start').click();
+    await page.waitForFunction(() => !!window.physicsAtStop, undefined, { timeout: 5000 });
+  } finally {
+    await page.evaluate(() => window.cancelStopFlightObserver?.());
+  }
   const stopped = await page.evaluate(() => window.physicsAtStop);
-  expect(await page.evaluate(() => window.playbackAtStop)).toEqual({ state: 'playing', listening: false });
+  expect(await page.evaluate(() => window.playbackAtStop)).toEqual({ state: 'playing', kind: 'exercise', listening: false });
   await expect(page.locator('.mic-status')).toBeEmpty();
   const calls = await page.evaluate(() => window.sensorRequests);
   expect(calls).toHaveLength(2);
@@ -369,7 +374,8 @@ test.afterEach(async ({ page }, info) => {
     const v = document.querySelector('#dancinglights')?.physics;
     return { layout: v?.layout, timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames,
       current: v?.current && Array.from(v.current), input: v?.input && Array.from(v.input),
-      audio: v?.report?.audioState, idle: v?.idle, preview: v?.previewLevels && Array.from(v.previewLevels) };
+      audio: v?.report?.audioState, idle: v?.idle, preview: v?.previewLevels && Array.from(v.previewLevels),
+      stopObservations: window.stopFlightObservations, stopped: window.physicsAtStop };
   }).catch(error => ({ error: String(error) }));
   const path = info.outputPath('physics-timing.json');
   await writeFile(path, JSON.stringify(timing));
