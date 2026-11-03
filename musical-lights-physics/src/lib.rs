@@ -1586,7 +1586,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            22.0, // variable balls, capped active gap and normalized motion
+            23.0, // full resting opening with capped musical travel
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,

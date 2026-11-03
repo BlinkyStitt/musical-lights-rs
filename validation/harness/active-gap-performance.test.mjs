@@ -115,7 +115,7 @@ test('automated collector counts only submitted frames, catches interruptions an
     if (interruption === 'visibility') assert(data.invalidReasons.includes('Page hidden during test'));
     if (interruption === 'continuity' || interruption === 'session') assert(data.invalidReasons.includes('Audio interrupted or changed'));
     if (interruption === 'workload') assert(data.invalidReasons.includes('Audio workload changed'));
-    if (interruption === 'cap') assert(data.invalidReasons.includes('Active gap cap changed during test'));
+    if (interruption === 'cap') assert(data.invalidReasons.includes('Bar travel cap changed during test'));
     if (interruption === 'continuity') {
       assert.equal(data.audioTransitions.length, 1);
       assert.equal(data.audioTransitions[0].atMs, 100 * 1000 / 60);

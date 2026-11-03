@@ -224,7 +224,7 @@ export class PhysicsView {
       if (detail.physics) this.input[62] = detail.physics[5];
       this.input.set([detail.balls[0], detail.balls[1] / 100, detail.balls[2] / 100], 64);
       const gapCap = Math.fround((detail.activeGapCap ?? 60) / 100);
-      if (gapCap !== this.input[67]) this.report?.invalidate('Active gap cap changed during test');
+      if (gapCap !== this.input[67]) this.report?.invalidate('Bar travel cap changed during test');
       this.input[67] = gapCap;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
@@ -391,7 +391,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout.length !== 32 || data.layout[18] !== 22 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 32 || data.layout[18] !== 23 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];

@@ -7,34 +7,21 @@ product-use sign-off is a completion gate. Existing diagnostic UI is unchanged.
 
 ## Geometry and behavior
 
-For the core-calculated packed opening `P`, enclosure height `H ≥ P` and reference
-cap `C`, use `A = min(H, max(C, P))`. Add equal permanent bases `(H - A) / 2`,
-with the existing 3 mm idle inset at each end. Retain the core's ball and flight
-clearance policies. The default 60 cm cap denotes enclosure height, not stroke.
-Above `max(C, P)`, settled travel stays constant as enclosure height increases;
-below it, preserve the original geometry. Packing takes precedence without
-shrinking or removing selected balls.
+The 2026-11-02 view correction supersedes the permanent-base geometry. For the
+core-calculated packed opening `P`, enclosure height `H ≥ P` and reference cap
+`C`, use `A = min(H, max(C, P))` to calculate travel and flight. Keep the resting
+baseline at 3 mm at each end. Extra enclosure height remains open space; it does
+not become permanent bar base. Above `max(C, P)`, settled musical travel stays
+constant as enclosure height increases. Preserve ball packing, flight clearance,
+normalized musical trajectories, pigments and the loudness model.
 
-Core calculations remain reusable, bounded, allocation-free where required and
-compatible with the `no_std`/`libm` feature matrix. Rapier, browser and Three.js
-remain adapters. All nine banks, colliders, snapshots and depth use the same
-applied endpoints. Construction fits all balls. Live cap/viewport changes retain
-continuing identities, colors and normalized musical trajectories. Moving bases
-use bounded contacts and occupied clearance; transitions never reset balls,
-tunnel, discard elapsed time, suppress warnings or change integration limits.
-
-Keep raw loudness, filtered targets, display gain, accessible meters and attack
-eligibility independent of bases. Preserve rise duration, Reduced Motion, source
-colors, contacts and flight allowance. Identical PCM/settings retain identical
-analysis. Do not redesign audio, rendering, diagnostics or notifications.
-
-The shared Home/Advanced Display slider remains **Active gap cap (cm)**, default
-60, range 40–2,000, step 1. Help explains that ball/flight clearance reduce actual
-travel. Preserve editor, increment/decrement, keyboard/touch help, visible focus
-and 44-pixel targets. Apply live without acquiring audio. Preserve shared
+The shared Home/Advanced **Bar travel cap (cm)** control retains its saved value,
+default 60, range 40–2,000 and step 1. It specifies a reference enclosure height,
+not a literal stroke distance. Help explains the travel and clearance relationship.
+Edits apply live without acquiring audio. Preserve keyboard/touch editing, help,
 fullscreen Settings, fixed scene dimensions and keyboard-open collider stability.
-Persist across reload/navigation; Reset display restores 60. Invalid or missing
-caps independently fall back without losing valid preferences.
+Reset display restores 60. Invalid or missing values independently fall back.
+All nine banks and their colliders use the same applied bar endpoints.
 
 Worker recordings retain initial cap and applied edits in FIFO order, including
 same-tick edits during playback/resizing. Replay must match final snapshots,

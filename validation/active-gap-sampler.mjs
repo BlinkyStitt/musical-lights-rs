@@ -30,7 +30,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
         invalidate('Audio interrupted or changed');
       for (const key of workloadKeys)
         if (report.audioState[key] !== workload[key]) invalidate('Audio workload changed');
-      if (config && view.input[67] !== Math.fround(config[11])) invalidate('Active gap cap changed during test');
+      if (config && view.input[67] !== Math.fround(config[11])) invalidate('Bar travel cap changed during test');
       if (document.hidden) invalidate('Page hidden during test');
       if (view.lost || view.closed) invalidate('Renderer stopped during test');
       if (view.sceneVisible === false) invalidate('Visualizer left viewport');
@@ -90,7 +90,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       const evaluation = evaluatePerformance({ intervals, renderCosts, progress, maxSnapshotAgeMs,
         invalid: invalidReasons, hz: layout[1], data });
       cleanup();
-      resolve({ ...data, type: 'musical-lights-phone-report-v8', layout, palette, config: data.config,
+      resolve({ ...data, type: 'musical-lights-phone-report-v9', layout, palette, config: data.config,
         mode, viewport, camera: JSON.parse(camera), cameraBase, cameraMotion, scrolling, workload,
         physicalPhone: false, evidenceEnvironment: 'hardware-rendered desktop Chromium with mobile viewport',
         warmupSeconds: 15, measurementSeconds: 300, frameIntervalsMs: intervals, renderCostsMs: renderCosts,

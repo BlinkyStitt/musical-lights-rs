@@ -81,7 +81,7 @@ test(`contact color fills gradually on ${route} with motion ${reducedMotion}`, a
     }
   });
   await info.attach('contact-fill-pixels.json', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.version).toBe(22); expect(result.firstContact).toBeGreaterThan(0);
+  expect(result.version).toBe(23); expect(result.firstContact).toBeGreaterThan(0);
   expect(result.maximumJump).toBeGreaterThan(.001); expect(result.maximumPerceptualJump).toBeLessThan(.047);
   expect(result.frames).toHaveLength(5);
   const [initial, impact, early, middle, late] = result.frames;
