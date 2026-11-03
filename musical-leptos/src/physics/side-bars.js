@@ -9,7 +9,8 @@ export function rampMaximum(values, offset = 0) {
 }
 
 // Eight full-size background boxes beside the physical center box. Copy its
-// vertical bars, including the scrolling seam, without adding any physics.
+// vertical bars, including the scrolling seam. Physics uses the same repeating
+// surface across all nine banks wherever the viewport or balls can reach it.
 export class SideBars {
   constructor(scene, bars, count) {
     this.scene = scene; this.bars = bars;

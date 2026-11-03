@@ -21,7 +21,8 @@ pub const DEPTH_INPUT: usize = ATTACK_OFFSET + COUNT;
 pub const PAINT_INPUT: usize = DEPTH_INPUT + 1;
 pub const BALL_INPUT: usize = PAINT_INPUT + 1;
 pub const GAP_INPUT: usize = BALL_INPUT + 3;
-pub const INPUT_LEN: usize = GAP_INPUT + 1;
+pub const SIDE_INPUT: usize = GAP_INPUT + 1;
+pub const INPUT_LEN: usize = SIDE_INPUT + 8;
 pub const HZ: u32 = 120;
 pub const DT: f32 = 1.0 / HZ as f32;
 pub const WIDTH: f32 = 1.2;
@@ -30,7 +31,10 @@ pub const PITCH: f32 = WIDTH / COUNT as f32;
 pub const BALL_SIZE_UNIT: f32 = PITCH - 0.002;
 const BRIDGE_WIDTH: f32 = PITCH * JOIN_FRACTION as f32;
 const CAP_WIDTH: f32 = PITCH - BRIDGE_WIDTH;
-const SURFACE_END_COUNT: usize = COUNT * 3 * 2;
+// Nine rendered banks plus one scrolling wrap bank at each side.
+const SURFACE_BANKS: usize = 11;
+const HALF_BANKS: usize = SURFACE_BANKS / 2;
+const SURFACE_END_COUNT: usize = COUNT * SURFACE_BANKS * 2;
 const SURFACE_COUNT: usize = SURFACE_END_COUNT * 2;
 fn ramp_width(index: usize) -> f32 {
     if index.is_multiple_of(2) {
@@ -430,6 +434,9 @@ impl SimulationConfig {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SimulationInput {
     pub gap_cap: f32,
+    /// Inward unit planes [nx, ny, nz, d], with n·position + d >= radius.
+    /// Browser adapters use the actual left/right camera frustum planes.
+    pub side_planes: [[f32; 4]; 2],
     pub tick: u64,
     pub levels: [f32; COUNT],
     /// Current audio attack edges, separate from physical and decorative travel.
@@ -449,6 +456,7 @@ impl Default for SimulationInput {
     fn default() -> Self {
         Self {
             tick: 0,
+            side_planes: [[1.0, 0.0, 0.0, 0.0], [-1.0, 0.0, 0.0, WIDTH]],
             gap_cap: DEFAULT_GAP_CAP,
             levels: [0.0; COUNT],
             attacks: [0.0; COUNT],
@@ -500,6 +508,7 @@ pub struct Simulation {
     touching: [[bool; COUNT]; MAX_BALLS],
     ceiling: RigidBodyHandle,
     depth_walls: [RigidBodyHandle; 2],
+    side_walls: [RigidBodyHandle; 2],
     ceiling_height: f32,
     resize_from: f32,
     gap_from: f32,
@@ -549,7 +558,7 @@ impl Simulation {
             },
             ..PhysicsWorld::default()
         };
-        // Closed enclosure: every visible boundary has a physical collider.
+        // Closed physical depth; the browser supplies the visible side boundaries.
         let boundaries = [
             (Vector::Y, Vector::ZERO),
             (Vector::X, Vector::ZERO),
@@ -557,13 +566,19 @@ impl Simulation {
             (Vector::Z, Vector::new(0.0, 0.0, -config.depth / 2.0)),
             (-Vector::Z, Vector::new(0.0, 0.0, config.depth / 2.0)),
         ]
-        .map(|(normal, position)| {
+        .into_iter()
+        .enumerate()
+        .map(|(index, (normal, position))| {
             // Vertical walls shed tangential load instead of pinning spheres.
             // Keep the floor, ceiling, balls and bars on the configured material.
             let vertical = normal.y == 0.0;
             world
                 .insert(
-                    RigidBodyBuilder::fixed().translation(position),
+                    if index == 1 || index == 2 {
+                        RigidBodyBuilder::kinematic_position_based().translation(position)
+                    } else {
+                        RigidBodyBuilder::fixed().translation(position)
+                    },
                     ColliderBuilder::halfspace(Unit::new_unchecked(normal))
                         .friction(if vertical { 0.0 } else { config.friction })
                         .friction_combine_rule(if vertical {
@@ -583,7 +598,8 @@ impl Simulation {
                         }),
                 )
                 .0
-        });
+        })
+        .collect::<Vec<_>>();
         let (ceiling, _) = world.insert(
             RigidBodyBuilder::fixed().translation(Vector::new(0.0, config.height, 0.0)),
             ColliderBuilder::halfspace(Unit::new_unchecked(-Vector::Y))
@@ -596,8 +612,8 @@ impl Simulation {
                 let column = index / 2;
                 let end = index / SURFACE_END_COUNT;
                 let x = ((column % COUNT) as f32 + 0.5) * PITCH
-                    + ((column / COUNT + 1) % 3) as f32 * WIDTH
-                    - WIDTH;
+                    + ((column / COUNT + HALF_BANKS) % SURFACE_BANKS) as f32 * WIDTH
+                    - HALF_BANKS as f32 * WIDTH;
                 let segment = surface_segment(
                     x - CAP_WIDTH / 2.0
                         + if index.is_multiple_of(2) {
@@ -658,6 +674,7 @@ impl Simulation {
             touching: [[false; COUNT]; MAX_BALLS],
             ceiling,
             depth_walls: [boundaries[3], boundaries[4]],
+            side_walls: [boundaries[1], boundaries[2]],
             ceiling_height: config.height,
             resize_from: config.height,
             gap_from: config.gap_cap,
@@ -685,6 +702,11 @@ impl Simulation {
     pub fn apply(&mut self, input: SimulationInput) -> Result<(), &'static str> {
         if !input.balls.valid()
             || !valid_gap_cap(input.gap_cap)
+            || input.side_planes.iter().any(|p| {
+                p.iter().any(|v| !v.is_finite())
+                    || (Vector::new(p[0], p[1], p[2]).length_squared() - 1.0).abs() > 0.0001
+                    || p[3].abs() > 1000.0
+            })
             || input.tick != self.tick
             || input
                 .levels
@@ -924,7 +946,50 @@ impl Simulation {
         // Adding all three speeds double-counts the ball for post contacts and
         // makes unrelated ball-ball contacts pay for the fastest nearby post.
         // Recompute deterministically each outer tick, never from wall-clock cost.
-        let relative_speed = (2.0 * ball_speed).max(ball_speed + bar_speed);
+        let side_from = self.side_walls.map(|h| *self.world.bodies[h].position());
+        let side_targets: [Pose; 2] = std::array::from_fn(|i| {
+            let p = self.input.side_planes[i];
+            let n = Vector::new(p[0], p[1], p[2]).normalize();
+            let local = if i == 0 { Vector::X } else { -Vector::X };
+            Pose::from_parts(-n * p[3], Rotation::from_rotation_arc(local, n))
+        });
+        let wall_speed = side_from
+            .iter()
+            .zip(&side_targets)
+            .enumerate()
+            .map(|(side, (from, to))| {
+                if from == to {
+                    return 0.0;
+                }
+                let local = if side == 0 { Vector::X } else { -Vector::X };
+                let from_normal = from.rotation * local;
+                let to_normal = to.rotation * local;
+                let translation = (to.translation - from.translation).length();
+                let angle = from.rotation.angle_between(to.rotation).abs();
+                self.balls
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &(h, _))| {
+                        let body = &self.world.bodies[h];
+                        if !body.is_enabled() {
+                            return None;
+                        }
+                        let radius = self.config.balls.diameter(i) / 2.0;
+                        let reach = (body.translation() - from.translation).length()
+                            + radius
+                            + ball_reach as f32
+                            + translation;
+                        let before = from_normal.dot(body.translation() - from.translation);
+                        let after = to_normal.dot(body.translation() - to.translation);
+                        // Include angular curvature in this conservative swept bound.
+                        // Distant walls moving away cannot create a contact this tick.
+                        (before.min(after) <= radius + ball_reach as f32 + angle * reach)
+                            .then_some(f64::from(translation + angle * reach) / f64::from(DT))
+                    })
+                    .fold(0.0_f64, f64::max)
+            })
+            .fold(0.0_f64, f64::max);
+        let relative_speed = (2.0 * ball_speed).max(ball_speed + bar_speed.max(wall_speed));
         let required = (((relative_speed + 1.0) * f64::from(DT) / f64::from(min_radius * 0.5))
             .ceil() as usize)
             .max(1);
@@ -936,11 +1001,59 @@ impl Simulation {
         self.snapshot.values[COST_OFFSET + 1] = required.saturating_sub(MAX_SUBSTEPS) as f32;
         self.snapshot.values[COST_OFFSET + 2] = max_speed as f32;
         self.snapshot.values[COST_OFFSET + 3] = acceleration as f32;
+        // Only posts inside the swept viewport/ball range can contact a ball.
+        // The pool covers every rendered bank, including both scrolling seams.
+        let mut lower = -4.0 * WIDTH;
+        let mut upper = 5.0 * WIDTH;
+        for p in self.input.side_planes {
+            if p[0].abs() < 0.00001 {
+                continue;
+            }
+            let mut lo = f32::INFINITY;
+            let mut hi = f32::NEG_INFINITY;
+            for y in [0.0, self.ceiling_height] {
+                for z in [-self.config.depth / 2.0, self.config.depth / 2.0] {
+                    let x = (-p[3] - p[1] * y - p[2] * z) / p[0];
+                    lo = lo.min(x);
+                    hi = hi.max(x);
+                }
+            }
+            if p[0] > 0.0 {
+                lower = lower.max(lo);
+            } else {
+                upper = upper.min(hi);
+            }
+        }
+        for (i, &(h, _)) in self.balls.iter().enumerate() {
+            let body = &self.world.bodies[h];
+            if body.is_enabled() {
+                let reach = self.config.balls.diameter(i) / 2.0 + ball_reach as f32;
+                lower = lower.min(body.translation().x - reach);
+                upper = upper.max(body.translation().x + reach);
+            }
+        }
+        lower = lower.max(-4.0 * WIDTH);
+        upper = upper.min(5.0 * WIDTH);
         let new_attacks: [bool; COUNT] = std::array::from_fn(|i| {
             self.input.attacks[i] > 0.0 && self.input.attacks[i] > self.previous_attacks[i]
         });
         let mut painted = [[false; COUNT]; MAX_BALLS];
         for substep in 0..substeps {
+            // Sweep real kinematic walls through the fixed physics substeps.
+            // Their contact velocity participates in the same work budget as bars.
+            let fraction = (substep + 1) as f32 / substeps as f32;
+            for i in 0..2 {
+                self.world.bodies[self.side_walls[i]].set_next_kinematic_position(
+                    Pose::from_parts(
+                        side_from[i]
+                            .translation
+                            .lerp(side_targets[i].translation, fraction),
+                        side_from[i]
+                            .rotation
+                            .slerp(side_targets[i].rotation, fraction),
+                    ),
+                );
+            }
             let previous_surface = self.surface;
             let previous_ceiling = self.ceiling_height;
             // Move the permanent lower surface through bounded contact steps.
@@ -973,7 +1086,8 @@ impl Simulation {
             self.resize_ceiling(dt);
             let distance = self.dance.advance(enabled, self.tempo, f64::from(dt));
             self.scroll_speed = self.dance.speed();
-            self.scroll_phase = (self.scroll_phase + distance).rem_euclid((COUNT * 3) as f64);
+            self.scroll_phase =
+                (self.scroll_phase + distance).rem_euclid((COUNT * SURFACE_BANKS) as f64);
             let scale = old_travel + (travel - old_travel) * (substep + 1) as f64 / substeps as f64;
             for i in 0..COUNT {
                 self.motions[i].advance(f64::from(dt));
@@ -988,9 +1102,9 @@ impl Simulation {
                 let x = ((band as f64
                     + 0.5
                     + self.scroll_phase
-                    + (column / COUNT % 3 + 1) as f64 * COUNT as f64)
-                    .rem_euclid((COUNT * 3) as f64)
-                    - COUNT as f64)
+                    + (column / COUNT % SURFACE_BANKS + HALF_BANKS) as f64 * COUNT as f64)
+                    .rem_euclid((COUNT * SURFACE_BANKS) as f64)
+                    - (COUNT * HALF_BANKS) as f64)
                     * f64::from(PITCH);
                 let x = x as f32 - CAP_WIDTH / 2.0
                     + if index.is_multiple_of(2) {
@@ -999,7 +1113,7 @@ impl Simulation {
                         CAP_WIDTH
                     };
                 let body = &mut self.world.bodies[handle];
-                let active = (-ramp_width(index)..=WIDTH).contains(&x);
+                let active = x + ramp_width(index) >= lower && x <= upper;
                 if !active {
                     body.set_enabled(false);
                     continue;
@@ -1377,7 +1491,13 @@ impl Simulation {
             let radius = settings.diameter(i) / 2.0;
             let mut position = self.world.bodies[h].translation();
             if growing {
-                position.x = position.x.clamp(radius + 0.002, WIDTH - radius - 0.002);
+                // A diameter edit must use the same viewport walls as motion.
+                // Never pull a survivor back into the former center box.
+                for p in self.input.side_planes {
+                    let n = Vector::new(p[0], p[1], p[2]);
+                    let penetration = (radius + 0.002 - n.dot(position) - p[3]).max(0.0);
+                    position += n * penetration;
+                }
                 let z = (self.input.depth / 2.0 - radius - 0.002).max(0.0);
                 position.z = position.z.clamp(-z, z);
                 let bar_top = self
@@ -1563,6 +1683,18 @@ impl PhysicsSimulation {
     pub fn defaults() -> Vec<f32> {
         SimulationConfig::default().values().to_vec()
     }
+    pub fn input_defaults() -> Vec<f32> {
+        let config = SimulationConfig::default();
+        let mut values = vec![0.0; INPUT_LEN];
+        values[32] = config.height;
+        values[DEPTH_INPUT] = config.depth;
+        values[BALL_INPUT..BALL_INPUT + 3].copy_from_slice(&config.values()[8..11]);
+        values[GAP_INPUT] = config.gap_cap;
+        for (i, p) in SimulationInput::default().side_planes.iter().enumerate() {
+            values[SIDE_INPUT + i * 4..SIDE_INPUT + (i + 1) * 4].copy_from_slice(p);
+        }
+        values
+    }
     pub fn listening_level(level: f32, band: usize, seconds: f64, reduced: bool) -> f32 {
         musical_lights_core::lights::musical_motion::listening_level(level, band, seconds, reduced)
     }
@@ -1586,7 +1718,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            23.0, // full resting opening with capped musical travel
+            24.0, // viewport side planes and full resting opening
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,
@@ -1610,7 +1742,7 @@ impl PhysicsSimulation {
             || values[BALL_INPUT] != (values[BALL_INPUT] as usize) as f32
         {
             return Err(JsError::new(
-                "Expected 68 simulation inputs with scrolling, gravity, audio attacks and enclosure depth, plus the paint policy",
+                "Expected 76 simulation inputs with scrolling, gravity, audio attacks and enclosure depth, plus the paint policy",
             ));
         }
         let input = SimulationInput {
@@ -1625,6 +1757,9 @@ impl PhysicsSimulation {
             height: values[32],
             depth: values[DEPTH_INPUT],
             gap_cap: values[GAP_INPUT],
+            side_planes: std::array::from_fn(|i| {
+                std::array::from_fn(|j| values[SIDE_INPUT + i * 4 + j])
+            }),
             scrolling: values[33] == 1.0,
             balls: BallSettings {
                 count: values[BALL_INPUT] as usize,

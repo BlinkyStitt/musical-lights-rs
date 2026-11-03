@@ -1,5 +1,17 @@
 # Validation record
 
+## Current view and ball boundaries
+
+The wider resting opening keeps the 3 mm end baseline while the bar travel cap
+continues to limit displacement using its reference height. Native geometry tests
+check travel and flight against the same reference at every supported height.
+`box-depth.spec.mjs` checks actual live balls at both screen edges after viewport
+changes. Native tests cover each of the nine banks, moving side planes, source
+pigments, invalid inputs and exact replay. The browser supplies its actual camera
+frustum planes; it does not clamp rendered ball positions. Protocol 24/report v10
+record the planes with all other fixed-tick inputs. The selected depth and the
+top/bottom bar surfaces still constrain physical motion.
+
 ## Current active-gap acceptance
 
 The [active-gap specification](active-gap-spec.md) and

@@ -54,7 +54,7 @@ test('automated collector counts only submitted frames, catches interruptions an
     const view = { card: Object.assign(new EventTarget(), { hasAttribute: () => false, querySelector: () => ({ checked: true }) }),
       onFrame: originalOnFrame, gpuFrames: { ready: originalReady },
       canvas: new EventTarget(), layout: [24, 120], palette: [.5], cameraBase: 0, cameraParameters: { values: { zoom: 100 } },
-      input: new Float32Array(68), settings: { cameraMotion: true }, metrics: { physicsSteps: 0, debt: 0, snapshotAgeMs: 1 },
+      input: new Float32Array(76), settings: { cameraMotion: true }, metrics: { physicsSteps: 0, debt: 0, snapshotAgeMs: 1 },
       report: { frame: originalFrame, receive: originalReceive, invalidate: originalInvalidate,
         audioState: { sessionId: 1, source: 'generated', kind: 'exercise', state: 'playing', repeat: true,
           diagnostics: false, sampleRate: 48000, dbfs: -34, frequency: 1000, channel: 0, pascalsPerUnit: 2,

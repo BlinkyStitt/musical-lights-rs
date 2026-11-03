@@ -30,7 +30,7 @@ const palette = Float32Array.from(Array.from({ length: 24 }, (_, i) => {
 for (const gapCap of [.6, 20]) for (let run = 0; run < 3; run++) {
   const config = PhysicsSimulation.defaults(); config[11] = gapCap;
   const sim = new PhysicsSimulation(config, palette);
-  const input = new Float32Array(layout[22]); input.set(config.slice(8, 11), 64); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5]; input[67] = gapCap;
+  const input = PhysicsSimulation.input_defaults(); input.set(config.slice(8, 11), 64); input[33] = 1; input[62] = PhysicsSimulation.defaults()[5]; input[67] = gapCap;
   let totalMs = 0, maxTickMs = 0, substeps = 0, requestedSubsteps = 0, overloadTicks = 0;
   for (let tick = 0; tick < 1440; tick++) {
     if (tick % 2 === 0) {
@@ -62,7 +62,7 @@ result.fullAttacks = [];
 for (const height of [.927803, 2.596923]) for (const gapCap of [.6, 20]) {
   const config = PhysicsSimulation.defaults(); config[0] = height; config[11] = gapCap;
   const sim = new PhysicsSimulation(config, palette);
-  const input = new Float32Array(layout[22] ?? 34); input.set(config.slice(8, 11), 64); input[32] = height; input[62] = config[5]; input[67] = config[11];
+  const input = PhysicsSimulation.input_defaults(); input.set(config.slice(8, 11), 64); input[32] = height; input[62] = config[5]; input[67] = config[11];
   sim.input(input);
   for (let tick = 0; tick < 120; tick++) sim.step();
   input.fill(1, 0, 24); sim.input(input);

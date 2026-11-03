@@ -777,7 +777,7 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
         }
     }
     let expected = SCROLL_SPEED * (110.0 - SCROLL_EASE);
-    assert!((sim.scroll_phase - expected.rem_euclid(72.0)).abs() < 0.001);
+    assert!((sim.scroll_phase - expected.rem_euclid((COUNT * SURFACE_BANKS) as f64)).abs() < 0.001);
     sim.apply(SimulationInput {
         tick: sim.tick,
         scrolling: false,
@@ -3196,4 +3196,177 @@ fn capped_gap_reserves_variable_ball_packing_on_construction_and_live_edits() {
             }
         }
     }
+}
+
+#[test]
+fn viewport_side_planes_replace_the_center_walls_and_bounce_inward() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        ..Default::default()
+    });
+    isolate(&mut sim, &[0]);
+    sim.apply(SimulationInput {
+        side_planes: [[1.0, 0.0, 0.0, 1.2], [-1.0, 0.0, 0.0, 2.4]],
+        gravity: Some([2.0, 0.0, 0.0]),
+        ..Default::default()
+    })
+    .unwrap();
+    place(
+        &mut sim,
+        0,
+        Vector::new(1.1, 0.3, 0.0),
+        Vector::new(1.0, 0.0, 0.0),
+    );
+    let mut maximum = 0.0_f32;
+    let mut bounced = false;
+    for _ in 0..HZ * 3 {
+        sim.step();
+        maximum = maximum.max(position(&sim, 0).x);
+        bounced |= velocity(&sim, 0).x < -0.1;
+        assert!(position(&sim, 0).x + radius(0) <= 2.402);
+    }
+    assert!(
+        maximum > 2.35,
+        "The old 1.2m center wall still blocks the ball: {maximum}"
+    );
+    assert!(bounced);
+}
+
+#[test]
+fn every_visible_bank_has_matching_bar_contacts_and_source_pigment() {
+    for bank in -4..=4 {
+        let mut sim = world(Default::default());
+        isolate(&mut sim, &[0]);
+        sim.apply(SimulationInput {
+            side_planes: [[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]],
+            ..Default::default()
+        })
+        .unwrap();
+        // Source 10 has a different pigment from ball 0's initial source 6.
+        place(
+            &mut sim,
+            0,
+            Vector::new(bank as f32 * WIDTH + 10.5 * PITCH, 0.05, 0.0),
+            Vector::ZERO,
+        );
+        let initial = sim.pigments;
+        let mut contacts = 0.0;
+        for _ in 0..HZ {
+            sim.step();
+            contacts += sim.snapshot.values[IMPULSE_OFFSET + 10];
+            assert!(
+                position(&sim, 0).y - radius(0) > 0.001,
+                "bank {bank}: ball crossed the bar"
+            );
+        }
+        assert!(contacts > 0.0, "bank {bank} lacks source 10 contacts");
+        assert_ne!(initial[..9], sim.pigments[..9], "bank {bank} did not paint");
+        assert!(target_color(&sim, 0)[0] > sim.palette[6][0]);
+    }
+}
+
+#[test]
+fn moving_viewport_planes_preserve_identity_pigment_and_exact_replay() {
+    let run = |fps| {
+        let mut sim = world(SimulationConfig {
+            gravity: 0.0,
+            ..Default::default()
+        });
+        isolate(&mut sim, &[0]);
+        place(&mut sim, 0, Vector::new(1.05, 0.3, 0.0), Vector::ZERO);
+        let handles = sim.balls.clone();
+        let pigments = sim.pigments;
+        for _ in 0..fps * 3 {
+            for _ in 0..HZ / fps {
+                let t = (sim.tick as f32 / HZ as f32).min(1.0);
+                let angle = 0.15 * t;
+                let (s, c) = angle.sin_cos();
+                let right = [-c, 0.0, -s, 1.2 - 0.3 * t];
+                sim.apply(SimulationInput {
+                    tick: sim.tick,
+                    side_planes: [[c, 0.0, -s, 0.2 * t], right],
+                    ..Default::default()
+                })
+                .unwrap();
+                sim.step();
+                assert_eq!(handles, sim.balls);
+                assert_eq!(pigments, sim.pigments);
+                let p = position(&sim, 0);
+                let distance = right[0] * p.x + right[2] * p.z + right[3];
+                assert!(
+                    distance >= radius(0) - 0.003,
+                    "tick {}: {distance}",
+                    sim.tick
+                );
+                assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
+            }
+        }
+        sim.snapshot
+    };
+    assert_eq!(run(30), run(60));
+    assert_eq!(run(60), run(120));
+}
+
+#[test]
+fn invalid_viewport_planes_do_not_change_held_inputs_or_snapshots() {
+    let mut sim = world(Default::default());
+    for plane in [
+        [0.0; 4],
+        [2.0, 0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, f32::NAN],
+        [1.0, 0.0, 0.0, 1001.0],
+    ] {
+        let before = sim.snapshot.clone();
+        let input = sim.input;
+        assert!(
+            sim.apply(SimulationInput {
+                side_planes: [plane, input.side_planes[1]],
+                ..input
+            })
+            .is_err()
+        );
+        assert_eq!(sim.snapshot, before);
+        assert_eq!(sim.input, input);
+    }
+}
+
+#[test]
+fn viewport_widening_away_from_balls_does_not_spend_contact_substeps() {
+    let mut reference = world(Default::default());
+    let mut widened = world(Default::default());
+    widened
+        .apply(SimulationInput {
+            side_planes: [[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]],
+            ..Default::default()
+        })
+        .unwrap();
+    reference.step();
+    widened.step();
+    assert_eq!(
+        reference.snapshot.values[COST_OFFSET],
+        widened.snapshot.values[COST_OFFSET]
+    );
+    assert_eq!(widened.snapshot.values[COST_OFFSET + 1], 0.0);
+}
+
+#[test]
+fn growing_a_ball_in_a_side_bank_does_not_restore_the_old_center_wall() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        ..Default::default()
+    });
+    isolate(&mut sim, &[0]);
+    place(&mut sim, 0, Vector::new(2.1, 0.3, 0.0), Vector::ZERO);
+    sim.apply(SimulationInput {
+        side_planes: [[1.0, 0.0, 0.0, 1.2], [-1.0, 0.0, 0.0, 2.4]],
+        balls: BallSettings {
+            small: 0.1,
+            big: 0.1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    sim.step();
+    assert!((position(&sim, 0).x - 2.1).abs() < 0.0001);
 }

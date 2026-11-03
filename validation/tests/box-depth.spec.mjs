@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {writeFile} from 'node:fs/promises';
 import {physicsReady,normalView} from '../physics-state.mjs';
 const origin='http://127.0.0.1:8101';
 
@@ -84,7 +85,7 @@ test('browser WASM starts balls uniformly in the source band at their spawn X',a
       return {version:layout[18],palette:Array.from(new Float32Array(v.palette)),balls:Array.from({length:8},(_,i)=>({x:state[3+i*layout[8]],color:Array.from(state.slice(3+i*layout[8]+15,3+i*layout[8]+18)),pigments:Array.from(pigments.slice(i*9,i*9+9))}))};
     } finally {sim.free();}
   });
-  expect(colors.version).toBe(23);
+  expect(colors.version).toBe(24);
   for(const [i,band] of [6,18,10,2,6,22,2,14].entries()) {
     const ball=colors.balls[i],expected=colors.palette.slice(band*3,band*3+3);
     expect(ball.x).toBeGreaterThanOrEqual(band*.05-1e-6);expect(ball.x).toBeLessThan((band+1)*.05+1e-6);expect(ball.color).toEqual(expected);
@@ -101,4 +102,92 @@ test('report config uses the selected depth before its physics receipt', async (
   });
   expect(state.previous).toBeCloseTo(.48, 5); expect(state.actual).toBeCloseTo(.48, 5);
   expect(state.requested).toBeCloseTo(.36, 5); expect(state.report).toBeCloseTo(.36, 5); expect(state.audio).toBe(false);
+});
+
+test('live balls reach the visible side edges after viewport changes without a center-box wall', async ({page}, info) => {
+  test.setTimeout(60000);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.goto(origin+'/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('.display-controls').evaluate(n=>{n.open=true;});
+  await page.locator('.camera-motion').uncheck();
+  await page.locator('.camera-rotation').fill('0');
+  const observations=[];
+  for (const viewport of [{width:1440,height:1000},{width:390,height:844},{width:844,height:390}]) {
+    await page.setViewportSize(viewport);
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+    for (const direction of [1,-1]) {
+      await page.evaluate(direction=>{
+        const v=document.querySelector('#dancinglights').physics;
+        v.stopPreview(); v.idle=false; v.clearAudio();
+        v.deviceGravity(direction*9.81,0,0,0);
+      },direction);
+      await page.waitForFunction(direction=>{
+        const v=document.querySelector('#dancinglights').physics;
+        const offset=68+(direction>0?4:0), p=v.input.slice(offset,offset+4);
+        return Array.from({length:v.balls.count},(_,i)=>{
+          const b=3+i*v.layout[8];
+          const gap=p[0]*v.current[b]+p[1]*v.current[b+1]+p[2]*v.current[b+2]+p[3]-v.current[b+7];
+          return Math.abs(gap)<.003;
+        }).some(Boolean);
+      },direction,{timeout:10000});
+      const state=await page.evaluate(()=>{
+        const v=document.querySelector('#dancinglights').physics;
+        const balls=Array.from({length:v.balls.count},(_,i)=>{
+          const b=3+i*v.layout[8], position=Array.from(v.current.slice(b,b+3)), radius=v.current[b+7];
+          return {position,radius,clearance:[0,1].map(side=>{
+            const p=v.input.slice(68+side*4,72+side*4);
+            return p[0]*position[0]+p[1]*position[1]+p[2]*position[2]+p[3]-radius;
+          })};
+        });
+        return {width:v.width,balls,tick:v.current[2],planes:Array.from(v.input.slice(68)),frames:v.metrics.frames,
+          discarded:v.metrics.discardedSimulationMs,notice:v.notice.persistent,audio:!!v.card.activeAudioContext};
+      });
+      for(const ball of state.balls) for(const clearance of ball.clearance) expect(clearance).toBeGreaterThan(-.004);
+      expect(state.discarded).toBe(0); expect(state.notice).toBeFalsy(); expect(state.audio).toBe(false); expect(state.frames).toBeGreaterThan(0);
+      if(direction>0) expect(Math.max(...state.balls.map(b=>b.position[0]))).toBeGreaterThan(state.width+.02);
+      else expect(Math.min(...state.balls.map(b=>b.position[0]))).toBeLessThan(-.02);
+      observations.push({viewport,direction,...state});
+    }
+  }
+  const evidence=info.outputPath('viewport-edge-contacts.json'), image=info.outputPath('wide-opening.png');
+  await writeFile(evidence,JSON.stringify(observations,null,2));
+  await page.screenshot({path:image});
+  await info.attach('viewport-edge-contacts.json',{path:evidence,contentType:'application/json'});
+  await info.attach('wide-opening.png',{path:image,contentType:'image/png'});
+});
+
+
+test('screen planes follow camera rotation, zoom and position in the actual renderer', async ({page}, info) => {
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.goto(origin+'/advanced/'); await physicsReady(page); await normalView(page);
+  await page.locator('.display-controls').evaluate(n=>{n.open=true;});
+  await page.locator('.camera-motion').uncheck();
+  const samples=[];
+  for(const c of [{width:390,height:844,angle:-30,zoom:75,x:20,y:70},{width:844,height:390,angle:30,zoom:125,x:80,y:30},{width:1440,height:1000,angle:0,zoom:25,x:50,y:50}]) {
+    await page.setViewportSize({width:c.width,height:c.height});
+    for(const [selector,value] of [['.camera-rotation',c.angle],['.camera-zoom',c.zoom],['.camera-x',c.x],['.camera-y',c.y]]) await page.locator(selector).fill(String(value));
+    await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+    await page.waitForFunction(c=>{
+      const v=document.querySelector('#dancinglights').physics;
+      return v.rotation===c.angle && v.cameraParameters.get('cameraZoom')===c.zoom && v.aspect===v.canvasWidth/v.canvasHeight;
+    },c);
+    const state=await page.evaluate(async()=>{
+      const v=document.querySelector('#dancinglights').physics,base=document.querySelector('meta[name="musical-lights-assets"]').content;
+      const THREE=await import(new URL(base+'physics/three.module.js',document.baseURI));
+      const planes=Array.from(v.input.slice(68)), checks=[];
+      for(const [side,x] of [[0,-1],[1,1]]) for(const delta of [-.01,0,.01]) {
+        const point=new THREE.Vector3(x*(1+delta),0,.5).unproject(v.camera), p=planes.slice(side*4,side*4+4);
+        checks.push({side,delta,distance:p[0]*point.x+p[1]*point.y+p[2]*point.z+p[3]});
+      }
+      return {planes,checks,tick:v.current[2],frame:v.metrics.frames,audio:!!v.card.activeAudioContext};
+    });
+    for(const row of state.checks) {
+      if(row.delta===0) expect(Math.abs(row.distance)).toBeLessThan(1e-5);
+      else if(row.delta<0) expect(row.distance).toBeGreaterThan(0);
+      else expect(row.distance).toBeLessThan(0);
+    }
+    expect(state.audio).toBe(false);expect(state.frame).toBeGreaterThan(0);samples.push({configuration:c,...state});
+  }
+  const path=info.outputPath('camera-side-planes.json');await writeFile(path,JSON.stringify(samples,null,2));
+  await info.attach('camera-side-planes.json',{path,contentType:'application/json'});
 });
