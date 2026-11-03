@@ -58,7 +58,8 @@ export class PhysicsView {
     this.ready = false;
     this.inflight = false;
     this.sequence = 0;
-    this.input = new Float32Array(68);
+    this.input = new Float32Array(76);
+    this.input.set([1, 0, 0, 0, -1, 0, 0, 1.2], 68);
     this.listening = this.card.dataset.audioSource === 'microphone' && this.card.dataset.audioState === 'playing';
     this.tempo = 120;
     this.accentSerial = 0; this.audioAccent = 0; this.idleAccent = 0;
@@ -97,6 +98,7 @@ export class PhysicsView {
     this.status = this.card.querySelector('.physics-status');
     this.notice = new PhysicsNotice(this.status);
     this.scene = new THREE.Scene();
+    this.sideFrustum = new THREE.Frustum(); this.sideProjection = new THREE.Matrix4();
     this.camera = new THREE.PerspectiveCamera(30, 1, .01, 200);
     // Draw the foreground and stars in one scene pass.
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
@@ -160,6 +162,7 @@ export class PhysicsView {
       this.input[31] = this.reduced.matches ? 1 : 0;
       this.input[63] = this.card.dataset.audioState === 'playing' ? 1 : 0;
       for (let i = 0; i < 3; i++) this.input[24 + i] = now - this.accelerationAt < 150 ? this.acceleration[i] : 0;
+      this.updateCamera(now);
       if (this.ready) {
         this.worker.postMessage({ type: 'pulse', timestamp: performance.timeOrigin + now,
           sequence: ++this.sequence, input: this.input, tempo: this.tempo, accent: this.accentSerial, listening: this.listening });
@@ -169,7 +172,6 @@ export class PhysicsView {
         const readout = this.card.querySelector('.tempo-readout');
         if (readout) { const playing = this.card.dataset.audioState === 'playing'; readout.hidden = !playing; readout.textContent = playing ? `${Math.round(this.tempo)} BPM` : ''; readout.title = this.tempoConfidence > 0 ? 'Estimated musical tempo' : 'No reliable beat; easing toward 60 BPM'; }
       }
-      this.updateCamera(now);
       let rendered = false;
       // Keep input and simulation active while the GPU completes earlier frames.
       // Only submitted frames contribute to FPS and diagnostic cadence.
@@ -224,7 +226,7 @@ export class PhysicsView {
       if (detail.physics) this.input[62] = detail.physics[5];
       this.input.set([detail.balls[0], detail.balls[1] / 100, detail.balls[2] / 100], 64);
       const gapCap = Math.fround((detail.activeGapCap ?? 60) / 100);
-      if (gapCap !== this.input[67]) this.report?.invalidate('Active gap cap changed during test');
+      if (gapCap !== this.input[67]) this.report?.invalidate('Bar travel cap changed during test');
       this.input[67] = gapCap;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });
     });
@@ -346,6 +348,13 @@ export class PhysicsView {
     }
     const fov = 2 * Math.atan(tangent * 1.015 / (this.cameraParameters.get('cameraZoom') / 100)) * 180 / Math.PI;
     if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+    this.sideFrustum.setFromProjectionMatrix(this.sideProjection.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
+    for (let i = 0; i < 2; i++) {
+      const plane = this.sideFrustum.planes[1 - i];
+      const offset = 68 + i * 4;
+      this.input[offset] = plane.normal.x; this.input[offset + 1] = plane.normal.y;
+      this.input[offset + 2] = plane.normal.z; this.input[offset + 3] = plane.constant;
+    }
   }
   get cameraBase() { return this.cameraParameters.get('cameraAngle'); }
   set cameraBase(value) { this.cameraParameters.set('cameraAngle', value); }
@@ -391,7 +400,7 @@ export class PhysicsView {
     if (this.closed) return;
     if (data.type === 'error') { this.fail(data.message); return; }
     if (data.type === 'ready') {
-      if (data.layout.length !== 32 || data.layout[18] !== 22 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
+      if (data.layout.length !== 32 || data.layout[18] !== 26 || data.layout[21] !== 16 || data.layout[22] !== this.input.length || !Number.isInteger(data.layout[20])) { this.fail('Physics assets have mismatched protocol versions. Reload to update.'); return; }
       this.layout = data.layout; this.config = data.config; this.defaults = data.defaults;
       this.buffers = Array.from({ length: 3 }, () => new ArrayBuffer(this.layout[12] * 4));
       this.input[62] = this.settings.physics?.[5] ?? this.config[5];

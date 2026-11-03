@@ -55,14 +55,14 @@ test('a transition with no observed frames cannot produce accepted timing', asyn
 
 const measuredResult = kind => ({ complete: true, timingSource: 'submitted-frames', browser: 'fixture', rendering: { kind },
   errors: [], discardedSimulationMs: 0, workload: { state: 'playing', diagnostics: false },
-  windows: [{ event: 'enter', fps: 60, p95: 16.7, maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8,
+  windows: [{ event: 'enter', fps: 60, p95: 16.7, maxFrame: 16.7, slowFrameFraction: 0, maxSnapshotAge: 20, maxDebt: 8,
     recovery: { afterMs: 1000, durationMs: 2000, measuredMs: 2000, fps: 60, p95: 16.7,
-      maxFrame: 16.7, over25Fraction: 0, maxSnapshotAge: 20, maxDebt: 8, finalDebt: 4, debtGrowthMs: 0 } }] });
+      maxFrame: 16.7, slowFrameFraction: 0, maxSnapshotAge: 20, maxDebt: 8, finalDebt: 4, debtGrowthMs: 0 } }] });
 
 test('software frame timing is reported without applying hardware frame limits', () => {
   const result = measuredResult('software');
   for (const phase of [result.windows[0], result.windows[0].recovery])
-    Object.assign(phase, { fps: 20, p95: 65, maxFrame: 80, over25Fraction: 1 });
+    Object.assign(phase, { fps: 20, p95: 65, maxFrame: 80, slowFrameFraction: 1 });
   assert.doesNotThrow(() => validateFullscreenResult(result));
   result.rendering.kind = 'hardware';
   assert.throws(() => validateFullscreenResult(result), /did not recover frame budget/);
@@ -107,7 +107,7 @@ test('missing tail frames and a freeze across the end boundary cannot pass recov
 });
 
 test('recovery keeps frame, age and debt limits; transients and freezes remain bounded', () => {
-  for (const boundary of [{ fps: 58.99 }, { p95: 18.51 }, { over25Fraction: .01 }]) {
+  for (const boundary of [{ fps: 29.99 }, { p95: 37.01 }, { slowFrameFraction: .01 }]) {
     const result = measuredResult('hardware'); Object.assign(result.windows[0].recovery, boundary);
     assert.throws(() => validateFullscreenResult(result), /did not recover frame budget/);
   }
@@ -140,4 +140,13 @@ test('recovery keeps frame, age and debt limits; transients and freezes remain b
   assert.throws(() => validateFullscreenResult(measuredResult('unverified')), /renderer is unverified/);
   const missing = measuredResult('hardware'); delete missing.rendering;
   assert.throws(() => validateFullscreenResult(missing), /renderer is unverified/);
+});
+
+
+test('hardware recovery accepts the approved 30 FPS cadence without relaxing physics limits', () => {
+  const result=measuredResult('hardware');
+  Object.assign(result.windows[0].recovery,{fps:30,p95:37,slowFrameFraction:.009});
+  assert.doesNotThrow(()=>validateFullscreenResult(result));
+  result.windows[0].recovery.finalDebt=2*1000/120;
+  assert.throws(()=>validateFullscreenResult(result),/recover/);
 });

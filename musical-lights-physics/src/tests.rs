@@ -777,7 +777,7 @@ fn continuous_scroll_stops_in_place_resumes_and_recycles_only_outside() {
         }
     }
     let expected = SCROLL_SPEED * (110.0 - SCROLL_EASE);
-    assert!((sim.scroll_phase - expected.rem_euclid(72.0)).abs() < 0.001);
+    assert!((sim.scroll_phase - expected.rem_euclid((COUNT * SURFACE_BANKS) as f64)).abs() < 0.001);
     sim.apply(SimulationInput {
         tick: sim.tick,
         scrolling: false,
@@ -3118,7 +3118,20 @@ fn settled_cap_keeps_reference_travel_and_timing_at_every_enclosure_height() {
             height,
             ..eight_ball_config()
         });
-        isolate(&mut sim, &[]);
+        // Keep balls spread across the center bank so these physical surfaces
+        // remain in the collision range while we check their prescribed poses.
+        for i in 0..BALL_COUNT {
+            place(
+                &mut sim,
+                i,
+                Vector::new(
+                    (i as f32 + 0.5) * WIDTH / BALL_COUNT as f32,
+                    height / 2.0,
+                    0.0,
+                ),
+                Vector::ZERO,
+            );
+        }
         input(&mut sim, [1.0; COUNT]);
         let mut trajectory = Vec::new();
         for _ in 0..6 {
@@ -3195,5 +3208,325 @@ fn capped_gap_reserves_variable_ball_packing_on_construction_and_live_edits() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn viewport_side_planes_replace_the_center_walls_and_bounce_inward() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        ..Default::default()
+    });
+    isolate(&mut sim, &[0]);
+    sim.apply(SimulationInput {
+        side_planes: [[1.0, 0.0, 0.0, 1.2], [-1.0, 0.0, 0.0, 2.4]],
+        gravity: Some([2.0, 0.0, 0.0]),
+        ..Default::default()
+    })
+    .unwrap();
+    place(
+        &mut sim,
+        0,
+        Vector::new(1.1, 0.3, 0.0),
+        Vector::new(1.0, 0.0, 0.0),
+    );
+    let mut maximum = 0.0_f32;
+    let mut bounced = false;
+    for _ in 0..HZ * 3 {
+        sim.step();
+        maximum = maximum.max(position(&sim, 0).x);
+        bounced |= velocity(&sim, 0).x < -0.1;
+        assert!(position(&sim, 0).x + radius(0) <= 2.402);
+    }
+    assert!(
+        maximum > 2.35,
+        "The old 1.2m center wall still blocks the ball: {maximum}"
+    );
+    assert!(bounced);
+}
+
+#[test]
+fn every_visible_bank_has_matching_bar_contacts_and_source_pigment() {
+    for bank in -4..=4 {
+        let mut sim = world(Default::default());
+        isolate(&mut sim, &[0]);
+        sim.apply(SimulationInput {
+            side_planes: [[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]],
+            ..Default::default()
+        })
+        .unwrap();
+        // Source 10 has a different pigment from ball 0's initial source 6.
+        place(
+            &mut sim,
+            0,
+            Vector::new(bank as f32 * WIDTH + 10.5 * PITCH, 0.05, 0.0),
+            Vector::ZERO,
+        );
+        let initial = sim.pigments;
+        let mut contacts = 0.0;
+        for _ in 0..HZ {
+            sim.step();
+            contacts += sim.snapshot.values[IMPULSE_OFFSET + 10];
+            assert!(
+                position(&sim, 0).y - radius(0) > 0.001,
+                "bank {bank}: ball crossed the bar"
+            );
+        }
+        assert!(contacts > 0.0, "bank {bank} lacks source 10 contacts");
+        assert_ne!(initial[..9], sim.pigments[..9], "bank {bank} did not paint");
+        assert!(target_color(&sim, 0)[0] > sim.palette[6][0]);
+    }
+}
+
+#[test]
+fn moving_viewport_planes_preserve_identity_pigment_and_exact_replay() {
+    let run = |fps| {
+        let mut sim = world(SimulationConfig {
+            gravity: 0.0,
+            ..Default::default()
+        });
+        isolate(&mut sim, &[0]);
+        place(&mut sim, 0, Vector::new(1.05, 0.3, 0.0), Vector::ZERO);
+        let handles = sim.balls.clone();
+        let pigments = sim.pigments;
+        for _ in 0..fps * 3 {
+            for _ in 0..HZ / fps {
+                let t = (sim.tick as f32 / HZ as f32).min(1.0);
+                let angle = 0.15 * t;
+                let (s, c) = angle.sin_cos();
+                let right = [-c, 0.0, -s, 1.2 - 0.3 * t];
+                sim.apply(SimulationInput {
+                    tick: sim.tick,
+                    side_planes: [[c, 0.0, -s, 0.2 * t], right],
+                    ..Default::default()
+                })
+                .unwrap();
+                sim.step();
+                assert_eq!(handles, sim.balls);
+                assert_eq!(pigments, sim.pigments);
+                let p = position(&sim, 0);
+                let distance = right[0] * p.x + right[2] * p.z + right[3];
+                assert!(
+                    distance >= radius(0) - 0.003,
+                    "tick {}: {distance}",
+                    sim.tick
+                );
+                assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
+            }
+        }
+        sim.snapshot
+    };
+    assert_eq!(run(30), run(60));
+    assert_eq!(run(60), run(120));
+}
+
+#[test]
+fn invalid_viewport_planes_do_not_change_held_inputs_or_snapshots() {
+    let mut sim = world(Default::default());
+    for plane in [
+        [0.0; 4],
+        [-1.0, 0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, f32::NAN],
+        [1.0, 0.0, 0.0, 1001.0],
+    ] {
+        let before = sim.snapshot.clone();
+        let input = sim.input;
+        assert!(
+            sim.apply(SimulationInput {
+                side_planes: [plane, input.side_planes[1]],
+                ..input
+            })
+            .is_err()
+        );
+        assert_eq!(sim.snapshot, before);
+        assert_eq!(sim.input, input);
+    }
+}
+
+#[test]
+fn viewport_widening_away_from_balls_does_not_spend_contact_substeps() {
+    let mut reference = world(Default::default());
+    let mut widened = world(Default::default());
+    widened
+        .apply(SimulationInput {
+            side_planes: [[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]],
+            ..Default::default()
+        })
+        .unwrap();
+    reference.step();
+    widened.step();
+    assert_eq!(
+        reference.snapshot.values[COST_OFFSET],
+        widened.snapshot.values[COST_OFFSET]
+    );
+    assert_eq!(widened.snapshot.values[COST_OFFSET + 1], 0.0);
+}
+
+#[test]
+fn growing_a_ball_in_a_side_bank_does_not_restore_the_old_center_wall() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        ..Default::default()
+    });
+    isolate(&mut sim, &[0]);
+    place(&mut sim, 0, Vector::new(2.1, 0.3, 0.0), Vector::ZERO);
+    sim.apply(SimulationInput {
+        side_planes: [[1.0, 0.0, 0.0, 1.2], [-1.0, 0.0, 0.0, 2.4]],
+        balls: BallSettings {
+            small: 0.1,
+            big: 0.1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    sim.step();
+    assert!((position(&sim, 0).x - 2.1).abs() < 0.0001);
+}
+
+#[test]
+fn wall_rotation_keeps_the_shared_free_space_free_of_phantom_contacts() {
+    let mut sim = world(SimulationConfig {
+        gravity: 0.0,
+        depth: 2.0,
+        ..Default::default()
+    });
+    isolate(&mut sim, &[0]);
+    let sides = [[1.0, 0.0, 0.0, 1.0], [-1.0, 0.0, 0.0, 3.0]];
+    sim.apply(SimulationInput {
+        side_planes: sides,
+        depth: 2.0,
+        ..Default::default()
+    })
+    .unwrap();
+    sim.step();
+    let p = Vector::new(-0.9, 0.3, -0.9);
+    place(&mut sim, 0, p, Vector::ZERO);
+    // The sphere has 10cm clearance at both ends of this wall rotation.
+    // Rotating the closest-point rigid frame cuts through that shared free space.
+    sim.apply(SimulationInput {
+        tick: sim.tick,
+        side_planes: [[0.0, 0.0, 1.0, 1.0], sides[1]],
+        ..sim.input
+    })
+    .unwrap();
+    sim.step();
+    assert!(
+        (position(&sim, 0) - p).length() < 0.001,
+        "phantom wall contact moved the sphere: {:?}",
+        position(&sim, 0)
+    );
+    assert!(velocity(&sim, 0).length() < 0.001);
+    assert!(sim.snapshot.values[COST_OFFSET] <= 3.0);
+    assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
+}
+
+#[test]
+fn empty_viewport_banks_do_not_add_collision_work_or_change_ball_motion() {
+    let run = |sides| {
+        let mut sim = world(SimulationConfig::default());
+        let mut snapshots = Vec::new();
+        for tick in 0..HZ * 3 {
+            sim.apply(SimulationInput {
+                tick: u64::from(tick),
+                levels: std::array::from_fn(|i| ((tick as usize / 13 + i) % 5) as f32 / 5.0),
+                side_planes: sides,
+                ..SimulationInput::default()
+            })
+            .unwrap();
+            sim.step();
+            snapshots.push(sim.snapshot.clone());
+            let enabled = sim
+                .bars
+                .iter()
+                .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
+                .count();
+            assert!(
+                enabled < SURFACE_END_COUNT / 2,
+                "{enabled} posts for two nearby balls"
+            );
+        }
+        (snapshots, sim.pigments)
+    };
+    assert_eq!(
+        run([[1.0, 0.0, 0.0, 2.4], [-1.0, 0.0, 0.0, 3.6]]),
+        run([[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]])
+    );
+}
+
+#[test]
+fn inactive_post_coordinates_cannot_change_the_contact_speed_bound() {
+    let run = |stale| {
+        let mut sim = world(eight_ball_config());
+        isolate(&mut sim, &[0]);
+        sim.apply(SimulationInput {
+            side_planes: [[1.0, 0.0, 0.0, 4.8], [-1.0, 0.0, 0.0, 6.0]],
+            ..eight_ball_input()
+        })
+        .unwrap();
+        sim.step();
+        if stale {
+            for &(h, _) in &sim.bars {
+                let body = &mut sim.world.bodies[h];
+                if !body.is_enabled() {
+                    body.set_translation(body.translation() + Vector::X * 100.0, false);
+                }
+            }
+        }
+        place(
+            &mut sim,
+            0,
+            Vector::new(
+                3.0 * WIDTH + 10.5 * PITCH,
+                radius(0) + BASELINE + 0.005,
+                0.0,
+            ),
+            Vector::ZERO,
+        );
+        let mut snapshots = Vec::new();
+        for _ in 0..8 {
+            let mut levels = [0.0; COUNT];
+            levels[10] = 1.0;
+            sim.apply(SimulationInput {
+                tick: sim.tick,
+                levels,
+                ..sim.input
+            })
+            .unwrap();
+            sim.step();
+            snapshots.push(sim.snapshot.clone());
+        }
+        snapshots
+    };
+    assert_eq!(run(false), run(true));
+}
+
+#[test]
+fn fast_wall_resize_does_not_enable_empty_banks_for_every_substep() {
+    let mut sim = world(SimulationConfig::default());
+    sim.apply(SimulationInput {
+        side_planes: [[1.0, 0.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 0.3]],
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    sim.step();
+    assert_eq!(sim.snapshot.values[COST_OFFSET], MAX_SUBSTEPS as f32);
+    let enabled = sim
+        .bars
+        .iter()
+        .filter(|(h, _)| sim.world.bodies[*h].is_enabled())
+        .count();
+    assert!(
+        enabled < COUNT * 8,
+        "{enabled} posts for the narrow swept ball span"
+    );
+    for _ in 0..HZ {
+        sim.step();
+    }
+    for (i, &(h, _)) in sim.balls.iter().enumerate() {
+        let x = sim.world.bodies[h].translation().x;
+        let radius = sim.config.balls.diameter(i) / 2.0;
+        assert!(x >= radius - 0.004 && x <= 0.3 - radius + 0.004);
     }
 }

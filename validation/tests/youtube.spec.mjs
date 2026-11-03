@@ -49,6 +49,27 @@ test('batched control input requires a stable enabled hit target and emits trust
   expect(await page.evaluate(() => controlClicks)).toEqual([true, true]);
 });
 
+test('control input waits for settling fractional layout before one trusted click', async ({ page }) => {
+  await page.setContent('<div style="position:absolute;left:50px;top:50px"><button style="display:block;width:100px;height:44px">Settling control</button></div>');
+  const control = page.getByRole('button', { name: 'Settling control', exact: true });
+  await control.evaluate(node => {
+    const scroll = node.scrollIntoView.bind(node);
+    node.scrollIntoView = (...args) => {
+      scroll(...args);
+      window.settlingAnimation = node.parentElement.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(.25px)' }], { duration: 200, fill: 'forwards' });
+    };
+    // Decorative motion must not block an otherwise stable hit point.
+    window.decorativeAnimation = node.animate([{ opacity: 1 }, { opacity: .7 }], { duration: 1000, iterations: Infinity });
+    window.settlingClicks = [];
+    node.addEventListener('click', event => settlingClicks.push(event.isTrusted));
+  });
+  await clickControlAtHitPoint(page, control);
+  expect(await control.evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(50.25, 4);
+  expect(await page.evaluate(() => settlingAnimation.playState)).toBe('finished');
+  expect(await page.evaluate(() => decorativeAnimation.playState)).toBe('running');
+  expect(await page.evaluate(() => settlingClicks)).toEqual([true]);
+});
+
 async function setup(page, path = '/', progressingVideo = false, nativeFullscreen = false) {
   await syntheticAudio(page);
   await page.addInitScript(nativeFullscreen => {

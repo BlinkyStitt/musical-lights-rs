@@ -3,7 +3,7 @@ import init, { PhysicsSimulation } from './physics.js';
 let wasm, layout, stepMs;
 const ready = init().then(instance => {
   wasm = instance; layout = PhysicsSimulation.layout(); stepMs = 1000 / layout[1];
-  input = new Float32Array(layout[22]);
+  input = PhysicsSimulation.input_defaults();
   impulseTotals = new Float32Array(layout[14] - layout[10]);
 });
 const capacity = 50000;
@@ -104,7 +104,7 @@ function reset(values) {
   simulation?.free();
   config = values ?? PhysicsSimulation.defaults();
   simulation = new PhysicsSimulation(config, palette);
-  input = new Float32Array(layout[22]); input[32] = config[0]; input[62] = config[5]; input.set(config.slice(8, 11), 64); input[67] = config[11];
+  input = PhysicsSimulation.input_defaults(); input[32] = config[0]; input[62] = config[5]; input.set(config.slice(8, 11), 64); input[67] = config[11];
   simulation.input(input);
   simulation.set_tempo(tempo);
   if (danceOptions) simulation.configure_dance(new Float64Array(danceOptions.odds), danceOptions.flight, danceOptions.seed, danceOptions.scrollSpeed);

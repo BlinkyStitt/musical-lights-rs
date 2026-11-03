@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { requireHardwareRenderer } from './gpu-renderer.mjs';
+import { hardwareFrameBudget } from '../musical-leptos/src/physics/performance.js';
 
 const order = [
   ['forward', 'baseline'], ['forward', 'shading'], ['forward', 'shadows'],
@@ -22,8 +23,8 @@ function distribution(value, label) {
 
 // Limits apply to the shipped shading mode. The shadow candidate is informative.
 // Software throughput depends on host capacity; gate its matched relative cost.
-const hardwareMinFps = 59;
-const hardwareMaxP95FrameMs = 18.5;
+const hardwareMinFps = hardwareFrameBudget.minimumFps;
+const hardwareMaxP95FrameMs = hardwareFrameBudget.maxP95Ms;
 const maxRepeatableShadingRegression = 0.10;
 
 export function performanceFailures(software, hardware) {

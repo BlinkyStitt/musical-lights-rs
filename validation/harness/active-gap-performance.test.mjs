@@ -16,9 +16,9 @@ test('five-minute numeric acceptance retains every frame, debt, lag and invalida
   const mutations = [
     f => { f.intervals = []; },
     f => { f.intervals = Array(17900).fill(1000 / 60); },
-    f => { f.intervals.fill(1000 / 58); },
-    f => { f.intervals.fill(19, 0, 1000); },
-    f => { f.intervals.fill(26, 0, 180); },
+    f => { f.intervals.fill(1000 / 29); },
+    f => { f.intervals.fill(38, 0, 1000); },
+    f => { f.intervals.fill(51, 0, 180); },
     f => { f.intervals[0] = NaN; },
     f => { f.data.debt = 2 * 1000 / 120; },
     f => { f.data.maxDebt = 100; },
@@ -41,6 +41,14 @@ test('five-minute numeric acceptance retains every frame, debt, lag and invalida
   }
 });
 
+test('temporary 30 FPS acceptance keeps full cadence and physics evidence', () => {
+  const f=fixture();f.intervals=Array.from({length:9000},(_,i)=>[33,33,34][i%3]);
+  const result=evaluatePerformance(f);
+  assert.equal(result.summary.fps,30);assert.equal(result.numericPass,true);
+  assert.equal(result.summary.slowFrameMs,50);assert.equal(result.summary.slowFrameFraction,0);
+  f.data.maxDebt=100;assert.equal(evaluatePerformance(f).numericPass,false);
+});
+
 test('automated collector counts only submitted frames, catches interruptions and restores hooks', async () => {
   const source = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url), 'utf8');
   for (const interruption of [null, 'visibility', 'continuity', 'session', 'workload', 'backpressure', 'audio-event-overflow', 'cap']) {
@@ -54,7 +62,7 @@ test('automated collector counts only submitted frames, catches interruptions an
     const view = { card: Object.assign(new EventTarget(), { hasAttribute: () => false, querySelector: () => ({ checked: true }) }),
       onFrame: originalOnFrame, gpuFrames: { ready: originalReady },
       canvas: new EventTarget(), layout: [24, 120], palette: [.5], cameraBase: 0, cameraParameters: { values: { zoom: 100 } },
-      input: new Float32Array(68), settings: { cameraMotion: true }, metrics: { physicsSteps: 0, debt: 0, snapshotAgeMs: 1 },
+      input: new Float32Array(76), settings: { cameraMotion: true }, metrics: { physicsSteps: 0, debt: 0, snapshotAgeMs: 1 },
       report: { frame: originalFrame, receive: originalReceive, invalidate: originalInvalidate,
         audioState: { sessionId: 1, source: 'generated', kind: 'exercise', state: 'playing', repeat: true,
           diagnostics: false, sampleRate: 48000, dbfs: -34, frequency: 1000, channel: 0, pascalsPerUnit: 2,
@@ -115,7 +123,7 @@ test('automated collector counts only submitted frames, catches interruptions an
     if (interruption === 'visibility') assert(data.invalidReasons.includes('Page hidden during test'));
     if (interruption === 'continuity' || interruption === 'session') assert(data.invalidReasons.includes('Audio interrupted or changed'));
     if (interruption === 'workload') assert(data.invalidReasons.includes('Audio workload changed'));
-    if (interruption === 'cap') assert(data.invalidReasons.includes('Active gap cap changed during test'));
+    if (interruption === 'cap') assert(data.invalidReasons.includes('Bar travel cap changed during test'));
     if (interruption === 'continuity') {
       assert.equal(data.audioTransitions.length, 1);
       assert.equal(data.audioTransitions[0].atMs, 100 * 1000 / 60);

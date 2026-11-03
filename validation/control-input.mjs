@@ -8,17 +8,25 @@ export async function controlHitPoint(control, { nativeScroll = false } = {}) {
   return control.evaluateAll(async (nodes, nativeScroll) => {
     if (nodes.length !== 1) throw new Error('Mouse input requires exactly one control');
     const node = nodes[0];
-    if (!nativeScroll) {
-      node.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    if (!nativeScroll) node.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    const deadline = performance.now() + 5000;
+    await new Promise(requestAnimationFrame);
+    let before = node.getBoundingClientRect();
+    for (;;) {
       await new Promise(requestAnimationFrame);
-      const before = node.getBoundingClientRect();
-      await new Promise(requestAnimationFrame);
+      // A newly queued animation can leave two initial rectangles unchanged.
+      // Wait for it to start before judging geometry, including parent motion.
+      let pendingAnimation = false;
+      for (let target = node; target; target = target.parentElement)
+        pendingAnimation ||= target.getAnimations().some(animation => animation.pending);
       const after = node.getBoundingClientRect();
-      if (['x', 'y', 'width', 'height'].some(key => before[key] !== after[key])) {
+      if (!pendingAnimation && ['x', 'y', 'width', 'height'].every(key => before[key] === after[key])) break;
+      if (performance.now() >= deadline) {
         throw new Error('Mouse input requires a stable control after scrolling: ' + JSON.stringify({
-          before: before.toJSON(), after: after.toJSON(), scroll: [scrollX, scrollY],
+          before: before.toJSON(), after: after.toJSON(), pendingAnimation, scroll: [scrollX, scrollY],
         }));
       }
+      before = after;
     }
     const box = node.getBoundingClientRect();
     const x = box.x + box.width / 2, y = box.y + box.height / 2;

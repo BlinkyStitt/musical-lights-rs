@@ -713,11 +713,17 @@ for (const scenario of [
     await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
     const lower = scenario.axis === 2 ? -before.config[5] / 2 : 0;
     const upper = [1.2, before.ceiling, before.config[5] / 2][scenario.axis];
+    const sidePlanes = before.sidePlanes;
     let eligible = 0;
     for (const [i, ball] of before.balls.entries()) {
       // A ball already at the wall cannot travel through it. Require every
       // ball with enough space to move the full distance at the measured force.
-      const room = scenario.direction > 0 ? upper - ball.radius - result.first[i] : result.first[i] - lower - ball.radius;
+      let room = scenario.direction > 0 ? upper - ball.radius - result.first[i] : result.first[i] - lower - ball.radius;
+      if (scenario.axis === 0) {
+        const offset = scenario.direction > 0 ? 4 : 0;
+        const n = sidePlanes.slice(offset, offset + 3);
+        room = (n.reduce((sum, value, j) => sum + value * ball.position[j], sidePlanes[offset + 3]) - ball.radius) / Math.abs(n[0]);
+      }
       if (room <= scenario.travel) continue;
       eligible++;
       expect(result.travel[i], `ball ${i}, available travel ${room}`).toBeGreaterThan(scenario.travel);
@@ -727,9 +733,12 @@ for (const scenario of [
     // Lost events do not leave a continuous force; gravity/collisions continue.
     await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
     const after = await physicsState(page);
+    const sides = after.sidePlanes;
     for (const b of after.balls) {
-      expect(b.position[0]).toBeGreaterThanOrEqual(b.radius - .006);
-      expect(b.position[0]).toBeLessThanOrEqual(1.2 - b.radius + .006);
+      for (const offset of [0, 4]) {
+        const clearance = sides[offset] * b.position[0] + sides[offset + 1] * b.position[1] + sides[offset + 2] * b.position[2] + sides[offset + 3];
+        expect(clearance).toBeGreaterThanOrEqual(b.radius - .006);
+      }
       expect(b.position[1]).toBeGreaterThanOrEqual(b.radius - .006);
       expect(b.position[1]).toBeLessThanOrEqual(after.ceiling - b.radius + .006);
       expect(Math.abs(b.position[2])).toBeLessThanOrEqual(after.config[5] / 2 - b.radius + .006);

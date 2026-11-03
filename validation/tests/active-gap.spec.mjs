@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { physicsReady, normalView, syntheticAudio, startFrozen } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
-const sliderName = 'Active gap cap (cm)';
+const sliderName = 'Bar travel cap (cm)';
 test.use({ hasTouch: true });
 
 test('active gap collector snapshots live audio metadata and rejects incomplete captures', async ({ page }) => {
@@ -81,10 +81,10 @@ test('cap edits invalidate phone and automated performance captures even after r
       restoredCap: view.input[67], sameWorker: view.worker === worker };
   });
   expect(result.unchangedPhone).toEqual([]);
-  expect(result.changedPhone).toEqual(['Active gap cap changed during test']);
-  expect(result.invalidReasons).toEqual(['Active gap cap changed during test']);
+  expect(result.changedPhone).toEqual(['Bar travel cap changed during test']);
+  expect(result.invalidReasons).toEqual(['Bar travel cap changed during test']);
   expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(.6, 6); expect(result.sameWorker).toBe(true);
-  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(0);
+  await physicsReady(page);
 });
 
 test('active gap cap edits, validates, restores and resets without acquiring audio', async ({ page }) => {
@@ -103,7 +103,7 @@ test('active gap cap edits, validates, restores and resets without acquiring aud
   await page.getByRole('button', { name: `Edit ${sliderName}`, exact: true }).click();
   await editor.fill('40.5'); await editor.press('Enter'); await expect(editor).toBeVisible(); await expect(slider).toHaveValue('2000');
   await editor.fill('40'); await editor.press('Enter'); await expect(slider).toHaveValue('40');
-  await page.getByRole('button', { name: 'About active gap cap', exact: true }).click();
+  await page.getByRole('button', { name: 'About bar travel cap', exact: true }).click();
   await expect(page.getByRole('tooltip')).toContainText('Ball and flight clearance reduce actual bar travel');
   await page.reload(); await physicsReady(page); await normalView(page);
   await page.locator('.display-controls').evaluate(n => { n.open = true; }); await expect(slider).toHaveValue('40');
@@ -126,12 +126,12 @@ test('live gap edits preserve measured meters and filtered targets while physics
   const tick = await page.evaluate(() => document.querySelector('#dancinglights').physics.current[2]);
   await page.locator('.display-controls').evaluate(node => { node.open = true; });
   for (const cap of [40, 2000, 60]) {
+    const previousTravel = await page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return v.current[v.layout[17] + 6]; });
     await page.getByRole('slider', { name: sliderName, exact: true }).fill(String(cap));
     await expect.poll(() => page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
-      const expectedBase = (v.height - Math.min(v.height, v.input[67])) / 2 + .003;
-      return Math.abs(v.current[v.layout[17] + 5] - expectedBase) < 1e-5;
-    })).toBe(true);
+      return { baseline: v.current[v.layout[17] + 5], travel: v.current[v.layout[17] + 6] };
+    }).then(s => Math.abs(s.baseline - .003) < 1e-5 && Math.abs(s.travel - previousTravel) > 1e-4)).toBe(true);
     expect(await measured()).toEqual(before);
     const state = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
@@ -160,7 +160,7 @@ test('restored cap constructs active placement and live geometry reaches all ban
       tops, source: Array.from(v.bars.instanceMatrix.array), side: Array.from(v.sideBars.mesh.instanceMatrix.array), sideCount: v.sideBars.mesh.count, sideBands: Array.from(v.sideBars.sourceBands.slice(0, v.sideBars.mesh.count)), offsets: Array.from(v.sideBars.offsets.slice(0, v.sideBars.mesh.count)), input: v.input[67], report: v.report.readConfig()[11] };
   });
   expect(state.tick).toBeGreaterThan(before.tick); expect(state.canvasHeight).toBe(before.height); expect(state.balls).toBe(8); expect(state.audio).toBe(false);
-  expect(state.base).toBeCloseTo((state.height - .6) / 2 + .003, 3); expect(state.report).toBeCloseTo(.6, 6);
+  expect(state.base).toBeCloseTo(.003, 6); expect(state.report).toBeCloseTo(.6, 6);
   for (let i = 0; i < 144; i++) expect(Math.abs(state.source[i * 16 + 5])).toBeCloseTo(state.tops[i % 24], 5);
   expect(new Set(state.offsets).size).toBe(8);
   for (let i = 0; i < state.sideCount; i++) expect(Math.abs(state.side[i * 16 + 5])).toBeCloseTo(state.tops[state.sideBands[i]], 5);

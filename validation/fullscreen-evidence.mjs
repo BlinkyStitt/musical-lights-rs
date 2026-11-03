@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
-import { summarize as summarizeValues } from '../musical-leptos/src/physics/performance.js';
+import { summarize as summarizeValues, hardwareFrameBudget } from '../musical-leptos/src/physics/performance.js';
 
 // Fixed input-to-recovery deadline; do not wait for a favorable frame to start
 // the recovery window. Keep the complete transition alongside its steady period.
@@ -20,7 +20,8 @@ export function fullscreenWindows(data) {
     const measuredMs = frames.reduce((a, b) => a + b, 0);
     return { measuredMs, fps: 1000 * frames.length / measuredMs,
       p95: frames[Math.ceil(frames.length * .95) - 1], maxFrame: frames.at(-1),
-      over25Fraction: frames.filter(x => x > 25).length / frames.length,
+      slowFrameMs: hardwareFrameBudget.slowFrameMs,
+      slowFrameFraction: frames.filter(x => x > hardwareFrameBudget.slowFrameMs).length / frames.length,
       maxDebt: Math.max(...points.map(p => p.debt)), finalDebt: points.at(-1).debt,
       debtGrowthMs: summarizeValues(points.slice(-10).map(p => p.debt)).mean
         - summarizeValues(points.slice(0, 10).map(p => p.debt)).mean,
@@ -77,7 +78,8 @@ export function validateFullscreenResult(result) {
       && recovery.durationMs === fullscreenRecovery.durationMs && recovery.measuredMs >= fullscreenRecovery.durationMs,
       `${result.browser} ${window.event} has incomplete recovery evidence`);
     if (result.rendering.kind === 'hardware') {
-      assert(recovery.fps >= 59 && recovery.p95 <= 18.5 && recovery.over25Fraction < .01,
+      assert(recovery.fps >= hardwareFrameBudget.minimumFps && recovery.p95 <= hardwareFrameBudget.maxP95Ms
+        && recovery.slowFrameFraction < hardwareFrameBudget.maxSlowFraction,
         `${result.browser} ${window.event} did not recover frame budget`);
     }
     // Use the existing steady-state catch-up contract: isolated debt peaks can

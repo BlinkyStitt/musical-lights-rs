@@ -27,8 +27,8 @@ pub fn valid_gap_cap(cap: f32) -> bool {
     cap.is_finite() && (MIN_GAP_CAP..=MAX_GAP_CAP).contains(&cap)
 }
 
-/// Symmetric permanent bases surround an active opening. Musical displacement,
-/// flight and brightness use active geometry only; base height is never a level.
+/// Cap musical travel using a reference height without closing the resting gap.
+/// Flight and brightness remain independent of the enclosing viewport height.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PairedBarGeometry {
     pub active_height: f32,
@@ -50,7 +50,7 @@ impl PairedBarGeometry {
         let extent = paired_bar_extent(active_height, (diameter + hop).max(stack) + clearance);
         Self {
             active_height,
-            baseline: (height - active_height) * 0.5 + BAR_BASELINE,
+            baseline: BAR_BASELINE,
             travel: (extent - BAR_BASELINE).max(0.0),
             flight: hop,
         }
@@ -504,7 +504,7 @@ mod capped_gap_tests {
     use super::*;
 
     #[test]
-    fn cap_reserves_symmetric_bases_and_preserves_reference_travel() {
+    fn cap_preserves_the_full_opening_and_reference_travel() {
         for cap in [0.4, 0.6, 1.0, 20.0] {
             for height in [0.4, 0.6, 1.2, 2.596923, 20.0] {
                 for flight in [0.0, 0.3, 0.5] {
@@ -514,9 +514,11 @@ mod capped_gap_tests {
                         PairedBarGeometry::new(active, active, 0.192, 0.0, 0.004, flight);
                     assert_eq!(geometry.travel, reference.travel);
                     assert_eq!(geometry.flight, reference.flight);
-                    assert_eq!(geometry.baseline, (height - active) / 2.0 + BAR_BASELINE);
+                    assert_eq!(geometry.baseline, BAR_BASELINE);
                     let gap = height - 2.0 * (geometry.baseline + geometry.travel);
-                    assert!((gap - (0.192 + 0.004 + geometry.flight)).abs() < 2e-6);
+                    assert!(
+                        (gap - (height - active + 0.192 + 0.004 + geometry.flight)).abs() < 2e-6
+                    );
                 }
             }
         }

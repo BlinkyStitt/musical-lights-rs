@@ -95,7 +95,7 @@ export async function physicsState(page) {
   return page.evaluate(() => {
     const view = document.querySelector('#dancinglights').physics;
     const state = view.current, layout = view.layout;
-    return { tick: state[2], height: state[1], ceiling: state[layout[17]], barMax: state[layout[17] + 1], baseline: state[layout[17] + 5], travel: state[layout[17] + 6], metrics: { ...view.metrics }, config: view.config,
+    return { sidePlanes: Array.from(view.input.slice(68)), tick: state[2], height: state[1], ceiling: state[layout[17]], barMax: state[layout[17] + 1], baseline: state[layout[17] + 5], travel: state[layout[17] + 6], metrics: { ...view.metrics }, config: view.config,
       bars: Array.from(state.slice(layout[9], layout[10])), edges: Array.from(view.edges),
       balls: Array.from({ length: state[layout[30]] }, (_, i) => {
         const o = 3 + i * layout[8];
