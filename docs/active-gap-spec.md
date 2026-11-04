@@ -175,3 +175,19 @@ coverage and zero-retry requirement unchanged. Keep the relative lighting slowdo
 gate. Report v12 uses `slowFrameFraction` with its explicit 50 ms threshold. Retain
 all older failed captures with their original verdicts; acceptance under this new
 policy does not prove the former 60 FPS workload passes.
+
+## Approved capture duration policy (2026-11-03)
+
+Routine PR and main validation use 15 seconds of warmup and a **two-minute
+measurement per view**, for normal, portrait-expanded and landscape-expanded.
+Require at least 119,000 ms of submitted frame intervals and a complete 135,000 ms
+worker recording. Keep all current FPS, p95, slow-frame, debt, drift, snapshot-age,
+audio, provenance, discarded-time, one-worker and zero-retry rules unchanged.
+This duration policy supersedes the earlier five-minute requirement for routine CI.
+
+The same collector supports an explicit `endurance` profile for periodic checks
+or targeted investigations: 15-second warmup, 300-second measurement, at least
+299,000 ms of submitted intervals, and a complete 315,000 ms worker recording.
+A two-minute capture cannot pass endurance acceptance. The optional phone-report
+UI retains the endurance profile. See [the command](validation.md#current-active-gap-acceptance).
+Retain historical five-minute results and their original verdicts.

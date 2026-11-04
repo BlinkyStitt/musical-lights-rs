@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { performanceCaptureTiming } from '../../musical-leptos/src/physics/performance.js';
 
 test('phone progress and sensor ages use the worker clock while FPS keeps frame timestamps', async () => {
   let monotonic = 15125;
-  const context = { performance: { now: () => monotonic }, innerWidth: 390, innerHeight: 844 };
+  const context = { performanceCaptureTiming, performance: { now: () => monotonic }, innerWidth: 390, innerHeight: 844 };
   const source = await readFile(new URL('../../musical-leptos/src/physics/report.js', import.meta.url), 'utf8');
   runInNewContext(source.replace(/^import .*;\n/gm, '').replace('export class PhoneReport', 'class PhoneReport') + '\nglobalThis.Report = PhoneReport;', context);
   const nodes = new Map();

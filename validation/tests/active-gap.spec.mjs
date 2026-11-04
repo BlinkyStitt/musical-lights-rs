@@ -24,12 +24,12 @@ test('active gap collector snapshots live audio metadata and rejects incomplete 
   const result = await page.evaluate(async () => {
     const view = document.querySelector('#dancinglights').physics, report = view.report;
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-    const { evaluatePerformance } = await import(base + 'physics/performance.js');
+    const acceptance = await import(base + 'physics/performance.js');
     const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
     const hooks = [report.frame, report.receive, report.invalidate, view.onFrame, view.gpuFrames.ready];
     const resources = { restart: typeof report.audioState.restart, processor: report.audioState.node instanceof AudioWorkletNode };
-    const pending = collectActiveGapPerformance(view, 'normal', evaluatePerformance);
-    // This is a serialization smoke check, not five-minute performance evidence.
+    const pending = collectActiveGapPerformance(view, 'normal', acceptance);
+    // This is a serialization smoke check, not full-duration performance evidence.
     // FIFO worker messages finish it early; the numeric gate must reject it.
     view.worker.postMessage({ type: 'report' });
     const data = structuredClone(await pending);
@@ -60,7 +60,7 @@ test('cap edits invalidate phone and automated performance captures even after r
   const result = await page.evaluate(async () => {
     const view = document.querySelector('#dancinglights').physics, report = view.report, worker = view.worker;
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-    const { evaluatePerformance } = await import(base + 'physics/performance.js');
+    const acceptance = await import(base + 'physics/performance.js');
     const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
     const edit = cm => {
       const node = view.card.querySelector('.active-gap-cap'); node.value = String(cm);
@@ -72,7 +72,7 @@ test('cap edits invalidate phone and automated performance captures even after r
     edit(60); const unchangedPhone = [...report.invalid];
     edit(40); edit(60); const changedPhone = [...report.invalid];
     report.active = false;
-    const pending = collectActiveGapPerformance(view, 'normal', evaluatePerformance);
+    const pending = collectActiveGapPerformance(view, 'normal', acceptance);
     edit(60); edit(40); edit(60);
     // The short FIFO report tests invalidation and replay availability only.
     view.worker.postMessage({ type: 'report' });

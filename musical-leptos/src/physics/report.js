@@ -2,7 +2,8 @@ import { ListeningReview } from './review.js';
 import { settingSwitch } from './controls.js';
 import { build } from './build.js';
 
-import { evaluatePerformance } from './performance.js';
+import { evaluatePerformance, performanceCaptureTiming } from './performance.js';
+const capture = performanceCaptureTiming('endurance');
 
 export class PhoneReport {
   constructor(view) {
@@ -182,7 +183,7 @@ export class PhoneReport {
       device: this.query('.phone-device').value.trim(), browser: this.query('.phone-browser').value.trim(), lowPowerMode: 'off (user confirmed)', mode,
       viewport: [innerWidth, innerHeight], pixelRatio: this.view.renderer.getPixelRatio(),
       cameraParameters: { ...this.view.cameraParameters.values },
-      cameraDegrees: this.view.cameraBase, cameraMotion: this.view.settings.cameraMotion, scrolling: this.view.card.querySelector('.scroll-lights').checked, warmupSeconds: 15, measurementSeconds: 300,
+      cameraDegrees: this.view.cameraBase, cameraMotion: this.view.settings.cameraMotion, scrolling: this.view.card.querySelector('.scroll-lights').checked, captureProfile: capture.profile, warmupSeconds: capture.warmupSeconds, measurementSeconds: capture.measurementSeconds,
       audioSource: 'generated PCM → AudioWorklet → loudness WASM', continuity: { ...this.audioState.continuity },
       startedAt: new Date().toISOString(), config, layout: this.view.layout, palette: Array.from(this.view.palette) };
     this.query('.phone-start').disabled = true; this.query('.phone-finish').disabled = false;
@@ -207,11 +208,11 @@ export class PhoneReport {
       this.invalidate('Audio workload changed during test');
     if (this.startMs == null) return;
     const elapsed = now - this.startMs;
-    if (elapsed < 15000) { this.previous = null; this.metadata.viewport = [innerWidth, innerHeight]; return; }
+    if (elapsed < capture.warmupMs) { this.previous = null; this.metadata.viewport = [innerWidth, innerHeight]; return; }
     if (this.view.sceneVisible === false) {
       this.invalidate('Visualizer left the viewport during test');
       this.previous = null;
-      if (elapsed >= 315000) this.finish(false);
+      if (elapsed >= capture.durationMs) this.finish(false);
       return;
     }
     this.maxSnapshotAgeMs = Math.max(this.maxSnapshotAgeMs, this.view.metrics.snapshotAgeMs);
@@ -227,11 +228,11 @@ export class PhoneReport {
     if (expanded !== (this.metadata.mode !== 'normal') || innerWidth !== this.metadata.viewport[0]
       || innerHeight !== this.metadata.viewport[1]) this.invalidate('View changed during test');
     if (now - this.lastProgress > 1000) {
-      this.query('.phone-progress').textContent = `Recording: ${Math.floor((elapsed - 15000) / 1000)} / 300 seconds. Physics delay ${this.view.metrics.debt.toFixed(1)} ms.`;
-      this.progress.push({ elapsedMs: elapsed - 15000, tick: this.view.metrics.physicsSteps, debtMs: this.view.metrics.debt, snapshotAgeMs: this.view.metrics.snapshotAgeMs });
+      this.query('.phone-progress').textContent = `Recording: ${Math.floor((elapsed - capture.warmupMs) / 1000)} / ${capture.measurementSeconds} seconds. Physics delay ${this.view.metrics.debt.toFixed(1)} ms.`;
+      this.progress.push({ elapsedMs: elapsed - capture.warmupMs, tick: this.view.metrics.physicsSteps, debtMs: this.view.metrics.debt, snapshotAgeMs: this.view.metrics.snapshotAgeMs });
       this.lastProgress = now;
     }
-    if (elapsed >= 315000) this.finish(false);
+    if (elapsed >= capture.durationMs) this.finish(false);
   }
   receive(data) {
     if (data.type === 'recording') {
@@ -243,7 +244,7 @@ export class PhoneReport {
         frameIntervalsMs: intervals, renderCostsMs: Array.from(this.renderCosts.subarray(0, this.costCount)),
         invalidReasons: this.invalid, simulationProgress: this.progress, maxSnapshotAgeMs: this.maxSnapshotAgeMs,
         ...evaluatePerformance({ intervals, renderCosts: Array.from(this.renderCosts.subarray(0, this.costCount)),
-          progress: this.progress, maxSnapshotAgeMs: this.maxSnapshotAgeMs, invalid: this.invalid, hz: this.view.layout[1], data }),
+          progress: this.progress, maxSnapshotAgeMs: this.maxSnapshotAgeMs, invalid: this.invalid, hz: this.view.layout[1], data, captureProfile: capture.profile }),
       };
       this.query('.phone-export').disabled = false; this.host.open = true; this.showResult();
     }

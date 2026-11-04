@@ -320,9 +320,12 @@ its device fields and smooth-motion checkbox are never fabricated by automation.
 GitHub's verified hardware-rendered Chromium suite measures normal,
 portrait-expanded and landscape-expanded views at mobile viewport sizes. Each
 run uses the repeating generated PCM → AudioWorklet → loudness WASM exercise,
-diagnostics off, 15 seconds of warmup, and five minutes of recorded submissions.
-The shared numeric evaluator requires average FPS ≥59, p95 interval ≤18.5 ms,
-less than 1% of intervals over 25 ms, and at least 299,000 ms of frame intervals.
+diagnostics off, 15 seconds of warmup, and two minutes of recorded submissions.
+The shared numeric evaluator requires the approved average FPS ≥30, p95 interval
+≤37 ms, fewer than 1% of intervals over 50 ms, and at least 119,000 ms of frame
+intervals. The same collector has an explicit five-minute `endurance` profile
+for periodic checks or targeted investigations; it requires at least 299,000 ms
+of intervals. The optional phone-report UI retains that endurance profile.
 At 120 Hz, final debt must be less than two steps, maximum debt below 100 ms,
 and mean debt growth from the first to last ten progress samples at most one
 step. Simulation lag must be at least minus one step and below three steps;

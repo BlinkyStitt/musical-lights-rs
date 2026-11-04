@@ -8,11 +8,14 @@ import { activeGapIdentity } from '../active-gap-identity.mjs';
 import { replayReport } from '../replay-physics.mjs';
 import { capturePerformanceEvidence } from '../performance-evidence.mjs';
 import { activeGapSeeds, setActiveGapSeed } from '../active-gap-workload.mjs';
+import { performanceCaptureTiming } from '../../musical-leptos/src/physics/performance.js';
+const captureProfile = process.env.ACTIVE_GAP_PROFILE ?? 'standard';
+const timing = performanceCaptureTiming(captureProfile);
 
 // Only selected by the hardware configuration; the ordinary suite stays intact.
 for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
-  test(`active gap five-minute acceptance: ${mode}`, async ({ page }, testInfo) => {
-    test.setTimeout(600000);
+  test(`active gap ${timing.measurementSeconds}-second ${captureProfile} acceptance: ${mode}`, async ({ page }, testInfo) => {
+    test.setTimeout(timing.deadlineMs + 120000);
     const identity = await activeGapIdentity();
     const sampler = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url));
     const instrumentationSha256 = createHash('sha256').update(sampler).digest('hex');
@@ -51,13 +54,13 @@ for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
     let data;
     try {
       data = await capturePerformanceEvidence(testInfo.outputDir, { ...identity, instrumentationSha256,
-        browserVersion: page.context().browser().version(), gpu, errors, failedRequests }, () => page.evaluate(async mode => {
+        browserVersion: page.context().browser().version(), gpu, errors, failedRequests }, () => page.evaluate(async ({ mode, captureProfile }) => {
         const view = document.querySelector('#dancinglights').physics;
         const base = document.querySelector('meta[name="musical-lights-assets"]').content;
-        const { evaluatePerformance } = await import(base + 'physics/performance.js');
+        const acceptance = await import(base + 'physics/performance.js');
         const { collectActiveGapPerformance } = await import('/active-gap-sampler.mjs');
-        return collectActiveGapPerformance(view, mode, evaluatePerformance);
-      }, mode));
+        return collectActiveGapPerformance(view, mode, acceptance, captureProfile);
+      }, { mode, captureProfile }));
     } finally {
       try { await testInfo.attach('active-gap-performance', { path: testInfo.outputPath('active-gap-performance.json'), contentType: 'application/json' }); }
       finally { await testInfo.attach('performance-processes', { path: nativePath, contentType: 'application/x-ndjson' }); }
@@ -67,6 +70,9 @@ for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
     expect(failedRequests).toEqual([]);
     expect(data.invalidReasons, JSON.stringify({ invalidations: data.invalidations, audioTransitions: data.audioTransitions,
       finalAudio: data.finalAudio })).toEqual([]);
+    expect(data.captureProfile).toBe(captureProfile);
+    expect(data.warmupSeconds).toBe(timing.warmupSeconds);
+    expect(data.measurementSeconds).toBe(timing.measurementSeconds);
     expect(data.numericPass, JSON.stringify({ ...data.summary, debt: data.debt, maxDebt: data.maxDebt,
       debtGrowthMs: data.debtGrowthMs, simulationLagMs: data.simulationLagMs,
       snapshotProgressDriftMs: data.snapshotProgressDriftMs, maxSnapshotAgeMs: data.maxSnapshotAgeMs })).toBe(true);

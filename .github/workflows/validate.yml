@@ -300,6 +300,7 @@ jobs:
           tool: just
       - name: Run hardware-rendered browser checks
         env:
+          ACTIVE_GAP_PROFILE: standard
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-gpu --shard=${{ matrix.shard }}/2
       - name: Collect active-gap transition and latency evidence
