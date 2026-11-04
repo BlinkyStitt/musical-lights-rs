@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 import { activeGapSeeds, setActiveGapSeed } from '../active-gap-workload.mjs';
 
-test('each five-minute view reproduces its recorded failing NUC1 seed', () => {
+test('each performance view reproduces its recorded failing NUC1 seed', () => {
   assert.deepEqual(activeGapSeeds, { normal: 3086797548,
     'portrait-fullscreen': 4156900579, 'landscape-fullscreen': 1360618947 });
   assert(Object.isFrozen(activeGapSeeds));

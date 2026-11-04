@@ -1,6 +1,7 @@
 // Browser-only collector. The production submission hook supplies frames; no
 // independent rAF loop can turn skipped draws into successful FPS evidence.
-export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
+export function collectActiveGapPerformance(view, mode, { evaluatePerformance, performanceCaptureTiming }, captureProfile = 'standard') {
+  const timing = performanceCaptureTiming(captureProfile);
   return new Promise((resolve, reject) => {
     const report = view.report, intervals = [], renderCosts = [], progress = [], invalid = new Set();
     const viewport = [innerWidth, innerHeight], camera = JSON.stringify(view.cameraParameters.values);
@@ -56,8 +57,8 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       view.canvas.removeEventListener('webglcontextlost', lost);
     };
     const deadline = setTimeout(() => {
-      cleanup(); reject(new Error('Performance capture ended without a complete five-minute worker report'));
-    }, 330000);
+      cleanup(); reject(new Error(`Performance capture ended without a complete ${timing.measurementSeconds}-second worker report`));
+    }, timing.deadlineMs);
     report.invalidate = reason => { invalidate(reason); oldInvalidate.call(report, reason); };
     // Observe the production loop without creating another animation clock.
     // These counters explain missing submissions; only frame() feeds acceptance.
@@ -88,12 +89,12 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       check();
       const invalidReasons = [...invalid];
       const evaluation = evaluatePerformance({ intervals, renderCosts, progress, maxSnapshotAgeMs,
-        invalid: invalidReasons, hz: layout[1], data });
+        invalid: invalidReasons, hz: layout[1], data, captureProfile });
       cleanup();
       resolve({ ...data, type: 'musical-lights-phone-report-v14', layout, palette, config: data.config,
         mode, viewport, camera: JSON.parse(camera), cameraBase, cameraMotion, scrolling, workload,
         physicalPhone: false, evidenceEnvironment: 'hardware-rendered desktop Chromium with mobile viewport',
-        warmupSeconds: 15, measurementSeconds: 300, frameIntervalsMs: intervals, renderCostsMs: renderCosts,
+        captureProfile, warmupSeconds: timing.warmupSeconds, measurementSeconds: timing.measurementSeconds, frameIntervalsMs: intervals, renderCostsMs: renderCosts,
         simulationProgress: progress, maxSnapshotAgeMs, invalidReasons, invalidations, audioTransitions,
         finalAudio: audioSnapshot(), renderProgress, ...evaluation });
     };
@@ -103,7 +104,7 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       submissions++;
       maxSubmissionDelayMs = Math.max(maxSubmissionDelayMs, performance.now() - timestamp);
       const elapsed = performance.now() - start;
-      if (elapsed < 15000) return;
+      if (elapsed < timing.warmupMs) return;
       maxSnapshotAgeMs = Math.max(maxSnapshotAgeMs, view.metrics.snapshotAgeMs);
       if (intervals.length >= 60000 || renderCosts.length >= 60000) invalidate('Frame report capacity exceeded');
       else {
@@ -112,11 +113,11 @@ export function collectActiveGapPerformance(view, mode, evaluatePerformance) {
       }
       previous = timestamp;
       if (elapsed - lastProgress >= 1000) {
-        progress.push({ elapsedMs: elapsed - 15000, tick: view.metrics.physicsSteps,
+        progress.push({ elapsedMs: elapsed - timing.warmupMs, tick: view.metrics.physicsSteps,
           debtMs: view.metrics.debt, snapshotAgeMs: view.metrics.snapshotAgeMs });
         lastProgress = elapsed;
       }
-      if (elapsed >= 315000) { finishing = true; view.worker.postMessage({ type: 'report' }); }
+      if (elapsed >= timing.durationMs) { finishing = true; view.worker.postMessage({ type: 'report' }); }
     };
     view.card.addEventListener('audio-session', audioChanged);
     document.addEventListener('visibilitychange', hidden);

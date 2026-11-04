@@ -40,16 +40,38 @@ thresholds. No owner product-use task or manual sign-off is a completion gate.
 Physical-device claims remain unavailable from desktop emulation.
 
 `just validate` runs CPU/build and offline regression checks locally. Exact-head
-GitHub GPU jobs add `active-gap.spec.mjs` and three five-minute hardware-rendered
+GitHub GPU jobs add `active-gap.spec.mjs` and three two-minute hardware-rendered
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
 off). NUC3 runs both GPU shards against the same verified build. NUC1 is retired
 from CI; its earlier captures remain historical comparison evidence. The remote
-validation gate requires both NUC3 shards and all three long cases to pass.
+validation gate requires both NUC3 shards and all three measured cases to pass.
 General self-hosted jobs can use NUC3 and the two existing Lambo workers.
 The ordinary browser inventory excludes
 those long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
-The five-minute views retain the seeds from the failed NUC1 captures in
+Each routine case uses the `standard` profile: 15 seconds of warmup followed by
+120 seconds of measurement. The shared timing contract controls the collector,
+deadline, report metadata and numeric gate. At least 119,000 ms of submitted
+frame intervals is required. Early worker completion cannot pass. This reduces
+the three measurement windows from 15 minutes to six minutes; other CI work is
+unchanged. FPS, p95, slow-frame, debt, drift, snapshot-age, audio and evidence
+requirements remain unchanged.
+
+For a periodic endurance check or targeted investigation, run the same three
+cases on an idle hardware-rendered host with the already-built artifact:
+
+```sh
+PATH="$PWD/.tools/bin:$PATH" ACTIVE_GAP_PROFILE=endurance .tools/bin/node validation/node_modules/@playwright/test/cli.js test --config validation/playwright.gpu.config.mjs validation/tests/active-gap-performance.spec.mjs
+```
+
+The `endurance` profile keeps the 15-second warmup, 300-second measurement and
+299,000 ms minimum submitted intervals. Unknown profiles fail before capture.
+The optional phone-report UI keeps this five-minute endurance profile. Endurance
+runs use the same collector, workload, acceptance limits, one worker, zero retries
+and failure exports. Short standard captures do not establish endurance acceptance.
+No recurring job or automatic rerun is added.
+
+The three measured views retain the seeds from the failed NUC1 captures in
 `active-gap-workload.mjs`, so runners use the same per-view initial seed.
 Tests check the application seed before capture and the worker seed afterward.
 Each result attaches the full replayable report, source/build digest identity,
@@ -85,18 +107,18 @@ Full transitions
 remain reported, bounded to debt/age below 100 ms and frame intervals below
 100 ms on hardware or 1,000 ms on software. The first frame crossing the end
 boundary is included; missing recovery coverage fails. This changes transition
-acceptance, not application speed or five-minute limits.
+acceptance, not application speed or steady-state capture limits.
 Both paths retain live-audio, error and discarded-time checks.
 Linux WebKit classification includes native software-renderer thread evidence;
 its masked `Apple GPU` string alone does not establish hardware rendering. Any failure
 blocks the existing validated-site/Pages barrier.
 
-Failed five-minute captures retain timestamped audio session transitions, the
+Failed performance captures retain timestamped audio session transitions, the
 final audio continuity state, and the first state associated with each
 invalidation. Per-second render counters distinguish animation callbacks,
 submitted frames, GPU backpressure and submission delay. These counters observe
 the existing loop; only actual submitted frames enter FPS acceptance. A live cap
-edit invalidates both the phone performance verdict and automated five-minute
+edit invalidates both the phone performance verdict and automated performance
 capture, including when the original cap is restored. The recording and physics
 continue for replay; saving an unchanged cap does not invalidate the run.
 `performance-processes.jsonl` records native process/thread CPU and runnable-queue
@@ -1371,7 +1393,7 @@ A skipped analysis call after PCM production must still report the missing
 backward-analysis-clock checks at the analysis boundary, after production advances.
 A separate stale-browser-clock check requires one live worklet, advancing analysis,
 unchanged session and no recovery reset. These correctness tests do not replace
-the three five-minute cases or strict transition/latency checks. All performance
+the three full-duration cases or strict transition/latency checks. All performance
 limits, invalidation rules, one worker, zero retries and failed exports remain.
 
 ## Audio sample gaps
