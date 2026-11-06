@@ -25,7 +25,7 @@ These defaults are adjustable prototype assumptions, not measured materials.
 | Physics rate / solver iterations | 120 Hz / 8 |
 | Reserved space between paired bars | Larger of the packed stack or largest sphere + hop allowance, plus 4 mm |
 | Minimum enclosure height | 0.40 m, expanded when the selected balls require more packing space |
-| Active gap cap | 0.60 m reference enclosure (0.40–20 m); ball packing remains reserved |
+| Bar travel cap | 1.20 m reference enclosure (0.40–20 m); ball packing remains reserved |
 
 Rapier derives sphere mass and inertia from radius and density. It resolves
 friction, angular motion, restitution, and contact impulses. Balls do not
@@ -466,13 +466,15 @@ of the fill. Spawn colors still match each ball's actual X coordinate.
 
 ## Active gap cap
 
-The shared Display settings include **Active gap cap (cm)**: 60 cm by default,
+The shared Display settings include **Bar travel cap (cm)**: 120 cm by default,
 40–2,000 cm in 1 cm steps. This is a reference enclosure height, not a stroke.
 For packed opening `P`, actual enclosure height `H ≥ P` and reference cap `C`,
-core and its physics adapter use `A = min(H, max(C, P))` and add `(H - A) / 2`
+core and its physics adapter use `A = min(H, max(C, P))` and add `(H - A) / 4`
 to each permanent base, retaining the 3 mm idle inset at each end. Ball diameter,
-flight allowance and clearance reduce inward bar travel. At the default flight setting, the
-60 cm reference retains 13.84 cm of travel per end, above the 3 mm baseline.
+flight allowance and clearance reduce inward bar travel. With the default two
+balls and flight setting, the 120 cm reference allows 39.21 cm of travel per end
+above the permanent baseline, where enclosure height permits. The former 60 cm
+reference allowed 18.21 cm with those same balls and flight setting.
 All nine banks use the applied physical endpoints, including during transitions.
 
 Changing the cap applies live and preserves ball handles, pigments and normalized
@@ -484,10 +486,12 @@ The cap changes neither loudness nor filtered audio targets, meters or attacks.
 Wave lighting uses normalized displacement above the applied permanent base.
 
 The cap is saved separately from the eight material/motion preferences. Missing
-or invalid cap preferences fall back to 60 cm without dropping other fields.
-Reset display restores 60 cm. Worker construction includes the cap before ball
+or invalid cap preferences fall back to 120 cm without dropping other fields.
+Display settings version 2 migrates saved 60 cm values to 120 cm. Other caps
+remain unchanged, and a new explicit 60 cm choice persists. Reset display
+restores 120 cm. Worker construction includes the cap before ball
 placement; live changes use the timestamped input queue and remain editable
-while recording. Engine layout 22 has twelve configuration floats (cap in metres
+while recording. Engine layout 27 has twelve configuration floats (cap in metres
 at index 11), 68 input floats (cap at index 67), and seven geometry floats
 (applied baseline/travel at offsets 5/6). Layout index 31 locates 24
 normalized motion values for wave lighting, independent of moving bases. Replay requires the entire matching
