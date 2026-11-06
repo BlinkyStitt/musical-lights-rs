@@ -3,10 +3,13 @@ name = "musical-lights-loudness-validation"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "mosqito==1.2.1", "numpy==2.5.3", "scipy==1.18.1",
-    "openpyxl==3.1.5", "matplotlib==3.11.1",
+    "mosqito==1.2.1", "numpy==2.5.4", "scipy==1.18.1",
+    "openpyxl==3.1.5", "matplotlib==3.11.2",
     "pillow>=13.0.0",
 ]
 
 [dependency-groups]
-dev = ["ruff==0.16.7", "ty==0.0.80"]
+dev = ["ruff==0.17.3", "ty==0.0.95"]
+
+[tool.uv]
+exclude-newer = "7 days"
