@@ -123,7 +123,7 @@ export function collectActiveGapPerformance(view, mode, { evaluatePerformance, p
     document.addEventListener('visibilitychange', hidden);
     view.canvas.addEventListener('webglcontextlost', lost);
     check();
-    if (!config || layout[1] !== 120 || !report.acceptanceWorkload() || Math.abs(config[11] - .6) > 1e-6
+    if (!config || layout[1] !== 120 || !report.acceptanceWorkload() || Math.abs(config[11] - report.defaults[11]) > 1e-6
       || (mode === 'landscape-fullscreen' ? innerWidth <= innerHeight : innerWidth > innerHeight)) {
       cleanup(); reject(new Error('Invalid active-gap acceptance workload or view')); return;
     }

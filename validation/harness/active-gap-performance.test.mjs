@@ -70,7 +70,7 @@ for (const captureProfile of ['standard', 'endurance']) {
   test(`${captureProfile} collector counts only submitted frames, catches interruptions and restores hooks`, async () => {
     const timing = performanceCaptureTiming(captureProfile);
     const source = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url), 'utf8');
-    for (const interruption of [null, 'visibility', 'continuity', 'session', 'workload', 'backpressure', 'audio-event-overflow', 'cap']) {
+    for (const interruption of [null, 'visibility', 'continuity', 'session', 'workload', 'backpressure', 'audio-event-overflow', 'cap', 'initial-cap']) {
       let now = 0, timeoutMs, cleared = false, reportedAt;
       const doc = Object.assign(new EventTarget(), { hidden: false });
       const context = { performance: { now: () => now, timeOrigin: 0 }, innerWidth: 390, innerHeight: 844,
@@ -91,13 +91,20 @@ for (const captureProfile of ['standard', 'endurance']) {
             restart() { assert.fail('Collector must not restart playback'); },
             node: { port: { postMessage() { assert.fail('Collector must not command the audio processor'); } } } },
           acceptanceWorkload: () => true,
-          readConfig: () => Array.from({ length: 12 }, (_, i) => i === 11 ? .6 : 0) } };
-      view.input[67] = .6;
+          defaults: Array.from({ length: 12 }, (_, i) => i === 11 ? 1.2 : 0),
+          readConfig: () => Array.from({ length: 12 }, (_, i) => i === 11 ? (interruption === 'initial-cap' ? .6 : 1.2) : 0) } };
+      view.input[67] = 1.2;
       view.worker = { postMessage(data) {
         if (data.type === 'record') view.report.receive({ type: 'recording', timestamp: 0 });
         else { reportedAt = now; view.report.receive({ ...fixture(captureProfile).data, type: 'report', config: [], finalTick: now * 120 / 1000, elapsedMs: now }); }
       } };
       const result = context.collect(view, 'normal', { evaluatePerformance, performanceCaptureTiming }, captureProfile);
+      if (interruption === 'initial-cap') {
+        await assert.rejects(result, /Invalid active-gap acceptance workload or view/);
+        assert.equal(cleared, true);
+        assert.equal(view.report.frame, originalFrame);
+        continue;
+      }
       // No calls to the submission hook means no frame samples, regardless of
       // elapsed wall time. Then feed genuine hook calls for the complete window.
       for (let tick = 0; tick <= timing.durationMs * 60 / 1000 + 1; tick++) {
@@ -123,7 +130,7 @@ for (const captureProfile of ['standard', 'endurance']) {
         }
         // Change the cap during measurement, then restore it before reporting.
         if (interruption === 'cap' && tick === 2000) view.input[67] = .4;
-        if (interruption === 'cap' && tick === 2001) view.input[67] = .6;
+        if (interruption === 'cap' && tick === 2001) view.input[67] = 1.2;
         view.onFrame(now, false);
         if (view.gpuFrames.ready()) view.report.frame(now, .2);
       }

@@ -46,8 +46,6 @@ test('former default gains visible musical travel and an explicit 60 cm choice s
 });
 
 test('active gap collector snapshots live audio metadata and rejects incomplete captures', async ({ page }) => {
-  // This collector measures the fixed 60 cm acceptance workload.
-  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 2, activeGapCap: 60 })));
   const sampler = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/active-gap-sampler.mjs', route => route.fulfill({ body: sampler, contentType: 'text/javascript' }));
@@ -88,8 +86,6 @@ test('active gap collector snapshots live audio metadata and rejects incomplete 
 });
 
 test('cap edits invalidate phone and automated performance captures even after restoring the cap', async ({ page }) => {
-  // This collector measures the fixed 60 cm acceptance workload.
-  await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 2, activeGapCap: 60 })));
   await page.setViewportSize({ width: 390, height: 844 });
   const sampler = await readFile(new URL('../active-gap-sampler.mjs', import.meta.url));
   await page.route('**/active-gap-sampler.mjs', route => route.fulfill({ body: sampler, contentType: 'text/javascript' }));
@@ -113,11 +109,11 @@ test('cap edits invalidate phone and automated performance captures even after r
     // Exercise the phone report's real invalidation listener without inventing
     // device declarations or claiming a short fixture as phone acceptance.
     report.active = true; report.invalid = [];
-    edit(60); const unchangedPhone = [...report.invalid];
-    edit(40); edit(60); const changedPhone = [...report.invalid];
+    edit(120); const unchangedPhone = [...report.invalid];
+    edit(40); edit(120); const changedPhone = [...report.invalid];
     report.active = false;
     const pending = collectActiveGapPerformance(view, 'normal', acceptance);
-    edit(60); edit(40); edit(60);
+    edit(120); edit(40); edit(120);
     // The short FIFO report tests invalidation and replay availability only.
     view.worker.postMessage({ type: 'report' });
     const data = await pending;
@@ -127,7 +123,7 @@ test('cap edits invalidate phone and automated performance captures even after r
   expect(result.unchangedPhone).toEqual([]);
   expect(result.changedPhone).toEqual(['Bar travel cap changed during test']);
   expect(result.invalidReasons).toEqual(['Bar travel cap changed during test']);
-  expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(.6, 6); expect(result.sameWorker).toBe(true);
+  expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(1.2, 6); expect(result.sameWorker).toBe(true);
   await physicsReady(page);
 });
 

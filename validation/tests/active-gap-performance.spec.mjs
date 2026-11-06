@@ -25,8 +25,6 @@ for (const mode of ['normal', 'portrait-fullscreen', 'landscape-fullscreen']) {
     await page.setViewportSize(mode === 'landscape-fullscreen' ? { width: 844, height: 390 } : { width: 390, height: 844 });
     await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
     await page.addInitScript(setActiveGapSeed, activeGapSeeds[mode]);
-    // Keep the specified workload independent of the application's default.
-    await page.addInitScript(() => localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 2, activeGapCap: 60 })));
     await page.route('**/active-gap-sampler.mjs', route => route.fulfill({ body: sampler, contentType: 'text/javascript' }));
     await page.goto('http://127.0.0.1:8101/advanced/');
     await physicsReady(page);

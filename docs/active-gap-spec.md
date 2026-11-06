@@ -25,8 +25,9 @@ Reset display restores 120. Display settings version 2 migrates the former
 60 cm default to 120 cm once. Other saved caps remain unchanged; version 2
 retains an explicit 60 cm choice. Invalid or missing values independently fall back.
 All nine banks and their colliders use the same applied bar endpoints.
-Performance and latency fixtures select their specified caps explicitly with
-version 2 settings, independently of the application default.
+Long-run performance captures use the compiled default cap of 120 cm.
+Transition and latency comparisons retain explicit 60 cm and 2,000 cm caps
+with version 2 settings, independently of the application default.
 
 The browser sends the actual inward left/right camera-frustum planes as held
 physics inputs. They replace the center box's side walls and follow viewport,
