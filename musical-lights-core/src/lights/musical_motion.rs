@@ -18,7 +18,7 @@ pub fn paired_bar_extent(height: f32, reserved: f32) -> f32 {
 }
 
 /// Reference enclosure height, not a stroke length (metres).
-pub const DEFAULT_GAP_CAP: f32 = 0.6;
+pub const DEFAULT_GAP_CAP: f32 = 1.2;
 pub const MIN_GAP_CAP: f32 = 0.4;
 pub const MAX_GAP_CAP: f32 = 20.0;
 pub const BAR_BASELINE: f32 = 0.003;
@@ -502,6 +502,31 @@ mod tests {
 #[cfg(test)]
 mod capped_gap_tests {
     use super::*;
+
+    #[test]
+    fn default_cap_adds_musical_travel_without_using_ball_or_flight_clearance() {
+        let balls = super::super::balls::BallSettings::default();
+        let geometry = |height, cap| {
+            PairedBarGeometry::new(
+                height,
+                cap,
+                balls.largest(),
+                balls.stack_height(),
+                0.004,
+                0.3,
+            )
+        };
+        let old = geometry(2.6, 0.6);
+        let current = geometry(2.6, DEFAULT_GAP_CAP);
+        assert!((current.travel - 0.39208).abs() < 1e-6);
+        assert!(current.travel > old.travel * 2.15);
+        for geometry in [old, current] {
+            let opening = 2.6 - 2.0 * (geometry.baseline + geometry.travel);
+            assert!(opening >= balls.largest() + 0.004 + geometry.flight);
+        }
+        let short = geometry(0.6, DEFAULT_GAP_CAP);
+        assert_eq!(short.travel, old.travel);
+    }
 
     #[test]
     fn cap_splits_extra_height_between_bases_and_opening() {

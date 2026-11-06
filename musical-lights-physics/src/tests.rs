@@ -3116,6 +3116,7 @@ fn settled_cap_keeps_reference_travel_and_timing_at_every_enclosure_height() {
     for height in [0.6, 1.2, 2.596923, 20.0] {
         let mut sim = world(SimulationConfig {
             height,
+            gap_cap: 0.6,
             ..eight_ball_config()
         });
         // Keep balls spread across the center bank so these physical surfaces

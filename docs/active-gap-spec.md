@@ -17,12 +17,16 @@ musical travel stays constant as enclosure height increases. Preserve ball packi
 normalized musical trajectories, pigments and the loudness model.
 
 The shared Home/Advanced **Bar travel cap (cm)** control retains its saved value,
-default 60, range 40–2,000 and step 1. It specifies a reference enclosure height,
+default 120, range 40–2,000 and step 1. It specifies a reference enclosure height,
 not a literal stroke distance. Help explains the travel and clearance relationship.
 Edits apply live without acquiring audio. Preserve keyboard/touch editing, help,
 fullscreen Settings, fixed scene dimensions and keyboard-open collider stability.
-Reset display restores 60. Invalid or missing values independently fall back.
+Reset display restores 120. Display settings version 2 migrates the former
+60 cm default to 120 cm once. Other saved caps remain unchanged; version 2
+retains an explicit 60 cm choice. Invalid or missing values independently fall back.
 All nine banks and their colliders use the same applied bar endpoints.
+Performance and latency fixtures select their specified caps explicitly with
+version 2 settings, independently of the application default.
 
 The browser sends the actual inward left/right camera-frustum planes as held
 physics inputs. They replace the center box's side walls and follow viewport,

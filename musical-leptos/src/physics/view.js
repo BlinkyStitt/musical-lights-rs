@@ -71,7 +71,7 @@ export class PhysicsView {
     this.cameraPan.onStop = () => {
       if (this.cameraDirty) { presentation?.persist(); this.cameraDirty = false; }
     };
-    this.input[67] = (this.settings.activeGapCap ?? 60) / 100;
+    this.input[67] = (this.settings.activeGapCap ?? 120) / 100;
     this.cameraBase = this.settings.cameraAngle; this.cameraDrag = false; this.cameraTime = 0;
     this.edges = new Float32Array(24);
     this.meshEdges = new Float32Array(144);
@@ -225,7 +225,7 @@ export class PhysicsView {
       this.lighting.configure(detail); this.resizePending = true;
       if (detail.physics) this.input[62] = detail.physics[5];
       this.input.set([detail.balls[0], detail.balls[1] / 100, detail.balls[2] / 100], 64);
-      const gapCap = Math.fround((detail.activeGapCap ?? 60) / 100);
+      const gapCap = Math.fround((detail.activeGapCap ?? 120) / 100);
       if (gapCap !== this.input[67]) this.report?.invalidate('Bar travel cap changed during test');
       this.input[67] = gapCap;
       if (!this.report?.active) this.worker.postMessage({ type: 'dance', options: this.danceOptions() });

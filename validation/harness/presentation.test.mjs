@@ -74,7 +74,7 @@ test('stored display settings restore valid preferences without restoring live p
   for (const depth of [.199,2.001,'1',null]) assert.equal(read({version:1,physics:[.6,12,16,.6,.4,depth,.02,.7]}).physics,undefined);
   assert.deepEqual(read({ version: 1, directionOdds: [200, 60, .5, .05, 1], flight: 99, cameraAngle: '20' }).directionOdds, [60, 200, .05, .5, 1]);
   assert.equal(read({ version: 1, physics: [0.6, -1, 8, .72, .12, .24, .04, .32] }).physics, undefined);
-  assert.deepEqual(read({ version: 2, directionOdds: [80, 180, .1, .6, 2] }).directionOdds, [60, 200, .05, .5, 1]);
+  assert.deepEqual(read({ version: 3, directionOdds: [80, 180, .1, .6, 2] }).directionOdds, [60, 200, .05, .5, 1]);
   assert.equal(read({ version: 1, listening: true, identify: true }).listening, undefined);
   assert.equal(readSettings({ getItem() { throw Error('denied'); } }).flight, 30);
 });
@@ -144,7 +144,7 @@ test('inverse pointer mapping and top-layer placement agree in all four display 
 test('camera preferences tolerate legacy, malformed and unavailable storage independently', () => {
   const read = saved => readSettings({ getItem: () => JSON.stringify(saved) });
   const defaults = { cameraAngle: 0, cameraZoom: 100, cameraX: 50, cameraY: 50 };
-  for (const settings of [read({ version: 1 }), read({ version: 2, cameraZoom: 25 }), readSettings(), readSettings({ getItem: () => '{' })]) {
+  for (const settings of [read({ version: 1 }), read({ version: 3, cameraZoom: 25 }), readSettings(), readSettings({ getItem: () => '{' })]) {
     for (const [id, value] of Object.entries(defaults)) assert.equal(settings[id], value);
   }
   for (const [id, min, max] of [['cameraAngle', -40, 40], ['cameraZoom', 25, 200], ['cameraX', 0, 100], ['cameraY', 0, 100]]) {
@@ -190,9 +190,31 @@ test('saved sones gate recovers independently from each gain field and other pre
   assert.deepEqual(recoverVisual([9, .1, 0, 2]).values, [0, .1, 0, 2]);
 });
 test('active gap cap restores independently and invalid fields preserve other preferences', () => {
-  const read = activeGapCap => readSettings({ getItem: () => JSON.stringify({ version: 1, activeGapCap, flight: 40, cameraAngle: 12 }) });
+  const read = activeGapCap => readSettings({ getItem: () => JSON.stringify({ version: 2, activeGapCap, flight: 40, cameraAngle: 12 }) });
   for (const cm of [40, 60, 2000]) assert.equal(read(cm).activeGapCap, cm);
   for (const cm of [undefined, null, '60', 39, 2001, 60.5]) {
-    assert.equal(read(cm).activeGapCap, 60); assert.equal(read(cm).flight, 40); assert.equal(read(cm).cameraAngle, 12);
+    assert.equal(read(cm).activeGapCap, 120); assert.equal(read(cm).flight, 40); assert.equal(read(cm).cameraAngle, 12);
   }
+});
+
+test('longer default travel migrates the old default once and retains custom settings', () => {
+  const read = saved => readSettings({ getItem: () => JSON.stringify(saved) });
+  for (const saved of [null, { version: 1 }, { version: 1, activeGapCap: 60 }]) {
+    const settings = read(saved);
+    assert.equal(settings.activeGapCap, 120);
+    assert.equal(settings.version, 2);
+    assert.equal(read(settings).activeGapCap, 120);
+  }
+  for (const version of [1, 2]) for (const cm of [40, 120, 250, 2000]) {
+    assert.equal(read({ version, activeGapCap: cm }).activeGapCap, cm);
+  }
+  const settings = read({ version: 1, activeGapCap: 60, flight: 40, balls: [8, 2.64, 19.2],
+    cameraAngle: 17, youtubeLink: '', visual: [0, .1, 0, 2] });
+  assert.equal(settings.flight, 40);
+  assert.equal(settings.cameraAngle, 17);
+  assert.equal(settings.youtubeLink, '');
+  assert.deepEqual(settings.balls, [8, 2.64, 19.2]);
+  assert.deepEqual(settings.visual, [0, .1, 0, 2]);
+  settings.activeGapCap = 60;
+  assert.equal(read(settings).activeGapCap, 60);
 });
