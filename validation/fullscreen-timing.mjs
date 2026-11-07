@@ -23,7 +23,7 @@ for (const gapCap of [60, 2000]) for (const [name,engine,profile] of [['chromium
     await staticPreview(context,origin);
     await context.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{value:false});Element.prototype.requestFullscreen=undefined;});
     await context.addInitScript(gapCap => {
-      localStorage.setItem('musical-lights-display-v1', JSON.stringify({version:1,activeGapCap:gapCap}));
+      localStorage.setItem('musical-lights-display-v1', JSON.stringify({version:2,activeGapCap:gapCap}));
       const random = crypto.getRandomValues.bind(crypto);
       crypto.getRandomValues = values => {
         if (values instanceof Uint32Array && values.length === 1) { values[0] = 1; return values; }

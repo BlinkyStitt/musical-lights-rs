@@ -34,7 +34,7 @@ try {
         const context = await browser.newContext({ ...profile, hasTouch: true, viewport: { width: 390, height: 844 } });
         await staticPreview(context, origin);
         await context.addInitScript(cap => {
-          localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 1, activeGapCap: cap }));
+          localStorage.setItem('musical-lights-display-v1', JSON.stringify({ version: 2, activeGapCap: cap }));
           const random = crypto.getRandomValues.bind(crypto);
           crypto.getRandomValues = values => {
             if (values instanceof Uint32Array && values.length === 1) { values[0] = 1; return values; }
