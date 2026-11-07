@@ -25,13 +25,15 @@ The processor warms for six seconds and retains its continuous sample clock.
 Physics cases replay 240 ticks at 120 Hz through the production Rapier
 simulation. Their 24 filtered targets come from that same audio processor.
 Portrait and landscape cases include scrolling, full-depth paired colliders,
-eight balls and snapshot reads. All physics fixtures use the production
+the default ball settings and snapshot reads. All physics fixtures use the production
 peak-scaled HSLuv rainbow (100 saturation, 58 lightness), so contact painting
 exercises chromatic hue paths instead of a uniform grey fast path. The full-attack cases exercise all bands in
 the tall portrait enclosure. Portrait music and full attacks each compare explicit
 60 cm (`_capped`) and 2,000 cm (`_uncapped`) gap caps in the same engine, with
 identical targets, rise duration and ticks. The latter retains the previous
-full-height geometry. For a statistical geometry comparison on an idle host:
+full-height geometry. The portrait music and full-attack cases also compare
+the previous 120 cm default with the compiled application default under the same workload.
+For a statistical geometry comparison on an idle host:
 
 ```sh
 cargo +nightly-2026-09-10 bench --locked --manifest-path validation/benchmarks/Cargo.toml --bench production -- production_physics

@@ -5,18 +5,18 @@ const origin = 'http://127.0.0.1:8101';
 const sliderName = 'Bar travel cap (cm)';
 test.use({ hasTouch: true });
 
-test('former default gains visible musical travel and an explicit 60 cm choice still persists', async ({ page }, info) => {
+test('former default gains visible musical travel and an explicit 120 cm choice still persists', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
     if (!localStorage.getItem('musical-lights-display-v1')) localStorage.setItem('musical-lights-display-v1',
-      JSON.stringify({ version: 1, activeGapCap: 60, cameraMotion: false }));
+      JSON.stringify({ version: 2, activeGapCap: 120, cameraMotion: false }));
   });
   await syntheticAudio(page);
   await page.goto(origin + '/advanced/'); await physicsReady(page); await startFrozen(page);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[67])).toBeCloseTo(1.2, 6);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[67])).toBeCloseTo(1.6, 6);
   const strokes = [];
-  for (const cap of [60, 120]) {
+  for (const cap of [120, 160]) {
     await page.evaluate(cap => {
       const node = document.querySelector('.active-gap-cap'); node.value = String(cap);
       node.dispatchEvent(new Event('input', { bubbles: true }));
@@ -27,22 +27,22 @@ test('former default gains visible musical travel and an explicit 60 cm choice s
       await expect.poll(() => page.evaluate(({ level, cap }) => {
         const v = document.querySelector('#dancinglights').physics, offset = v.layout[17];
         const base = v.current[offset + 5], travel = v.current[offset + 6];
-        return { tall: v.current[offset] > 1.2, travel,
+        return { tall: v.current[offset] > 1.6, travel,
           topError: v.renderedTops[0] - (base + level * travel) };
-      }, { level, cap })).toEqual({ tall: true, travel: expect.closeTo(cap === 60 ? .18208 : .39208, 5), topError: expect.closeTo(0, 4) });
+      }, { level, cap })).toEqual({ tall: true, travel: expect.closeTo(cap === 120 ? .39208 : .53208, 5), topError: expect.closeTo(0, 4) });
       tops.push(await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedTops[0]));
     }
     strokes.push(tops[1] - tops[0]);
     await info.attach(`${cap}-cm-loud-bars`, { body: await page.locator('#dancinglights canvas').screenshot(), contentType: 'image/png' });
   }
-  expect(strokes[1] / strokes[0]).toBeCloseTo(.39208 / .18208, 2);
-  // A new explicit 60 cm preference survives reload after the one-time migration.
+  expect(strokes[1] / strokes[0]).toBeCloseTo(.53208 / .39208, 2);
+  // A new explicit 120 cm preference survives reload after the one-time migration.
   await page.evaluate(() => {
-    const node = document.querySelector('.active-gap-cap'); node.value = '60';
+    const node = document.querySelector('.active-gap-cap'); node.value = '120';
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await page.reload(); await physicsReady(page);
-  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[67])).toBeCloseTo(.6, 6);
+  expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.input[67])).toBeCloseTo(1.2, 6);
 });
 
 test('active gap collector snapshots live audio metadata and rejects incomplete captures', async ({ page }) => {
@@ -109,11 +109,11 @@ test('cap edits invalidate phone and automated performance captures even after r
     // Exercise the phone report's real invalidation listener without inventing
     // device declarations or claiming a short fixture as phone acceptance.
     report.active = true; report.invalid = [];
-    edit(120); const unchangedPhone = [...report.invalid];
-    edit(40); edit(120); const changedPhone = [...report.invalid];
+    edit(160); const unchangedPhone = [...report.invalid];
+    edit(40); edit(160); const changedPhone = [...report.invalid];
     report.active = false;
     const pending = collectActiveGapPerformance(view, 'normal', acceptance);
-    edit(120); edit(40); edit(120);
+    edit(160); edit(40); edit(160);
     // The short FIFO report tests invalidation and replay availability only.
     view.worker.postMessage({ type: 'report' });
     const data = await pending;
@@ -123,7 +123,7 @@ test('cap edits invalidate phone and automated performance captures even after r
   expect(result.unchangedPhone).toEqual([]);
   expect(result.changedPhone).toEqual(['Bar travel cap changed during test']);
   expect(result.invalidReasons).toEqual(['Bar travel cap changed during test']);
-  expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(1.2, 6); expect(result.sameWorker).toBe(true);
+  expect(result.numericPass).toBe(false); expect(result.restoredCap).toBeCloseTo(1.6, 6); expect(result.sameWorker).toBe(true);
   await physicsReady(page);
 });
 
@@ -132,12 +132,12 @@ test('active gap cap edits, validates, restores and resets without acquiring aud
   await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
   await page.locator('.display-controls').evaluate(n => { n.open = true; });
   const slider = page.getByRole('slider', { name: sliderName, exact: true });
-  await expect(slider).toHaveValue('120');
-  await page.getByRole('button', { name: `Increase ${sliderName}`, exact: true }).click(); await expect(slider).toHaveValue('121');
-  await slider.focus(); await slider.press('ArrowLeft'); await expect(slider).toHaveValue('120');
+  await expect(slider).toHaveValue('160');
+  await page.getByRole('button', { name: `Increase ${sliderName}`, exact: true }).click(); await expect(slider).toHaveValue('161');
+  await slider.focus(); await slider.press('ArrowLeft'); await expect(slider).toHaveValue('160');
   await page.getByRole('button', { name: `Edit ${sliderName}`, exact: true }).click();
   const editor = page.getByRole('spinbutton', { name: `${sliderName} value`, exact: true });
-  await editor.fill('2001'); await editor.press('Enter'); await expect(editor).toBeVisible(); await expect(slider).toHaveValue('120');
+  await editor.fill('2001'); await editor.press('Enter'); await expect(editor).toBeVisible(); await expect(slider).toHaveValue('160');
   await editor.fill('2000'); await editor.press('Enter'); await expect(slider).toHaveValue('2000');
   await page.getByRole('button', { name: `Increase ${sliderName}`, exact: true }).click(); await expect(slider).toHaveValue('2000');
   await page.getByRole('button', { name: `Edit ${sliderName}`, exact: true }).click();
@@ -150,7 +150,7 @@ test('active gap cap edits, validates, restores and resets without acquiring aud
   await page.goto(origin + '/'); await physicsReady(page); await normalView(page);
   await page.locator('.display-controls').evaluate(n => { n.open = true; }); await expect(slider).toHaveValue('40');
   await page.locator('.display-controls').evaluate(n => { n.open = true; });
-  await page.getByRole('button', { name: 'Reset display', exact: true }).click(); await expect(slider).toHaveValue('120');
+  await page.getByRole('button', { name: 'Reset display', exact: true }).click(); await expect(slider).toHaveValue('160');
   expect(await page.evaluate(() => !!document.querySelector('.audio-card').activeAudioContext)).toBe(false);
   expect(await page.evaluate(() => window.captureRequests)).toBe(0);
 });

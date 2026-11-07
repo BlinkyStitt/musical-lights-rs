@@ -91,9 +91,9 @@ for (const captureProfile of ['standard', 'endurance']) {
             restart() { assert.fail('Collector must not restart playback'); },
             node: { port: { postMessage() { assert.fail('Collector must not command the audio processor'); } } } },
           acceptanceWorkload: () => true,
-          defaults: Array.from({ length: 12 }, (_, i) => i === 11 ? 1.2 : 0),
-          readConfig: () => Array.from({ length: 12 }, (_, i) => i === 11 ? (interruption === 'initial-cap' ? .6 : 1.2) : 0) } };
-      view.input[67] = 1.2;
+          defaults: Array.from({ length: 12 }, (_, i) => i === 11 ? 1.6 : 0),
+          readConfig: () => Array.from({ length: 12 }, (_, i) => i === 11 ? (interruption === 'initial-cap' ? 1.2 : 1.6) : 0) } };
+      view.input[67] = 1.6;
       view.worker = { postMessage(data) {
         if (data.type === 'record') view.report.receive({ type: 'recording', timestamp: 0 });
         else { reportedAt = now; view.report.receive({ ...fixture(captureProfile).data, type: 'report', config: [], finalTick: now * 120 / 1000, elapsedMs: now }); }
@@ -130,7 +130,7 @@ for (const captureProfile of ['standard', 'endurance']) {
         }
         // Change the cap during measurement, then restore it before reporting.
         if (interruption === 'cap' && tick === 2000) view.input[67] = .4;
-        if (interruption === 'cap' && tick === 2001) view.input[67] = 1.2;
+        if (interruption === 'cap' && tick === 2001) view.input[67] = 1.6;
         view.onFrame(now, false);
         if (view.gpuFrames.ready()) view.report.frame(now, .2);
       }
