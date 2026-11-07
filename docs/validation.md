@@ -319,9 +319,10 @@ Run from the repository root with pinned tools and macOS host access. To check
 workflow syntax, install the pinned checker with
 `python3 validation/install_tools.py ci`, then run
 `.tools/bin/actionlint .github/workflows/*.yml`.
-`just validate` and `just check-ci` run that installer automatically when the
-local `.tools/bin/actionlint` executable is missing. Installation errors stop
-the recipe; workflow lint still runs on every invocation.
+The `ci` installer also provides uv `0.10.5`, matching the reference CI pin.
+`just validate` and `just check-ci` run that installer automatically when either
+local `.tools/bin/actionlint` or `.tools/bin/uv` is missing or not executable.
+Installation errors stop the recipe; workflow lint still runs on every invocation.
 Run provenance, coverage, change-selector, installer and publication regressions
 with `python3 -m unittest discover -s validation/tooling -v`.
 `python3 validation/validate.py python` installs the locked reference environment

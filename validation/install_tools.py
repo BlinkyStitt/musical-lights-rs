@@ -79,6 +79,11 @@ def main():
             ["actionlint"],
             bindir,
         )
+        install_archive(
+            f"https://github.com/astral-sh/uv/releases/download/0.10.5/uv-{target}.tar.gz",
+            ["uv"],
+            bindir,
+        )
     elif args.group == "esp":
         download(
             f"https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-{target}",

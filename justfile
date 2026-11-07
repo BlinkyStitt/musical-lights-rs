@@ -43,6 +43,6 @@ validate: _ci-tools
 validate-gpu *args:
     cd validation && npm ci --ignore-scripts && npx playwright install chromium && npx playwright test --config playwright.gpu.config.mjs {{args}}
 
-# Local worktrees need the same pinned workflow checker that CI installs.
+# Local worktrees need the pinned workflow checker and Python environment tool.
 _ci-tools:
-    test -x .tools/bin/actionlint || python3 validation/install_tools.py ci
+    test -x .tools/bin/actionlint && test -x .tools/bin/uv || python3 validation/install_tools.py ci
