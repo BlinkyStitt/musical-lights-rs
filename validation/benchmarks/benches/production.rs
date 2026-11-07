@@ -184,11 +184,16 @@ fn physics(c: &mut Criterion) {
     assert_eq!(levels.len(), TICKS);
     let mut group = c.benchmark_group("production_physics");
     group.throughput(Throughput::Elements(TICKS as u64));
+    let default_cap = SimulationConfig::default().gap_cap;
     for (name, height, gap_cap, full_attack) in [
         ("music_portrait_capped", 2.596923, 0.6, false),
+        ("music_portrait_previous_default", 2.596923, 1.2, false),
+        ("music_portrait_default", 2.596923, default_cap, false),
         ("music_portrait_uncapped", 2.596923, 20.0, false),
         ("music_landscape", 0.554502, 0.6, false),
         ("full_attack_portrait_capped", 2.596923, 0.6, true),
+        ("full_attack_portrait_previous_default", 2.596923, 1.2, true),
+        ("full_attack_portrait_default", 2.596923, default_cap, true),
         ("full_attack_portrait_uncapped", 2.596923, 20.0, true),
     ] {
         assert_eq!(

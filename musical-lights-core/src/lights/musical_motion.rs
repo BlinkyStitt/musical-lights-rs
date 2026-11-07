@@ -18,7 +18,7 @@ pub fn paired_bar_extent(height: f32, reserved: f32) -> f32 {
 }
 
 /// Reference enclosure height, not a stroke length (metres).
-pub const DEFAULT_GAP_CAP: f32 = 1.2;
+pub const DEFAULT_GAP_CAP: f32 = 1.6;
 pub const MIN_GAP_CAP: f32 = 0.4;
 pub const MAX_GAP_CAP: f32 = 20.0;
 pub const BAR_BASELINE: f32 = 0.003;
@@ -516,16 +516,18 @@ mod capped_gap_tests {
                 0.3,
             )
         };
-        let old = geometry(2.6, 0.6);
+        let old = geometry(2.6, 1.2);
         let current = geometry(2.6, DEFAULT_GAP_CAP);
-        assert!((current.travel - 0.39208).abs() < 1e-6);
-        assert!(current.travel > old.travel * 2.15);
+        assert!((old.travel - 0.39208).abs() < 1e-6);
+        assert!((current.travel - 0.53208).abs() < 1e-6);
+        assert!(current.travel > old.travel * 1.35);
         for geometry in [old, current] {
             let opening = 2.6 - 2.0 * (geometry.baseline + geometry.travel);
             assert!(opening >= balls.largest() + 0.004 + geometry.flight);
         }
-        let short = geometry(0.6, DEFAULT_GAP_CAP);
-        assert_eq!(short.travel, old.travel);
+        for height in [0.6, 1.2] {
+            assert_eq!(geometry(height, DEFAULT_GAP_CAP), geometry(height, 1.2));
+        }
     }
 
     #[test]

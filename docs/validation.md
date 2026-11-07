@@ -5,9 +5,9 @@
 The resting opening now splits the difference between the earlier permanent-base
 and full-opening views. Each end baseline is 3 mm plus one quarter of the height
 above the capped reference. The bar travel cap continues to limit displacement
-using that same reference height. The default reference is 120 cm; the former
-60 cm saved default migrates once, while custom caps remain unchanged. With the
-default two balls and flight setting, full travel rises from 18.21 cm to 39.21 cm
+using that same reference height. The default reference is 160 cm; the former
+60 cm and 120 cm saved defaults migrate once, while custom caps remain unchanged.
+With the default two balls and flight setting, full travel rises from 39.21 cm to 53.21 cm
 per end where enclosure height permits. Native geometry tests
 check travel and flight against the same reference at every supported height.
 `box-depth.spec.mjs` checks actual live balls at both screen edges after viewport

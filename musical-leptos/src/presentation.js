@@ -3,14 +3,14 @@ import { CAMERA_PARAMETERS, CAMERA_DEFAULTS, CameraParameters, validCameraParame
 import { DEFAULT_AUDIO, validAudio, DEFAULT_VISUAL, recoverVisual, RENDER_CONTROLS, mountAudioControls } from './audio_controls.js';
 // Browser presentation only. Acoustic decisions and flight math live in core.
 export const SETTINGS_KEY = 'musical-lights-display-v1';
-export const DEFAULT_SETTINGS = Object.freeze({ version: 2, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30, activeGapCap: 120,
+export const DEFAULT_SETTINGS = Object.freeze({ version: 3, directionOdds: Object.freeze([60, 200, .05, .5, 1]), flight: 30, activeGapCap: 160,
   cameraMotion: true, ...CAMERA_DEFAULTS, audio: DEFAULT_AUDIO, visual: DEFAULT_VISUAL, quantum: 'default', latency: 'interactive',
   ...Object.fromEntries(RENDER_CONTROLS.map(([key, , value]) => [key, value])), scrolling: true, balls: Object.freeze([2, 2.64, 19.2]), youtubeLink: 'https://www.youtube.com/watch?v=6d4NOjyd2Ik' });
 export function readSettings(storage) {
   const defaults = { ...DEFAULT_SETTINGS, directionOdds: [...DEFAULT_SETTINGS.directionOdds], audio: [...DEFAULT_AUDIO], visual: [...DEFAULT_VISUAL], balls: [...DEFAULT_SETTINGS.balls] };
   try {
     const saved = JSON.parse(storage.getItem(SETTINGS_KEY));
-    if (![1, 2].includes(saved?.version)) return defaults;
+    if (![1, 2, 3].includes(saved?.version)) return defaults;
     for (const [key, min, max] of [['flight', 0, 50]]) {
       if (Number.isFinite(saved[key]) && saved[key] >= min && saved[key] <= max) defaults[key] = saved[key];
     }
@@ -19,10 +19,11 @@ export function readSettings(storage) {
     if (validBalls(saved.balls)) defaults.balls = [...saved.balls];
     const recovered = recoverVisual(saved.visual); defaults.visual = recovered.values;
     Object.defineProperty(defaults, 'gateReset', { value: recovered.gateReset });
-    // Move the former default to the longer stroke once. Version 2 preserves
-    // every explicit cap, including a later choice to return to 60 cm.
+    // Move each former default to the longer stroke once. Version 3 preserves
+    // every explicit cap, including a later choice to return to 60 or 120 cm.
     if (Number.isInteger(saved.activeGapCap) && saved.activeGapCap >= 40 && saved.activeGapCap <= 2000
-      && !(saved.version === 1 && saved.activeGapCap === 60)) defaults.activeGapCap = saved.activeGapCap;
+      && !(saved.version === 1 && saved.activeGapCap === 60)
+      && !(saved.version === 2 && saved.activeGapCap === 120)) defaults.activeGapCap = saved.activeGapCap;
     if (validAudio(saved.audio)) defaults.audio = [...saved.audio];
     if (['default', 'hardware', 128, 256, 512, 1024].includes(saved.quantum)) defaults.quantum = saved.quantum;
     if (['interactive', 'balanced', 'playback', .01, .02, .04].includes(saved.latency)) defaults.latency = saved.latency;
