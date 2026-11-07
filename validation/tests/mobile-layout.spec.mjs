@@ -1,6 +1,7 @@
 import { test, expect, devices } from '@playwright/test';
 import { physicsReady, scrollingIntersections } from '../physics-state.mjs';
 import { meterPoint } from '../meter-input.mjs';
+import { expectToolbarFits } from '../fullscreen-toolbar.mjs';
 
 const origin = 'http://127.0.0.1:8101';
 
@@ -94,7 +95,7 @@ test.describe('touch help input', () => {
 // Each route retains the complete portrait-to-landscape workflow within its own
 // deadline. CI traces showed the second route exhausting the shared 30 seconds.
 for (const route of ['/', '/advanced/'])
-test(`phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape on ${route}`, async ({ browser }) => {
+test(`phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape on ${route}`, async ({ browser }, info) => {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();
@@ -112,8 +113,10 @@ test(`phone opens expanded without capture and keeps settings in the top half wi
       return initial;
     });
     expect(initial).toEqual({ expanded: true, requests: 0, native: null });
-    for (const width of [320, 393, 568]) {
-      await page.setViewportSize({ width, height: 852 });
+    for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 393, height: 852 }, { width: 568, height: 320 }]) {
+      await page.setViewportSize(viewport);
+      await expectToolbarFits(page);
+      await page.locator('.fullscreen-toolbar').screenshot({ path: info.outputPath(`toolbar-${viewport.width}.png`) });
       expect(await page.locator('.fullscreen-toolbar').evaluate(toolbar => {
         const controls = [...toolbar.children], centers = controls.map(node => {
           const r = node.getBoundingClientRect(); return r.x + r.width / 2;
@@ -130,6 +133,7 @@ test(`phone opens expanded without capture and keeps settings in the top half wi
     }
     for (const viewport of [{ width: 393, height: 852 }, { width: 568, height: 320 }]) {
       await page.setViewportSize(viewport);
+      await expectToolbarFits(page);
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       const selectors = ['label:has(.listening-toggle)', 'label:has(.identify-song)',
         'label:has(.motion-button)', 'label:has(.scroll-lights)', '.frame-rate', '.camera-rotation', '.camera-zoom', '.camera-x', '.camera-y'];
@@ -156,6 +160,7 @@ test(`phone opens expanded without capture and keeps settings in the top half wi
       }))).toEqual({ angle: 29, sceneLarge: true, fps: true });
       await page.getByRole('button', { name: 'Close settings', exact: true }).click();
       await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).not.toBeVisible();
+      await expectToolbarFits(page);
       expect(await scrollingIntersections(page, ['.physics-status', '.fullscreen-button'])).toEqual({ '.physics-status': 1, '.fullscreen-button': 1 });
     }
     await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();

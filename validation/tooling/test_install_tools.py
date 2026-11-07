@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tarfile
 import tempfile
 import unittest
 from email.message import Message
@@ -12,6 +13,7 @@ from unittest.mock import call, patch
 from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import install_tools
 from install_tools import download
 
 
@@ -19,6 +21,62 @@ class Response(BytesIO):
     def __init__(self, data: bytes, length: int | None = None):
         super().__init__(data)
         self.headers = {"Content-Length": str(len(data) if length is None else length)}
+
+
+class CiToolsTests(unittest.TestCase):
+    def test_ci_installs_executable_uv_with_the_workflow_checker(self):
+        for system, machine, target in [
+            ("Linux", "x86_64", "x86_64-unknown-linux-gnu"),
+            ("Linux", "aarch64", "aarch64-unknown-linux-gnu"),
+            ("Darwin", "x86_64", "x86_64-apple-darwin"),
+            ("Darwin", "arm64", "aarch64-apple-darwin"),
+        ]:
+            with (
+                self.subTest(system=system, machine=machine),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+
+                def archive(url, destination):
+                    binary = "uv" if "/astral-sh/uv/" in url else "actionlint"
+                    data = f"#!/bin/sh\necho {binary}\n".encode()
+                    with tarfile.open(destination, "w:gz") as package:
+                        member = tarfile.TarInfo(f"release/{binary}")
+                        member.size = len(data)
+                        package.addfile(member, BytesIO(data))
+
+                with (
+                    patch.object(install_tools, "ROOT", root),
+                    patch.object(sys, "argv", ["install_tools.py", "ci"]),
+                    patch("install_tools.platform.system", return_value=system),
+                    patch("install_tools.platform.machine", return_value=machine),
+                    patch("install_tools.download", side_effect=archive) as fetched,
+                ):
+                    install_tools.main()
+                self.assertEqual(fetched.call_count, 2)
+                self.assertEqual(
+                    fetched.call_args.args[0],
+                    f"https://github.com/astral-sh/uv/releases/download/0.10.5/uv-{target}.tar.gz",
+                )
+                for binary in ("actionlint", "uv"):
+                    installed = root / ".tools/bin" / binary
+                    self.assertEqual(installed.stat().st_mode & 0o777, 0o755)
+                    self.assertEqual(
+                        installed.read_text(), f"#!/bin/sh\necho {binary}\n"
+                    )
+
+    def test_uv_installation_failure_is_not_ignored(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(install_tools, "ROOT", Path(directory)),
+            patch.object(sys, "argv", ["install_tools.py", "ci"]),
+            patch(
+                "install_tools.install_archive",
+                side_effect=[None, URLError("uv unavailable")],
+            ),
+            self.assertRaisesRegex(URLError, "uv unavailable"),
+        ):
+            install_tools.main()
 
 
 class DownloadTests(unittest.TestCase):
