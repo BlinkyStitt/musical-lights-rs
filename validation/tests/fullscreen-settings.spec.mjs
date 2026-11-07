@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { clickControlAtHitPoint } from '../control-input.mjs';
+import { expectToolbarFits } from '../fullscreen-toolbar.mjs';
 import { normalView, physicsReady, scrollingIntersections, syntheticAudio } from '../physics-state.mjs';
 const origin = 'http://127.0.0.1:8101';
 
@@ -283,6 +284,8 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
 
   test(`settings close on native browser exit and route cleanup on ${path} (${reducedMotion})`, async ({ page }, info) => {
     await startFullscreenAudio(page, path, reducedMotion, info);
+    const motion = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
+    await motion.check();
     await clickControlAtHitPoint(page, page.locator('.rotate-display'));
     await expect(page.locator('.audio-card')).toHaveAttribute('data-display-rotation', '1');
     await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
@@ -298,6 +301,9 @@ for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', '
     if (path === '/advanced/') await expect(page.locator('.input-source')).toHaveValue('generated');
     else await expect(page.getByRole('checkbox', { name: 'Listening', exact: true })).toBeChecked();
     expect(await page.evaluate(() => ({ same: modalContext === modalSession.context, state: modalContext.state, id: document.querySelector('.audio-card').dataset.audioSession }))).toEqual({ same: true, state: 'running', id: await page.evaluate(() => modalSession.id) });
+    await motion.uncheck();
+    await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+    expect(await page.evaluate(() => modalContext.state)).toBe('running');
     await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
     await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
     await page.evaluate(() => { window.oldModal = document.querySelector('dialog'); document.querySelector('nav a[href="/about"]').click(); });
@@ -411,43 +417,148 @@ for (const path of ['/', '/advanced/']) {
   });
 }
 
-test('toolbar Listening keeps one microphone session through Settings and restores on exit', async ({ page }, info) => {
-  await page.setViewportSize({ width: 320, height: 568 });
-  await syntheticAudio(page);
-  await page.addInitScript(() => {
-    const capture = MediaDevices.prototype.getUserMedia;
-    window.toolbarCaptures = 0;
-    MediaDevices.prototype.getUserMedia = async (...args) => { toolbarCaptures++; return capture.call(navigator.mediaDevices, ...args); };
-  });
-  await page.goto(origin + '/advanced/'); await physicsReady(page); await normalView(page);
-  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
-  const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
-  await expect(listening).toBeChecked();
-  await expect(listening).toBeInViewport({ ratio: 1 });
-  expect(await page.evaluate(() => {
-    const bar = document.querySelector('.fullscreen-toolbar'), label = bar.querySelector('label');
-    const gear = bar.querySelector('.fullscreen-settings-button'), exit = bar.querySelector('.fullscreen-button');
-    return { textFits: label.scrollWidth <= label.clientWidth, fits: bar.scrollWidth <= bar.clientWidth,
-      order: exit.getBoundingClientRect().right <= label.getBoundingClientRect().left && label.getBoundingClientRect().right <= gear.getBoundingClientRect().left };
-  })).toEqual({ textFits: true, fits: true, order: true });
-  await page.evaluate(() => { window.toolbarAudio = { context: testContext, input: document.querySelector('.listening-toggle'), session: document.querySelector('.audio-card').dataset.audioSession }; });
-  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
-  await expect(listening).toBeChecked();
-  expect(await listening.evaluate(n => !!n.closest('dialog'))).toBe(true);
-  const close = page.getByRole('button', { name: 'Close settings', exact: true });
-  if (info.project.use.hasTouch) await close.tap(); else await close.click();
-  await expect(listening).toBeChecked();
-  await expect(listening).toBeInViewport({ ratio: 1 });
-  expect(await page.evaluate(() => ({ same: testContext === toolbarAudio.context && document.querySelector('.listening-toggle') === toolbarAudio.input,
-    session: document.querySelector('.audio-card').dataset.audioSession === toolbarAudio.session, state: testContext.state, captures: toolbarCaptures }))).toEqual({ same: true, session: true, state: 'running', captures: 1 });
-  await listening.uncheck();
-  await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
-  await expect.poll(() => page.evaluate(() => toolbarAudio.context.state)).toBe('closed');
-  await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Exit fullscreen', exact: true }));
-  expect(await listening.evaluate(n => !!n.closest('.audio-controls') && !n.closest('.fullscreen-toolbar'))).toBe(true);
-  await expect(listening).not.toBeChecked();
-  await expect(listening).toHaveCount(1);
+test.describe('mobile toolbar sensor ownership', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 320, height: 568 } });
+
+  for (const path of ['/', '/advanced/']) {
+    test(`toolbar switches preserve independent sessions through Settings and exit on ${path}`, async ({ page }) => {
+      await syntheticAudio(page);
+      await page.addInitScript(() => {
+        Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+        window.toolbarCaptures = 0; window.toolbarPermissions = 0;
+        const capture = MediaDevices.prototype.getUserMedia;
+        MediaDevices.prototype.getUserMedia = async (...args) => { toolbarCaptures++; return capture.call(navigator.mediaDevices, ...args); };
+        for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) {
+          const request = window[name].requestPermission;
+          Object.defineProperty(window[name], 'requestPermission', { configurable: true,
+            value: () => { toolbarPermissions++; return request(); } });
+        }
+      });
+      await page.goto(origin + path); await physicsReady(page);
+      await expectToolbarFits(page);
+      const listening = page.getByRole('checkbox', { name: 'Listening', exact: true });
+      const motion = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
+      expect(await page.evaluate(() => [toolbarCaptures, toolbarPermissions])).toEqual([0, 0]);
+      await motion.check();
+      await expect(motion).toBeChecked();
+      await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 20, gamma: 45 })));
+      await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.input[34])).toBeGreaterThan(1);
+      await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 0, z: 0 } })));
+      await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'active');
+      expect(await page.evaluate(() => [toolbarCaptures, toolbarPermissions, window.testContext === undefined])).toEqual([0, 2, true]);
+      await listening.check();
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'playing');
+      await page.evaluate(() => {
+        const view = document.querySelector('#dancinglights').physics;
+        window.toolbarIdentity = { context: testContext, audio: document.querySelector('.listening-toggle'),
+          motion: document.querySelector('.motion-button'), session: view.motion.motion,
+          audioSession: document.querySelector('.audio-card').dataset.audioSession };
+      });
+      for (let cycle = 0; cycle < 2; cycle++) {
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+        await expect(motion).toBeChecked(); await expect(listening).toBeChecked();
+        expect(await motion.evaluate(node => !!node.closest('.motion-controls') && !!node.closest('dialog'))).toBe(true);
+        // Moving the original help span preserves its Settings tap handler.
+        await page.getByRole('button', { name: 'Phone motion', exact: true }).tap();
+        await expect(page.locator('.control-help')).toContainText('Phone motion');
+        await page.getByRole('button', { name: 'Close settings', exact: true }).tap();
+        await expectToolbarFits(page);
+        await motion.focus();
+        await expect(page.locator('.control-help')).toContainText('Phone motion');
+        await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).tap();
+        await expect(page.locator('.audio-card')).not.toHaveAttribute('data-expanded', '');
+        expect(await motion.evaluate(node => !!node.closest('.motion-controls') && !!node.closest('.audio-controls'))).toBe(true);
+        expect(await listening.evaluate(node => !!node.closest('.audio-controls') && !node.closest('.fullscreen-toolbar'))).toBe(true);
+        await expect(listening).toBeChecked();
+        await expect(motion).toBeChecked();
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Fullscreen', exact: true }));
+        await expectToolbarFits(page);
+        expect(await page.evaluate(() => {
+          const view = document.querySelector('#dancinglights').physics, card = document.querySelector('.audio-card');
+          return { same: testContext === toolbarIdentity.context && card.querySelector('.listening-toggle') === toolbarIdentity.audio
+              && card.querySelector('.motion-button') === toolbarIdentity.motion && view.motion.motion === toolbarIdentity.session,
+            audioSession: card.dataset.audioSession === toolbarIdentity.audioSession, state: testContext.state,
+            captures: toolbarCaptures, permissions: toolbarPermissions, count: card.querySelectorAll('.motion-button').length };
+        })).toEqual({ same: true, audioSession: true, state: 'running', captures: 1, permissions: 2, count: 1 });
+      }
+      await motion.uncheck();
+      expect(await page.evaluate(() => {
+        const view = document.querySelector('#dancinglights').physics;
+        return { force: Array.from(view.input.slice(24, 27)), gravity: Array.from(view.input.slice(34, 38)), session: view.motion.motion,
+          context: testContext === toolbarIdentity.context, state: testContext.state };
+      })).toEqual({ force: [0, 0, 0], gravity: [0, 0, 0, 0], session: null, context: true, state: 'running' });
+      await expect(listening).toBeChecked();
+      await motion.check();
+      await listening.uncheck();
+      await expect(page.locator('.audio-card')).toHaveAttribute('data-audio-state', 'stopped');
+      await expect(listening).not.toBeChecked();
+      await expect(listening).toHaveCount(1);
+      await expect.poll(() => page.evaluate(() => ({ audio: toolbarIdentity.context.state,
+        motion: document.querySelector('#dancinglights').physics.motion.enabled }))).toEqual({ audio: 'closed', motion: true });
+      await expect(motion).toBeChecked();
+      await page.evaluate(() => {
+        window.oldMotion = document.querySelector('#dancinglights').physics.motion;
+        document.querySelector('nav a[href="/about"]').click();
+      });
+      await expect(page.locator('.audio-card')).toHaveCount(0);
+      expect(await page.evaluate(() => ({ closed: oldMotion.closed, session: oldMotion.motion }))).toEqual({ closed: true, session: null });
+    });
+
+    test(`pending toolbar motion survives relocation and cancellation rejects late grants on ${path}`, async ({ page }) => {
+      await syntheticAudio(page, 'pending');
+      await page.goto(origin + path); await physicsReady(page);
+      const motion = page.getByRole('checkbox', { name: 'Phone motion', exact: true });
+      await motion.check();
+      await expect(motion).toHaveAttribute('data-pending', 'true');
+      await page.evaluate(() => { window.pendingIdentity = { input: document.querySelector('.motion-button'), session: document.querySelector('#dancinglights').physics.motion.motion }; });
+      for (let cycle = 0; cycle < 2; cycle++) {
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Settings', exact: true }));
+        await expect(motion).toBeEnabled();
+        expect(await motion.evaluate(node => node.indeterminate && node.checked && node === pendingIdentity.input)).toBe(true);
+        await clickControlAtHitPoint(page, page.getByRole('button', { name: 'Close settings', exact: true }));
+        expect(await page.evaluate(() => ({ same: document.querySelector('#dancinglights').physics.motion.motion === pendingIdentity.session,
+          requests: resolveMotion.length }))).toEqual({ same: true, requests: 2 });
+      }
+      await motion.uncheck();
+      await page.evaluate(() => {
+        for (const resolve of resolveMotion) resolve('granted');
+      });
+      await expect(motion).toHaveAttribute('data-pending', 'false');
+      await expect(motion).not.toBeChecked();
+      expect(await motion.evaluate(node => node.indeterminate)).toBe(false);
+      await page.evaluate(() => {
+        window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 60, gamma: 60 }));
+        window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration: { x: 8, y: 0, z: 0 } }));
+      });
+      expect(await page.evaluate(() => {
+        const view = document.querySelector('#dancinglights').physics;
+        return { session: view.motion.motion, force: Array.from(view.input.slice(24, 27)), gravity: Array.from(view.input.slice(34, 38)), audio: window.testContext === undefined };
+      })).toEqual({ session: null, force: [0, 0, 0], gravity: [0, 0, 0, 0], audio: true });
+      // Unsupported and denied sensors stay operable for an explicit retry.
+      await page.evaluate(() => {
+        window.sensorInterfaces = [DeviceMotionEvent, DeviceOrientationEvent];
+        for (const name of ['DeviceMotionEvent', 'DeviceOrientationEvent']) Object.defineProperty(window, name, { configurable: true, value: undefined });
+      });
+      await motion.click();
+      await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'unavailable');
+      await expect(motion).not.toBeChecked();
+      await page.evaluate(() => {
+        ['DeviceMotionEvent', 'DeviceOrientationEvent'].forEach((name, index) => {
+          Object.defineProperty(window, name, { configurable: true, value: sensorInterfaces[index] });
+          Object.defineProperty(window[name], 'requestPermission', { configurable: true, value: () => Promise.resolve('denied') });
+        });
+      });
+      await motion.click();
+      await expect(page.locator('.motion-status')).toHaveAttribute('data-state', 'denied');
+      await expect(motion).not.toBeChecked();
+      await page.evaluate(() => {
+        for (const sensor of sensorInterfaces) Object.defineProperty(sensor, 'requestPermission', { configurable: true, value: () => Promise.resolve('granted') });
+      });
+      await motion.check();
+      await expect(motion).toBeChecked();
+      expect(await page.evaluate(() => document.querySelector('#dancinglights').physics.motion.enabled)).toBe(true);
+    });
+  }
 });
 
 // The native number editor owns cancellation before its containing dialog.
