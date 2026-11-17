@@ -4,6 +4,9 @@ on:
     paths:
       - .github/workflows/gpu-runner-health.yml
   workflow_dispatch:
+concurrency:
+  group: pr-ci-gpu-runner-health.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
