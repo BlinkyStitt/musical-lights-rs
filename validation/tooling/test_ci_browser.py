@@ -97,8 +97,8 @@ class BrowserGateTests(unittest.TestCase):
     def test_rejects_missing_or_failed_gpu_shards(self):
         original = self.jobs.copy()
         for name in (
-            "GPU browser (nuc3, 1)",
-            "GPU browser (nuc3, 2)",
+            "GPU browser (1)",
+            "GPU browser (2)",
         ):
             for conclusion in (None, "failure"):
                 with self.subTest(name=name, conclusion=conclusion):
@@ -156,20 +156,20 @@ class BrowserGateTests(unittest.TestCase):
 
 
 class RunnerPlacementTests(unittest.TestCase):
-    def test_gpu_workflows_and_required_checks_only_target_nuc3(self):
-        root = Path(__file__).resolve().parents[2]
-        workflows = root / ".github/workflows"
-        for name in ("validate.yml", "gpu-runner-network.yml", "gpu-runner-health.yml"):
-            source = (workflows / name).read_text()
-            with self.subTest(workflow=name):
-                self.assertNotIn("nuc1", source)
-                self.assertIn("nuc3", source)
+    def test_both_gpu_workers_share_the_required_shards(self):
+        workflows = Path(__file__).resolve().parents[2] / ".github/workflows"
         validation = (workflows / "validate.yml").read_text()
-        self.assertIn("host: [nuc3]", validation)
+        self.assertIn("runs-on: ci-musical-gpu\n", validation)
         self.assertIn("shard: [1, 2]", validation)
+        self.assertNotIn("matrix.host", validation)
+        network = (workflows / "gpu-runner-network.yml").read_text()
+        self.assertIn("runs-on: ci-musical-gpu\n", network)
+        health = (workflows / "gpu-runner-health.yml").read_text()
+        self.assertIn("runner: ci-musical-gpu-nuc3", health)
+        self.assertIn("runner: ci-musical-gpu-t4", health)
         self.assertEqual(
             {name for name in ci.VALIDATORS if name.startswith("GPU browser")},
-            {"GPU browser (nuc3, 1)", "GPU browser (nuc3, 2)"},
+            {"GPU browser (1)", "GPU browser (2)"},
         )
 
 

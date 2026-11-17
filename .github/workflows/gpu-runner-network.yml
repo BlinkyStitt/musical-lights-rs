@@ -5,12 +5,8 @@ permissions:
   contents: read
 jobs:
   transfer:
-    name: Action transfer (${{ matrix.runner }})
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ci-musical-gpu-nuc3]
-    runs-on: ${{ matrix.runner }}
+    name: Action transfer (GPU runner)
+    runs-on: ci-musical-gpu
     timeout-minutes: 5
     steps:
       # No uses steps: the runner downloads ALL remote actions before any step.

@@ -232,7 +232,7 @@ class ArtifactTests(unittest.TestCase):
         jobs.remove(native)
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
         jobs.append(native)
-        for name in ("GPU browser (nuc3, 1)", "GPU browser (nuc3, 2)"):
+        for name in ("GPU browser (1)", "GPU browser (2)"):
             job = next(job for job in jobs if job["name"] == name)
             jobs.remove(job)
             self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
