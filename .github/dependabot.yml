@@ -1,0 +1,73 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /musical-adafruit-sparkle-embassy
+      - /musical-adafruit-sparkle-idf
+      - /musical-dioxus
+      - /musical-feather-m0
+      - /musical-leptos
+      - /musical-lights-physics
+      - /musical-lights-worklet
+      - /musical-recognition-worker
+      - /musical-stm32
+      - /musical-terminal
+      - /musical-wasm
+      - /validation/benchmarks
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: rust-toolchain
+    directories:
+      - /
+      - /musical-adafruit-sparkle-embassy
+      - /musical-adafruit-sparkle-idf
+      - /musical-leptos
+      - /musical-wasm
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directories:
+      - /musical-leptos
+      - /musical-lights-physics
+      - /musical-recognition-worker
+      - /validation
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: uv
+    directories:
+      - /tools/firmware
+      - /validation/loudness
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: docker
+    directory: /musical-adafruit-sparkle-embassy/.devcontainer
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 3

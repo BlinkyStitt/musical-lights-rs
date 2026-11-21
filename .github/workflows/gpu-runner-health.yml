@@ -18,10 +18,16 @@ jobs:
         include:
           - label: gpu-nuc3
             runner: ci-musical-gpu-nuc3
+            renderer: virgl.*Intel
+          - label: gpu-t4
+            runner: ci-musical-gpu-t4
+            renderer: virgl.*Tesla T4
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:
-      - name: Verify Chrome uses the shared Intel GPU
+      - name: Verify Chrome uses the assigned GPU
+        env:
+          EXPECTED_RENDERER: ${{ matrix.renderer }}
         shell: bash
         run: |
           set -euo pipefail
@@ -44,6 +50,7 @@ jobs:
             }
           python3 - "$scratch/result.html" <<'PY'
           from pathlib import Path
+          import os
           import re
           import sys
 
@@ -53,8 +60,8 @@ jobs:
               raise SystemExit('Chrome did not report a WebGL renderer')
           renderer = match.group(1)
           print(f'WebGL renderer: {renderer}')
-          if not re.search(r'virgl.*Intel', renderer, re.IGNORECASE):
-              raise SystemExit('Chrome did not use the shared Intel GPU')
+          if not re.search(os.environ['EXPECTED_RENDERER'], renderer, re.IGNORECASE):
+              raise SystemExit('Chrome did not use the assigned GPU')
           if re.search(r'llvmpipe|softpipe|swiftshader|software', renderer, re.IGNORECASE):
               raise SystemExit('Chrome used a software renderer')
           PY
