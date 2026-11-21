@@ -78,7 +78,7 @@ jobs:
           key: demos-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-dioxus/Cargo.lock', 'musical-wasm/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-dioxus/src/**/*.rs', 'musical-wasm/src/**/*.rs', 'musical-dioxus/Cargo.toml', 'musical-wasm/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             demos-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-dioxus/Cargo.lock', 'musical-wasm/Cargo.lock') }}-
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '26.12.1'
           cache: npm

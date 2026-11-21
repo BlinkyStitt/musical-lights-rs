@@ -129,7 +129,7 @@ jobs:
         with:
           path: .cache/npm
           key: renderer-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('musical-leptos/package-lock.json') }}
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         if: needs.plan.outputs.reuse != 'true'
         with:
           node-version: '26.12.1'
@@ -229,7 +229,7 @@ jobs:
         with:
           python-version: '3.14.7'
       - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '26.12.1'
           cache: npm
@@ -288,7 +288,7 @@ jobs:
         env:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
