@@ -79,7 +79,7 @@ jobs:
       - name: Package STM32 firmware
         if: matrix.package == 'stm32'
         run: python3 validation/firmware_artifacts.py stm32 "$RUNNER_TEMP/firmware-stm32"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: matrix.package == 'stm32'
         with:
           name: firmware-stm32
@@ -133,7 +133,7 @@ jobs:
       - name: Package net and amulet firmware
         if: matrix.package == 'esp-idf'
         run: python3 validation/firmware_artifacts.py esp-idf "$RUNNER_TEMP/firmware-esp-idf"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: matrix.package == 'esp-idf'
         with:
           name: firmware-esp-idf
