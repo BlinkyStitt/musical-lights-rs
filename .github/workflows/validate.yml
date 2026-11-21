@@ -402,14 +402,52 @@ jobs:
             gstreamer1.0-plugins-good libsoup-3.0-0 libwebpdemux2 libmanette-0.2-0
           )
           printf '%s\n' "${packages[@]}" > "$RUNNER_TEMP/guest-packages.txt"
-          sudo env LIBGUESTFS_BACKEND=direct virt-customize -a overlay.qcow2 --smp 2 --memsize 2048 \
-            --install "$(IFS=,; echo "${packages[*]}")" \
-            --run-command 'id gpu-test >/dev/null 2>&1 || useradd --create-home --user-group --shell /usr/sbin/nologin --groups render gpu-test' \
-            --run-command 'systemctl disable ssh.service ssh.socket || true' \
-            --run-command 'apt-get clean' \
-            --run-command 'truncate -s 0 /etc/machine-id' \
-            --run-command 'rm -f /etc/ssh/ssh_host_*'
-          sudo env LIBGUESTFS_BACKEND=direct virt-cat -a overlay.qcow2 /var/lib/dpkg/status | tee "$RUNNER_TEMP/guest-dpkg-status.txt" >/dev/null
+          mountdir="$RUNNER_TEMP/offline-guest-mount"
+          mkdir "$mountdir"
+          cleanup_mount() {
+            if mountpoint -q "$mountdir/proc"; then sudo umount "$mountdir/proc"; fi
+            if mountpoint -q "$mountdir/dev"; then sudo umount "$mountdir/dev"; fi
+            if mountpoint -q "$mountdir"; then sudo guestunmount "$mountdir"; fi
+          }
+          trap cleanup_mount EXIT
+          sudo env LIBGUESTFS_BACKEND=direct guestmount -a overlay.qcow2 -i --rw --pid-file "$RUNNER_TEMP/guestmount.pid" "$mountdir"
+          sudo mount --bind /dev "$mountdir/dev"
+          sudo mount -t proc -o nosuid,nodev,noexec proc "$mountdir/proc"
+          if sudo test -e "$mountdir/etc/resolv.conf" || sudo test -L "$mountdir/etc/resolv.conf"; then
+            sudo mv "$mountdir/etc/resolv.conf" "$mountdir/etc/resolv.gpuprep"
+          fi
+          sudo cp -L /etc/resolv.conf "$mountdir/etc/resolv.conf"
+          if sudo test -e "$mountdir/usr/sbin/policy-rc.d"; then
+            sudo mv "$mountdir/usr/sbin/policy-rc.d" "$mountdir/usr/sbin/policy-rc.gpuprep"
+          fi
+          printf '%s\n' '#!/bin/sh' 'exit 101' | sudo tee "$mountdir/usr/sbin/policy-rc.d" >/dev/null
+          sudo chmod 0755 "$mountdir/usr/sbin/policy-rc.d"
+          chroot=(sudo chroot "$mountdir" /usr/bin/env -i HOME=/root LANG=C.UTF-8
+            PATH=/usr/sbin:/usr/bin:/sbin:/bin DEBIAN_FRONTEND=noninteractive)
+          "${chroot[@]}" /usr/bin/apt-get -qq update
+          "${chroot[@]}" /usr/bin/apt-get --no-install-recommends -yq install "${packages[@]}"
+          "${chroot[@]}" /usr/sbin/useradd --create-home --user-group --shell /usr/sbin/nologin --groups render gpu-test
+          sudo systemctl --root="$mountdir" disable ssh.service ssh.socket || true
+          "${chroot[@]}" /usr/bin/apt-get clean
+          sudo truncate -s 0 "$mountdir/etc/machine-id"
+          sudo find "$mountdir/etc/ssh" -maxdepth 1 -type f -name 'ssh_host_*' -delete
+          sudo rm -f "$mountdir/etc/resolv.conf" "$mountdir/usr/sbin/policy-rc.d"
+          if sudo test -e "$mountdir/etc/resolv.gpuprep" || sudo test -L "$mountdir/etc/resolv.gpuprep"; then
+            sudo mv "$mountdir/etc/resolv.gpuprep" "$mountdir/etc/resolv.conf"
+          fi
+          if sudo test -e "$mountdir/usr/sbin/policy-rc.gpuprep"; then
+            sudo mv "$mountdir/usr/sbin/policy-rc.gpuprep" "$mountdir/usr/sbin/policy-rc.d"
+          fi
+          sudo cat "$mountdir/var/lib/dpkg/status" | tee "$RUNNER_TEMP/guest-dpkg-status.txt" >/dev/null
+          guestmount_pid=$(cat "$RUNNER_TEMP/guestmount.pid")
+          test "$guestmount_pid" -gt 0
+          cleanup_mount
+          trap - EXIT
+          for _ in {1..20}; do
+            if ! sudo kill -0 "$guestmount_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if sudo kill -0 "$guestmount_pid" 2>/dev/null; then exit 1; fi
           sudo qemu-img convert -c -O qcow2 overlay.qcow2 "$RUNNER_TEMP/guest-os.qcow2"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/guest-os.qcow2"
           test "$(qemu-img info --output=json "$RUNNER_TEMP/guest-os.qcow2" | jq -r 'has("backing-filename")')" = false
