@@ -6,7 +6,7 @@ on:
         description: Independently routed incumbent physical GPU
         type: choice
         required: true
-        options: [nuc3, t4, stage]
+        options: [nuc3, t4, stage, os]
 permissions:
   contents: read
   actions: read
@@ -363,5 +363,64 @@ jobs:
         with:
           name: gpu-offline-deps-f0a3b0b
           path: ${{ runner.temp }}/gpu-offline.tar
+          retention-days: 2
+          if-no-files-found: error
+
+  stage-guest-os:
+    if: github.repository == 'BlinkyStitt/musical-lights-rs' && github.ref_name == 'dot/gpu-incumbent-parity-20261121' && inputs.profile == 'os'
+    name: Prepare disposable offline browser guest OS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - name: Install official image tools on the GitHub-hosted builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -qq update
+          sudo apt-get -yq --no-install-recommends install libguestfs-tools qemu-utils
+      - name: Build the inactive AMD64 Xorg and browser system image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --proto '=https' --proto-redir '=https' --fail --location --retry 2 --max-time 180 \
+            https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-amd64.img \
+            --output ubuntu-base.img
+          printf '%s  %s\n' 6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2 ubuntu-base.img | sha256sum --check --strict
+          qemu-img create -f qcow2 overlay.qcow2 12G
+          disk_free=$(df -BG --output=avail "$RUNNER_TEMP" | tail -1 | tr -dc 0-9)
+          test "$disk_free" -ge 9
+          sudo env LIBGUESTFS_BACKEND=direct virt-resize --expand /dev/sda1 ubuntu-base.img overlay.qcow2
+          echo 'Preparing Ubuntu software only; no repository data or credentials enter the image.'
+          packages=(
+            git unzip xauth xserver-xorg-core x11-xkb-utils mesa-utils libgl1-mesa-dri
+            libegl-mesa0 libglx-mesa0 libgbm1 fonts-liberation fonts-noto-color-emoji
+            libasound2t64 libatk-bridge2.0-0t64 libcups2t64 libgtk-4-1 libgtk-3-0t64
+            libnss3 libnspr4 libxdmcp6 libxcomposite1 libxdamage1 libxfixes3 libxrandr2
+            libxkbcommon-x11-0 libwoff1 libharfbuzz-icu0 libgstreamer-gl1.0-0
+            gstreamer1.0-libav gstreamer1.0-plugins-base gstreamer1.0-plugins-bad
+            gstreamer1.0-plugins-good libsoup-3.0-0 libwebpdemux2 libmanette-0.2-0
+          )
+          printf '%s\n' "${packages[@]}" > "$RUNNER_TEMP/guest-packages.txt"
+          sudo env LIBGUESTFS_BACKEND=direct virt-customize -a overlay.qcow2 --smp 2 --memsize 2048 \
+            --install "$(IFS=,; echo "${packages[*]}")" \
+            --run-command 'id gpu-test >/dev/null 2>&1 || useradd --create-home --user-group --shell /usr/sbin/nologin --groups render gpu-test' \
+            --run-command 'systemctl disable ssh.service ssh.socket || true' \
+            --run-command 'apt-get clean' \
+            --run-command 'truncate -s 0 /etc/machine-id' \
+            --run-command 'rm -f /etc/ssh/ssh_host_*'
+          sudo env LIBGUESTFS_BACKEND=direct virt-cat -a overlay.qcow2 /var/lib/dpkg/status | tee "$RUNNER_TEMP/guest-dpkg-status.txt" >/dev/null
+          sudo qemu-img convert -c -O qcow2 overlay.qcow2 "$RUNNER_TEMP/guest-os.qcow2"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/guest-os.qcow2"
+          test "$(qemu-img info --output=json "$RUNNER_TEMP/guest-os.qcow2" | jq -r 'has("backing-filename")')" = false
+          sha256sum guest-os.qcow2 guest-dpkg-status.txt guest-packages.txt | tee guest-os.sha256
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: gpu-offline-noble-xorg-pilot
+          path: |
+            ${{ runner.temp }}/guest-os.qcow2
+            ${{ runner.temp }}/guest-dpkg-status.txt
+            ${{ runner.temp }}/guest-packages.txt
+            ${{ runner.temp }}/guest-os.sha256
           retention-days: 2
           if-no-files-found: error
