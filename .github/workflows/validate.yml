@@ -97,7 +97,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - name: Restore exact validated bundle
         if: needs.plan.outputs.reuse == 'true'
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.plan.outputs.artifact_id }}
           run-id: ${{ needs.plan.outputs.run_id }}
@@ -129,7 +129,7 @@ jobs:
         with:
           path: .cache/npm
           key: renderer-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('musical-leptos/package-lock.json') }}
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         if: needs.plan.outputs.reuse != 'true'
         with:
           node-version: '26.12.1'
@@ -161,7 +161,7 @@ jobs:
       - name: Record compiled bundle and digests
         if: needs.plan.outputs.reuse != 'true'
         run: python3 validation/ci.py pack .ci/site .ci/inventory.json
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         id: compiled-bundle
         with:
           name: site-build-${{ github.run_attempt }}
@@ -221,7 +221,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.browser_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
@@ -229,7 +229,7 @@ jobs:
         with:
           python-version: '3.14.7'
       - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '26.12.1'
           cache: npm
@@ -248,7 +248,7 @@ jobs:
           cd validation
           read -r -a projects <<< "$PROJECTS"
           npx playwright test --test-list ../.ci/browser-tests.txt "${projects[@]}" --reporter=list,./browser-process-reporter.mjs,json
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: browser-report-${{ matrix.name }}
@@ -277,7 +277,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       # Record the actual failing Node/libc lookup in job logs, even if uploads
       # fail. Step env is required: GITHUB_ENV cannot set NODE_OPTIONS.
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
@@ -288,7 +288,7 @@ jobs:
         env:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
@@ -310,7 +310,7 @@ jobs:
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-active-gap
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.shard == 1
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -337,7 +337,7 @@ jobs:
           if test -f .ci/tilt-lighting/comparison.md; then
             cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.shard == 1
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -348,7 +348,7 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: error
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -373,7 +373,7 @@ jobs:
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: python3 validation/ci.py validation-barrier
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
@@ -381,7 +381,7 @@ jobs:
         env:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         if: needs.plan.outputs.reuse != 'true'
         with:
           pattern: browser-report-*
@@ -391,7 +391,7 @@ jobs:
         run: python3 validation/ci.py coverage .ci/site/inventory.json .ci/reports
       - name: Retain exact fully validated bundle
         if: needs.plan.outputs.reuse != 'true'
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: validated-site-${{ needs.plan.outputs.tree }}
           path: .ci/site
