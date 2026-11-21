@@ -97,7 +97,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - name: Restore exact validated bundle
         if: needs.plan.outputs.reuse == 'true'
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.plan.outputs.artifact_id }}
           run-id: ${{ needs.plan.outputs.run_id }}
@@ -221,7 +221,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.browser_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
@@ -277,7 +277,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       # Record the actual failing Node/libc lookup in job logs, even if uploads
       # fail. Step env is required: GITHUB_ENV cannot set NODE_OPTIONS.
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
@@ -373,7 +373,7 @@ jobs:
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: python3 validation/ci.py validation-barrier
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
@@ -381,7 +381,7 @@ jobs:
         env:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         if: needs.plan.outputs.reuse != 'true'
         with:
           pattern: browser-report-*
