@@ -1,293 +1,250 @@
-name: Website validation and deployment
+name: GPU incumbent parity (one-shot shadow)
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'musical-lights-core/**'
-      - 'validation/**'
-      - '!validation/demos.config.mjs'
-      - '!validation/tests/other-apps.spec.mjs'
-      - '.github/workflows/validate.yml'
-      - '.github/workflows/gpu-runner-network.yml'
-      - '**/.cargo/**'
-      - '**/rust-toolchain*'
-      - 'musical-leptos/**'
-      - 'musical-lights-worklet/**'
-      - 'musical-lights-physics/**'
-      - 'docs/audio-audit-results/**'
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
-concurrency:
-  group: pr-ci-validate.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+    inputs:
+      profile:
+        description: Independently routed incumbent physical GPU
+        type: choice
+        required: true
+        options: [nuc3, t4]
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: gpu-incumbent-parity-${{ inputs.profile }}
+  cancel-in-progress: false
 jobs:
-  plan:
-    name: Site plan
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: site-plan-${{ github.ref }}
-      cancel-in-progress: true
-    outputs:
-      reuse: ${{ steps.plan.outputs.reuse }}
-      site_required: ${{ steps.plan.outputs.site_required }}
-      run_id: ${{ steps.plan.outputs.run_id }}
-      artifact_id: ${{ steps.plan.outputs.artifact_id }}
-      tree: ${{ steps.plan.outputs.tree }}
-      browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
+  transfer:
+    if: github.repository == 'BlinkyStitt/musical-lights-rs' && github.ref_name == 'dot/gpu-incumbent-parity-20261121' && (inputs.profile == 'nuc3' || inputs.profile == 't4')
+    name: Shadow action transfer (${{ inputs.profile }})
+    runs-on: ${{ inputs.profile == 'nuc3' && 'ci-musical-gpu-nuc3' || 'ci-musical-gpu-t4' }}
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/cache@v6.1.0
-        id: ci-tools
-        with:
-          path: .tools
-          key: ci-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
-      - run: python3 validation/install_tools.py ci
-        if: steps.ci-tools.outputs.cache-hit != 'true'
-      - run: .tools/bin/actionlint .github/workflows/*.yml
-      - run: python3 -m unittest discover -s validation/tooling -v
-      - run: python3 -m unittest discover -s validation/notification_tests -v
-      - name: Resolve exact validated source tree
-        id: plan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 validation/ci.py plan
-  core:
-    name: rust (core)
-    needs: plan
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: site-core-${{ github.ref }}
-      cancel-in-progress: true
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Cache workspace dependencies and builds
-        uses: actions/cache@v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'validation/benchmarks/**/*.rs', 'validation/benchmarks/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
-          restore-keys: |
-            core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-
-            core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-
-      - name: Install Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
-      - run: python3 validation/validate.py core physics-native benchmarks
-  web:
-    name: Build website
-    needs: plan
-    if: needs.plan.outputs.site_required == 'true'
-    runs-on: ubuntu-24.04
-    outputs:
-      artifact_id: ${{ steps.compiled-bundle.outputs.artifact-id }}
-    concurrency:
-      group: site-build-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Restore exact validated bundle
-        if: needs.plan.outputs.reuse == 'true'
-        uses: actions/download-artifact@v8.0.2
-        with:
-          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
-          run-id: ${{ needs.plan.outputs.run_id }}
-          github-token: ${{ github.token }}
-          path: .ci/site
-          merge-multiple: true
-      - name: Verify and restore compiled packages
-        if: needs.plan.outputs.reuse == 'true'
-        env:
-          PRODUCER_RUN: ${{ needs.plan.outputs.run_id }}
-        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
-      - name: Cache Rust dependencies and builds
-        if: needs.plan.outputs.reuse != 'true'
-        uses: actions/cache@v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            musical-lights-physics/target
-            musical-lights-worklet/target
-            musical-leptos/target
-          key: site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-${{ hashFiles('musical-lights-core/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-lights-physics/**/*.rs', 'musical-lights-physics/Cargo.toml', 'musical-lights-worklet/**/*.rs', 'musical-lights-worklet/Cargo.toml', 'musical-leptos/**/*.rs', 'musical-leptos/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
-          restore-keys: |
-            site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-lights-physics/Cargo.lock', 'musical-lights-worklet/Cargo.lock', 'musical-leptos/Cargo.lock') }}-
-            site-rust-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-
-      - name: Cache renderer package downloads
-        if: needs.plan.outputs.reuse != 'true'
-        uses: actions/cache@v6.1.0
-        with:
-          path: .cache/npm
-          key: renderer-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('musical-leptos/package-lock.json') }}
-      - uses: actions/setup-node@v7.1.0
-        if: needs.plan.outputs.reuse != 'true'
-        with:
-          node-version: '26.12.1'
-          cache: npm
-          cache-dependency-path: validation/package-lock.json
-      - name: Install Rust
-        if: needs.plan.outputs.reuse != 'true'
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown
-      - name: Cache pinned web tools
-        if: needs.plan.outputs.reuse != 'true'
-        id: web-tools
-        uses: actions/cache@v6.1.0
-        with:
-          path: .tools
-          key: site-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
-      - run: python3 validation/install_tools.py site
-        if: needs.plan.outputs.reuse != 'true' && steps.web-tools.outputs.cache-hit != 'true'
-      - name: Validate and build compiled packages once
-        if: needs.plan.outputs.reuse != 'true'
-        run: python3 validation/validate.py physics-wasm worklet leptos
-      - name: Run offline checks and collect full browser inventory
-        if: needs.plan.outputs.reuse != 'true'
-        working-directory: validation
-        run: |
-          npm ci --ignore-scripts
-          node --test harness/*.test.mjs
-          mkdir -p ../.ci
-          npx playwright test --project chromium --project chromium-permissions --project webkit-spectrum --project iphone-webkit --list --reporter=json > ../.ci/inventory.json
-      - name: Record compiled bundle and digests
-        if: needs.plan.outputs.reuse != 'true'
-        run: python3 validation/ci.py pack .ci/site .ci/inventory.json
-      - uses: actions/upload-artifact@v7.0.2
-        id: compiled-bundle
-        with:
-          name: site-build-${{ github.run_attempt }}
-          path: .ci/site
-          include-hidden-files: true
-          retention-days: 1
-          overwrite: true
-          if-no-files-found: error
-  loudness-reference:
-    needs: plan
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: site-reference-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Cache workspace dependencies and builds
-        uses: actions/cache@v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: reference-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', '**/.cargo/**', '**/rust-toolchain*') }}
-          restore-keys: |
-            reference-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-
-      - uses: actions/setup-python@v7.0.0
-        with:
-          python-version: '3.14.7'
-      - name: Install locked reference environment tool
-        run: python3 -m pip install uv==0.10.5
-      - name: Cache locked Python downloads
-        uses: actions/cache@v6.1.0
-        with:
-          path: ~/.cache/uv
-          key: reference-uv-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/loudness/uv.lock') }}
-      - name: Install Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal
-      - run: python3 validation/validate.py reference
-  browser:
-    name: Browser (${{ matrix.name }})
-    needs: [plan, web]
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ubuntu-24.04
-    container:
-      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
-      options: --init --ipc=host --user 1001
-    defaults:
-      run:
+      # No uses steps: the runner downloads ALL remote actions before any step.
+      # Keep this probe inline so checkout failures cannot prevent observation.
+      - name: Observe one native action-archive transfer
         shell: bash
-    concurrency:
-      group: site-browser-${{ matrix.name }}-${{ github.ref }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.browser_matrix) }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/download-artifact@v8.0.2
-        with:
-          artifact-ids: ${{ needs.web.outputs.artifact_id }}
-          path: .ci/site
-      - uses: actions/setup-python@v7.0.0
-        with:
-          python-version: '3.14.7'
-      - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version: '26.12.1'
-          cache: npm
-          cache-dependency-path: validation/package-lock.json
-      - name: Install locked browser SDK
-        working-directory: validation
-        run: npm ci --ignore-scripts
-      - name: Run isolated browser group
-        env:
-          BROWSER_GROUP: ${{ matrix.name }}
-          PROJECTS: ${{ matrix.projects }}
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
-          DEBUG: pw:browser
         run: |
-          python3 validation/ci.py browser-list .ci/site/inventory.json "$BROWSER_GROUP" .ci/browser-tests.txt
-          cd validation
-          read -r -a projects <<< "$PROJECTS"
-          npx playwright test --test-list ../.ci/browser-tests.txt "${projects[@]}" --reporter=list,./browser-process-reporter.mjs,json
-      - uses: actions/upload-artifact@v7.0.2
-        if: always()
-        with:
-          name: browser-report-${{ matrix.name }}
-          path: validation/test-results/
-          retention-days: ${{ job.status == 'failure' && 7 || 2 }}
-          overwrite: true
-          if-no-files-found: error
-  gpu-network:
-    needs: plan
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    uses: ./.github/workflows/gpu-runner-network.yml
+          set -euo pipefail
+          timeout --signal=TERM 90s python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import socket
+          import threading
+          import time
+          import urllib.request
+          from functools import wraps
+          from pathlib import Path
+          from typing import Any
+
+          # The exact checkout archive from failed run 41206913591. No credentials,
+          # retries, alternate resolvers, address-family overrides or installations.
+          ARCHIVE = "https://codeload.github.com/actions/checkout/tar.gz/3d3c42e5aac5ba805825da76410c181273ba90b1"
+
+
+          def emit(event, **fields):
+              print(
+                  json.dumps(dict(event=event, at=time.time(), pid=os.getpid(), **fields)),
+                  flush=True,
+              )
+
+
+          def native_state():
+              paths = [
+                  "/etc/resolv.conf",
+                  "/etc/nsswitch.conf",
+                  "/proc/net/route",
+                  "/proc/net/ipv6_route",
+                  "/proc/net/snmp",
+                  "/proc/self/cgroup",
+                  "/proc/self/status",
+                  "/proc/self/limits",
+              ]
+              result = {}
+              try:
+                  for task in Path("/proc/self/task").iterdir():
+                      paths.extend(str(task / name) for name in ("comm", "wchan", "syscall"))
+              except OSError as error:
+                  result["/proc/self/task"] = {
+                      "error": type(error).__name__,
+                      "errno": error.errno,
+                  }
+              for path in paths:
+                  try:
+                      with open(path, "rb") as source:
+                          data = source.read(8193)
+                      result[path] = {
+                          "text": data[:8192].decode(errors="replace"),
+                          "truncated": len(data) > 8192,
+                      }
+                  except OSError as error:
+                      result[path] = {"error": type(error).__name__, "errno": error.errno}
+              return result
+
+
+          def capture():
+              original = socket.getaddrinfo
+              stop = threading.Event()
+
+              @wraps(original)
+              def lookup(host: Any, port: Any, *args: Any, **kwargs: Any) -> Any:
+                  started = time.monotonic()
+                  emit("lookup-start", host=host, port=port)
+                  try:
+                      addresses = original(host, port, *args, **kwargs)
+                  except OSError as error:
+                      emit(
+                          "lookup-error",
+                          host=host,
+                          errno=error.errno,
+                          error=type(error).__name__,
+                          elapsed=time.monotonic() - started,
+                          native=native_state(),
+                      )
+                      raise
+                  emit(
+                      "lookup-end",
+                      host=host,
+                      elapsed=time.monotonic() - started,
+                      addresses=[{"family": a[0], "address": a[4][0]} for a in addresses],
+                  )
+                  return addresses
+
+              def sample():
+                  while not stop.wait(2):
+                      emit("request-progress", native=native_state())
+
+              emit("request-start", archive=ARCHIVE, native=native_state())
+              sampler = threading.Thread(target=sample, daemon=True)
+              # Preserve every native call signature; the injected-failure tests exercise
+              # forwarding and restoration of this variadic observational wrapper.
+              socket.getaddrinfo = lookup  # ty: ignore[invalid-assignment]
+              sampler.start()
+              started = time.monotonic()
+              try:
+                  with urllib.request.urlopen(ARCHIVE, timeout=30) as response:
+                      data = response.read(8 * 1024 * 1024 + 1)
+                      if response.status != 200 or not 0 < len(data) <= 8 * 1024 * 1024:
+                          raise ValueError("Missing or oversized action archive")
+                      emit(
+                          "request-success",
+                          status=response.status,
+                          bytes=len(data),
+                          sha256=hashlib.sha256(data).hexdigest(),
+                      )
+              except Exception as error:
+                  # Do not print headers, proxy credentials or ambient environment.
+                  emit(
+                      "request-error",
+                      error=type(error).__name__,
+                      errno=getattr(error, "errno", None),
+                  )
+                  raise
+              finally:
+                  stop.set()
+                  sampler.join()
+                  socket.getaddrinfo = original
+                  emit("request-end", elapsed=time.monotonic() - started, native=native_state())
+
+
+          if __name__ == "__main__":
+              try:
+                  capture()
+              except (OSError, ValueError):
+                  raise SystemExit(1)
+          PY
   gpu:
-    name: GPU browser (${{ matrix.shard }})
-    timeout-minutes: 60
-    needs: [plan, web, gpu-network]
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ci-musical-gpu
+    needs: transfer
+    name: Shadow GPU browser (${{ inputs.profile }}, shard ${{ matrix.shard }})
+    runs-on: ${{ inputs.profile == 'nuc3' && 'ci-musical-gpu-nuc3' || 'ci-musical-gpu-t4' }}
+    timeout-minutes: 35
     strategy:
+      max-parallel: 1
       fail-fast: false
       matrix:
         shard: [1, 2]
-    concurrency:
-      group: site-gpu-${{ matrix.shard }}-${{ github.ref }}
-      cancel-in-progress: true
     steps:
+      - name: Observe guest GLX renderer and Chromium build
+        env:
+          EXPECTED_RENDERER: ${{ inputs.profile == 'nuc3' && 'virgl.*Intel' || 'virgl.*Tesla T4' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v glxinfo >/dev/null; then
+            glx=$(glxinfo -B)
+            renderer=$(grep -E '^OpenGL renderer string:' <<<"$glx")
+            printf "%s\n" "$renderer"
+            grep -Eiq "$EXPECTED_RENDERER" <<<"$renderer"
+            if grep -Eiq 'llvmpipe|softpipe|swiftshader|software' <<<"$renderer"; then exit 1; fi
+          else
+            printf "%s\n" "Runner image does not ship glxinfo; use separate scoped guest readback."
+          fi
+          google-chrome --version
+      - name: Verify Chrome uses the assigned GPU
+        env:
+          EXPECTED_RENDERER: ${{ inputs.profile == 'nuc3' && 'virgl.*Intel' || 'virgl.*Tesla T4' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          cat > "$scratch/probe.html" <<'HTML'
+          <!doctype html><html><body><script>
+          const gl = document.createElement('canvas').getContext('webgl2');
+          const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+          const renderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : '';
+          document.body.textContent = 'WEBGL_RENDERER=' + renderer;
+          </script></body></html>
+          HTML
+          google-chrome --headless --no-sandbox --disable-dev-shm-usage \
+            --use-gl=angle --use-angle=gl --enable-gpu \
+            --user-data-dir="$scratch/profile" --dump-dom "file://$scratch/probe.html" \
+            > "$scratch/result.html" 2> "$scratch/chrome.log" || {
+              cat "$scratch/chrome.log"
+              exit 1
+            }
+          python3 - "$scratch/result.html" <<'PY'
+          from pathlib import Path
+          import os
+          import re
+          import sys
+
+          html = Path(sys.argv[1]).read_text()
+          match = re.search(r'WEBGL_RENDERER=([^<\n]+)', html)
+          if not match:
+              raise SystemExit('Chrome did not report a WebGL renderer')
+          renderer = match.group(1)
+          print(f'WebGL renderer: {renderer}')
+          if not re.search(os.environ['EXPECTED_RENDERER'], renderer, re.IGNORECASE):
+              raise SystemExit('Chrome did not use the assigned GPU')
+          if re.search(r'llvmpipe|softpipe|swiftshader|software', renderer, re.IGNORECASE):
+              raise SystemExit('Chrome used a software renderer')
+          PY
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: f0a3b0b5e39e0f549daed3e105fbf4318cfd079a
+          persist-credentials: false
       # Record the actual failing Node/libc lookup in job logs, even if uploads
       # fail. Step env is required: GITHUB_ENV cannot set NODE_OPTIONS.
       - uses: actions/download-artifact@v8.0.2
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
-          artifact-ids: ${{ needs.web.outputs.artifact_id }}
+          artifact-ids: 14692491706
+          run-id: 44866114626
+          github-token: ${{ github.token }}
           path: .ci/site
       - name: Verify the compiled site
         id: gpu-site
         env:
-          PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
-        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
+          PRODUCER_RUN: '44866114626'
+          SITE_SOURCE: f0a3b0b5e39e0f549daed3e105fbf4318cfd079a
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SITE_SOURCE"
+          python3 -c 'import json, os; from pathlib import Path; m=json.loads(Path(".ci/site/provenance.json").read_text()); assert m["source_commit"] == os.environ["SITE_SOURCE"]; assert m["repository"] == m["head_repository"] == os.environ["GITHUB_REPOSITORY"]'
+          python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
       - uses: actions/setup-node@v7.1.0
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -358,126 +315,3 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: ignore
-  validated:
-    name: Validated website
-    needs: [plan, core, web, loudness-reference, browser, gpu]
-    if: >-
-      ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.site_required == 'true' }}
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: site-validated-${{ github.ref }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Require complete validation or exact validated reuse
-        env:
-          CI_NEEDS: ${{ toJSON(needs) }}
-        run: python3 validation/ci.py validation-barrier
-      - uses: actions/download-artifact@v8.0.2
-        with:
-          artifact-ids: ${{ needs.web.outputs.artifact_id }}
-          path: .ci/site
-      - name: Verify producer and byte digests
-        env:
-          PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
-        run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
-      - uses: actions/download-artifact@v8.0.2
-        if: needs.plan.outputs.reuse != 'true'
-        with:
-          pattern: browser-report-*
-          path: .ci/reports
-      - name: Require complete browser coverage
-        if: needs.plan.outputs.reuse != 'true'
-        run: python3 validation/ci.py coverage .ci/site/inventory.json .ci/reports
-      - name: Retain exact fully validated bundle
-        if: needs.plan.outputs.reuse != 'true'
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: validated-site-${{ needs.plan.outputs.tree }}
-          path: .ci/site
-          include-hidden-files: true
-          retention-days: 7
-          overwrite: true
-          if-no-files-found: error
-      - name: Package the tested website
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5.0.0
-        with:
-          path: musical-leptos/dist
-          include-hidden-files: true
-          retention-days: 1
-  required:
-    name: Required website checks
-    needs: [plan, validated]
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - run: python3 validation/ci.py required-checks website
-        env:
-          CI_NEEDS: ${{ toJSON(needs) }}
-  pages:
-    # Reuse skips ancestor test jobs. Check the validated result explicitly
-    # instead of GitHub's implicit success() check across all ancestors.
-    if: >-
-      ${{ !cancelled() && needs.validated.result == 'success' && needs.required.result == 'success' &&
-          github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
-    needs: [validated, required]
-    outputs:
-      deployed: ${{ steps.deployment.outcome == 'success' }}
-      page_url: ${{ steps.deployment.outputs.page_url }}
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    concurrency:
-      group: github-pages
-      cancel-in-progress: false
-    runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Check that this is still main
-        id: current
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
-          if [ "$GITHUB_SHA" = "$latest" ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Skipping superseded revision $GITHUB_SHA"
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/configure-pages@v6.0.0
-        if: steps.current.outputs.deploy == 'true'
-      - uses: actions/deploy-pages@v5.0.1
-        if: steps.current.outputs.deploy == 'true'
-        id: deployment
-  notify:
-    name: Notify deployment result
-    if: >-
-      ${{ always() && !cancelled() && github.ref == 'refs/heads/main' &&
-          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    needs: [plan, core, web, loudness-reference, browser, gpu, validated, required, pages]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Publish deployment notification
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JOB_RESULTS: ${{ toJSON(needs) }}
-          NTFY_URL: ${{ vars.NTFY_URL }}
-          NTFY_TOPIC: ${{ vars.NTFY_TOPIC }}
-          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
-        run: |
-          if ! LATEST_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha); then
-            echo '::warning::Could not check current main; notification was skipped.'
-            echo 'Notification skipped: could not check current main.' >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          export LATEST_SHA
-          python3 validation/deploy_notification.py
