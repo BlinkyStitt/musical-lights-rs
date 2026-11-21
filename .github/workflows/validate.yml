@@ -6,7 +6,7 @@ on:
         description: Independently routed incumbent physical GPU
         type: choice
         required: true
-        options: [nuc3, t4]
+        options: [nuc3, t4, stage]
 permissions:
   contents: read
   actions: read
@@ -315,3 +315,53 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: ignore
+  stage-offline:
+    if: github.repository == 'BlinkyStitt/musical-lights-rs' && github.ref_name == 'dot/gpu-incumbent-parity-20261121' && inputs.profile == 'stage'
+    name: Stage exact offline GPU browser dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      SOURCE: f0a3b0b5e39e0f549daed3e105fbf4318cfd079a
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: f0a3b0b5e39e0f549daed3e105fbf4318cfd079a
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '26.12.1'
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Capture only versioned toolchain and deterministic package caches
+        shell: bash
+        working-directory: validation
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE"
+          staging="$RUNNER_TEMP/gpu-offline"
+          export NPM_CONFIG_CACHE="$staging/deps/npm-cache"
+          export PLAYWRIGHT_BROWSERS_PATH="$staging/deps/ms-playwright"
+          mkdir -p "$staging/deps/bin"
+          node_root=$(dirname "$(dirname "$(command -v node)")")
+          install -m 755 "$(command -v node)" "$staging/deps/bin/node"
+          install -m 755 "$(command -v just)" "$staging/deps/bin/just"
+          cp -a "$node_root/lib/node_modules/npm" "$staging/deps/npm"
+          ln -s ../npm/bin/npm-cli.js "$staging/deps/bin/npm"
+          ln -s ../npm/bin/npx-cli.js "$staging/deps/bin/npx"
+          npm ci --ignore-scripts
+          npx playwright install chromium webkit
+          node --version > "$staging/node.txt"
+          npm --version > "$staging/npm.txt"
+          just --version > "$staging/just.txt"
+          node -p "require('./node_modules/playwright/package.json').version" > "$staging/playwright.txt"
+          sha256sum package-lock.json | cut -d' ' -f1 > "$staging/package-lock.sha256"
+          rm -rf "$NPM_CONFIG_CACHE/_logs"
+          tar -C "$staging" -cf "$RUNNER_TEMP/gpu-offline.tar" .
+          sha256sum "$RUNNER_TEMP/gpu-offline.tar" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: gpu-offline-deps-f0a3b0b
+          path: ${{ runner.temp }}/gpu-offline.tar
+          retention-days: 2
+          if-no-files-found: error
