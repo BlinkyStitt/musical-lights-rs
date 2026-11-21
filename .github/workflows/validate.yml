@@ -161,7 +161,7 @@ jobs:
       - name: Record compiled bundle and digests
         if: needs.plan.outputs.reuse != 'true'
         run: python3 validation/ci.py pack .ci/site .ci/inventory.json
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         id: compiled-bundle
         with:
           name: site-build-${{ github.run_attempt }}
@@ -248,7 +248,7 @@ jobs:
           cd validation
           read -r -a projects <<< "$PROJECTS"
           npx playwright test --test-list ../.ci/browser-tests.txt "${projects[@]}" --reporter=list,./browser-process-reporter.mjs,json
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: browser-report-${{ matrix.name }}
@@ -310,7 +310,7 @@ jobs:
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-active-gap
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.shard == 1
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -337,7 +337,7 @@ jobs:
           if test -f .ci/tilt-lighting/comparison.md; then
             cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.shard == 1
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -348,7 +348,7 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: error
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
@@ -391,7 +391,7 @@ jobs:
         run: python3 validation/ci.py coverage .ci/site/inventory.json .ci/reports
       - name: Retain exact fully validated bundle
         if: needs.plan.outputs.reuse != 'true'
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: validated-site-${{ needs.plan.outputs.tree }}
           path: .ci/site
