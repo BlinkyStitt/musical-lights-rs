@@ -393,8 +393,8 @@ jobs:
           sudo env LIBGUESTFS_BACKEND=direct virt-resize --expand /dev/sda1 ubuntu-base.img overlay.qcow2
           echo 'Preparing Ubuntu software only; no repository data or credentials enter the image.'
           packages=(
-            fonts-freefont-ttf fonts-ipafont-gothic fonts-liberation fonts-noto-color-emoji fonts-tlwg-loma-
-            otf fonts-unifont fonts-wqy-zenhei git gstreamer1.0-libav gstreamer1.0-plugins-bad
+            fonts-freefont-ttf fonts-ipafont-gothic fonts-liberation fonts-noto-color-emoji
+            fonts-tlwg-loma-otf fonts-unifont fonts-wqy-zenhei git gstreamer1.0-libav gstreamer1.0-plugins-bad
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good libasound2t64 libatk-bridge2.0-0t64
             libatk1.0-0t64 libatomic1 libatspi2.0-0t64 libavif16 libcairo-gobject2 libcairo2 libcups2t64
             libdbus-1-3 libdrm2 libegl-mesa0 libenchant-2-2 libepoxy0 libevent-2.1-7t64 libflite1
