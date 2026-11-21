@@ -411,9 +411,11 @@ jobs:
           mountdir="$RUNNER_TEMP/offline-guest-mount"
           mkdir "$mountdir"
           cleanup_mount() {
-            if mountpoint -q "$mountdir/proc"; then sudo umount "$mountdir/proc"; fi
-            if mountpoint -q "$mountdir/dev"; then sudo umount "$mountdir/dev"; fi
-            if mountpoint -q "$mountdir"; then sudo guestunmount "$mountdir"; fi
+            # guestmount was run as root. The Actions user's mountpoint probe
+            # gets EACCES on FUSE children and must not stand in for absence.
+            if sudo mountpoint -q "$mountdir/proc"; then sudo umount "$mountdir/proc"; fi
+            if sudo mountpoint -q "$mountdir/dev"; then sudo umount "$mountdir/dev"; fi
+            if sudo mountpoint -q "$mountdir"; then sudo guestunmount "$mountdir"; fi
           }
           trap cleanup_mount EXIT
           sudo env LIBGUESTFS_BACKEND=direct guestmount -a overlay.qcow2 -i --rw --pid-file "$RUNNER_TEMP/guestmount.pid" "$mountdir"
@@ -449,6 +451,10 @@ jobs:
           test "$guestmount_pid" -gt 0
           cleanup_mount
           trap - EXIT
+          if sudo mountpoint -q "$mountdir"; then
+            echo 'The guest OS filesystem still has a live mount' >&2
+            exit 1
+          fi
           # A reaped or zombie FUSE process cannot hold an active image descriptor.
           state=unknown
           for _ in {1..60}; do
