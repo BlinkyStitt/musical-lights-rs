@@ -110,7 +110,7 @@ def unpack(
                 if item.filename in SMALL:
                     values[item.filename] = transport.read(item)
             approval = approved_run(values["approved-run.json"])
-            if set(expected) != {
+            required = {
                 "run_id",
                 "attempt",
                 "check_run_id",
@@ -119,7 +119,10 @@ def unpack(
                 "source_commit",
                 "shard",
                 "profile",
-            } or any(approval[k] != v for k, v in expected.items()):
+            }
+            if set(expected) not in (required, required | {"artifact_id"}) or any(
+                approval[k] != v for k, v in expected.items()
+            ):
                 raise ValueError("Return bundle does not match this exact hosted job")
             signature = working / "reply.json.sig"
             signature.write_bytes(values["reply.json.sig"])
@@ -153,9 +156,12 @@ def main() -> None:
     parser.add_argument("--trust", type=Path, required=True)
     for name in ("run-id", "attempt", "check-run-id", "shard"):
         parser.add_argument("--" + name, type=int, required=True)
+    parser.add_argument("--artifact-id", type=int)
     for name in ("workflow-sha", "pr-head-sha", "source-commit", "profile"):
         parser.add_argument("--" + name, required=True)
     args = vars(parser.parse_args())
+    if args["artifact_id"] is None:
+        args.pop("artifact_id")
     bundle, target, trust = (args.pop(name) for name in ("bundle", "target", "trust"))
     try:
         unpack(bundle, target, trust, expected=args, now=int(time.time()))
