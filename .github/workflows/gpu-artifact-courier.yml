@@ -1,0 +1,103 @@
+name: Hosted transport for native GPU results
+on:
+  workflow_call:
+    inputs:
+      shard:
+        required: true
+        type: number
+      profile:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  return:
+    name: Return native GPU artifacts
+    if: >-
+      ${{ github.event_name == 'pull_request' &&
+          github.repository_id == '736904496' &&
+          github.actor_id == '624221' &&
+          github.actor == github.triggering_actor &&
+          github.event.pull_request.user.id == 624221 &&
+          github.event.pull_request.head.repo.id == 736904496 &&
+          github.event.pull_request.base.ref == 'main' &&
+          vars.SKI_GPU_APPROVED_PR_MERGE_SHA == github.sha &&
+          ((inputs.shard == 1 && inputs.profile == 't4') ||
+           (inputs.shard == 2 && inputs.profile == 'intel')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out the immutable transport only, never the PR
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 491b1cd8be57344cf62091e152dc74adfa9feabc
+          path: courier-source
+          persist-credentials: false
+          sparse-checkout: .github/gpu-courier
+      - id: evidence
+        name: Receive exact native output, not hosted compute
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TESTED: ${{ github.sha }}
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { resolve } = require('node:path');
+            const { receive } = await import(pathToFileURL(resolve(
+              'courier-source/.github/gpu-courier/fetch.mjs',
+            )).href);
+            const result = await receive(core, {
+              tested: process.env.TESTED, ref: process.env.GITHUB_REF,
+              run: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT,
+            }, resolve(process.env.RUNNER_TEMP, 'native-gpu-result.zip'));
+            core.setOutput('check', result.check);
+            core.setOutput('callee', result.callee);
+      - name: Verify pinned native proof matching this run and shader profile
+        working-directory: courier-source/.github/gpu-courier
+        shell: bash
+        env:
+          CHECK_ID: ${{ steps.evidence.outputs.check }}
+          CALLEE_SHA: ${{ steps.evidence.outputs.callee }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          TESTED: ${{ github.sha }}
+          SHARD: ${{ inputs.shard }}
+          PROFILE: ${{ inputs.profile }}
+          REPORT_SIGNER_PUBLIC: ${{ vars.SKI_GPU_REPORT_SIGNER_PUBLIC }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ ! "$REPORT_SIGNER_PUBLIC" =~ ^ssh-ed25519\ AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]+={0,2}$ ]]; then
+            echo "::error::Missing exact reviewed GPU report public signer"
+            exit 1
+          fi
+          printf 'ski-ci-gpu-qualified-operator %s\n' "$REPORT_SIGNER_PUBLIC" > "$RUNNER_TEMP/gpu-report.allowed-signers"
+          python3 -m scripts.ci_gpu_hosted_unpack "$RUNNER_TEMP/native-gpu-result.zip" "$RUNNER_TEMP/native-gpu-reports" \
+            --trust "$RUNNER_TEMP/gpu-report.allowed-signers" --run-id "$GITHUB_RUN_ID" \
+            --attempt "$GITHUB_RUN_ATTEMPT" --check-run-id "$CHECK_ID" --workflow-sha "$CALLEE_SHA" \
+            --pr-head-sha "$PR_HEAD" --source-commit "$TESTED" --shard "$SHARD" --profile "$PROFILE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gpu-browser-report-${{ inputs.shard }}
+          path: ${{ runner.temp }}/native-gpu-reports/gpu-browser-report-${{ inputs.shard }}/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+      - if: inputs.shard == 1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: active-gap-evidence
+          path: ${{ runner.temp }}/native-gpu-reports/active-gap-evidence/
+          include-hidden-files: true
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+      - if: inputs.shard == 1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tilt-lighting-comparison
+          path: ${{ runner.temp }}/native-gpu-reports/tilt-lighting-comparison/
+          include-hidden-files: true
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
