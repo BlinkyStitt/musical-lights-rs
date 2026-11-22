@@ -8,6 +8,9 @@ on:
       profile:
         required: true
         type: string
+      producer-artifact:
+        required: true
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -31,7 +34,7 @@ jobs:
       - name: Check out the immutable transport only, never the PR
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 491b1cd8be57344cf62091e152dc74adfa9feabc
+          ref: e8d5df97e3a8951a31ee0d58879858ea387ca778
           path: courier-source
           persist-credentials: false
           sparse-checkout: .github/gpu-courier
@@ -63,6 +66,7 @@ jobs:
           TESTED: ${{ github.sha }}
           SHARD: ${{ inputs.shard }}
           PROFILE: ${{ inputs.profile }}
+          PRODUCER_ARTIFACT: ${{ inputs.producer-artifact }}
           REPORT_SIGNER_PUBLIC: ${{ vars.SKI_GPU_REPORT_SIGNER_PUBLIC }}
         run: |
           set -euo pipefail
@@ -75,7 +79,8 @@ jobs:
           python3 -m scripts.ci_gpu_hosted_unpack "$RUNNER_TEMP/native-gpu-result.zip" "$RUNNER_TEMP/native-gpu-reports" \
             --trust "$RUNNER_TEMP/gpu-report.allowed-signers" --run-id "$GITHUB_RUN_ID" \
             --attempt "$GITHUB_RUN_ATTEMPT" --check-run-id "$CHECK_ID" --workflow-sha "$CALLEE_SHA" \
-            --pr-head-sha "$PR_HEAD" --source-commit "$TESTED" --shard "$SHARD" --profile "$PROFILE"
+            --pr-head-sha "$PR_HEAD" --source-commit "$TESTED" --shard "$SHARD" --profile "$PROFILE" \
+            --artifact-id "$PRODUCER_ARTIFACT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gpu-browser-report-${{ inputs.shard }}
