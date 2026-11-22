@@ -386,10 +386,11 @@ jobs:
             profile: t4
           - shard: 2
             profile: intel
-    uses: BlinkyStitt/musical-lights-rs/.github/workflows/gpu-artifact-courier.yml@bfa82b9406917ad307b0c46fec01750f440baf63
+    uses: BlinkyStitt/musical-lights-rs/.github/workflows/gpu-artifact-courier.yml@526801609913ee87a402b3a92c37fe6d2dd5c4b5
     with:
       shard: ${{ matrix.shard }}
       profile: ${{ matrix.profile }}
+      producer-artifact: ${{ needs.web.outputs.artifact_id }}
   gpu:
     name: Require exact GPU validation
     needs: [plan, gpu-legacy, gpu-artifact]
