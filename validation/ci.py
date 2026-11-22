@@ -54,6 +54,13 @@ VALIDATORS = {
     "Required website checks",
 }
 
+GPU_LEGACY_VALIDATORS = {f"GPU browser ({shard})" for shard in (1, 2)}
+GPU_COURIER_VALIDATORS = {
+    *(f"GPU artifact ({shard}) / Return native GPU artifacts" for shard in (1, 2)),
+    "Require exact GPU validation",
+}
+GPU_COURIER_SHA = "bfa82b9406917ad307b0c46fec01750f440baf63"
+
 
 def git(*args, root=ROOT):
     return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
@@ -281,8 +288,31 @@ def reusable(repository, expected, read=api, fetch=download):
         )["jobs"]
         passed = {job["name"] for job in jobs if job["conclusion"] == "success"}
         counts = Counter(job["name"] for job in jobs)
-        if not VALIDATORS.issubset(passed) or any(
-            counts[name] != 1 for name in VALIDATORS
+        expected_validators = VALIDATORS
+        if GPU_COURIER_VALIDATORS & passed:
+            if (
+                run.get("actor", {}).get("id") != 624221
+                or run.get("triggering_actor", {}).get("id") != 624221
+                or not any(
+                    item.get("sha") == GPU_COURIER_SHA
+                    and item.get("path")
+                    == (
+                        f"{repository}/.github/workflows/gpu-artifact-courier.yml@"
+                        + GPU_COURIER_SHA
+                    )
+                    for item in run.get("referenced_workflows", [])
+                )
+            ):
+                # Legacy also has a GPU result bridge; use legacy only if no
+                # new courier shard claims success.
+                if (GPU_COURIER_VALIDATORS - {"Require exact GPU validation"}) & passed:
+                    continue
+            else:
+                expected_validators = (
+                    VALIDATORS - GPU_LEGACY_VALIDATORS
+                ) | GPU_COURIER_VALIDATORS
+        if not expected_validators.issubset(passed) or any(
+            counts[name] != 1 for name in expected_validators
         ):
             continue
         with tempfile.TemporaryDirectory() as directory:

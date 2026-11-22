@@ -11,6 +11,8 @@ on:
       - '!validation/tests/other-apps.spec.mjs'
       - '.github/workflows/validate.yml'
       - '.github/workflows/gpu-runner-network.yml'
+      - '.github/workflows/gpu-artifact-courier.yml'
+      - '.github/gpu-courier/**'
       - '**/.cargo/**'
       - '**/rust-toolchain*'
       - 'musical-leptos/**'
@@ -40,6 +42,15 @@ jobs:
       artifact_id: ${{ steps.plan.outputs.artifact_id }}
       tree: ${{ steps.plan.outputs.tree }}
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
+      native_gpu: >-
+        ${{ github.event_name == 'pull_request' &&
+            github.repository_id == '736904496' &&
+            github.actor_id == '624221' &&
+            github.actor == github.triggering_actor &&
+            github.event.pull_request.user.id == 624221 &&
+            github.event.pull_request.head.repo.id == 736904496 &&
+            github.event.pull_request.base.ref == 'main' &&
+            vars.SKI_GPU_APPROVED_PR_MERGE_SHA == github.sha }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/cache@v6.1.0
@@ -260,11 +271,13 @@ jobs:
     needs: plan
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
     uses: ./.github/workflows/gpu-runner-network.yml
-  gpu:
+    with:
+      hosted: ${{ needs.plan.outputs.native_gpu == 'true' }}
+  gpu-legacy:
     name: GPU browser (${{ matrix.shard }})
     timeout-minutes: 60
     needs: [plan, web, gpu-network]
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
+    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true' && needs.plan.outputs.native_gpu != 'true'
     runs-on: ci-musical-gpu
     strategy:
       fail-fast: false
@@ -358,6 +371,42 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: ignore
+  gpu-artifact:
+    name: GPU artifact (${{ matrix.shard }})
+    needs: [plan, web, gpu-network]
+    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true' && needs.plan.outputs.native_gpu == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            profile: t4
+          - shard: 2
+            profile: intel
+    uses: BlinkyStitt/musical-lights-rs/.github/workflows/gpu-artifact-courier.yml@bfa82b9406917ad307b0c46fec01750f440baf63
+    with:
+      shard: ${{ matrix.shard }}
+      profile: ${{ matrix.profile }}
+  gpu:
+    name: Require exact GPU validation
+    needs: [plan, gpu-legacy, gpu-artifact]
+    if: always() && !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the selected GPU validator, never an unapproved skip
+        env:
+          NATIVE: ${{ needs.plan.outputs.native_gpu }}
+          LEGACY: ${{ needs.gpu-legacy.result }}
+          ARTIFACT: ${{ needs.gpu-artifact.result }}
+        run: |
+          set -euo pipefail
+          case "$NATIVE:$LEGACY:$ARTIFACT" in
+            true:skipped:success|false:success:skipped) ;;
+            *) echo "::error::The selected real GPU validation did not succeed"; exit 1 ;;
+          esac
   validated:
     name: Validated website
     needs: [plan, core, web, loudness-reference, browser, gpu]

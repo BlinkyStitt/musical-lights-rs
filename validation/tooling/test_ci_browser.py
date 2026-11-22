@@ -163,7 +163,7 @@ class RunnerPlacementTests(unittest.TestCase):
         self.assertIn("shard: [1, 2]", validation)
         self.assertNotIn("matrix.host", validation)
         network = (workflows / "gpu-runner-network.yml").read_text()
-        self.assertIn("runs-on: ci-musical-gpu\n", network)
+        self.assertIn("inputs.hosted && 'ubuntu-24.04' || 'ci-musical-gpu'", network)
         health = (workflows / "gpu-runner-health.yml").read_text()
         self.assertIn("runner: ci-musical-gpu-nuc3", health)
         self.assertIn("runner: ci-musical-gpu-t4", health)
