@@ -32,7 +32,7 @@ test('only fixed HTTPS GET, no redirect, new OIDC after opaque pending, private 
       return oidc();
     } }, identity, output, {
       fetch: async (url, init) => {
-        assert.equal(url, 'https://gpu-artifacts.stytt.com/v1/musical-gpu/result');
+        assert.equal(url, 'https://gpu-artifacts.shorthair-fir.ts.net/v1/musical-gpu/result');
         assert.equal(init.redirect, 'error');
         assert.equal(init.method, 'GET');
         assert.equal(init.headers.Authorization, 'Bearer ' + oidc());

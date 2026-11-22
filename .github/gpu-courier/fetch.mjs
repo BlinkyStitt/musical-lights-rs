@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const audience = 'ski-musical-gpu-return-v1';
-const endpoint = 'https://gpu-artifacts.stytt.com/v1/musical-gpu/result';
+const endpoint = 'https://gpu-artifacts.shorthair-fir.ts.net/v1/musical-gpu/result';
 const maxBytes = 300 * 1024 * 1024;
 
 export async function receive(core, identity, output, dependencies = {}) {
