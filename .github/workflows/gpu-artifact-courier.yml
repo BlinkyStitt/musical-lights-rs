@@ -34,7 +34,7 @@ jobs:
       - name: Check out the immutable transport only, never the PR
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: e8d5df97e3a8951a31ee0d58879858ea387ca778
+          ref: 65fd244ca8442d4b4fa3f52a86ffd00a5379b8ff
           path: courier-source
           persist-credentials: false
           sparse-checkout: .github/gpu-courier
