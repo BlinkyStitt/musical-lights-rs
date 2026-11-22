@@ -59,7 +59,7 @@ GPU_COURIER_VALIDATORS = {
     *(f"GPU artifact ({shard}) / Return native GPU artifacts" for shard in (1, 2)),
     "Require exact GPU validation",
 }
-GPU_COURIER_SHA = "526801609913ee87a402b3a92c37fe6d2dd5c4b5"
+GPU_COURIER_SHA = "64bf920d0aa3ed06e8121ebb935dd5ae63dab9f4"
 
 
 def git(*args, root=ROOT):

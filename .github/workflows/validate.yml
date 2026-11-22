@@ -386,7 +386,7 @@ jobs:
             profile: t4
           - shard: 2
             profile: intel
-    uses: BlinkyStitt/musical-lights-rs/.github/workflows/gpu-artifact-courier.yml@526801609913ee87a402b3a92c37fe6d2dd5c4b5
+    uses: BlinkyStitt/musical-lights-rs/.github/workflows/gpu-artifact-courier.yml@64bf920d0aa3ed06e8121ebb935dd5ae63dab9f4
     with:
       shard: ${{ matrix.shard }}
       profile: ${{ matrix.profile }}
