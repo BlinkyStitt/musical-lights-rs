@@ -17,10 +17,10 @@ jobs:
       matrix:
         include:
           - label: gpu-nuc3
-            runner: ci-musical-gpu-nuc3
+            runner: ski-gpu-blink-intel-small
             renderer: virgl.*Intel
           - label: gpu-t4
-            runner: ci-musical-gpu-t4
+            runner: ski-gpu-blink-nvidia-small
             renderer: virgl.*Tesla T4
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5

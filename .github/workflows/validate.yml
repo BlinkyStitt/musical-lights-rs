@@ -265,11 +265,15 @@ jobs:
     timeout-minutes: 60
     needs: [plan, web, gpu-network]
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ci-musical-gpu
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        include:
+          - shard: 1
+            runner: ski-gpu-blink-nvidia-small
+          - shard: 2
+            runner: ski-gpu-blink-intel-small
     concurrency:
       group: site-gpu-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true

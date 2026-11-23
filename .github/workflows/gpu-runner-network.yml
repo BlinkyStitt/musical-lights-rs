@@ -6,7 +6,7 @@ permissions:
 jobs:
   transfer:
     name: Action transfer (GPU runner)
-    runs-on: ci-musical-gpu
+    runs-on: ski-gpu-blink-intel-small
     timeout-minutes: 5
     steps:
       # No uses steps: the runner downloads ALL remote actions before any step.
