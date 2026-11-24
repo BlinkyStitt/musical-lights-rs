@@ -156,17 +156,22 @@ class BrowserGateTests(unittest.TestCase):
 
 
 class RunnerPlacementTests(unittest.TestCase):
-    def test_both_gpu_workers_share_the_required_shards(self):
+    def test_native_gpu_workers_keep_both_required_shards(self):
         workflows = Path(__file__).resolve().parents[2] / ".github/workflows"
         validation = (workflows / "validate.yml").read_text()
-        self.assertIn("runs-on: ci-musical-gpu\n", validation)
-        self.assertIn("shard: [1, 2]", validation)
+        self.assertIn("runs-on: ${{ matrix.runner }}\n", validation)
+        self.assertIn(
+            "shard: 1\n            runner: ski-gpu-blink-nvidia-small", validation
+        )
+        self.assertIn(
+            "shard: 2\n            runner: ski-gpu-blink-intel-small", validation
+        )
         self.assertNotIn("matrix.host", validation)
         network = (workflows / "gpu-runner-network.yml").read_text()
-        self.assertIn("runs-on: ci-musical-gpu\n", network)
+        self.assertIn("runs-on: ski-gpu-blink-intel-small\n", network)
         health = (workflows / "gpu-runner-health.yml").read_text()
-        self.assertIn("runner: ci-musical-gpu-nuc3", health)
-        self.assertIn("runner: ci-musical-gpu-t4", health)
+        self.assertIn("runner: ski-gpu-blink-intel-small", health)
+        self.assertIn("runner: ski-gpu-blink-nvidia-small", health)
         self.assertEqual(
             {name for name in ci.VALIDATORS if name.startswith("GPU browser")},
             {"GPU browser (1)", "GPU browser (2)"},
