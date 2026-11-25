@@ -56,7 +56,10 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 validation/ci.py plan
+        run: |
+          export PATH="$PWD/.tools/bin:$PATH"
+          gh --version
+          python3 validation/ci.py plan
   core:
     name: rust (core)
     needs: plan

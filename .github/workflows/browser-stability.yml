@@ -35,10 +35,20 @@ jobs:
           ref: ${{ inputs.source_ref }}
       - id: source
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6.1.0
+        id: ci-tools
+        with:
+          path: .tools
+          key: ci-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
+      - run: python3 validation/install_tools.py ci
+        if: steps.ci-tools.outputs.cache-hit != 'true'
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 validation/ci.py plan
+        run: |
+          export PATH="$PWD/.tools/bin:$PATH"
+          gh --version
+          python3 validation/ci.py plan
       - name: Require an exact trusted producer
         env:
           REUSE: ${{ steps.plan.outputs.reuse }}
