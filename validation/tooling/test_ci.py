@@ -178,7 +178,7 @@ class ArtifactTests(unittest.TestCase):
 
     def test_reuse_requires_trusted_successful_complete_validation(self):
         repo = "owner/lights"
-        run = {
+        run: dict[str, object] = {
             "id": 123,
             "run_attempt": 1,
             "head_sha": "head",
@@ -221,9 +221,9 @@ class ArtifactTests(unittest.TestCase):
             shutil.copytree(self.bundle, directory, dirs_exist_ok=True)
 
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("123", "456"))
-        run["head_repository"]["full_name"] = "fork/lights"
+        run["head_repository"] = {"full_name": "fork/lights"}
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
-        run["head_repository"]["full_name"] = repo
+        run["head_repository"] = {"full_name": repo}
         jobs = responses["actions/runs/123/attempts/1/jobs?per_page=100"]["jobs"]
         native = next(job for job in jobs if job["name"] == "rust (core)")
         native["conclusion"] = "failure"

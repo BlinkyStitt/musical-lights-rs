@@ -43,6 +43,13 @@ BROWSER_GROUPS = tuple(
     for browser, family in BROWSER_FAMILIES.items()
     for shard in range(1, family.groups + 1)
 )
+GPU_LEGACY_VALIDATORS = {f"GPU browser ({shard})" for shard in (1, 2)}
+GPU_COURIER_SHARDS = {
+    f"GPU artifact ({shard}) / Return native GPU artifacts" for shard in (1, 2)
+}
+GPU_COURIER_VALIDATORS = GPU_COURIER_SHARDS | {"Require exact GPU validation"}
+GPU_COURIER_SHA = "64bf920d0aa3ed06e8121ebb935dd5ae63dab9f4"
+
 VALIDATORS = {
     *(f"Browser ({group['name']})" for group in BROWSER_GROUPS),
     "Site plan",
@@ -50,17 +57,10 @@ VALIDATORS = {
     "loudness-reference",
     "Build website",
     "gpu-network / Action transfer (GPU runner)",
-    *(f"GPU browser ({shard})" for shard in (1, 2)),
+    *GPU_LEGACY_VALIDATORS,
     "Validated website",
     "Required website checks",
 }
-
-GPU_LEGACY_VALIDATORS = {f"GPU browser ({shard})" for shard in (1, 2)}
-GPU_COURIER_VALIDATORS = {
-    *(f"GPU artifact ({shard}) / Return native GPU artifacts" for shard in (1, 2)),
-    "Require exact GPU validation",
-}
-GPU_COURIER_SHA = "64bf920d0aa3ed06e8121ebb935dd5ae63dab9f4"
 
 
 def git(*args, root=ROOT):
@@ -264,6 +264,36 @@ def download(repository, run, directory):
     )
 
 
+def require_validator_jobs(repository, run, jobs):
+    """Require the complete job set for the GPU route that produced evidence."""
+    passed = {job["name"] for job in jobs if job["conclusion"] == "success"}
+    counts = Counter(job["name"] for job in jobs)
+    expected = VALIDATORS
+    # Both routes use the result gate. Only a successful courier shard selects
+    # the courier checks.
+    if GPU_COURIER_SHARDS & passed:
+        reference = (
+            f"{repository}/.github/workflows/gpu-artifact-courier.yml@{GPU_COURIER_SHA}"
+        )
+        if (
+            run.get("actor", {}).get("id") != 624221
+            or run.get("triggering_actor", {}).get("id") != 624221
+            or not any(
+                item.get("sha") == GPU_COURIER_SHA and item.get("path") == reference
+                for item in run.get("referenced_workflows") or []
+            )
+        ):
+            raise ValueError(
+                "GPU courier run did not use the approved actor and workflow"
+            )
+        expected = (VALIDATORS - GPU_LEGACY_VALIDATORS) | GPU_COURIER_VALIDATORS
+    for name in sorted(expected):
+        if name not in passed or counts[name] != 1:
+            raise ValueError(
+                f"Required website job did not succeed exactly once: {name}"
+            )
+
+
 def reusable(repository, expected, read=api, fetch=download):
     workflow = read(repository, "actions/workflows/validate.yml")
     name = f"validated-site-{expected['source_tree']}"
@@ -287,34 +317,9 @@ def reusable(repository, expected, read=api, fetch=download):
             repository,
             f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
         )["jobs"]
-        passed = {job["name"] for job in jobs if job["conclusion"] == "success"}
-        counts = Counter(job["name"] for job in jobs)
-        expected_validators = VALIDATORS
-        if GPU_COURIER_VALIDATORS & passed:
-            if (
-                run.get("actor", {}).get("id") != 624221
-                or run.get("triggering_actor", {}).get("id") != 624221
-                or not any(
-                    item.get("sha") == GPU_COURIER_SHA
-                    and item.get("path")
-                    == (
-                        f"{repository}/.github/workflows/gpu-artifact-courier.yml@"
-                        + GPU_COURIER_SHA
-                    )
-                    for item in run.get("referenced_workflows", [])
-                )
-            ):
-                # Legacy also has a GPU result bridge; use legacy only if no
-                # new courier shard claims success.
-                if (GPU_COURIER_VALIDATORS - {"Require exact GPU validation"}) & passed:
-                    continue
-            else:
-                expected_validators = (
-                    VALIDATORS - GPU_LEGACY_VALIDATORS
-                ) | GPU_COURIER_VALIDATORS
-        if not expected_validators.issubset(passed) or any(
-            counts[name] != 1 for name in expected_validators
-        ):
+        try:
+            require_validator_jobs(repository, run, jobs)
+        except ValueError:
             continue
         with tempfile.TemporaryDirectory() as directory:
             try:
@@ -426,8 +431,12 @@ def site_affected(paths):
                 "validation/tests/other-apps.spec.mjs",
             )
         )
-        or path.startswith("docs/audio-audit-results/")
-        or path == ".github/workflows/gpu-runner-network.yml"
+        or path.startswith(("docs/audio-audit-results/", ".github/gpu-courier/"))
+        or path
+        in (
+            ".github/workflows/gpu-artifact-courier.yml",
+            ".github/workflows/gpu-runner-network.yml",
+        )
         for path in paths
     )
 

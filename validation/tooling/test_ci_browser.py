@@ -20,7 +20,7 @@ class BrowserGateTests(unittest.TestCase):
             "runner_os": "Linux",
             "runner_arch": "X64",
         }
-        self.ci_run = {
+        self.ci_run: dict[str, object] = {
             "id": 42,
             "run_attempt": 1,
             "head_sha": self.head,
@@ -81,6 +81,53 @@ class BrowserGateTests(unittest.TestCase):
 
     def test_complete_run_and_exact_source_pass(self):
         self.verify()
+
+    def test_courier_run_requires_pinned_workflow_and_both_shards(self):
+        reference = {
+            "path": f"{self.repository}/.github/workflows/gpu-artifact-courier.yml@{ci.GPU_COURIER_SHA}",
+            "sha": ci.GPU_COURIER_SHA,
+        }
+        self.ci_run.update(
+            actor={"id": 624221},
+            triggering_actor={"id": 624221},
+            referenced_workflows=[reference],
+        )
+        for job in self.jobs:
+            if job["name"] in ci.GPU_LEGACY_VALIDATORS:
+                job["conclusion"] = "skipped"
+        self.jobs.extend(
+            {"name": name, "conclusion": "success"}
+            for name in ci.GPU_COURIER_VALIDATORS
+        )
+        self.verify()
+
+        for field, invalid in (
+            ("actor", {"id": 123}),
+            ("triggering_actor", {"id": 123}),
+            ("referenced_workflows", [{**reference, "sha": "c" * 40}]),
+        ):
+            with self.subTest(field=field):
+                original = self.ci_run[field]
+                self.ci_run[field] = invalid
+                with self.assertRaises(ValueError):
+                    self.verify()
+                self.ci_run[field] = original
+
+        for job in self.jobs:
+            if job["name"] in ci.GPU_COURIER_VALIDATORS:
+                with self.subTest(job=job["name"]):
+                    job["conclusion"] = "skipped"
+                    with self.assertRaises(ValueError):
+                        self.verify()
+                    job["conclusion"] = "success"
+
+    def test_courier_paths_require_website_validation_on_push(self):
+        for path in (
+            ".github/workflows/gpu-artifact-courier.yml",
+            ".github/gpu-courier/fetch.mjs",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(ci.website_required("push", [path]))
 
     def test_rejects_missing_duplicate_or_failed_required_jobs(self):
         original = self.jobs.copy()

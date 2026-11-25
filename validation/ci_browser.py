@@ -40,12 +40,7 @@ def verify_run(repository, run, head, expected, read=ci.api, fetch=ci.download):
         repository,
         f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
     )["jobs"]
-    for name in ci.VALIDATORS:
-        matches = [job for job in jobs if job["name"] == name]
-        if len(matches) != 1 or matches[0]["conclusion"] != "success":
-            raise ValueError(
-                f"Required website job did not succeed exactly once: {name}"
-            )
+    ci.require_validator_jobs(repository, run, jobs)
     artifact_name = f"validated-site-{expected['source_tree']}"
     with tempfile.TemporaryDirectory() as directory:
         fetch(repository, {**run, "artifact_name": artifact_name}, Path(directory))
