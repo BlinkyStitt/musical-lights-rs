@@ -308,8 +308,9 @@ jobs:
       - name: Run hardware-rendered browser checks
         env:
           ACTIVE_GAP_PROFILE: standard
+          GPU_BROWSER_SHARD: ${{ matrix.shard }}
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
-        run: just validate-gpu --shard=${{ matrix.shard }}/2
+        run: just validate-gpu
       - name: Collect active-gap transition and latency evidence
         if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
         env:
