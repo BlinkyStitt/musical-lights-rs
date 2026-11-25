@@ -94,8 +94,9 @@ every ten seconds during, and after execution, including command failures.
 
 GPU reports upload on success and failure. When the compiled site verifies,
 the NVIDIA shard executes `just validate-active-gap` and `just validate-tilt`
-serially even if its browser suite failed. The Intel shard runs the long active-gap
-browser captures. Both GPUs run their browser cases one at a time. Timing collectors
+serially even if its browser suite failed. It also runs the active-gap browser
+captures. Intel runs the remaining browser cases. Each GPU runs its cases one at
+a time. Timing collectors
 verify the served build and apply the bounded transition recovery policy.
 Software frame timing is reported without a blocking FPS, p95 or slow-frame
 limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
