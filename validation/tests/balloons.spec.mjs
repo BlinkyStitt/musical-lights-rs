@@ -127,7 +127,11 @@ test('continuous scrolling carries source identity and stops in place', async ({
   const stopTick = (await physicsState(page)).tick;
   await expect.poll(() => page.evaluate(stopTick => {
     const view = document.querySelector('#dancinglights').physics;
-    return view.current[2] >= stopTick + 20 && view.current[view.layout[20]] === view.previous[view.layout[20]];
+    const offset = view.layout[20], count = view.layout[0];
+    const stopped = view.current[offset];
+    // A settled worker snapshot can arrive before the next rendered frame.
+    return view.current[2] >= stopTick + 20 && stopped === view.previous[offset]
+      && view.renderedPhase === (stopped + count) % count;
   }, stopTick)).toBe(true);
   const phase = await page.evaluate(() => document.querySelector('#dancinglights').physics.renderedPhase);
   await page.waitForTimeout(300);
