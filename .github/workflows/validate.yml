@@ -263,7 +263,7 @@ jobs:
   gpu:
     name: GPU browser (${{ matrix.shard }})
     timeout-minutes: 60
-    needs: [plan, web, gpu-network]
+    needs: [plan, web]
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -365,7 +365,7 @@ jobs:
           if-no-files-found: ignore
   validated:
     name: Validated website
-    needs: [plan, core, web, loudness-reference, browser, gpu]
+    needs: [plan, core, web, loudness-reference, browser, gpu-network, gpu]
     if: >-
       ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.site_required == 'true' }}
     runs-on: ubuntu-24.04
