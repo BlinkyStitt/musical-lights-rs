@@ -36,6 +36,14 @@ jobs:
     outputs:
       terminal: ${{ steps.changes.outputs.terminal }}
       demos: ${{ steps.changes.outputs.demos }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: changes
+        run: python3 validation/ci.py changes
+  terminal:
+    needs: changes
+    if: needs.changes.outputs.terminal == 'true'
+    runs-on: ski-kvm-musical-linux
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
       options: --user 0
@@ -47,14 +55,6 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl git python3 build-essential pkg-config libasound2-dev libsdl2-dev
-      - uses: actions/checkout@v7.0.1
-      - id: changes
-        run: python3 validation/ci.py changes
-  terminal:
-    needs: changes
-    if: needs.changes.outputs.terminal == 'true'
-    runs-on: ski-kvm-musical-linux
-    steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
         uses: actions/cache@v6.1.0
