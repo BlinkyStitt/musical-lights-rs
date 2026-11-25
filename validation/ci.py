@@ -49,6 +49,7 @@ VALIDATORS = {
     "rust (core)",
     "loudness-reference",
     "Build website",
+    "gpu-network / Action transfer (GPU runner)",
     *(f"GPU browser ({shard})" for shard in (1, 2)),
     "Validated website",
     "Required website checks",
@@ -445,7 +446,7 @@ def website_required(event_name, paths):
 
 def require_website_validation(needs):
     """Reuse the complete trusted PR receipt, or require every fresh validator."""
-    validators = {"core", "loudness-reference", "browser", "gpu"}
+    validators = {"core", "loudness-reference", "browser", "gpu-network", "gpu"}
     if set(needs) != {"plan", "web", *validators}:
         raise ValueError("Website validation dependencies are incomplete or unexpected")
     plan = needs["plan"]

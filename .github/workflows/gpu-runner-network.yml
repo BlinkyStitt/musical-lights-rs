@@ -9,8 +9,8 @@ permissions:
   contents: read
 jobs:
   transfer:
-    name: Action transfer (GPU coordinator)
-    runs-on: ${{ inputs.hosted && 'ubuntu-24.04' || 'ci-musical-gpu' }}
+    name: Action transfer (GPU runner)
+    runs-on: ${{ inputs.hosted && 'ubuntu-24.04' || 'ski-gpu-blink-intel-small' }}
     timeout-minutes: 5
     steps:
       # No uses steps: the runner downloads ALL remote actions before any step.

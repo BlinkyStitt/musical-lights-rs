@@ -292,7 +292,13 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
             "web": {"result": "success"},
             **{
                 job: {"result": "skipped" if reuse else "success"}
-                for job in ("core", "loudness-reference", "browser", "gpu")
+                for job in (
+                    "core",
+                    "loudness-reference",
+                    "browser",
+                    "gpu-network",
+                    "gpu",
+                )
             },
         }
 
@@ -359,12 +365,17 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
         self.assertIn(fresh[1], job("gpu"))
         self.assertIn("true:skipped:success|false:success:skipped", job("gpu"))
         self.assertIn("needs.plan.outputs.native_gpu == 'true'", job("gpu-artifact"))
-        self.assertIn("needs.plan.outputs.native_gpu != 'true'", job("gpu-legacy"))
+        legacy = job("gpu-legacy")
+        self.assertIn("needs.plan.outputs.native_gpu != 'true'", legacy)
+        self.assertIn("needs: [plan, web]", legacy)
+        self.assertNotIn("gpu-network", legacy.split("steps:")[0])
         self.assertIn(
             "Return native GPU artifacts",
             (ci.ROOT / ".github/workflows/gpu-artifact-courier.yml").read_text(),
         )
         barrier = job("validated")
+        self.assertIn("browser, gpu-network, gpu]", barrier)
+        self.assertIn("gpu-network / Action transfer (GPU runner)", ci.VALIDATORS)
         self.assertIn("always() && !cancelled()", barrier)
         self.assertIn("CI_NEEDS: ${{ toJSON(needs) }}", barrier)
         self.assertIn("run: python3 validation/ci.py validation-barrier", barrier)
