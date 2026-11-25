@@ -709,8 +709,10 @@ for (const scenario of [
         while (performance.now() - started < 3000 && (activeTick === undefined || view.current[2] - activeTick < shakeTicks)) {
           await new Promise(resolve => requestAnimationFrame(resolve));
           const tick = view.current[2], input = Array.from(view.input.slice(24, 27));
-          if (input[axis] !== 0) activeTick ??= tick;
           for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], direction * (view.current[3 + i * view.layout[8] + axis] - first[i]));
+          // The renderer can show a fresh input while the current worker snapshot
+          // still predates it. Start the interval when the simulation responds.
+          if (input[axis] !== 0 && travel.some(distance => distance > .0001)) activeTick ??= tick;
           samples.push({ elapsed: performance.now() - started, tick, snapshotAge: view.metrics.snapshotAgeMs,
             debt: view.metrics.debt, steps: view.metrics.physicsSteps, input,
             positions: first.map((_, i) => view.current[3 + i * view.layout[8] + axis]) });
@@ -720,7 +722,7 @@ for (const scenario of [
         elapsed: performance.now() - started, samples };
     }, scenario);
     await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
-    expect(result.activeTick, 'physics sampled the applied motion input').toBeDefined();
+    expect(result.activeTick, 'physics began moving under the applied motion input').toBeDefined();
     expect(result.endTick - result.activeTick, 'physics steps during the shake').toBeGreaterThanOrEqual(result.shakeTicks);
     const lower = scenario.axis === 2 ? -before.config[5] / 2 : 0;
     const upper = [1.2, before.ceiling, before.config[5] / 2][scenario.axis];
