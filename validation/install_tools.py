@@ -76,7 +76,11 @@ def main():
     if args.group == "rust":
         if target != "x86_64-unknown-linux-gnu":
             parser.error("The Linux runner uses the pinned x86-64 rustup installer")
-        cargo_bin = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin"
+        rust_env = {
+            "CARGO_HOME": os.environ.get("CARGO_HOME", str(Path.home() / ".cargo")),
+            "RUSTUP_HOME": os.environ.get("RUSTUP_HOME", str(Path.home() / ".rustup")),
+        }
+        cargo_bin = Path(rust_env["CARGO_HOME"]) / "bin"
         with tempfile.TemporaryDirectory() as directory:
             installer = Path(directory) / "rustup-init"
             download(
@@ -100,7 +104,13 @@ def main():
                     "-y",
                 ],
                 check=True,
+                env=os.environ | rust_env,
             )
+        if not (cargo_bin / "rustup").is_file():
+            raise ValueError("Rustup installer did not populate the CI Cargo home")
+        with Path(os.environ["GITHUB_ENV"]).open("a") as variables:
+            for name, value in rust_env.items():
+                print(f"{name}={value}", file=variables)
         with Path(os.environ["GITHUB_PATH"]).open("a") as paths:
             print(cargo_bin, file=paths)
         return
