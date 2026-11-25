@@ -2,6 +2,8 @@
 """Install frozen upstream CLI binaries into .tools/bin (macOS or Linux)."""
 
 import argparse
+import hashlib
+import os
 import platform
 import shutil
 import subprocess
@@ -62,7 +64,7 @@ def install_archive(url, binaries, bindir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("group", choices=["web", "site", "demos", "esp", "ci"])
+    parser.add_argument("group", choices=["web", "site", "demos", "esp", "ci", "rust"])
     args = parser.parse_args()
     machine = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64"}[
         platform.machine()
@@ -71,6 +73,37 @@ def main():
     target = f"{machine}-{system}"
     bindir = ROOT / ".tools/bin"
     bindir.mkdir(parents=True, exist_ok=True)
+    if args.group == "rust":
+        if target != "x86_64-unknown-linux-gnu":
+            parser.error("The Linux runner uses the pinned x86-64 rustup installer")
+        cargo_bin = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin"
+        with tempfile.TemporaryDirectory() as directory:
+            installer = Path(directory) / "rustup-init"
+            download(
+                "https://static.rust-lang.org/rustup/archive/1.29.3/"
+                f"{target}/rustup-init",
+                installer,
+            )
+            with installer.open("rb") as binary:
+                digest = hashlib.file_digest(binary, "sha256").hexdigest()
+            if digest != (
+                "b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55"
+            ):
+                raise ValueError("Rustup installer checksum mismatch")
+            installer.chmod(0o755)
+            subprocess.run(
+                [
+                    str(installer),
+                    "--default-toolchain",
+                    "none",
+                    "--no-modify-path",
+                    "-y",
+                ],
+                check=True,
+            )
+        with Path(os.environ["GITHUB_PATH"]).open("a") as paths:
+            print(cargo_bin, file=paths)
+        return
     if args.group == "ci":
         archive_system = {"Darwin": "darwin", "Linux": "linux"}[platform.system()]
         archive_machine = {"aarch64": "arm64", "x86_64": "amd64"}[machine]

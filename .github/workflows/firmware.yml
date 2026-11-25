@@ -32,7 +32,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.firmware_tools == 'true'
     name: Wired provisioning and calibration tools
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
@@ -42,7 +42,7 @@ jobs:
       - run: python3 validation/validate.py firmware-tools
   changes:
     name: Affected firmware
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     outputs:
       firmware_tools: ${{ steps.changes.outputs.firmware_tools }}
       rust: ${{ steps.changes.outputs.rust }}
@@ -57,7 +57,7 @@ jobs:
     name: rust (${{ matrix.package }})
     needs: changes
     if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.rust_matrix) }}
@@ -73,6 +73,7 @@ jobs:
           key: firmware-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', format('{0}/src/**/*.rs', matrix.directory), format('{0}/Cargo.toml', matrix.directory), format('{0}/build.rs', matrix.directory), '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             firmware-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-
+      - run: python3 validation/install_tools.py rust
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target thumbv6m-none-eabi,thumbv7em-none-eabihf
       - run: python3 validation/validate.py ${{ matrix.package }}
@@ -92,7 +93,7 @@ jobs:
     if: needs.changes.outputs.esp == 'true'
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.esp_matrix) }}
@@ -111,6 +112,7 @@ jobs:
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.14.7'
+      - run: python3 validation/install_tools.py rust
       - name: Install host Rust and linker
         run: |
           rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
@@ -144,7 +146,7 @@ jobs:
     name: Required firmware checks
     needs: [changes, firmware-tools, rust, esp]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
       - run: python3 validation/ci.py required-checks firmware
