@@ -29,7 +29,7 @@ permissions:
 jobs:
   plan:
     name: Site plan
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     concurrency:
       group: site-plan-${{ github.ref }}
       cancel-in-progress: true
@@ -61,7 +61,7 @@ jobs:
     name: rust (core)
     needs: plan
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     concurrency:
       group: site-core-${{ github.ref }}
       cancel-in-progress: true
@@ -80,6 +80,7 @@ jobs:
           restore-keys: |
             core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock', 'musical-lights-physics/Cargo.lock', 'validation/benchmarks/Cargo.lock') }}-
             core-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-
+      - run: python3 validation/install_tools.py rust
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
       - run: python3 validation/validate.py core physics-native benchmarks
@@ -87,7 +88,7 @@ jobs:
     name: Build website
     needs: plan
     if: needs.plan.outputs.site_required == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     outputs:
       artifact_id: ${{ steps.compiled-bundle.outputs.artifact-id }}
     concurrency:
@@ -135,6 +136,8 @@ jobs:
           node-version: '26.12.1'
           cache: npm
           cache-dependency-path: validation/package-lock.json
+      - run: python3 validation/install_tools.py rust
+        if: needs.plan.outputs.reuse != 'true'
       - name: Install Rust
         if: needs.plan.outputs.reuse != 'true'
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown
@@ -173,7 +176,7 @@ jobs:
   loudness-reference:
     needs: plan
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     concurrency:
       group: site-reference-${{ github.ref }}
       cancel-in-progress: true
@@ -199,6 +202,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: reference-uv-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/loudness/uv.lock') }}
+      - run: python3 validation/install_tools.py rust
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal
       - run: python3 validation/validate.py reference
@@ -206,10 +210,10 @@ jobs:
     name: Browser (${{ matrix.name }})
     needs: [plan, web]
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
-      options: --init --ipc=host --user 1001
+      options: --init --ipc=host --user 1002:1002
     defaults:
       run:
         shell: bash
@@ -221,6 +225,8 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.browser_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Trust the checked-out workspace inside the guest
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
@@ -368,7 +374,7 @@ jobs:
     needs: [plan, core, web, loudness-reference, browser, gpu-network, gpu]
     if: >-
       ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.site_required == 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     concurrency:
       group: site-validated-${{ github.ref }}
       cancel-in-progress: true
@@ -415,7 +421,7 @@ jobs:
     name: Required website checks
     needs: [plan, validated]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
       - run: python3 validation/ci.py required-checks website
@@ -438,7 +444,7 @@ jobs:
     concurrency:
       group: github-pages
       cancel-in-progress: false
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -448,7 +454,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          latest=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | jq -er .object.sha)
           if [ "$GITHUB_SHA" = "$latest" ]; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
@@ -466,7 +472,7 @@ jobs:
       ${{ always() && !cancelled() && github.ref == 'refs/heads/main' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     needs: [plan, core, web, loudness-reference, browser, gpu, validated, required, pages]
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v7.0.1
@@ -479,7 +485,7 @@ jobs:
           NTFY_TOPIC: ${{ vars.NTFY_TOPIC }}
           NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
         run: |
-          if ! LATEST_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha); then
+          if ! LATEST_SHA=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | jq -er .object.sha); then
             echo '::warning::Could not check current main; notification was skipped.'
             echo 'Notification skipped: could not check current main.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
