@@ -50,6 +50,9 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      CARGO_HOME: /github/home/.cargo
+      RUSTUP_HOME: /github/home/.rustup
     steps:
       - name: Install terminal build dependencies
         run: |
@@ -63,13 +66,15 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             musical-terminal/target
-          key: terminal-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-terminal/src/**/*.rs', 'musical-terminal/examples/**/*.rs', 'musical-terminal/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
+          key: terminal-v3-k3s-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-terminal/src/**/*.rs', 'musical-terminal/examples/**/*.rs', 'musical-terminal/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            terminal-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-
-      - run: python3 validation/install_tools.py rust
-      - name: Install Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
-      - run: python3 validation/validate.py terminal
+            terminal-v3-k3s-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-
+      - name: Install Rust and validate the terminal application
+        run: |
+          python3 validation/install_tools.py rust
+          export PATH="$CARGO_HOME/bin:$PATH"
+          rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
+          python3 validation/validate.py terminal
   demos:
     needs: changes
     if: needs.changes.outputs.demos == 'true'
