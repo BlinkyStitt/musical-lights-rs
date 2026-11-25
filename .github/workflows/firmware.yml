@@ -106,9 +106,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ${{ matrix.directory }}/target
-          key: esp-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', format('{0}/src/**/*.rs', matrix.directory), format('{0}/Cargo.toml', matrix.directory), format('{0}/build.rs', matrix.directory), '**/.cargo/**', '**/rust-toolchain*') }}
+          key: esp-v3-k3s-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', format('{0}/src/**/*.rs', matrix.directory), format('{0}/Cargo.toml', matrix.directory), format('{0}/build.rs', matrix.directory), '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            esp-v2-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-
+            esp-v3-k3s-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.14.7'
