@@ -35,19 +35,28 @@ jobs:
           ref: ${{ inputs.source_ref }}
       - id: source
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # The selected artifact may predate the gh installer.
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci/workflow-tools
+          persist-credentials: false
+          sparse-checkout: /validation/install_tools.py
+          sparse-checkout-cone-mode: false
       - uses: actions/cache@v6.1.0
         id: ci-tools
         with:
-          path: .tools
-          key: ci-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('validation/install_tools.py') }}
-      - run: python3 validation/install_tools.py ci
+          path: .ci/workflow-tools/.tools
+          key: ci-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.ci/workflow-tools/validation/install_tools.py') }}
+      - run: python3 .ci/workflow-tools/validation/install_tools.py ci
         if: steps.ci-tools.outputs.cache-hit != 'true'
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          export PATH="$PWD/.tools/bin:$PATH"
-          gh --version
+          tools="$GITHUB_WORKSPACE/.ci/workflow-tools/.tools/bin"
+          "$tools/gh" --version
+          export PATH="$tools:$PATH"
           python3 validation/ci.py plan
       - name: Require an exact trusted producer
         env:
