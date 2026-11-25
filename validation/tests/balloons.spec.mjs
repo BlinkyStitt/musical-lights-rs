@@ -698,19 +698,30 @@ for (const scenario of [
       const travel = first.map(() => 0);
       const started = performance.now(), startTick = view.current[2];
       const samples = [];
-      const end = started + 240;
-      while (performance.now() < end) {
-        window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration }));
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], direction * (view.current[3 + i * view.layout[8] + axis] - first[i]));
-        samples.push({ elapsed: performance.now() - started, tick: view.current[2], snapshotAge: view.metrics.snapshotAgeMs,
-          debt: view.metrics.debt, steps: view.metrics.physicsSteps, input: Array.from(view.input.slice(24, 27)),
-          positions: first.map((_, i) => view.current[3 + i * view.layout[8] + axis]) });
-      }
-      return { first, travel, input: Array.from(view.input.slice(24, 27)), startTick, endTick: view.current[2],
+      // Feed motion independently of the renderer and measure 240 ms of physics.
+      // On busy software renderers a frame can outlast a fresh sensor sample.
+      const sendMotion = () => window.dispatchEvent(Object.assign(new Event('devicemotion'), { acceleration }));
+      const shakeTicks = Math.ceil(.24 * view.layout[1]);
+      let activeTick;
+      sendMotion();
+      const motionTimer = setInterval(sendMotion, 20);
+      try {
+        while (performance.now() - started < 3000 && (activeTick === undefined || view.current[2] - activeTick < shakeTicks)) {
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          const tick = view.current[2], input = Array.from(view.input.slice(24, 27));
+          if (input[axis] !== 0) activeTick ??= tick;
+          for (let i = 0; i < first.length; i++) travel[i] = Math.max(travel[i], direction * (view.current[3 + i * view.layout[8] + axis] - first[i]));
+          samples.push({ elapsed: performance.now() - started, tick, snapshotAge: view.metrics.snapshotAgeMs,
+            debt: view.metrics.debt, steps: view.metrics.physicsSteps, input,
+            positions: first.map((_, i) => view.current[3 + i * view.layout[8] + axis]) });
+        }
+      } finally { clearInterval(motionTimer); }
+      return { first, travel, startTick, activeTick, shakeTicks, endTick: view.current[2],
         elapsed: performance.now() - started, samples };
     }, scenario);
     await info.attach('shake-travel', { body: JSON.stringify(result), contentType: 'application/json' });
+    expect(result.activeTick, 'physics sampled the applied motion input').toBeDefined();
+    expect(result.endTick - result.activeTick, 'physics steps during the shake').toBeGreaterThanOrEqual(result.shakeTicks);
     const lower = scenario.axis === 2 ? -before.config[5] / 2 : 0;
     const upper = [1.2, before.ceiling, before.config[5] / 2][scenario.axis];
     const sidePlanes = before.sidePlanes;
@@ -732,7 +743,6 @@ for (const scenario of [
     // A delayed final animation frame can already observe the expired force.
     // Verify the actual physics input while the motion events were active.
     const active = result.samples.find(sample => sample.input[scenario.axis] !== 0);
-    expect(active, 'physics sampled the applied motion input').toBeDefined();
     expect(active.input[scenario.axis]).toBeCloseTo(scenario.direction * 16, 5);
     // Lost events do not leave a continuous force; gravity/collisions continue.
     await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
