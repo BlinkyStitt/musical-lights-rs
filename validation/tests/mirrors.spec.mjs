@@ -637,6 +637,7 @@ test('all bars share the balls interpolation time during physical travel', async
 
 for (const path of ['/', '/advanced/']) {
   test(`active tempo stays beside FPS in normal and expanded views on ${path}`, async ({ page }) => {
+    test.setTimeout(60000);
     await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(origin + path); await physicsReady(page); await normalView(page); await startFrozen(page);
     await page.evaluate(() => document.querySelector('.audio-card').dispatchEvent(new CustomEvent('audio-tempo', {

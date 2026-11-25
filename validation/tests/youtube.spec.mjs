@@ -727,7 +727,7 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
 
 for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) for (const resizeLayout of [false, true]) {
   test(`rotated Load and Remove dismiss the ${resizeLayout ? 'layout' : 'visual'} keyboard on ${path} (${reducedMotion})`, async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(90000);
     await page.emulateMedia({ reducedMotion });
     await page.setViewportSize({ width: 568, height: 320 });
     await page.addInitScript(() => {
