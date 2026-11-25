@@ -161,7 +161,7 @@ class RunnerPlacementTests(unittest.TestCase):
         validation = (workflows / "validate.yml").read_text()
         self.assertIn("runs-on: ${{ matrix.runner }}\n", validation)
         self.assertIn(
-            "shard: 1\n            runner: ski-gpu-blink-nvidia-small", validation
+            "shard: 1\n            runner: ski-gpu-blink-nvidia-medium", validation
         )
         self.assertIn(
             "shard: 2\n            runner: ski-gpu-blink-intel-small", validation

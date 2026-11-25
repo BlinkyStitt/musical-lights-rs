@@ -270,8 +270,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Charge room for the browser, VMM and ownership observer together.
           - shard: 1
-            runner: ski-gpu-blink-nvidia-small
+            runner: ski-gpu-blink-nvidia-medium
           - shard: 2
             runner: ski-gpu-blink-intel-small
     concurrency:
