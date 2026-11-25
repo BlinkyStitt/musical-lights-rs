@@ -729,7 +729,11 @@ for (const scenario of [
       expect(result.travel[i], `ball ${i}, available travel ${room}`).toBeGreaterThan(scenario.travel);
     }
     expect(eligible).toBeGreaterThan(0);
-    expect(result.input[scenario.axis]).toBeCloseTo(scenario.direction * 16, 5);
+    // A delayed final animation frame can already observe the expired force.
+    // Verify the actual physics input while the motion events were active.
+    const active = result.samples.find(sample => sample.input[scenario.axis] !== 0);
+    expect(active, 'physics sampled the applied motion input').toBeDefined();
+    expect(active.input[scenario.axis]).toBeCloseTo(scenario.direction * 16, 5);
     // Lost events do not leave a continuous force; gravity/collisions continue.
     await expect.poll(() => page.evaluate(() => Array.from(document.querySelector('#dancinglights').physics.input.slice(24, 27)))).toEqual([0, 0, 0]);
     const after = await physicsState(page);

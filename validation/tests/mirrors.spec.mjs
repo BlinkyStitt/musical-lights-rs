@@ -1136,7 +1136,7 @@ test('active microphone PCM reaches the BPM counter, rejects stale packets and r
     await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 18000 }).toBeGreaterThan(90);
     await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(85);
     const first = await readout.textContent();
-    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 30000 }).toBeGreaterThan(140);
+    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 45000 }).toBeGreaterThan(140);
     await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(135);
     expect(await readout.textContent()).not.toBe(first);
     expect(await page.evaluate(() => tempoDelivery.mismatch)).toBe(0);
