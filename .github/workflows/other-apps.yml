@@ -32,7 +32,7 @@ concurrency:
 jobs:
   changes:
     name: Affected other-apps
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     outputs:
       terminal: ${{ steps.changes.outputs.terminal }}
       demos: ${{ steps.changes.outputs.demos }}
@@ -43,8 +43,21 @@ jobs:
   terminal:
     needs: changes
     if: needs.changes.outputs.terminal == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+      options: --user 0
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_HOME: /github/home/.cargo
+      RUSTUP_HOME: /github/home/.rustup
     steps:
+      - name: Install terminal build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git python3 build-essential pkg-config libasound2-dev libsdl2-dev
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
         uses: actions/cache@v6.1.0
@@ -53,18 +66,19 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             musical-terminal/target
-          key: terminal-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-terminal/src/**/*.rs', 'musical-terminal/examples/**/*.rs', 'musical-terminal/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
+          key: terminal-v3-k3s-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', 'musical-terminal/src/**/*.rs', 'musical-terminal/examples/**/*.rs', 'musical-terminal/Cargo.toml', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
-            terminal-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-
-      - name: Install Rust
-        run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
-      - name: Install terminal libraries
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsdl2-dev
-      - run: python3 validation/validate.py terminal
+            terminal-v3-k3s-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('musical-terminal/Cargo.lock') }}-
+      - name: Install Rust and validate the terminal application
+        run: |
+          python3 validation/install_tools.py rust
+          export PATH="$CARGO_HOME/bin:$PATH"
+          rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy
+          python3 validation/validate.py terminal
   demos:
     needs: changes
     if: needs.changes.outputs.demos == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Cache Rust dependencies and builds
@@ -83,6 +97,7 @@ jobs:
           node-version: '26.12.1'
           cache: npm
           cache-dependency-path: validation/package-lock.json
+      - run: python3 validation/install_tools.py rust
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown
       - name: Cache pinned demo tools
@@ -94,7 +109,7 @@ jobs:
       - run: python3 validation/install_tools.py demos
         if: steps.demo-tools.outputs.cache-hit != 'true'
       - run: python3 validation/validate.py dioxus wasm
-      - run: cd validation && npm ci --ignore-scripts && npx playwright install --with-deps chromium && npm run test:demos
+      - run: cd validation && npm ci --ignore-scripts && npx playwright install chromium && npm run test:demos
         env:
           DEBUG: pw:browser
       - uses: actions/upload-artifact@v7.0.2
@@ -108,7 +123,7 @@ jobs:
     name: Required other-application checks
     needs: [changes, terminal, demos]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
       - run: python3 validation/ci.py required-checks other-apps
