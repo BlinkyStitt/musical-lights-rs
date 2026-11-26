@@ -253,7 +253,7 @@ dependencies = [
  "num-traits",
  "pastey",
  "rayon",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "v_frame",
  "y4m",
 ]
@@ -626,7 +626,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1"
 dependencies = [
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -637,7 +637,7 @@ checksum = "dd93fd2c1b27acd030440c9dbd9d14c1122aad622374fe05a670b67a4bc034be"
 dependencies = [
  "defmt",
  "heapless 0.9.3",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1024,7 +1024,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
 dependencies = [
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1120,7 +1120,7 @@ dependencies = [
  "ndk-context",
  "ndk-sys",
  "percent-encoding",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1241,7 +1241,7 @@ dependencies = [
  "slab",
  "subtle",
  "tao",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tray-icon",
@@ -1263,7 +1263,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subsecond",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tracing",
  "tungstenite 0.28.0",
 ]
@@ -1343,7 +1343,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_urlencoded",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio-util",
  "tracing",
  "tungstenite 0.27.0",
@@ -1378,7 +1378,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
 ]
@@ -2309,7 +2309,7 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "once_cell",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "windows-sys 0.59.0",
  "x11rb",
  "xkeysym",
@@ -2933,7 +2933,7 @@ dependencies = [
  "jni-sys 0.4.1",
  "log",
  "simd_cesu8",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "walkdir",
  "windows-link 0.2.1",
 ]
@@ -3224,7 +3224,7 @@ dependencies = [
  "manganis-macro",
  "ndk-context",
  "objc2",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -3423,7 +3423,7 @@ dependencies = [
  "objc2-foundation",
  "once_cell",
  "png",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "windows-sys 0.61.2",
 ]
 
@@ -3508,7 +3508,7 @@ dependencies = [
  "serde",
  "sha2 0.11.0",
  "smart-leds",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "world_magnetic_model",
 ]
 
@@ -4435,7 +4435,7 @@ dependencies = [
  "rustc-hash 2.1.3",
  "rustls",
  "socket2",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "web-time",
@@ -4457,7 +4457,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tinyvec",
  "tracing",
  "web-time",
@@ -4583,7 +4583,7 @@ dependencies = [
  "rand 0.9.5",
  "rand_chacha",
  "simd_helpers",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "v_frame",
  "wasm-bindgen",
 ]
@@ -4673,7 +4673,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.17",
  "libredox",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -5025,7 +5025,7 @@ checksum = "f3faaf9e727533a19351a43cc5a8de957372163c7d35cc48c90b75cdda13c352"
 dependencies = [
  "percent-encoding",
  "serde",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -5344,7 +5344,7 @@ dependencies = [
  "memmap2",
  "serde",
  "subsecond-types",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -5495,7 +5495,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -5521,11 +5521,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
 dependencies = [
- "thiserror-impl 2.0.20",
+ "thiserror-impl 2.0.21",
 ]
 
 [[package]]
@@ -5541,9 +5541,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5883,7 +5883,7 @@ dependencies = [
  "objc2-foundation",
  "once_cell",
  "png",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "windows-sys 0.61.2",
 ]
 
@@ -5906,7 +5906,7 @@ dependencies = [
  "log",
  "rand 0.9.5",
  "sha1",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "utf-8",
 ]
 
@@ -5925,7 +5925,7 @@ dependencies = [
  "rand 0.9.5",
  "rustls",
  "sha1",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "utf-8",
 ]
 
@@ -6333,7 +6333,7 @@ version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "381336cfffd772377d291702245447a5251a2ffa5bad679c99e61bc48bacbf9c"
 dependencies = [
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "windows",
  "windows-core",
 ]
@@ -6709,7 +6709,7 @@ checksum = "18f3ef68aa525a950e244cd322661bcd7447221f8451e30900c2c2c58bc141cd"
 dependencies = [
  "askama",
  "libm",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "time",
  "uom",
 ]
@@ -6752,7 +6752,7 @@ dependencies = [
  "sha2 0.10.9",
  "soup3",
  "tao-macros",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "url",
  "webkit2gtk",
  "webkit2gtk-sys",
