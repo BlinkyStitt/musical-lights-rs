@@ -311,17 +311,29 @@ jobs:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           tool: just
+      - name: Install GPU browser test dependencies
+        working-directory: validation
+        env:
+          GPU_BROWSER_SHARD: ${{ matrix.shard }}
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
+        run: |
+          npm ci --ignore-scripts
+          browsers=(chromium)
+          if [ "$GPU_BROWSER_SHARD" = 1 ]; then
+            browsers+=(webkit)
+          fi
+          npx --no-install playwright install "${browsers[@]}"
       - name: Run hardware-rendered browser checks
         env:
           ACTIVE_GAP_PROFILE: standard
           GPU_BROWSER_SHARD: ${{ matrix.shard }}
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
-        run: just validate-gpu
+        run: just validate-gpu-checks
       - name: Collect active-gap transition and latency evidence
         if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
-        run: just validate-active-gap
+        run: just validate-active-gap-evidence
       - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.shard == 1
         env:
