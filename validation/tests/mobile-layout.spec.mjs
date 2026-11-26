@@ -92,10 +92,11 @@ test.describe('touch help input', () => {
   });
 });
 
-// Each route retains the complete portrait-to-landscape workflow within its own
-// deadline. CI traces showed the second route exhausting the shared 30 seconds.
+// Give each route time to complete the full layout checks and close its context
+// on the shared Linux runner.
 for (const route of ['/', '/advanced/'])
 test(`phone opens expanded without capture and keeps settings in the top half with notices, song and Exit in short landscape on ${route}`, async ({ browser }, info) => {
+  test.setTimeout(60000);
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();

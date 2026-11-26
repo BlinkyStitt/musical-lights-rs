@@ -17,7 +17,10 @@ test('native evidence retains VM CPU steal and I/O pressure separately from appl
   assert(cpu.slice(1).every(value => /^\d+$/.test(value)));
   assert.match(sample.limits['/proc/loadavg'], /^\d/);
   assert.match(sample.limits['/proc/uptime'], /^\d/);
-  assert.match(sample.limits['/proc/pressure/io'], /some .*total=\d+/);
+  const ioPressure = sample.limits['/proc/pressure/io'];
+  // Kata's guest kernel can omit PSI. The sampler preserves that absence.
+  if (typeof ioPressure === 'string') assert.match(ioPressure, /some .*total=\d+/);
+  else assert.deepEqual(ioPressure, { error: 'ENOENT' });
   assert(sample.processes.some(row => row.pid === process.pid));
 });
 

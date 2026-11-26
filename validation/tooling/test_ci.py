@@ -269,7 +269,13 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
             "web": {"result": "success"},
             **{
                 job: {"result": "skipped" if reuse else "success"}
-                for job in ("core", "loudness-reference", "browser", "gpu")
+                for job in (
+                    "core",
+                    "loudness-reference",
+                    "browser",
+                    "gpu-network",
+                    "gpu",
+                )
             },
         }
 
@@ -334,7 +340,11 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
             condition = re.search(r"^    if: (.+)$", job(name), re.MULTILINE)
             assert condition is not None
             self.assertEqual(condition[1], fresh[1])
+        self.assertIn("needs: [plan, web]", job("gpu"))
+        self.assertNotIn("gpu-network", job("gpu").split("steps:")[0])
         barrier = job("validated")
+        self.assertIn("browser, gpu-network, gpu]", barrier)
+        self.assertIn("gpu-network / Action transfer (GPU runner)", ci.VALIDATORS)
         self.assertIn("always() && !cancelled()", barrier)
         self.assertIn("CI_NEEDS: ${{ toJSON(needs) }}", barrier)
         self.assertIn("run: python3 validation/ci.py validation-barrier", barrier)

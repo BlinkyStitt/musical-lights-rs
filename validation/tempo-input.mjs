@@ -29,9 +29,11 @@ export async function tempoMicrophone(page) {
     };
     MediaDevices.prototype.getUserMedia = async () => {
       const context = tempoCapture.contexts.at(-1);
-      const buffer = context.createBuffer(1, 48 * context.sampleRate, context.sampleRate);
+      // Keep the second tempo playing through polling even if the Linux
+      // software renderer interrupts some audio callbacks.
+      const buffer = context.createBuffer(1, 66 * context.sampleRate, context.sampleRate);
       buffer.copyToChannel(tempoPCM(20, 100, context.sampleRate), 0);
-      buffer.copyToChannel(tempoPCM(28, 150, context.sampleRate), 0, 20 * context.sampleRate);
+      buffer.copyToChannel(tempoPCM(46, 150, context.sampleRate), 0, 20 * context.sampleRate);
       const source = context.createBufferSource(), destination = context.createMediaStreamDestination();
       source.buffer = buffer; source.connect(destination); source.start();
       const track = destination.stream.getAudioTracks()[0];
