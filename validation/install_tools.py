@@ -16,6 +16,11 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+GH_VERSION = "2.105.0"
+GH_LINUX_SHA256 = {
+    "amd64": "79e7ab5db738c48777b696e374f8b428f0647debfb424f44d2f426370407fe2f",
+    "arm64": "b1278c75107423d818f1937fd92cafc9e5e9b606631568f68d7fb816f5885a02",
+}
 
 
 def download(url: str, destination: Path) -> None:
@@ -43,10 +48,15 @@ def download(url: str, destination: Path) -> None:
                 time.sleep(2**attempt)
 
 
-def install_archive(url, binaries, bindir):
+def install_archive(url, binaries, bindir, *, sha256=None):
     with tempfile.TemporaryDirectory() as directory:
         archive = Path(directory) / "tools.tar.gz"
         download(url, archive)
+        if sha256 is not None:
+            with archive.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if digest != sha256:
+                raise ValueError("CLI archive checksum mismatch")
         with tarfile.open(archive) as package:
             for binary in binaries:
                 member = next(
@@ -127,6 +137,15 @@ def main():
             ["uv"],
             bindir,
         )
+        if archive_system == "linux":
+            # The Pages planner uses gh for exact PR artifact lookup and download.
+            install_archive(
+                f"https://github.com/cli/cli/releases/download/v{GH_VERSION}/"
+                f"gh_{GH_VERSION}_linux_{archive_machine}.tar.gz",
+                ["gh"],
+                bindir,
+                sha256=GH_LINUX_SHA256[archive_machine],
+            )
     elif args.group == "esp":
         download(
             f"https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-{target}",

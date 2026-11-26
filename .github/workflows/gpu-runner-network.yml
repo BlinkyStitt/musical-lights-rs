@@ -19,6 +19,7 @@ jobs:
           import hashlib
           import json
           import os
+          import re
           import socket
           import threading
           import time
@@ -26,6 +27,7 @@ jobs:
           from functools import wraps
           from pathlib import Path
           from typing import Any
+          from urllib.error import HTTPError, URLError
 
           # The exact checkout archive from failed run 41206913591. No credentials,
           # retries, alternate resolvers, address-family overrides or installations.
@@ -123,11 +125,17 @@ jobs:
                           sha256=hashlib.sha256(data).hexdigest(),
                       )
               except Exception as error:
-                  # Do not print headers, proxy credentials or ambient environment.
+                  # Report structured failure codes without logging the URL,
+                  # headers or arbitrary text from an upstream exception.
+                  reason = error.reason if isinstance(error, URLError) else error
+                  tunnel = re.match(r"Tunnel connection failed: ([1-5][0-9]{2})(?: |$)", str(reason))
                   emit(
                       "request-error",
                       error=type(error).__name__,
-                      errno=getattr(error, "errno", None),
+                      reason_type=type(reason).__name__,
+                      errno=getattr(reason, "errno", None),
+                      http_status=error.code if isinstance(error, HTTPError) else None,
+                      tunnel_status=int(tunnel[1]) if tunnel else None,
                   )
                   raise
               finally:
