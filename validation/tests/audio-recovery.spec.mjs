@@ -8,6 +8,14 @@ async function recoveryPage(page, microphone = false) {
     window.recoveryContexts = []; window.recoveryNodes = []; window.captureCalls = 0; window.recoveryFrames = 0; window.recoveryInjected = 0;
     window.recoveryTransport = []; window.recoveryBrowserClocks = [];
     window.AudioContext = class extends Context {
+      get currentTime() {
+        const time = super.currentTime;
+        if (this.firstClockRead === undefined) {
+          this.firstClockRead = time;
+          queueMicrotask(() => { this.firstClockRead = undefined; });
+        }
+        return time;
+      }
       constructor(...args) {
         super(...args); recoveryContexts.push(this);
         const prototype = Object.getPrototypeOf(this.audioWorklet), load = prototype.addModule;
@@ -77,9 +85,10 @@ async function recoveryPage(page, microphone = false) {
   await page.goto('http://127.0.0.1:8101/advanced/'); await physicsReady(page); await normalView(page);
   await page.evaluate(() => {
     document.querySelector('.audio-card').addEventListener('review-playback', ({ detail }) => {
-      // Pair each reported PCM position with the independent browser audio clock
-      // in the same event turn, before slow browser automation or trace export.
-      window.recoveryClock = { position: detail.processingSeconds, time: recoveryContexts[0].currentTime, sampleRate: recoveryContexts[0].sampleRate };
+      // The timer first reads the PCM clock, then queries output timing.
+      // A live context can advance several quanta between that read and this event.
+      const context = recoveryContexts[0];
+      window.recoveryClock = { position: detail.processingSeconds, time: context.firstClockRead, sampleRate: context.sampleRate };
     });
   });
 }
@@ -148,7 +157,6 @@ test('a real audio gap preserves playback and monitor controls while exported tr
   const positionDelta = after.clock.position - before.clock.position;
   const audioDelta = after.clock.time - before.clock.time;
   // Retain a strict jump/reset check independent of elapsed automation time.
-  // Two audio quanta cover clock sampling at the two event boundaries.
   expect(Math.abs(positionDelta - audioDelta)).toBeLessThanOrEqual(2 * 128 / before.clock.sampleRate);
   expect(after.continuity.missingSamples).toBe(128); expect(after.continuity.receivedSample - after.continuity.expectedSample).toBe(128);
   await page.locator('.tone-pause').click();
@@ -236,7 +244,6 @@ test('a backward analysis clock keeps the same playback position and declares it
   const positionDelta = after.clock.position - before.clock.position;
   const audioDelta = after.clock.time - before.clock.time;
   // Retain a strict jump/reset check independent of elapsed automation time.
-  // Two audio quanta cover clock sampling at the two event boundaries.
   expect(Math.abs(positionDelta - audioDelta)).toBeLessThanOrEqual(2 * 128 / before.clock.sampleRate);
   expect(after.continuity.missingSamples).toBe(0); expect(after.continuity.overlapSamples).toBe(128);
   expect(after.continuity.expectedSample - after.continuity.receivedSample).toBe(128);

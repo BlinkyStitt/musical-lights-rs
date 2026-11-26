@@ -125,11 +125,11 @@ test('modified keys and vertical arrows preserve selection and remain available 
 for (const colorScheme of ['light', 'dark']) {
   test(`keyboard focus stays visible above spheres in ${colorScheme} mode`, async ({ page }, testInfo) => {
     await page.emulateMedia({ colorScheme });
-    await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('End');
     for (const width of [375, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
+      await page.getByRole('button', { name: 'Fullscreen', exact: true }).focus();
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('End');
       await expectSample(page, 23);
       const meter = page.getByRole('meter').last();
       await expect(meter).toBeInViewport({ ratio: 1 });
@@ -149,7 +149,6 @@ for (const colorScheme of ['light', 'dark']) {
       // Include a sample through the spheres in the visual evidence too.
       await page.getByRole('meter').nth(13).focus();
       await page.screenshot({ path: testInfo.outputPath(`focus-${colorScheme}-${width}.png`), fullPage: true });
-      await page.keyboard.press('End');
     }
   });
 }
