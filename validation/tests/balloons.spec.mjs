@@ -493,40 +493,49 @@ test('snapshots stay fresh while the render loop is paused', async ({ page }) =>
 
 test('expensive physics ticks yield snapshots between steps and retain their debt', async ({ page }) => {
   await page.goto(url); await physicsReady(page);
-  await page.evaluate(() => { document.querySelector('#dancinglights').physics.timing.snapshots = []; document.querySelector('#dancinglights').physics.recordTiming = true; });
   const worker = page.workers().find(worker => worker.url().endsWith('/physics/worker.js'));
+  expect(worker).toBeTruthy();
   const before = await physicsState(page);
   await worker.evaluate(async () => {
     const { PhysicsSimulation } = await import(new URL('./physics.js', self.location.href));
     const step = PhysicsSimulation.prototype.step;
     const post = self.postMessage;
-    const probe = self.expensiveTickProbe = { injected: 0, published: [], done: false };
-    probe.restore = () => {
-      PhysicsSimulation.prototype.step = step; self.postMessage = post; probe.done = true;
+    const injected = new Set();
+    const probe = self.expensiveTickProbe = { published: [], done: false };
+    const stopInjecting = () => {
+      PhysicsSimulation.prototype.step = step; probe.done = true;
     };
     PhysicsSimulation.prototype.step = function () {
       step.call(this);
+      injected.add(this.tick());
       const end = performance.now() + 20;
       while (performance.now() < end) { /* Reproduce expensive indivisible contact steps. */ }
-      if (++probe.injected === 64) probe.restore();
+      if (injected.size === 64) stopInjecting();
     };
     self.postMessage = function (message, ...args) {
-      // Keep the injected load until actual snapshot publication has yielded
-      // enough observations. Eight ticks can finish before a slow renderer
-      // returns enough of the bounded transfer buffers to observe three batches.
-      if (message.type === 'snapshot' && message.batchMs >= 20) {
-        probe.published.push({ ticks: message.batchTicks, batchMs: message.batchMs });
-        if (probe.published.length === 4) probe.restore();
+      if (message.type === 'snapshot') {
+        // A host stall can also make an ordinary batch take 20 ms. Match the
+        // actual tick range in the published batch to the injected work.
+        for (let tick = message.tick - message.batchTicks + 1; tick <= message.tick; tick++) {
+          if (!injected.has(tick)) continue;
+          probe.published.push({ ticks: message.batchTicks, batchMs: message.batchMs });
+          if (probe.published.length === 4) stopInjecting();
+          break;
+        }
       }
       return post.call(self, message, ...args);
     };
+    probe.restore = () => { stopInjecting(); self.postMessage = post; };
   });
   try {
     await expect.poll(() => worker.evaluate(() => self.expensiveTickProbe.done)).toBe(true);
     await expect.poll(async () => (await physicsState(page)).tick).toBeGreaterThan(before.tick + 60);
-    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.timing.snapshots.filter(sample => sample.batchMs >= 20).length)).toBeGreaterThanOrEqual(3);
-    const costly = await page.evaluate(() => document.querySelector('#dancinglights').physics.timing.snapshots.filter(sample => sample.batchMs >= 20));
-    expect(costly.every(sample => sample.ticks === 1)).toBe(true);
+    const costly = await worker.evaluate(() => self.expensiveTickProbe.published);
+    expect(costly.length, JSON.stringify(costly)).toBeGreaterThanOrEqual(3);
+    for (const sample of costly) {
+      expect(sample.ticks, JSON.stringify(costly)).toBe(1);
+      expect(sample.batchMs).toBeGreaterThanOrEqual(20);
+    }
     await expect.poll(async () => (await physicsState(page)).metrics.debt).toBeLessThan(17);
     expect((await physicsState(page)).metrics.discardedSimulationMs).toBe(0);
   } finally {

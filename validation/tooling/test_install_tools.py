@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 import tarfile
 import tempfile
@@ -24,7 +25,27 @@ class Response(BytesIO):
 
 
 class CiToolsTests(unittest.TestCase):
-    def test_ci_installs_executable_uv_with_the_workflow_checker(self):
+    def test_ci_installs_executable_tools(self):
+        def tar_bytes(binary):
+            payload = f"#!/bin/sh\necho {binary}\n".encode()
+            archive = BytesIO()
+            with tarfile.open(fileobj=archive, mode="w") as package:
+                member = tarfile.TarInfo(f"release/{binary}")
+                member.size = len(payload)
+                package.addfile(member, BytesIO(payload))
+            return archive.getvalue()
+
+        tools = {
+            "/astral-sh/uv/": "uv",
+            "/rhysd/actionlint/": "actionlint",
+            "/cli/cli/": "gh",
+        }
+
+        def archive(url, destination):
+            binary = next(name for key, name in tools.items() if key in url)
+            destination.write_bytes(tar_bytes(binary))
+
+        checksum = hashlib.sha256(tar_bytes("gh")).hexdigest()
         for system, machine, target in [
             ("Linux", "x86_64", "x86_64-unknown-linux-gnu"),
             ("Linux", "aarch64", "aarch64-unknown-linux-gnu"),
@@ -36,34 +57,49 @@ class CiToolsTests(unittest.TestCase):
                 tempfile.TemporaryDirectory() as directory,
             ):
                 root = Path(directory)
-
-                def archive(url, destination):
-                    binary = "uv" if "/astral-sh/uv/" in url else "actionlint"
-                    data = f"#!/bin/sh\necho {binary}\n".encode()
-                    with tarfile.open(destination, "w:gz") as package:
-                        member = tarfile.TarInfo(f"release/{binary}")
-                        member.size = len(data)
-                        package.addfile(member, BytesIO(data))
-
                 with (
                     patch.object(install_tools, "ROOT", root),
+                    patch.object(
+                        install_tools,
+                        "GH_LINUX_SHA256",
+                        dict.fromkeys(("amd64", "arm64"), checksum),
+                    ),
                     patch.object(sys, "argv", ["install_tools.py", "ci"]),
                     patch("install_tools.platform.system", return_value=system),
                     patch("install_tools.platform.machine", return_value=machine),
                     patch("install_tools.download", side_effect=archive) as fetched,
                 ):
                     install_tools.main()
-                self.assertEqual(fetched.call_count, 2)
-                self.assertEqual(
-                    fetched.call_args.args[0],
+                bins = ["actionlint", "uv"] + (["gh"] if system == "Linux" else [])
+                self.assertEqual(fetched.call_count, len(bins))
+                self.assertIn(
                     f"https://github.com/astral-sh/uv/releases/download/0.10.5/uv-{target}.tar.gz",
+                    [call.args[0] for call in fetched.call_args_list],
                 )
-                for binary in ("actionlint", "uv"):
+                for binary in bins:
                     installed = root / ".tools/bin" / binary
                     self.assertEqual(installed.stat().st_mode & 0o777, 0o755)
                     self.assertEqual(
                         installed.read_text(), f"#!/bin/sh\necho {binary}\n"
                     )
+
+    def test_checksum_mismatch_preserves_the_existing_binary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bindir = Path(directory)
+            binary = bindir / "gh"
+            binary.write_bytes(b"existing binary")
+
+            def invalid_archive(_url, destination):
+                destination.write_bytes(b"corrupt archive")
+
+            with (
+                patch("install_tools.download", side_effect=invalid_archive),
+                self.assertRaisesRegex(ValueError, "CLI archive checksum mismatch"),
+            ):
+                install_tools.install_archive(
+                    "https://example.invalid/gh", ["gh"], bindir, sha256="0" * 64
+                )
+            self.assertEqual(binary.read_bytes(), b"existing binary")
 
     def test_uv_installation_failure_is_not_ignored(self):
         with (

@@ -10,6 +10,7 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from urllib.error import URLError
 
 WORKFLOW = (
     Path(__file__).resolve().parents[2] / ".github/workflows/gpu-runner-network.yml"
@@ -93,7 +94,9 @@ class GpuNetworkTests(unittest.TestCase):
         self.assertEqual(rows[-1]["event"], "request-end")
 
     def test_transfer_failure_after_resolution_still_fails(self):
-        failure = TimeoutError("private transfer details")
+        failure = URLError(
+            OSError("Tunnel connection failed: 502 private transfer details")
+        )
         with (
             patch.object(socket, "getaddrinfo", return_value=[]),
             patch.object(
@@ -101,12 +104,17 @@ class GpuNetworkTests(unittest.TestCase):
                 "urlopen",
                 side_effect=self.transfer(error=failure),
             ) as request,
-            self.assertRaises(TimeoutError),
+            self.assertRaises(URLError),
         ):
             self.probe.capture()
         self.assertEqual(request.call_count, 1)
         self.assertNotIn("private transfer details", self.output.getvalue())
-        self.assertIn("request-error", [row["event"] for row in self.rows()])
+        failure_row = next(
+            row for row in self.rows() if row["event"] == "request-error"
+        )
+        self.assertEqual(failure_row["error"], "URLError")
+        self.assertEqual(failure_row["reason_type"], "OSError")
+        self.assertEqual(failure_row["tunnel_status"], 502)
 
     def test_native_progress_is_emitted_during_a_blocked_lookup(self):
         sampled = threading.Event()
