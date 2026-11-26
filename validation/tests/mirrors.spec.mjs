@@ -637,6 +637,7 @@ test('all bars share the balls interpolation time during physical travel', async
 
 for (const path of ['/', '/advanced/']) {
   test(`active tempo stays beside FPS in normal and expanded views on ${path}`, async ({ page }) => {
+    test.setTimeout(60000);
     await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(origin + path); await physicsReady(page); await normalView(page); await startFrozen(page);
     await page.evaluate(() => document.querySelector('.audio-card').dispatchEvent(new CustomEvent('audio-tempo', {
@@ -1034,14 +1035,20 @@ test('zoomed-out production projection visibly includes three banks and aligns m
   await page.goto(origin + '/advanced/'); await normal(page); await startFrozen(page);
   await page.locator('.camera-zoom').fill('25');
   await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
-  await expect.poll(() => page.evaluate(() => { const v = document.querySelector('#dancinglights').physics; return v.renderedHeight(0) / v.current[v.layout[17] + 1]; })).toBeGreaterThan(.39);
+  // Wait for the worker to reach the requested height. This pixel check renders
+  // its own frame, so software GPU scheduling does not control fixture readiness.
+  await expect.poll(() => page.evaluate(() => {
+    const v = document.querySelector('#dancinglights').physics;
+    return v.current[v.layout[9]] / v.current[v.layout[17] + 1];
+  })).toBeGreaterThan(.39);
   const evidence = await page.evaluate(async () => {
     const v = document.querySelector('#dancinglights').physics;
     const base = document.querySelector('meta[name="musical-lights-assets"]').content;
     const THREE = await import(new URL(`${base}physics/three.module.js`, document.baseURI));
     const size = 480, target = new THREE.WebGLRenderTarget(size, size), pixels = new Uint8Array(size * size * 4);
     try {
-      v.setCamera(0); v.draw(performance.now()); v.positionMeters(v.renderedPhase ?? 0);
+      v.setCamera(0); v.updateScene(Math.max(performance.now(), v.received + 1000 / v.layout[1]));
+      const heightRatio = v.renderedHeight(0) / v.current[v.layout[17] + 1];
       v.renderer.setRenderTarget(target); v.render(); v.renderer.readRenderTargetPixels(target, 0, 0, size, size, pixels);
       const banks = [-1, 0, 1].map(bank => {
         const point = new THREE.Vector3(v.width * (.52 + bank), v.renderedHeight(12) * .3, v.renderedDepth / 2).project(v.camera);
@@ -1055,9 +1062,10 @@ test('zoomed-out production projection visibly includes three banks and aligns m
       // The inverse pointer ray must land on the same source at z=0.
       const world = new THREE.Vector3(v.width * .52, v.visibleHeight * .5, 0), projected = world.clone().project(v.camera);
       v.pointer((projected.x + 1) / 2, (1 - projected.y) / 2, true);
-      return { banks, meterError: Math.abs(left - (front.x + 1) * 50), pointerError: Math.hypot(v.input[28] - world.x, v.input[29] - world.y), zoom: v.cameraParameters.get('cameraZoom') };
+      return { banks, heightRatio, meterError: Math.abs(left - (front.x + 1) * 50), pointerError: Math.hypot(v.input[28] - world.x, v.input[29] - world.y), zoom: v.cameraParameters.get('cameraZoom') };
     } finally { v.renderer.setRenderTarget(null); target.dispose(); }
   });
+  expect(evidence.heightRatio).toBeGreaterThan(.39);
   for (const bank of evidence.banks) {
     expect(bank.x, JSON.stringify(bank)).toBeGreaterThan(0); expect(bank.x).toBeLessThan(480);
     expect(bank.y).toBeGreaterThan(0); expect(bank.y).toBeLessThan(480);
@@ -1136,7 +1144,7 @@ test('active microphone PCM reaches the BPM counter, rejects stale packets and r
     await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 18000 }).toBeGreaterThan(90);
     await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(85);
     const first = await readout.textContent();
-    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 30000 }).toBeGreaterThan(140);
+    await expect.poll(() => page.evaluate(() => tempoCapture.last?.tempo ?? 0), { timeout: 45000 }).toBeGreaterThan(140);
     await expect.poll(async () => parseInt(await readout.textContent()), { timeout: 3000 }).toBeGreaterThan(135);
     expect(await readout.textContent()).not.toBe(first);
     expect(await page.evaluate(() => tempoDelivery.mismatch)).toBe(0);

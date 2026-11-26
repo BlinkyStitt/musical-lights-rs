@@ -211,7 +211,10 @@ embedded build identity: the deployment run records its own main commit and
 links to the original producer. This reuses the complete successful PR validation,
 including both GPU shards, fullscreen recovery, latency and tilt acceptance.
 The merge run does not repeat GPU timing on unchanged bytes. GPU transfer and
-acceptance jobs run whenever fresh validation is required. The validation barrier
+acceptance jobs run whenever fresh validation is required. Both GPU shards may
+start after the compiled build without waiting for the Intel-only transfer canary.
+The final validation barrier still requires that canary, and exact reuse verifies
+its successful result with the other producer validators. The validation barrier
 requires every fresh validator to succeed, or every reused validator to be
 explicitly skipped with an identified trusted producer and verified build.
 Missing, failed, canceled or duplicate producer validators reject reuse. This

@@ -9,10 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pr-ci-security-scan.yml-${{ github.event_name }}-${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   scan:
     name: Scan dependencies, configuration, and secrets
-    runs-on: ubuntu-latest
+    runs-on: ski-kvm-musical-linux
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

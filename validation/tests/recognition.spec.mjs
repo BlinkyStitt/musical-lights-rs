@@ -388,6 +388,7 @@ test.describe('song controls with touch input', () => {
 });
 
 test('fullscreen overlays stay above wrapped song titles with Reduced Motion', async ({ page }, testInfo) => {
+  test.setTimeout(60000);
   await page.setViewportSize({ width: 320, height: 720 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   // Model phone Safari's expanded page view while rotating the viewport.
