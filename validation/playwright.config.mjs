@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
+// Chromium 159's macOS headless shell stalls on Playwright actionability.
+const chromium = {
+  browserName: 'chromium',
+  ...(process.platform === 'darwin' ? { channel: 'chromium' } : {}),
+};
 process.env.DEBUG = [process.env.DEBUG, 'pw:browser'].filter(Boolean).join(',');
 export default defineConfig({
   testDir: './tests',
@@ -15,8 +20,8 @@ export default defineConfig({
   use: { headless: true, screenshot: 'only-on-failure',
     trace: { mode: 'retain-on-failure', screenshots: false, snapshots: false, sources: true } },
   projects: [
-    { name: 'chromium', testIgnore: ['**/active-gap-performance.spec.mjs', '**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: { browserName: 'chromium' } },
-    { name: 'other-apps', testMatch: '**/other-apps.spec.mjs', use: { browserName: 'chromium' } },
+    { name: 'chromium', testIgnore: ['**/active-gap-performance.spec.mjs', '**/mobile-screen.spec.mjs', '**/permissions-native.spec.mjs', '**/other-apps.spec.mjs'], use: chromium },
+    { name: 'other-apps', testMatch: '**/other-apps.spec.mjs', use: chromium },
     { name: 'chromium-permissions', testMatch: '**/permissions-native.spec.mjs', use: {
       browserName: 'chromium', channel: 'chromium', launchOptions: { args: [
         '--use-fake-device-for-media-stream',
