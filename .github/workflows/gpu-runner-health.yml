@@ -17,10 +17,10 @@ jobs:
       matrix:
         include:
           - label: gpu-nuc3
-            runner: ci-musical-gpu-nuc3
+            runner: ski-gpu-blink-intel-small
             renderer: virgl.*Intel
           - label: gpu-t4
-            runner: ci-musical-gpu-t4
+            runner: ski-gpu-blink-nvidia-small
             renderer: virgl.*Tesla T4
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
@@ -41,7 +41,13 @@ jobs:
           document.body.textContent = 'WEBGL_RENDERER=' + renderer;
           </script></body></html>
           HTML
-          google-chrome --headless --no-sandbox --disable-dev-shm-usage \
+          # Use the full Chromium baked into both GPU guests with Playwright 1.64.1.
+          browser="$HOME/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome"
+          if [[ ! -x "$browser" ]]; then
+            echo '::error::Pinned Playwright Chromium (revision 1248) is missing or not executable in the GPU guest.'
+            exit 1
+          fi
+          "$browser" --headless --no-sandbox --disable-dev-shm-usage \
             --use-gl=angle --use-angle=gl --enable-gpu \
             --user-data-dir="$scratch/profile" --dump-dom "file://$scratch/probe.html" \
             > "$scratch/result.html" 2> "$scratch/chrome.log" || {

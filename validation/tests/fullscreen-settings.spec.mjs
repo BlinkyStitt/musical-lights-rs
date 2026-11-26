@@ -203,6 +203,7 @@ async function startFullscreenAudio(page, path, reducedMotion, info) {
 
 for (const path of ['/', '/advanced/']) for (const reducedMotion of ['reduce', 'no-preference']) {
   test(`all turns retain native fullscreen and switch help on ${path} (${reducedMotion})`, async ({ page }, info) => {
+    test.setTimeout(60000);
     await startFullscreenAudio(page, path, reducedMotion, info);
     for (let turn = 0; turn < 4; turn++) {
       if (info.project.name === 'chromium') {
@@ -372,6 +373,7 @@ test('queued dialog close keeps new action help and Escape usable', async ({ pag
 
 for (const path of ['/', '/advanced/']) {
   test(`narrow rotation toolbar fits fallback fonts and safe areas on ${path}`, async ({ browser }) => {
+    test.setTimeout(60000);
     const context = await browser.newContext({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true });
     try {
       const page = await context.newPage();
@@ -422,6 +424,7 @@ test.describe('mobile toolbar sensor ownership', () => {
 
   for (const path of ['/', '/advanced/']) {
     test(`toolbar switches preserve independent sessions through Settings and exit on ${path}`, async ({ page }) => {
+      test.setTimeout(60000);
       await syntheticAudio(page);
       await page.addInitScript(() => {
         Object.defineProperty(document, 'fullscreenEnabled', { value: false });

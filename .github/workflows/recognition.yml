@@ -14,7 +14,7 @@ concurrency:
 jobs:
   changes:
     name: Affected recognition Worker
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     outputs:
       recognition: ${{ steps.changes.outputs.recognition }}
     steps:
@@ -24,14 +24,15 @@ jobs:
   worker:
     needs: changes
     if: needs.changes.outputs.recognition == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '26.12.1'
           cache: npm
           cache-dependency-path: musical-recognition-worker/package-lock.json
+      - run: python3 validation/install_tools.py rust
       - name: Install Rust
         run: rustup toolchain install nightly-2026-09-10 --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
       - uses: actions/cache@v6.1.0
@@ -63,7 +64,7 @@ jobs:
     name: Required recognition checks
     needs: [changes, worker]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
       - run: python3 validation/ci.py required-checks recognition
