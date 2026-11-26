@@ -746,6 +746,8 @@ for (const path of ['/', '/advanced/']) for (const angle of [-40, 40]) {
       const v = document.querySelector('#dancinglights').physics;
       return angle < 0 ? v.rotation - angle : angle - v.rotation;
     }, angle), { timeout: 5000 }).toBeGreaterThan(.2);
+    // The camera and physics worker update independently. Wait for a new tick.
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.current[2])).toBeGreaterThan(initial.tick);
     const state = await page.evaluate(() => {
       const v = document.querySelector('#dancinglights').physics;
       return { yaw: v.rotation, tick: v.current[2], base: v.cameraBase,
