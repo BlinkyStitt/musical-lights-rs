@@ -84,6 +84,10 @@ for (const path of ['/', '/advanced/']) {
     await syntheticAudio(page); await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(origin + path); await normalView(page); await startFrozen(page);
     await page.locator('.depth-slider').fill('48');
+    // Editing the Advanced control can scroll the canvas out of view.
+    // Wait for rendering to resume before observing the attack.
+    await page.locator('#dancinglights canvas').scrollIntoViewIfNeeded();
+    await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sceneVisible)).toBe(true);
     await page.evaluate(() => window.sendBars(Array(24).fill(.4), 1));
     await expect.poll(() => page.evaluate(() => Math.max(...document.querySelector('#dancinglights').physics.edges))).toBe(.5);
     await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.renderedHeight(0))).toBeGreaterThan(.01);
