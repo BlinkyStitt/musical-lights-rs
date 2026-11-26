@@ -63,7 +63,7 @@ jobs:
   required:
     name: Required recognition checks
     needs: [changes, worker]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
