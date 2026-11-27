@@ -20,6 +20,10 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 3
+    groups:
+      shared-crates:
+        applies-to: version-updates
+        group-by: dependency-name
 
   - package-ecosystem: rust-toolchain
     directories:
@@ -33,6 +37,10 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 3
+    groups:
+      shared-rust-toolchain:
+        applies-to: version-updates
+        group-by: dependency-name
 
   - package-ecosystem: npm
     directories:
@@ -45,6 +53,10 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 3
+    groups:
+      shared-javascript-dependencies:
+        applies-to: version-updates
+        group-by: dependency-name
 
   - package-ecosystem: uv
     directories:
@@ -55,6 +67,10 @@ updates:
     cooldown:
       default-days: 3
     open-pull-requests-limit: 3
+    groups:
+      shared-python-dependencies:
+        applies-to: version-updates
+        group-by: dependency-name
 
   - package-ecosystem: docker
     directory: /musical-adafruit-sparkle-embassy/.devcontainer
