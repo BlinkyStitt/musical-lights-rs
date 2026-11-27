@@ -336,11 +336,13 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
 
         fresh = re.search(r"^    if: (.+)$", job("core"), re.MULTILINE)
         assert fresh is not None
-        for name in ("gpu-network", "gpu"):
+        for name in ("gpu-network", "gpu-browsers", "gpu"):
             condition = re.search(r"^    if: (.+)$", job(name), re.MULTILINE)
             assert condition is not None
             self.assertEqual(condition[1], fresh[1])
-        self.assertIn("needs: [plan, web]", job("gpu"))
+        self.assertIn("needs: [plan, web, gpu-browsers]", job("gpu"))
+        self.assertIn("needs.gpu-browsers.outputs.artifact_id", job("gpu"))
+        self.assertIn("needs.gpu-browsers.outputs.archive_sha", job("gpu"))
         self.assertNotIn("gpu-network", job("gpu").split("steps:")[0])
         barrier = job("validated")
         self.assertIn("browser, gpu-network, gpu]", barrier)
