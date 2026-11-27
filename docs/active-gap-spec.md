@@ -41,8 +41,9 @@ walls. The top/bottom surfaces and selected physical depth remain authoritative.
 A bounded pool covers all nine rendered banks and their scrolling seams. Disable
 posts outside the conservative ball reach and reactivate them before contact in
 any visible bank. Keep rendering, contacts and source pigments aligned.
-Protocol 27 and phone report v14 identify the half-gap geometry and retain both
-side planes in every recorded input. Reject older recordings with the
+Protocol 28 limits the motion of side walls within reach of a ball. Parallel
+expansion can still open more room immediately. Phone report v14 retains both
+requested side planes in every recorded input. Reject older recordings with the
 matching-engine error.
 
 Worker recordings retain initial cap and applied edits in FIFO order, including
