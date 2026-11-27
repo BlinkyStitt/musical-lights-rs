@@ -485,8 +485,10 @@ packets. The produced-WASM harness verifies that this is exactly the sample inde
 of the last diagnostic row across callback sizes and a nonzero sample origin, and
 that missing input cannot advance it. Enabling 472-value diagnostic rows every
 2 ms solely to observe that timestamp adds unnecessary work to native playback.
-The rotation cases still require fresh analysis after every click, non-silent PCM,
-zero missing/overlapping samples, advancing video frames, and retained resources.
+The rotation cases count the PCM blocks from the generated microphone fixture.
+The cases require fresh analysis after every click, non-silent PCM, zero missing
+or overlapping samples, advancing video frames, and retained resources. The audio
+recovery cases exercise discontinuities in the native capture clock.
 
 The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
 and network access. `.codex/rules/browser-tests.rules` allows the two browser

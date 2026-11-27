@@ -574,6 +574,20 @@ for (const viewport of [{ width: 390, height: 844, keyboard: 440 }, { width: 568
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
       window.rotationKeyboard = height => { viewport.width = innerWidth; viewport.height = height; viewport.dispatchEvent(new Event('resize')); };
     });
+    // This fixture generates its microphone PCM in the browser. Count the
+    // delivered blocks so native capture timestamp jumps cannot masquerade as
+    // rotation discontinuities. Audio recovery tests exercise the native clock.
+    await page.route('**/loudness/processor.js', async route => {
+      const response = await route.fetch();
+      const source = await response.text();
+      const capture = 'return this.analyze(samples, currentFrame);';
+      if (!source.includes(capture)) throw new Error('Cannot locate the capture sample clock');
+      await route.fulfill({ response, body: source.replace(capture, `
+        const firstSample = this.rotationFixtureFrame ?? currentFrame;
+        this.rotationFixtureFrame = firstSample + samples.length;
+        return this.analyze(samples, firstSample);
+      `) });
+    });
     await setup(page, path, true); await load(page);
     const video = page.frameLocator('.youtube-frame iframe').locator('video');
     await video.evaluate(v => { window.rotationVideo = v; });
