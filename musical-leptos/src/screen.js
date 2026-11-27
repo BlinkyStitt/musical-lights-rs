@@ -153,12 +153,14 @@ export class VisualizerScreen {
       }
     };
     this.onTouchEnd = event => {
-      if (!this.expanded || !event.changedTouches.length) return;
-      const target = event.target;
-      if (!target?.closest?.('.fullscreen-button')) return;
+      if (!event.changedTouches.length) return;
+      const button = event.target?.closest?.('.fullscreen-button');
+      if (!button || (!this.expanded && button !== this.suppressedFullscreenPointer?.button)) return;
+      // WebKit still sends touchend to Exit after pointer-down reveals the page.
+      // Cancel it before WebKit can synthesize a mouse click on a revealed link.
       event.preventDefault();
       event.stopPropagation();
-      if (!this.changingFullscreen) this.toggleFullscreen();
+      if (this.expanded && !this.changingFullscreen) this.toggleFullscreen();
     };
     this.onRotate = () => {
       if (!this.expanded || this.closed) return;

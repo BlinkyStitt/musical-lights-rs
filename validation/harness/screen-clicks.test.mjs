@@ -132,3 +132,12 @@ test('Exit consumes a matching touch click retargeted onto a revealed page link'
   assert.deepEqual(env.click(link, { pointerId: 7 }), { prevented: true, activated: false });
   assert.deepEqual(env.click(link, { pointerId: 8 }), { prevented: false, activated: true });
 });
+
+test('Exit cancels its touchend after pointer-down reveals the page', t => {
+  const env = exitGesture(t);
+  const unrelatedTouch = env.dispatch('touchend', env.listening, { changedTouches: [{}] });
+  assert.equal(unrelatedTouch.defaultPrevented, false);
+  const exitTouch = env.dispatch('touchend', env.fullscreen, { changedTouches: [{}] });
+  assert.equal(exitTouch.defaultPrevented, true);
+  assert.equal(env.screen.expanded, false);
+});

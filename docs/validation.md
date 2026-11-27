@@ -257,13 +257,13 @@ They do not remove default-branch caches.
 
 Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
-Standard GitHub-hosted runners remain free for this public repository.
-The workflow keeps the existing runner sizes and cache quota.
-Website browser groups use the official Playwright 1.64.1 Noble image, pinned
+Website browser groups use the official Playwright 1.65.1 Noble image, pinned
 by manifest digest in the workflow, with the matching locked SDK. Its bundled
 browsers and system libraries avoid per-run OS dependency installation. Keep the
 SDK and image versions synchronized when updating them. The groups retain every
-scheduled test and the final complete-coverage barrier.
+scheduled test and the final complete-coverage barrier. The GPU runners read
+the matching browser binaries from a verified archive. The stability workflow
+uses the image pinned by the source of the validated site.
 
 On macOS, the native crash guard reads each new browser IPS report. Actual crashes
 and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots

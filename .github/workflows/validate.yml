@@ -215,7 +215,7 @@ jobs:
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
     runs-on: ski-kvm-musical-linux
     container:
-      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+      image: &playwright_image mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
       options: --init --ipc=host --user 1002:1002
     defaults:
       run:
@@ -269,12 +269,55 @@ jobs:
     needs: plan
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
     uses: ./.github/workflows/gpu-runner-network.yml
+  gpu-browsers:
+    name: Package GPU browser binaries
+    needs: plan
+    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
+    runs-on: ski-kvm-musical-linux
+    container:
+      image: *playwright_image
+      options: --user 1002:1002
+    concurrency:
+      group: site-gpu-browsers-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      archive_sha: ${{ steps.package.outputs.archive_sha }}
+    steps:
+      # GPU guests can fetch Actions artifacts but block the Playwright CDN.
+      - name: Package browsers from the pinned image
+        id: package
+        run: |
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/gpu-browser-binaries.tar.gz"
+          cd /ms-playwright
+          shopt -s failglob
+          browsers=(chromium-* chromium_headless_shell-* webkit-* ffmpeg-*)
+          for browser in "${browsers[@]}"; do
+            test -f "$browser/INSTALLATION_COMPLETE"
+          done
+          tar -czf "$bundle" "${browsers[@]}"
+          echo "archive_sha=$(sha256sum "$bundle" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7.0.2
+        id: upload
+        with:
+          name: gpu-browser-binaries
+          path: gpu-browser-binaries.tar.gz
+          compression-level: 0
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
   gpu:
     name: GPU browser (${{ matrix.shard }})
     timeout-minutes: 60
-    needs: [plan, web]
+    needs: [plan, web, gpu-browsers]
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
     runs-on: ${{ matrix.runner }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.ci/gpu-browsers
     strategy:
       fail-fast: false
       matrix:
@@ -302,6 +345,21 @@ jobs:
         env:
           PRODUCER_RUN: ${{ needs.plan.outputs.run_id || github.run_id }}
         run: python3 validation/ci.py unpack .ci/site "$PRODUCER_RUN"
+      - uses: actions/download-artifact@v8.0.2
+        env:
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
+        with:
+          artifact-ids: ${{ needs.gpu-browsers.outputs.artifact_id }}
+          path: .ci/gpu-browser-archive
+      - name: Verify and restore matching browser binaries
+        env:
+          EXPECTED_SHA: ${{ needs.gpu-browsers.outputs.archive_sha }}
+        run: |
+          set -euo pipefail
+          archive=.ci/gpu-browser-archive/gpu-browser-binaries.tar.gz
+          printf '%s  %s\n' "$EXPECTED_SHA" "$archive" | sha256sum --check
+          mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+          tar -xzf "$archive" -C "$PLAYWRIGHT_BROWSERS_PATH"
       - uses: actions/setup-node@v7.1.0
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
