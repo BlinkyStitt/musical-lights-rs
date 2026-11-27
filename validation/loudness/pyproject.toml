@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff==0.17.5", "ty==0.0.95"]
+dev = ["ruff==0.17.6", "ty==0.0.95"]
 
 [tool.uv]
 exclude-newer = "7 days"
