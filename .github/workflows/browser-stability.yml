@@ -29,6 +29,7 @@ jobs:
       commit: ${{ steps.source.outputs.commit }}
       run_id: ${{ steps.plan.outputs.run_id }}
       artifact_id: ${{ steps.plan.outputs.artifact_id }}
+      browser_image: ${{ steps.browser-image.outputs.image }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -62,11 +63,33 @@ jobs:
         env:
           REUSE: ${{ steps.plan.outputs.reuse }}
         run: test "$REUSE" = true
+      - name: Select the browser image pinned at the validated source
+        id: browser-image
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import re
+
+          workflow = Path(".github/workflows/validate.yml").read_text()
+          lock = json.loads(Path("validation/package-lock.json").read_text())
+          version = lock["packages"]["node_modules/@playwright/test"]["version"]
+          images = set(re.findall(
+              r"(?m)^\s*image: (?:&[a-z_]+ )?"
+              r"(mcr\.microsoft\.com/playwright:v" + re.escape(version)
+              + r"-noble@sha256:[a-f0-9]{64})\s*$", workflow,
+          ))
+          if len(images) != 1:
+              raise SystemExit("Expected one official pinned image matching the selected Playwright SDK")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"image={images.pop()}", file=output)
+          PYTHON
   stability:
     needs: source
     runs-on: ski-kvm-musical-linux
     container:
-      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
+      image: ${{ needs.source.outputs.browser_image }}
       options: --init --ipc=host --user 1002:1002
     defaults:
       run:
