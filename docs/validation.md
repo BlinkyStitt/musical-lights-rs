@@ -42,10 +42,10 @@ confirmation for SKI-1240 throughout this historical record. Keep their numerica
 thresholds. No owner product-use task or manual sign-off is a completion gate.
 Physical-device claims remain unavailable from desktop emulation.
 
-`just validate` runs CPU/build and offline regression checks locally. Exact-head
-GitHub GPU jobs add `active-gap.spec.mjs` and three two-minute hardware-rendered
+`just validate` runs CPU/build and offline regression checks locally.
+The GitHub GPU job adds `active-gap.spec.mjs` and three two-minute hardware-rendered
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
-off). The validation gate requires both GPU jobs and all three measured cases
+off). The validation gate requires the GPU job and all three measured cases
 to pass against the same verified build. The ordinary browser inventory excludes
 the long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
@@ -88,10 +88,10 @@ validation or browser cleanup fails. Each cost,
 fullscreen and latency command also retains a separate native process log before,
 every ten seconds during, and after execution, including command failures.
 
-GPU reports upload on success and failure. NVIDIA runs the active-gap browser
-cases and `just validate-active-gap`. Intel runs the other GPU browser cases and
-`just validate-tilt`. Each job runs its browser cases one at a time, then collects
-timing evidence if the compiled site verified, even if a browser case failed.
+GPU reports upload on success and failure. One job on either qualified GPU
+runs the hardware browser cases one at a time. It also runs
+`just validate-active-gap` and `just validate-tilt` if the compiled site verified,
+even if a browser case failed.
 The active-gap timing collectors verify the served build and apply the bounded
 transition recovery policy.
 Software frame timing is reported without a blocking FPS, p95 or slow-frame
@@ -208,12 +208,9 @@ expired artifacts cannot replace validation. A miss performs the complete
 pinned build and checks. Reuse does not modify the tested files or relabel their
 embedded build identity: the deployment run records its own main commit and
 links to the original producer. This reuses the complete successful PR validation,
-including both GPU shards, fullscreen recovery, latency and tilt acceptance.
-The merge run does not repeat GPU timing on unchanged bytes. GPU transfer and
-acceptance jobs run whenever fresh validation is required. Both GPU shards may
-start after the compiled build without waiting for the Intel-only transfer canary.
-The final validation barrier still requires that canary, and exact reuse verifies
-its successful result with the other producer validators. The validation barrier
+including fullscreen recovery, latency and tilt acceptance on one GPU.
+The merge run does not repeat GPU timing on unchanged bytes. The independent
+transfer and vendor health probes serve to diagnose the runner. The validation barrier
 requires every fresh validator to succeed, or every reused validator to be
 explicitly skipped with an identified trusted producer and verified build.
 Missing, failed, canceled or duplicate producer validators reject reuse. This
@@ -280,9 +277,10 @@ app builds, benchmark smoke cases and the offline harness. It needs no physical
 GPU and no published branch. After the site is built,
 `just validate-gpu` runs the renderer and pixel checks in Chromium on a verified
 hardware WebGL2 renderer. It fails if the browser selects software rendering.
-GitHub runs the complete software browser suite and two hardware GPU shards for
-each website validation. Both GPU shards must pass before the website barrier can
-succeed or its artifact can be reused. `python3 validation/validate.py browser`
+GitHub runs the complete software browser suite and one hardware GPU job for
+each fresh website validation. The shared runner uses Intel or NVIDIA.
+The hardware GPU job must pass before the website barrier can succeed or its
+artifact can be reused. `python3 validation/validate.py browser`
 remains available to run the full software browser suite locally.
 `just check` runs `just validate`, the complete local software browser suite
 (including demos), both orders of the software tilt comparison, the hardware

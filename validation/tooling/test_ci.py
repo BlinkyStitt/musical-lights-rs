@@ -232,23 +232,19 @@ class ArtifactTests(unittest.TestCase):
         jobs.remove(native)
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
         jobs.append(native)
-        for name in ("GPU browser (1)", "GPU browser (2)"):
-            job = next(job for job in jobs if job["name"] == name)
-            jobs.remove(job)
+        name = "GPU browser"
+        job = next(job for job in jobs if job["name"] == name)
+        jobs.remove(job)
+        self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+        jobs.append(job)
+        for conclusion in ("failure", "skipped", "cancelled"):
+            job["conclusion"] = conclusion
             self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
-            jobs.append(job)
-            for conclusion in ("failure", "skipped", "cancelled"):
-                job["conclusion"] = conclusion
-                self.assertEqual(
-                    ci.reusable(repo, self.expected, read, fetch), ("", "")
-                )
-            job["conclusion"] = "success"
-            for conclusion in ("success", "failure"):
-                jobs.append({**job, "conclusion": conclusion})
-                self.assertEqual(
-                    ci.reusable(repo, self.expected, read, fetch), ("", "")
-                )
-                jobs.pop()
+        job["conclusion"] = "success"
+        for conclusion in ("success", "failure"):
+            jobs.append({**job, "conclusion": conclusion})
+            self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+            jobs.pop()
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("123", "456"))
         (self.bundle / ci.PAYLOAD[0] / "sample.wasm").write_bytes(b"tampered")
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
@@ -273,7 +269,6 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
                     "core",
                     "loudness-reference",
                     "browser",
-                    "gpu-network",
                     "gpu",
                 )
             },
@@ -336,15 +331,13 @@ class WebsiteValidationBarrierTests(unittest.TestCase):
 
         fresh = re.search(r"^    if: (.+)$", job("core"), re.MULTILINE)
         assert fresh is not None
-        for name in ("gpu-network", "gpu"):
-            condition = re.search(r"^    if: (.+)$", job(name), re.MULTILINE)
-            assert condition is not None
-            self.assertEqual(condition[1], fresh[1])
+        condition = re.search(r"^    if: (.+)$", job("gpu"), re.MULTILINE)
+        assert condition is not None
+        self.assertEqual(condition[1], fresh[1])
         self.assertIn("needs: [plan, web]", job("gpu"))
-        self.assertNotIn("gpu-network", job("gpu").split("steps:")[0])
         barrier = job("validated")
-        self.assertIn("browser, gpu-network, gpu]", barrier)
-        self.assertIn("gpu-network / Action transfer (GPU runner)", ci.VALIDATORS)
+        self.assertIn("browser, gpu]", barrier)
+        self.assertIn("GPU browser", ci.VALIDATORS)
         self.assertIn("always() && !cancelled()", barrier)
         self.assertIn("CI_NEEDS: ${{ toJSON(needs) }}", barrier)
         self.assertIn("run: python3 validation/ci.py validation-barrier", barrier)

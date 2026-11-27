@@ -94,19 +94,16 @@ class BrowserGateTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.verify()
 
-    def test_rejects_missing_or_failed_gpu_shards(self):
+    def test_rejects_missing_or_failed_gpu_job(self):
         original = self.jobs.copy()
-        for name in (
-            "GPU browser (1)",
-            "GPU browser (2)",
-        ):
-            for conclusion in (None, "failure"):
-                with self.subTest(name=name, conclusion=conclusion):
-                    self.jobs = [job for job in original if job["name"] != name]
-                    if conclusion:
-                        self.jobs.append({"name": name, "conclusion": conclusion})
-                    with self.assertRaises(ValueError):
-                        self.verify()
+        name = "GPU browser"
+        for conclusion in (None, "failure"):
+            with self.subTest(conclusion=conclusion):
+                self.jobs = [job for job in original if job["name"] != name]
+                if conclusion:
+                    self.jobs.append({"name": name, "conclusion": conclusion})
+                with self.assertRaises(ValueError):
+                    self.verify()
         self.jobs = original
 
     def test_rejects_wrong_producer_attempt_tree_or_commit(self):
@@ -156,25 +153,15 @@ class BrowserGateTests(unittest.TestCase):
 
 
 class RunnerPlacementTests(unittest.TestCase):
-    def test_native_gpu_workers_keep_both_required_shards(self):
+    def test_website_uses_one_required_pooled_gpu_job(self):
         workflows = Path(__file__).resolve().parents[2] / ".github/workflows"
         validation = (workflows / "validate.yml").read_text()
-        self.assertIn("runs-on: ${{ matrix.runner }}\n", validation)
-        self.assertIn(
-            "shard: 1\n            runner: ski-gpu-blink-nvidia-medium", validation
-        )
-        self.assertIn(
-            "shard: 2\n            runner: ski-gpu-blink-intel-small", validation
-        )
-        self.assertNotIn("matrix.host", validation)
-        network = (workflows / "gpu-runner-network.yml").read_text()
-        self.assertIn("runs-on: ski-gpu-blink-intel-small\n", network)
-        health = (workflows / "gpu-runner-health.yml").read_text()
-        self.assertIn("runner: ski-gpu-blink-intel-small", health)
-        self.assertIn("runner: ski-gpu-blink-nvidia-small", health)
+        self.assertEqual(validation.count("runs-on: ski-gpu-blink-any-small"), 1)
+        self.assertNotIn("matrix.shard", validation)
+        self.assertNotIn("gpu-network:", validation)
         self.assertEqual(
             {name for name in ci.VALIDATORS if name.startswith("GPU browser")},
-            {"GPU browser (1)", "GPU browser (2)"},
+            {"GPU browser"},
         )
 
 
