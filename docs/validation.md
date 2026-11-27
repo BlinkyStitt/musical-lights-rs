@@ -179,6 +179,9 @@ Website validation builds physics, the worklet and Leptos once. The build job
 runs the offline harness and records the complete browser test inventory. Three
 self-hosted K3s jobs download the same compiled bundle. The planner balances
 estimated test duration across jobs and keeps each project's spec files intact.
+It assigns the longest files first, using mean test durations from the 18 browser
+reports in [K3s run 45740634329](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/45740634329).
+New project and file pairs use a 7,500 ms estimate per test.
 Each job retains the serial startup and crash checks, one worker, and zero retries.
 The final job compares all three reports with the inventory. Missing, duplicate,
 incomplete, or failed tests stop publication.
@@ -255,17 +258,11 @@ Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
 Standard GitHub-hosted runners remain free for this public repository.
 The workflow keeps the existing runner sizes and cache quota.
-Website validation uses three software-browser jobs on the shared K3s runner
-pool. Each runs one Playwright worker and downloads the verified site once.
-The planner keeps each project and spec file together, assigns the longest
-estimated files first, and places each in the group with the least
-estimated work. Estimates are mean test durations in milliseconds from all 18
-software-browser reports in [K3s run 45740634329](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/45740634329).
-New project/file pairs use a 7,500 ms per-case estimate. The three reports must
-cover the compiled site's canonical inventory exactly once.
-The jobs use the official Playwright 1.64.1 Noble image, pinned by manifest
-digest, with the matching locked SDK. Its bundled browsers and system libraries
-avoid per-run OS dependency installation. Update the SDK and image together.
+Website browser groups use the official Playwright 1.64.1 Noble image, pinned
+by manifest digest in the workflow, with the matching locked SDK. Its bundled
+browsers and system libraries avoid per-run OS dependency installation. Keep the
+SDK and image versions synchronized when updating them. The groups retain every
+scheduled test and the final complete-coverage barrier.
 
 On macOS, the native crash guard reads each new browser IPS report. Actual crashes
 and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots
