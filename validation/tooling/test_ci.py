@@ -602,8 +602,7 @@ class BrowserGroupTests(unittest.TestCase):
                                     "title": f"turn {index}",
                                     "tests": [
                                         {"projectName": project}
-                                        for family in ci.BROWSER_FAMILIES.values()
-                                        for project in family.projects
+                                        for project in ci.BROWSER_PROJECTS
                                     ],
                                 }
                                 for index in range(12)
@@ -614,33 +613,54 @@ class BrowserGroupTests(unittest.TestCase):
             ]
         }
 
-    def test_every_case_runs_once_with_nested_titles_and_balanced_families(self):
+    def test_every_case_runs_once_with_nested_titles_and_deterministic_groups(self):
         inventory = self.inventory()
         groups = ci.browser_groups(inventory)
         cases = [case for group in groups.values() for case in group]
+        self.assertEqual(len(groups), 3)
         self.assertEqual(len(cases), 48)
         self.assertEqual(len(set(cases)), 48)
-        self.assertEqual(set(groups), {group["name"] for group in ci.BROWSER_GROUPS})
-        for group in ci.BROWSER_GROUPS:
-            selected = groups[group["name"]]
-            self.assertTrue(selected)
-            for case in selected:
-                self.assertIn("large.spec.mjs › rotation › turn ", case)
-                self.assertTrue(
-                    any(
-                        case.startswith(f"[{project}]")
-                        for project in ci.BROWSER_FAMILIES[group["browser"]].projects
-                    )
-                )
-        for browser in ci.BROWSER_FAMILIES:
-            sizes = [
-                len(groups[group["name"]])
-                for group in ci.BROWSER_GROUPS
-                if group["browser"] == browser
-            ]
-            self.assertLessEqual(max(sizes) - min(sizes), 1)
+        self.assertTrue(all(groups.values()))
+        self.assertTrue(
+            all("large.spec.mjs › rotation › turn " in case for case in cases)
+        )
         inventory["suites"][0]["suites"][0]["specs"].reverse()
         self.assertEqual(ci.browser_groups(inventory), groups)
+
+    def test_duration_assigns_whole_project_files_to_the_lightest_group(self):
+        report = self.inventory()
+        specs = report["suites"][0]["suites"][0]["specs"]
+        specs[0]["file"] = "second.spec.mjs"
+        times = {
+            project: {"large.spec.mjs": duration, "second.spec.mjs": 1}
+            for project, duration in zip(ci.BROWSER_PROJECTS, (9000, 8000, 7000, 1000))
+        }
+        groups = ci.browser_groups(report, times)
+        for index, project in enumerate(ci.BROWSER_PROJECTS[:3], 1):
+            cases = groups[f"software-{index}"]
+            self.assertEqual(
+                sum(case.startswith(f"[{project}] › large.spec.mjs") for case in cases),
+                11,
+            )
+        lightest = groups["software-3"]
+        self.assertEqual(
+            sum(
+                case.startswith("[iphone-webkit] › large.spec.mjs") for case in lightest
+            ),
+            11,
+        )
+
+    def test_diagnostic_groups_retain_the_prior_case_selection(self):
+        report = self.inventory()
+        canonical = list(ci.browser_cases(report))
+        for name, projects, selection in (
+            ("chromium-5", ("chromium", "chromium-permissions"), slice(4, None, 10)),
+            ("webkit-2", ("webkit-spectrum", "iphone-webkit"), slice(1, None, 8)),
+        ):
+            cases = sorted(
+                case for project, _, case in canonical if project in projects
+            )
+            self.assertEqual(ci.browser_list(report, name), cases[selection])
 
     def test_unknown_duplicate_empty_and_unrepresentable_cases_fail_closed(self):
         for failure in ("unknown", "duplicate", "empty", "delimiter", "newline"):

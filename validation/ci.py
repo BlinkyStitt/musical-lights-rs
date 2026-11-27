@@ -8,8 +8,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
-from collections import Counter
-from dataclasses import dataclass
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,29 +19,26 @@ PAYLOAD = (
 )
 
 
-@dataclass(frozen=True)
-class BrowserFamily:
-    projects: tuple[str, ...]
-    groups: int
-
-
-# Run 40411870070 measured 2,606 Chromium and 2,019 WebKit test-seconds.
-# Ten/eight groups reduce its largest recorded test load from 410 to 293 seconds.
-# Leave two of the account's 20 runner slots for other checks; filling all slots
-# delayed the last browser group by 217 seconds in run 40413428570.
-BROWSER_FAMILIES = {
-    "chromium": BrowserFamily(("chromium", "chromium-permissions"), 10),
-    "webkit": BrowserFamily(("webkit-spectrum", "iphone-webkit"), 8),
-}
+BROWSER_PROJECTS = (
+    "chromium",
+    "chromium-permissions",
+    "webkit-spectrum",
+    "iphone-webkit",
+)
 BROWSER_GROUPS = tuple(
     {
-        "name": f"{browser}-{shard}",
-        "browser": browser,
-        "projects": " ".join(f"--project {project}" for project in family.projects),
+        "name": f"software-{index}",
+        "projects": " ".join(f"--project {p}" for p in BROWSER_PROJECTS),
     }
-    for browser, family in BROWSER_FAMILIES.items()
-    for shard in range(1, family.groups + 1)
+    for index in range(1, 4)
 )
+# Keep the diagnostic scenarios on their original case selections.
+STABILITY_GROUPS = {
+    "chromium-5": (BROWSER_PROJECTS[:2], slice(4, None, 10)),
+    "webkit-2": (BROWSER_PROJECTS[2:], slice(1, None, 8)),
+}
+DEFAULT_BROWSER_CASE_MS = 7500
+
 VALIDATORS = {
     *(f"Browser ({group['name']})" for group in BROWSER_GROUPS),
     "Site plan",
@@ -177,22 +173,13 @@ def test_cases(report):
     ]
 
 
-def browser_groups(report):
-    """Partition the canonical inventory, never a manually maintained test list."""
-    families = {browser: [] for browser in BROWSER_FAMILIES}
+def browser_cases(report):
+    """Read every planned case from the compiled site's inventory."""
     seen = set()
     for spec, titles in test_specs(report):
         for test in spec["tests"]:
             project = test["projectName"]
-            family = next(
-                (
-                    name
-                    for name, family in BROWSER_FAMILIES.items()
-                    if project in family.projects
-                ),
-                None,
-            )
-            if family is None:
+            if project not in BROWSER_PROJECTS:
                 raise ValueError(
                     f"Browser inventory has an unmapped project: {project}"
                 )
@@ -203,17 +190,43 @@ def browser_groups(report):
             parts = (f"[{project}]", spec["file"], *titles, spec["title"])
             if any("\n" in part or "\r" in part or "›" in part for part in parts):
                 raise ValueError("Browser test cannot be represented in a test list")
-            families[family].append(" › ".join(parts))
-    groups = {}
-    for browser, cases in families.items():
-        names = [
-            group["name"] for group in BROWSER_GROUPS if group["browser"] == browser
-        ]
-        for index, name in enumerate(names):
-            groups[name] = sorted(cases)[index :: len(names)]
-            if not groups[name]:
-                raise ValueError(f"Browser group is empty: {name}")
+            yield project, spec["file"], " › ".join(parts)
+
+
+def browser_groups(report, case_ms=None):
+    """Assign the heaviest project/spec files first to the least loaded job."""
+    if case_ms is None:
+        case_ms = json.loads((ROOT / "validation/browser-case-ms.json").read_text())
+    files = defaultdict(list)
+    for project, filename, case in browser_cases(report):
+        files[project, filename].append(case)
+    weighted = []
+    for (project, filename), cases in files.items():
+        duration = case_ms.get(project, {}).get(filename, DEFAULT_BROWSER_CASE_MS)
+        weighted.append((-duration * len(cases), project, filename))
+
+    groups = {group["name"]: [] for group in BROWSER_GROUPS}
+    loads = dict.fromkeys(groups, 0)
+    for weight, project, filename in sorted(weighted):
+        name = min(loads, key=loads.__getitem__)
+        groups[name].extend(sorted(files[project, filename]))
+        loads[name] -= weight
+    for name, cases in groups.items():
+        if not cases:
+            raise ValueError(f"Browser group is empty: {name}")
     return groups
+
+
+def browser_list(report, name):
+    if name in STABILITY_GROUPS:
+        projects, selection = STABILITY_GROUPS[name]
+        cases = sorted(
+            case for project, _, case in browser_cases(report) if project in projects
+        )[selection]
+        if not cases:
+            raise ValueError(f"Browser group is empty: {name}")
+        return cases
+    return browser_groups(report)[name]
 
 
 def coverage(inventory, reports):
@@ -488,7 +501,10 @@ def main():
         p.add_argument("run_id")
     p = sub.add_parser("browser-list")
     p.add_argument("inventory", type=Path)
-    p.add_argument("group", choices=[group["name"] for group in BROWSER_GROUPS])
+    p.add_argument(
+        "group",
+        choices=[*(group["name"] for group in BROWSER_GROUPS), *STABILITY_GROUPS],
+    )
     p.add_argument("destination", type=Path)
     p = sub.add_parser("coverage")
     p.add_argument("inventory", type=Path)
@@ -578,8 +594,8 @@ def main():
     elif args.command == "verify":
         verify(args.bundle, inputs(), args.run_id)
     elif args.command == "browser-list":
-        groups = browser_groups(json.loads(args.inventory.read_text()))
-        args.destination.write_text("\n".join(groups[args.group]) + "\n")
+        cases = browser_list(json.loads(args.inventory.read_text()), args.group)
+        args.destination.write_text("\n".join(cases) + "\n")
     else:
         reports = sorted(args.reports.rglob("report.json"))
         if len(reports) != len(BROWSER_GROUPS):

@@ -257,11 +257,17 @@ Temporary build and Pages artifacts last one day. Fully validated bundles last
 seven days, successful browser reports two days, and failed reports seven days.
 Standard GitHub-hosted runners remain free for this public repository.
 The workflow keeps the existing runner sizes and cache quota.
-Website browser groups use the official Playwright 1.64.1 Noble image, pinned
-by manifest digest in the workflow, with the matching locked SDK. Its bundled
-browsers and system libraries avoid per-run OS dependency installation. Keep the
-SDK and image versions synchronized when updating them. The groups retain every
-scheduled test and the final complete-coverage barrier.
+Website validation uses three software-browser jobs on the shared K3s runner
+pool. Each runs one Playwright worker and downloads the verified site once.
+The planner keeps each project and spec file together, assigns the longest
+estimated files first, and places each in the group with the least
+estimated work. Estimates are mean test durations in milliseconds from all 18
+software-browser reports in [K3s run 45740634329](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/45740634329).
+New project/file pairs use a 7,500 ms per-case estimate. The three reports must
+cover the compiled site's canonical inventory exactly once.
+The jobs use the official Playwright 1.64.1 Noble image, pinned by manifest
+digest, with the matching locked SDK. Its bundled browsers and system libraries
+avoid per-run OS dependency installation. Update the SDK and image together.
 
 On macOS, the native crash guard reads each new browser IPS report. Actual crashes
 and unreadable reports fail validation. Apple marks nonfatal diagnostic snapshots
@@ -345,7 +351,7 @@ sample clock and the iPhone-profile WebKit startup failure.
 For example, dispatch the workflow from an investigation branch with
 `gh workflow run browser-stability.yml --ref <investigation-branch> -f source_ref=<validated-commit> -f scenario=rotation-clock -f repetitions=50`.
 The `rotation-group` and `webkit-group` scenarios run the complete canonical
-`chromium-5` and `webkit-2` groups from the selected artifact, including their
+`chromium-5` and `webkit-2` diagnostic selections from the selected artifact, including their
 normal browser reuse and test order. Use 1, 5 or 10 repetitions for groups. An
 isolated case does not check resources left by preceding cases in the same group.
 Each repetition must pass its original assertions. This diagnostic result does
