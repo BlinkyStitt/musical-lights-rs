@@ -1,12 +1,13 @@
 name: GPU runner network evidence
 on:
-  workflow_call:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   transfer:
     name: Action transfer (GPU runner)
-    runs-on: ski-gpu-blink-intel-small
+    if: github.ref == 'refs/heads/main'
+    runs-on: ski-gpu-blink-any-small
     timeout-minutes: 5
     steps:
       # No uses steps: the runner downloads ALL remote actions before any step.

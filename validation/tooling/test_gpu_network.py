@@ -30,6 +30,14 @@ class GpuNetworkTests(unittest.TestCase):
         self.output = io.StringIO()
         self.enterContext(contextlib.redirect_stdout(self.output))
 
+    def test_probe_runs_on_the_shared_gpu_pool_without_remote_actions(self):
+        text = WORKFLOW.read_text()
+        self.assertIn("  workflow_dispatch:", text)
+        self.assertIn("    if: github.ref == 'refs/heads/main'", text)
+        self.assertIn("    runs-on: ski-gpu-blink-any-small", text)
+        self.assertNotIn("  workflow_call:", text)
+        self.assertNotRegex(text, r"(?m)^\s*(?:-\s*)?uses:")
+
     def rows(self):
         return [json.loads(line) for line in self.output.getvalue().splitlines()]
 
