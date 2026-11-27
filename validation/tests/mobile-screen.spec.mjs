@@ -344,13 +344,27 @@ test('browser back closes the expanded view and restores the page', async ({ pag
 });
 
 test('fullscreen transitions keep live audio and bounded simulation delay', async ({ page }) => {
-  await page.addInitScript(() => { Object.defineProperty(document, 'fullscreenEnabled', { value: false }); });
+  await page.addInitScript(() => {
+    Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+    // Match the seed in the standalone fullscreen timing workload.
+    const random = crypto.getRandomValues.bind(crypto);
+    crypto.getRandomValues = values => {
+      if (values instanceof Uint32Array && values.length === 1) {
+        values[0] = 1;
+        return values;
+      }
+      return random(values);
+    };
+  });
   await page.setViewportSize({width:390,height:844});
   await page.goto('http://127.0.0.1:8101/advanced/');await physicsReady(page); await normalView(page);
   await page.locator('.diagnostics-controls').evaluate(node => { node.open = true; });
   await page.locator('.input-source').selectOption('generated');
   await page.locator('.review-start').click();
   await expect.poll(()=>page.evaluate(()=>document.querySelector('#dancinglights').physics.report.acceptanceWorkload())).toBe(true);
+  await page.locator('.diagnostics-controls').evaluate(node => { node.open = false; });
+  await page.locator('#dancinglights').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.evaluate(() => document.querySelector('#dancinglights').physics.sceneVisible)).toBe(true);
   await page.waitForTimeout(2000);
   await page.evaluate(()=>{
     const v=document.querySelector('#dancinglights').physics;
@@ -387,7 +401,7 @@ test('fullscreen transitions keep live audio and bounded simulation delay', asyn
 test.afterEach(async ({ page }, info) => {
   const timing = await page.evaluate(() => {
     const v = document.querySelector('#dancinglights')?.physics;
-    return { layout: v?.layout, timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames,
+    return { seed: v?.seed, layout: v?.layout, timing: v?.timing, metrics: v?.metrics, transitions: window.transitionFrames,
       current: v?.current && Array.from(v.current), input: v?.input && Array.from(v.input),
       audio: v?.report?.audioState, idle: v?.idle, preview: v?.previewLevels && Array.from(v.previewLevels),
       stopObservations: window.stopFlightObservations, stopped: window.physicsAtStop };
