@@ -19,7 +19,7 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
         silence.connect(destination); silence.start();
         window.captureTrack = destination.stream.getAudioTracks()[0];
         window.captureBurst = () => {
-          const rate = context.sampleRate, pcm = new Float32Array(rate / 5);
+          const rate = context.sampleRate, pcm = new Float32Array(Math.round(rate * .6));
           for (let i = 0; i < pcm.length; i++) pcm[i] = .08 * Math.sin(2 * Math.PI * 1000 * i / rate);
           const buffer = context.createBuffer(1, pcm.length, rate); buffer.copyToChannel(pcm, 0);
           const source = context.createBufferSource(); source.buffer = buffer;
@@ -61,8 +61,8 @@ for (const path of ['/', '/advanced/']) for (const action of ['Listening', 'Full
     // Silence has a small decorative floor without fabricated audio targets.
     await expect.poll(renderedRatio).toBeGreaterThan(.12);
     await expect.poll(renderedRatio).toBeLessThan(.18);
-    // Observe the short burst in the page. Separate protocol/trace snapshots
-    // can take longer than the burst on a software renderer. Require actual
+    // Keep the generated burst active long enough for the software renderer
+    // to sample its filtered response. Require actual
     // rendered travel and its ratio in the same frame, beyond the idle floor.
     const burst = await page.evaluate(() => new Promise(resolve => {
       const v = document.querySelector('#dancinglights').physics;
