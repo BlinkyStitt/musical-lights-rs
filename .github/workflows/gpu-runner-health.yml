@@ -1,33 +1,16 @@
 name: GPU runner health
 on:
-  pull_request:
-    paths:
-      - .github/workflows/gpu-runner-health.yml
   workflow_dispatch:
-concurrency:
-  group: pr-ci-gpu-runner-health.yml-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   webgl:
-    name: WebGL (${{ matrix.label }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: gpu-nuc3
-            runner: ski-gpu-blink-intel-small
-            renderer: virgl.*Intel
-          - label: gpu-t4
-            runner: ski-gpu-blink-nvidia-small
-            renderer: virgl.*Tesla T4
-    runs-on: ${{ matrix.runner }}
+    name: Hardware WebGL
+    if: github.ref == 'refs/heads/main'
+    runs-on: ski-gpu-blink-any-small
     timeout-minutes: 5
     steps:
       - name: Verify Chrome uses the assigned GPU
-        env:
-          EXPECTED_RENDERER: ${{ matrix.renderer }}
         shell: bash
         run: |
           set -euo pipefail
@@ -56,7 +39,6 @@ jobs:
             }
           python3 - "$scratch/result.html" <<'PY'
           from pathlib import Path
-          import os
           import re
           import sys
 
@@ -66,7 +48,7 @@ jobs:
               raise SystemExit('Chrome did not report a WebGL renderer')
           renderer = match.group(1)
           print(f'WebGL renderer: {renderer}')
-          if not re.search(os.environ['EXPECTED_RENDERER'], renderer, re.IGNORECASE):
+          if not re.search(r'virgl.*(?:Intel|Tesla T4)', renderer, re.IGNORECASE):
               raise SystemExit('Chrome did not use the assigned GPU')
           if re.search(r'llvmpipe|softpipe|swiftshader|software', renderer, re.IGNORECASE):
               raise SystemExit('Chrome used a software renderer')

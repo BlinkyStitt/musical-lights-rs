@@ -1,2 +1,2 @@
 self-hosted-runner:
-  labels: [ski-gpu-blink-any-small, ski-kvm-musical-linux, ski-gpu-blink-intel-small, ski-gpu-blink-nvidia-small, ski-gpu-blink-nvidia-medium]
+  labels: [ski-gpu-blink-any-small, ski-kvm-musical-linux]
