@@ -195,7 +195,7 @@ jobs:
           key: reference-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('Cargo.toml', 'musical-lights-core/**', '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             reference-v2-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-10-${{ hashFiles('Cargo.lock') }}-
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.14.7'
       - name: Install locked reference environment tool
@@ -234,7 +234,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.web.outputs.artifact_id }}
           path: .ci/site
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.14.7'
       - run: python3 validation/ci.py unpack .ci/site "$GITHUB_RUN_ID"
