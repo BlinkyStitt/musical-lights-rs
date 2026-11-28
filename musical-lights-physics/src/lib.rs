@@ -977,44 +977,64 @@ impl Simulation {
             let length = Vector::new(p[0], p[1], p[2]).length();
             p.map(|v| v / length)
         });
-        let wall_speed = side_from
-            .iter()
-            .zip(&side_targets)
-            .map(|(from, to)| {
-                if from == to {
-                    return 0.0;
-                }
-                let n0 = Vector::new(from[0], from[1], from[2]);
-                let n1 = Vector::new(to[0], to[1], to[2]);
-                let dn = n1 - n0;
-                let minimum_length = ((1.0 + n0.dot(n1)) * 0.5).sqrt();
-                self.balls
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, &(h, _))| {
-                        let body = &self.world.bodies[h];
-                        if !body.is_enabled() {
-                            return None;
-                        }
-                        let radius = self.config.balls.diameter(i) / 2.0;
-                        let before = n0.dot(body.translation()) + from[3];
-                        let after = n1.dot(body.translation()) + to[3];
-                        // A convex blend of halfspaces preserves shared free space.
-                        // Normalizing can only increase positive clearance, so these
-                        // endpoints conservatively exclude every unreachable wall.
-                        if before.min(after) > radius + ball_reach as f32 {
-                            return None;
-                        }
-                        // Bound d/dt[(n(t)·p + d(t)) / |n(t)|] over the entire tick,
-                        // including the sphere's conservative force/velocity reach.
-                        let q = before.abs().max(after.abs()) + ball_reach as f32;
-                        let dq = (after - before).abs() + dn.length() * ball_reach as f32;
-                        let speed = dq / minimum_length + q * dn.length() / minimum_length.powi(2);
-                        Some(f64::from(speed) / f64::from(DT))
-                    })
-                    .fold(0.0_f64, f64::max)
+        let wall_speeds: [f64; 2] = std::array::from_fn(|i| {
+            let from = &side_from[i];
+            let to = &side_targets[i];
+            if from == to {
+                return 0.0;
+            }
+            let n0 = Vector::new(from[0], from[1], from[2]);
+            let n1 = Vector::new(to[0], to[1], to[2]);
+            let dn = n1 - n0;
+            let minimum_length = ((1.0 + n0.dot(n1)) * 0.5).sqrt();
+            self.balls
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &(h, _))| {
+                    let body = &self.world.bodies[h];
+                    if !body.is_enabled() {
+                        return None;
+                    }
+                    let radius = self.config.balls.diameter(i) / 2.0;
+                    let before = n0.dot(body.translation()) + from[3];
+                    let after = n1.dot(body.translation()) + to[3];
+                    // A convex blend of halfspaces preserves shared free space.
+                    // Normalizing can only increase positive clearance, so these
+                    // endpoints conservatively exclude every unreachable wall.
+                    if before.min(after) > radius + ball_reach as f32 {
+                        return None;
+                    }
+                    // Bound d/dt[(n(t)·p + d(t)) / |n(t)|] over the entire tick,
+                    // including the sphere's conservative force/velocity reach.
+                    let q = before.abs().max(after.abs()) + ball_reach as f32;
+                    let dq = (after - before).abs() + dn.length() * ball_reach as f32;
+                    let speed = dq / minimum_length + q * dn.length() / minimum_length.powi(2);
+                    Some(f64::from(speed) / f64::from(DT))
+                })
+                .fold(0.0_f64, f64::max)
+        });
+        // A render update can move the visible boundary much farther than a ball
+        // travels in one tick. Advance occupied walls toward the held target at
+        // the same contact-speed limit as the moving floor and ceiling.
+        const RESIZE_SPEED: f64 = 2.0;
+        let wall_fractions: [f64; 2] = std::array::from_fn(|i| {
+            // A parallel expansion opens more room immediately, including
+            // when an edit grows a ball past the previous boundary.
+            if side_from[i][..3] == side_targets[i][..3] && side_targets[i][3] >= side_from[i][3] {
+                return 1.0;
+            }
+            (RESIZE_SPEED / wall_speeds[i]).min(1.0)
+        });
+        let side_targets: [[f32; 4]; 2] = std::array::from_fn(|i| {
+            std::array::from_fn(|j| {
+                side_from[i][j] + (side_targets[i][j] - side_from[i][j]) * wall_fractions[i] as f32
             })
-            .fold(0.0_f64, f64::max);
+        });
+        let wall_speed = wall_speeds
+            .into_iter()
+            .zip(wall_fractions)
+            .map(|(speed, fraction)| speed * fraction)
+            .fold(0.0, f64::max);
         let relative_speed = (2.0 * ball_speed).max(ball_speed + bar_speed.max(wall_speed));
         let required = (((relative_speed + 1.0) * f64::from(DT) / f64::from(min_radius * 0.5))
             .ceil() as usize)
@@ -1719,7 +1739,7 @@ impl PhysicsSimulation {
             COST_OFFSET as f32,
             MAX_SUBSTEPS as f32,
             GEOMETRY_OFFSET as f32,
-            27.0, // half of excess enclosure height remains in the resting opening
+            28.0, // bounded viewport side-wall transitions
             MIN_HEIGHT,
             SCROLL_OFFSET as f32,
             MAX_BALLS as f32,

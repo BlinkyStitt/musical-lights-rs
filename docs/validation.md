@@ -13,7 +13,7 @@ check travel and flight against the same reference at every supported height.
 `box-depth.spec.mjs` checks actual live balls at both screen edges after viewport
 changes. Native tests cover each of the nine banks, moving side planes, source
 pigments, invalid inputs and exact replay. The browser supplies its actual camera
-frustum planes; it does not clamp rendered ball positions. Protocol 27/report v14
+frustum planes; it does not clamp rendered ball positions. Protocol 28/report v14
 record the planes with all other fixed-tick inputs. The selected depth and the
 top/bottom bar surfaces still constrain physical motion.
 
@@ -42,16 +42,12 @@ confirmation for SKI-1240 throughout this historical record. Keep their numerica
 thresholds. No owner product-use task or manual sign-off is a completion gate.
 Physical-device claims remain unavailable from desktop emulation.
 
-`just validate` runs CPU/build and offline regression checks locally. Exact-head
-GitHub GPU jobs add `active-gap.spec.mjs` and three two-minute hardware-rendered
+`just validate` runs CPU/build and offline regression checks locally.
+The GitHub GPU job adds `active-gap.spec.mjs` and three two-minute hardware-rendered
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
-off). NUC3 and Lambo’s T4 share the GPU runner pool. Either can run both shards
-against the same verified build. NUC1 is retired
-from CI; its earlier captures remain historical comparison evidence. The remote
-validation gate requires both NUC3 shards and all three measured cases to pass.
-General self-hosted jobs can use NUC3 and the two existing Lambo workers.
-The ordinary browser inventory excludes
-those long GPU-only cases.
+off). The validation gate requires the GPU job and all three measured cases
+to pass against the same verified build. The ordinary browser inventory excludes
+the long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
 Each routine case uses the `standard` profile: 15 seconds of warmup followed by
 120 seconds of measurement. The shared timing contract controls the collector,
@@ -92,10 +88,12 @@ validation or browser cleanup fails. Each cost,
 fullscreen and latency command also retains a separate native process log before,
 every ten seconds during, and after execution, including command failures.
 
-GPU reports upload on success and failure. When the compiled site verifies,
-the first shard on each NUC executes `just validate-active-gap` and `just validate-tilt`
-serially even if its browser suite failed; timing collectors
-verify the served build and apply the bounded transition recovery policy.
+GPU reports upload on success and failure. One job on either qualified GPU
+runs the hardware browser cases one at a time. It also runs
+`just validate-active-gap` and `just validate-tilt` if the compiled site verified,
+even if a browser case failed.
+The active-gap timing collectors verify the served build and apply the bounded
+transition recovery policy.
 Software frame timing is reported without a blocking FPS, p95 or slow-frame
 limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
 The [2026-11-02 recovery policy](active-gap-spec.md#fullscreen-transition-recovery-policy-2026-11-02)
@@ -178,14 +176,15 @@ FPS. Production verification remains a later automated delivery step after merge
 ## Website deployment
 
 Website validation builds physics, the worklet and Leptos once. The build job
-runs the offline harness and records the complete browser test inventory. Ten
-isolated Chromium groups and eight WebKit/iPhone-profile groups download that same
-compiled bundle. The planner distributes cases from each browser family in
-round-robin order, so one large file cannot occupy a whole runner. Each group
-retains the serial startup/crash guard, one worker and zero retries. The ten-minute
-browser target includes all cases; it is not permission to omit slow tests.
-The final job compares all eighteen reports with
-the inventory: omitted, duplicated, incomplete or failed tests stop publication.
+runs the offline harness and records the complete browser test inventory. Three
+self-hosted K3s jobs download the same compiled bundle. The planner balances
+estimated test duration across jobs and keeps each project's spec files intact.
+It assigns the longest files first, using mean test durations from the 18 browser
+reports in [K3s run 45740634329](https://github.com/BlinkyStitt/musical-lights-rs/actions/runs/45740634329).
+New project and file pairs use a 7,500 ms estimate per test.
+Each job retains the serial startup and crash checks, one worker, and zero retries.
+The final job compares all three reports with the inventory. Missing, duplicate,
+incomplete, or failed tests stop publication.
 Core, native physics tests/Clippy and the Criterion correctness smoke checks run
 in the existing native job alongside the build and browser jobs. That job remains
 required by the final validation barrier. The build job runs physics WASM checks,
@@ -209,12 +208,10 @@ expired artifacts cannot replace validation. A miss performs the complete
 pinned build and checks. Reuse does not modify the tested files or relabel their
 embedded build identity: the deployment run records its own main commit and
 links to the original producer. This reuses the complete successful PR validation,
-including both GPU shards, fullscreen recovery, latency and tilt acceptance.
-The merge run does not repeat GPU timing on unchanged bytes. GPU transfer and
-acceptance jobs run whenever fresh validation is required. Both GPU shards may
-start after the compiled build without waiting for the Intel-only transfer canary.
-The final validation barrier still requires that canary, and exact reuse verifies
-its successful result with the other producer validators. The validation barrier
+including fullscreen recovery, latency and tilt acceptance on one GPU.
+The merge run does not repeat GPU timing on unchanged bytes. To debug a runner
+transfer failure, manually run GPU runner network evidence on `main`. It uses
+the shared pool and runs without action downloads. The validation barrier
 requires every fresh validator to succeed, or every reused validator to be
 explicitly skipped with an identified trusted producer and verified build.
 Missing, failed, canceled or duplicate producer validators reject reuse. This
@@ -281,9 +278,10 @@ app builds, benchmark smoke cases and the offline harness. It needs no physical
 GPU and no published branch. After the site is built,
 `just validate-gpu` runs the renderer and pixel checks in Chromium on a verified
 hardware WebGL2 renderer. It fails if the browser selects software rendering.
-GitHub runs the complete software browser suite and two hardware GPU shards for
-each website validation. Both GPU shards must pass before the website barrier can
-succeed or its artifact can be reused. `python3 validation/validate.py browser`
+GitHub runs the complete software browser suite and one hardware GPU job for
+each fresh website validation. The shared runner uses Intel or NVIDIA.
+The hardware GPU job must pass before the website barrier can succeed or its
+artifact can be reused. `python3 validation/validate.py browser`
 remains available to run the full software browser suite locally.
 `just check` runs `just validate`, the complete local software browser suite
 (including demos), both orders of the software tilt comparison, the hardware
@@ -347,7 +345,7 @@ sample clock and the iPhone-profile WebKit startup failure.
 For example, dispatch the workflow from an investigation branch with
 `gh workflow run browser-stability.yml --ref <investigation-branch> -f source_ref=<validated-commit> -f scenario=rotation-clock -f repetitions=50`.
 The `rotation-group` and `webkit-group` scenarios run the complete canonical
-`chromium-5` and `webkit-2` groups from the selected artifact, including their
+`chromium-5` and `webkit-2` diagnostic selections from the selected artifact, including their
 normal browser reuse and test order. Use 1, 5 or 10 repetitions for groups. An
 isolated case does not check resources left by preceding cases in the same group.
 Each repetition must pass its original assertions. This diagnostic result does
@@ -486,8 +484,10 @@ packets. The produced-WASM harness verifies that this is exactly the sample inde
 of the last diagnostic row across callback sizes and a nonzero sample origin, and
 that missing input cannot advance it. Enabling 472-value diagnostic rows every
 2 ms solely to observe that timestamp adds unnecessary work to native playback.
-The rotation cases still require fresh analysis after every click, non-silent PCM,
-zero missing/overlapping samples, advancing video frames, and retained resources.
+The rotation cases count the PCM blocks from the generated microphone fixture.
+The cases require fresh analysis after every click, non-silent PCM, zero missing
+or overlapping samples, advancing video frames, and retained resources. The audio
+recovery cases exercise discontinuities in the native capture clock.
 
 The repository's `.codex/config.toml` selects `workspace-write`, `on-request`,
 and network access. `.codex/rules/browser-tests.rules` allows the two browser

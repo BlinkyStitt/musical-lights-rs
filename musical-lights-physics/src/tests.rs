@@ -3512,7 +3512,8 @@ fn fast_wall_resize_does_not_enable_empty_banks_for_every_substep() {
     })
     .unwrap();
     sim.step();
-    assert_eq!(sim.snapshot.values[COST_OFFSET], MAX_SUBSTEPS as f32);
+    assert!(sim.snapshot.values[COST_OFFSET] < MAX_SUBSTEPS as f32);
+    assert_eq!(sim.snapshot.values[COST_OFFSET + 1], 0.0);
     let enabled = sim
         .bars
         .iter()
@@ -3530,4 +3531,52 @@ fn fast_wall_resize_does_not_enable_empty_banks_for_every_substep() {
         let radius = sim.config.balls.diameter(i) / 2.0;
         assert!(x >= radius - 0.004 && x <= 0.3 - radius + 0.004);
     }
+}
+
+#[test]
+fn replay_captured_viewport_wall_jump() {
+    let config = SimulationConfig {
+        height: 1.241_839_4,
+        ..Default::default()
+    };
+    // The frame after a large viewport update must not exhaust the solver
+    // when a low-speed ball is within reach of a rotating wall.
+    let mut sim = world(config);
+    sim.apply(SimulationInput {
+        side_planes: [
+            [0.8490704, 0.0, -0.5282798, 0.1962039],
+            [-0.9691368, 0.0, -0.2465237, 1.2871282],
+        ],
+        height: config.height,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    sim.step();
+    place(
+        &mut sim,
+        0,
+        Vector::new(0.5380586, 0.7292351, -0.17984),
+        Vector::new(0.0146884, -1.5270483, 0.0),
+    );
+    place(
+        &mut sim,
+        1,
+        Vector::new(-0.3193145, 0.5642869, -0.2054083),
+        Vector::new(-0.0086972, -0.0158529, -0.0123187),
+    );
+    sim.apply(SimulationInput {
+        side_planes: [
+            [0.6146995, 0.0, -0.7887613, 0.8617818],
+            [-0.82716, 0.0, -0.5619665, 1.7268976],
+        ],
+        height: config.height,
+        tick: sim.tick,
+        ..SimulationInput::default()
+    })
+    .unwrap();
+    sim.step();
+    let used = sim.snapshot.values[COST_OFFSET];
+    let excess = sim.snapshot.values[COST_OFFSET + 1];
+    assert!(used < MAX_SUBSTEPS as f32);
+    assert_eq!(excess, 0.0);
 }

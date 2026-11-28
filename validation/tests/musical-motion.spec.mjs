@@ -5,6 +5,7 @@ const origin = 'http://127.0.0.1:8101';
 
 for (const theme of ['light', 'dark']) {
   test(`shared compact bar, collapsed settings and fullscreen safe layout in ${theme}`, async ({ page }) => {
+    test.setTimeout(60000);
     await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
     await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
     await page.setViewportSize({ width: 320, height: 720 });

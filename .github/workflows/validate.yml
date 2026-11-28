@@ -265,27 +265,14 @@ jobs:
           retention-days: ${{ job.status == 'failure' && 7 || 2 }}
           overwrite: true
           if-no-files-found: error
-  gpu-network:
-    needs: plan
-    if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    uses: ./.github/workflows/gpu-runner-network.yml
   gpu:
-    name: GPU browser (${{ matrix.shard }})
+    name: GPU browser
     timeout-minutes: 60
     needs: [plan, web]
     if: needs.plan.outputs.site_required == 'true' && needs.plan.outputs.reuse != 'true'
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Charge room for the browser, VMM and ownership observer together.
-          - shard: 1
-            runner: ski-gpu-blink-nvidia-medium
-          - shard: 2
-            runner: ski-gpu-blink-intel-small
+    runs-on: ski-gpu-blink-any-small
     concurrency:
-      group: site-gpu-${{ matrix.shard }}-${{ github.ref }}
+      group: site-gpu-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7.0.1
@@ -318,14 +305,14 @@ jobs:
         env:
           ACTIVE_GAP_PROFILE: standard
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
-        run: just validate-gpu --shard=${{ matrix.shard }}/2
+        run: just validate-gpu
       - name: Collect active-gap transition and latency evidence
-        if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.gpu-site.outcome == 'success' }}
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         run: just validate-active-gap
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && matrix.shard == 1
+        if: always()
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
@@ -335,10 +322,9 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: error
-      # Measure after the first browser shard with the same downloaded site
-      # and instrumentation for both renderers.
+      # Compare both renderers on the same downloaded site.
       - name: Compare tilt lighting on software and hardware
-        if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.gpu-site.outcome == 'success' }}
         env:
           DEBUG: pw:browser
         run: |
@@ -346,13 +332,13 @@ jobs:
           mkdir -p .ci/tilt-lighting
           just validate-tilt 2>&1 | tee .ci/tilt-lighting/commands.log
       - name: Publish tilt timing summary
-        if: always() && matrix.shard == 1
+        if: always()
         run: |
           if test -f .ci/tilt-lighting/comparison.md; then
             cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && matrix.shard == 1
+        if: always()
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
@@ -367,14 +353,14 @@ jobs:
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
-          name: gpu-browser-report-${{ matrix.shard }}
+          name: gpu-browser-report
           path: validation/test-results/
           retention-days: 7
           overwrite: true
           if-no-files-found: ignore
   validated:
     name: Validated website
-    needs: [plan, core, web, loudness-reference, browser, gpu-network, gpu]
+    needs: [plan, core, web, loudness-reference, browser, gpu]
     if: >-
       ${{ always() && !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.site_required == 'true' }}
     runs-on: ski-kvm-musical-linux
