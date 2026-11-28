@@ -35,7 +35,7 @@ jobs:
     runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.14.7'
       - run: python3 -m pip install uv==0.10.5
@@ -109,7 +109,7 @@ jobs:
           key: esp-v3-k3s-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-${{ hashFiles('musical-lights-core/src/**/*.rs', 'musical-lights-core/Cargo.toml', format('{0}/src/**/*.rs', matrix.directory), format('{0}/Cargo.toml', matrix.directory), format('{0}/build.rs', matrix.directory), '**/.cargo/**', '**/rust-toolchain*') }}
           restore-keys: |
             esp-v3-k3s-${{ matrix.package }}-${{ runner.os }}-${{ runner.arch }}-esp-1.98.1.0-${{ hashFiles(format('{0}/Cargo.lock', matrix.directory)) }}-
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.14.7'
       - run: python3 validation/install_tools.py rust

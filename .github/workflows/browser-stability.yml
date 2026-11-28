@@ -83,7 +83,7 @@ jobs:
           run-id: ${{ needs.source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: .ci/site
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.14.7'
       - name: Verify the exact source and compiled bytes
