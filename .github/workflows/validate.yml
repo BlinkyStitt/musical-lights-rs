@@ -314,16 +314,29 @@ jobs:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:
           tool: just
+      - name: Install GPU browser test dependencies
+        working-directory: validation
+        env:
+          GPU_BROWSER_SHARD: ${{ matrix.shard }}
+          NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
+        run: |
+          npm ci --ignore-scripts
+          browsers=(chromium)
+          if [ "$GPU_BROWSER_SHARD" = 1 ]; then
+            browsers+=(webkit)
+          fi
+          npx --no-install playwright install "${browsers[@]}"
       - name: Run hardware-rendered browser checks
         env:
           ACTIVE_GAP_PROFILE: standard
+          GPU_BROWSER_SHARD: ${{ matrix.shard }}
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
-        run: just validate-gpu --shard=${{ matrix.shard }}/2
+        run: just validate-gpu-checks
       - name: Collect active-gap transition and latency evidence
         if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
-        run: just validate-active-gap
+        run: just validate-active-gap-evidence
       - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.shard == 1
         env:
@@ -335,10 +348,9 @@ jobs:
           retention-days: 7
           overwrite: true
           if-no-files-found: error
-      # Measure after the first browser shard with the same downloaded site
-      # and instrumentation for both renderers.
+      # Run both tilt measurements on Intel against the same downloaded site.
       - name: Compare tilt lighting on software and hardware
-        if: ${{ !cancelled() && matrix.shard == 1 && steps.gpu-site.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.shard == 2 && steps.gpu-site.outcome == 'success' }}
         env:
           DEBUG: pw:browser
         run: |
@@ -346,13 +358,13 @@ jobs:
           mkdir -p .ci/tilt-lighting
           just validate-tilt 2>&1 | tee .ci/tilt-lighting/commands.log
       - name: Publish tilt timing summary
-        if: always() && matrix.shard == 1
+        if: always() && matrix.shard == 2
         run: |
           if test -f .ci/tilt-lighting/comparison.md; then
             cat .ci/tilt-lighting/comparison.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && matrix.shard == 1
+        if: always() && matrix.shard == 2
         env:
           NODE_OPTIONS: --require "${{ github.workspace }}/validation/runner-network.cjs"
         with:

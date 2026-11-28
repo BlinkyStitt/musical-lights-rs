@@ -45,13 +45,9 @@ Physical-device claims remain unavailable from desktop emulation.
 `just validate` runs CPU/build and offline regression checks locally. Exact-head
 GitHub GPU jobs add `active-gap.spec.mjs` and three two-minute hardware-rendered
 acceptance cases (15-second warmup, repeating real generated PCM, diagnostics
-off). NUC3 and Lambo’s T4 share the GPU runner pool. Either can run both shards
-against the same verified build. NUC1 is retired
-from CI; its earlier captures remain historical comparison evidence. The remote
-validation gate requires both NUC3 shards and all three measured cases to pass.
-General self-hosted jobs can use NUC3 and the two existing Lambo workers.
-The ordinary browser inventory excludes
-those long GPU-only cases.
+off). The validation gate requires both GPU jobs and all three measured cases
+to pass against the same verified build. The ordinary browser inventory excludes
+the long GPU-only cases.
 One worker, zero retries and serial startup/crash checks remain in both configs.
 Each routine case uses the `standard` profile: 15 seconds of warmup followed by
 120 seconds of measurement. The shared timing contract controls the collector,
@@ -92,10 +88,12 @@ validation or browser cleanup fails. Each cost,
 fullscreen and latency command also retains a separate native process log before,
 every ten seconds during, and after execution, including command failures.
 
-GPU reports upload on success and failure. When the compiled site verifies,
-the first shard on each NUC executes `just validate-active-gap` and `just validate-tilt`
-serially even if its browser suite failed; timing collectors
-verify the served build and apply the bounded transition recovery policy.
+GPU reports upload on success and failure. NVIDIA runs the active-gap browser
+cases and `just validate-active-gap`. Intel runs the other GPU browser cases and
+`just validate-tilt`. Each job runs its browser cases one at a time, then collects
+timing evidence if the compiled site verified, even if a browser case failed.
+The active-gap timing collectors verify the served build and apply the bounded
+transition recovery policy.
 Software frame timing is reported without a blocking FPS, p95 or slow-frame
 limit under the [2026-11-01 approval](active-gap-spec.md#software-fullscreen-timing-policy-2026-11-01).
 The [2026-11-02 recovery policy](active-gap-spec.md#fullscreen-transition-recovery-policy-2026-11-02)

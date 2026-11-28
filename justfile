@@ -20,6 +20,9 @@ validate-tilt:
 # Collect geometry cost, strict transition timing and instrumented latency serially.
 validate-active-gap:
     cd validation && npm ci --ignore-scripts && npx playwright install chromium webkit
+    just validate-active-gap-evidence
+
+validate-active-gap-evidence:
     node validation/active-gap-evidence.mjs .ci/active-gap
 
 # Verify delivered, exact-commit CI and run local demo checks.
@@ -40,8 +43,14 @@ validate: _ci-tools
     cd validation && npm ci --ignore-scripts && node --test harness/*.test.mjs
 
 # Run the hardware-rendered browser checks against the already-built site.
+[positional-arguments]
 validate-gpu *args:
-    cd validation && npm ci --ignore-scripts && npx playwright install chromium && npx playwright test --config playwright.gpu.config.mjs {{args}}
+    cd validation && npm ci --ignore-scripts && npx playwright install chromium
+    just validate-gpu-checks "$@"
+
+[positional-arguments]
+validate-gpu-checks *args:
+    cd validation && npx --no-install playwright test --config playwright.gpu.config.mjs "$@"
 
 # Local worktrees need the pinned workflow checker and Python environment tool.
 _ci-tools:
