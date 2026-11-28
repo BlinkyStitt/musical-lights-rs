@@ -189,6 +189,9 @@ class ArtifactTests(unittest.TestCase):
             "status": "completed",
             "conclusion": "success",
         }
+        jobs: list[dict[str, str | int]] = [
+            {"name": name, "conclusion": "success"} for name in ci.VALIDATORS
+        ]
         responses = {
             "actions/workflows/validate.yml": {"id": 42},
             "actions/artifacts?name=validated-site-tree&per_page=100": {
@@ -206,11 +209,7 @@ class ArtifactTests(unittest.TestCase):
                 "tree": {"sha": "tree"},
                 "parents": [{"sha": "head"}],
             },
-            "actions/runs/123/attempts/1/jobs?per_page=100": {
-                "jobs": [
-                    {"name": name, "conclusion": "success"} for name in ci.VALIDATORS
-                ]
-            },
+            "actions/runs/123/attempts/1/jobs?per_page=100": {"jobs": jobs},
         }
 
         def read(repository, path):
