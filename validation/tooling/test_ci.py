@@ -250,6 +250,25 @@ class ArtifactTests(unittest.TestCase):
                 )
                 jobs.pop()
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("123", "456"))
+        # Attempt 2 reran validation but inherited the successful build.
+        build = next(job for job in jobs if job["name"] == "Build website")
+        build.update(
+            head_sha="head",
+            runner_id=8,
+            started_at="2026-11-26T02:48:53Z",
+            completed_at="2026-11-26T02:55:37Z",
+        )
+        effective = [{**job} for job in jobs]
+        responses["actions/runs/123/attempts/2/jobs?per_page=100"] = {"jobs": effective}
+        run["run_attempt"] = 2
+        self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("123", "456"))
+        rerun = next(job for job in effective if job["name"] == "Build website")
+        rerun["started_at"] = "2026-11-26T17:45:30Z"
+        self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+        rerun["started_at"] = build["started_at"]
+        build["conclusion"] = "failure"
+        self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
+        build["conclusion"] = "success"
         (self.bundle / ci.PAYLOAD[0] / "sample.wasm").write_bytes(b"tampered")
         self.assertEqual(ci.reusable(repo, self.expected, read, fetch), ("", ""))
 
