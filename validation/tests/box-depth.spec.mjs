@@ -122,17 +122,9 @@ test('live balls reach the visible side edges after viewport changes without a c
         v.stopPreview(); v.idle=false; v.clearAudio();
         v.deviceGravity(direction*9.81,0,0,0);
       },direction);
-      await page.waitForFunction(direction=>{
+      const contact = await page.waitForFunction(direction=>{
         const v=document.querySelector('#dancinglights').physics;
-        const offset=68+(direction>0?4:0), p=v.input.slice(offset,offset+4);
-        return Array.from({length:v.balls.count},(_,i)=>{
-          const b=3+i*v.layout[8];
-          const gap=p[0]*v.current[b]+p[1]*v.current[b+1]+p[2]*v.current[b+2]+p[3]-v.current[b+7];
-          return Math.abs(gap)<.003;
-        }).some(Boolean);
-      },direction,{timeout:10000});
-      const state=await page.evaluate(()=>{
-        const v=document.querySelector('#dancinglights').physics;
+        if (v.resizePending) return false;
         const balls=Array.from({length:v.balls.count},(_,i)=>{
           const b=3+i*v.layout[8], position=Array.from(v.current.slice(b,b+3)), radius=v.current[b+7];
           return {position,radius,clearance:[0,1].map(side=>{
@@ -140,9 +132,16 @@ test('live balls reach the visible side edges after viewport changes without a c
             return p[0]*position[0]+p[1]*position[1]+p[2]*position[2]+p[3]-radius;
           })};
         });
+        // Use the same worker snapshot for contact and edge reach. A ball
+        // can bounce away from the plane between two browser calls.
+        if (!balls.some(ball => direction > 0
+          ? Math.abs(ball.clearance[1]) < .003 && ball.position[0] + ball.radius > v.width + .02
+          : Math.abs(ball.clearance[0]) < .003 && ball.position[0] - ball.radius < -.02)) return false;
         return {width:v.width,balls,tick:v.current[2],planes:Array.from(v.input.slice(68)),frames:v.metrics.frames,
           discarded:v.metrics.discardedSimulationMs,notice:v.notice.persistent,audio:!!v.card.activeAudioContext};
-      });
+      }, direction, {timeout:10000});
+      const state = await contact.jsonValue();
+      await contact.dispose();
       observations.push({viewport,direction,...state});
       for(const ball of state.balls) for(const clearance of ball.clearance) expect(clearance).toBeGreaterThan(-.004);
       expect(state.discarded).toBe(0); expect(state.notice).toBeFalsy(); expect(state.audio).toBe(false); expect(state.frames).toBeGreaterThan(0);
