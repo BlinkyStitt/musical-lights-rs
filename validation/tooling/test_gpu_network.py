@@ -8,6 +8,7 @@ import textwrap
 import threading
 import types
 import unittest
+from http.client import RemoteDisconnected
 from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.error import URLError
@@ -80,7 +81,7 @@ class GpuNetworkTests(unittest.TestCase):
             ) as request,
         ):
             with self.assertRaises(socket.gaierror) as caught:
-                self.probe.capture()
+                self.probe.verify_transfer()
             self.assertIs(caught.exception, failure)
             self.assertIs(socket.getaddrinfo, lookup)
         self.assertEqual(lookup.call_count, 1)
@@ -106,7 +107,7 @@ class GpuNetworkTests(unittest.TestCase):
             ) as request,
             self.assertRaises(URLError),
         ):
-            self.probe.capture()
+            self.probe.verify_transfer()
         self.assertEqual(request.call_count, 1)
         self.assertNotIn("private transfer details", self.output.getvalue())
         failure_row = next(
@@ -115,6 +116,48 @@ class GpuNetworkTests(unittest.TestCase):
         self.assertEqual(failure_row["error"], "URLError")
         self.assertEqual(failure_row["reason_type"], "OSError")
         self.assertEqual(failure_row["tunnel_status"], 502)
+
+    def test_disconnect_is_logged_then_retried_once(self):
+        failure = URLError(RemoteDisconnected("closed before response"))
+        first = self.transfer(error=failure)
+        second = self.transfer()
+
+        def transfer(url, timeout):
+            return (first if request.call_count == 1 else second)(url, timeout)
+
+        request = Mock(side_effect=transfer)
+        with (
+            patch.object(socket, "getaddrinfo", return_value=[]),
+            patch.object(self.probe.urllib.request, "urlopen", request),
+            patch.object(self.probe.time, "sleep") as sleep,
+        ):
+            self.probe.verify_transfer()
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once_with(1)
+        outcomes = [
+            row["event"]
+            for row in self.rows()
+            if row["event"] in {"request-error", "request-retry", "request-success"}
+        ]
+        self.assertEqual(
+            outcomes, ["request-error", "request-retry", "request-success"]
+        )
+
+    def test_second_disconnect_fails_without_retrying_again(self):
+        failure = URLError(RemoteDisconnected("closed before response"))
+        with (
+            patch.object(
+                self.probe.urllib.request, "urlopen", side_effect=failure
+            ) as request,
+            patch.object(self.probe.time, "sleep"),
+            self.assertRaises(URLError),
+        ):
+            self.probe.verify_transfer()
+        self.assertEqual(request.call_count, 2)
+        events = [row["event"] for row in self.rows()]
+        self.assertEqual(events.count("request-error"), 2)
+        self.assertEqual(events.count("request-retry"), 1)
+        self.assertNotIn("request-success", events)
 
     def test_native_progress_is_emitted_during_a_blocked_lookup(self):
         sampled = threading.Event()

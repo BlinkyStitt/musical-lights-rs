@@ -257,6 +257,27 @@ def download(repository, run, directory):
     )
 
 
+def matches_build_attempt(repository, run, jobs, attempt, read):
+    if not isinstance(attempt, int) or not 1 <= attempt <= run["run_attempt"]:
+        return False
+    if attempt == run["run_attempt"]:
+        return True
+
+    # GitHub copies successful jobs into partial reruns with new job IDs
+    # and attempt numbers. The execution times and runner remain the same.
+    original = read(
+        repository, f"actions/runs/{run['id']}/attempts/{attempt}/jobs?per_page=100"
+    )["jobs"]
+    builds = [job for job in original if job["name"] == "Build website"]
+    if len(builds) != 1 or builds[0]["conclusion"] != "success":
+        return False
+    effective = next(job for job in jobs if job["name"] == "Build website")
+    return all(
+        effective.get(field) and effective[field] == builds[0].get(field)
+        for field in ("head_sha", "runner_id", "started_at", "completed_at")
+    )
+
+
 def reusable(repository, expected, read=api, fetch=download):
     workflow = read(repository, "actions/workflows/validate.yml")
     name = f"validated-site-{expected['source_tree']}"
@@ -304,7 +325,9 @@ def reusable(repository, expected, read=api, fetch=download):
                     raise ValueError("Invalid artifact source commit")
                 source = read(repository, f"git/commits/{manifest['source_commit']}")
                 if (
-                    manifest["run_attempt"] != run["run_attempt"]
+                    not matches_build_attempt(
+                        repository, run, jobs, manifest["run_attempt"], read
+                    )
                     or source["tree"]["sha"] != expected["source_tree"]
                     or (
                         manifest["source_commit"] != run["head_sha"]

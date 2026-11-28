@@ -148,18 +148,19 @@ request. Correlate it with the failing transfer's existing error log before
 changing runner networking. Missing browser downloads or artifact uploads still
 fail the job and the validated-site/Pages barrier.
 
-Before the GPU browser jobs, `gpu-runner-network.yml` performs one HTTPS GET of
-the checkout archive on each named GPU runner pool. It has no remote actions,
+The `gpu-runner-network.yml` check makes an HTTPS GET for the checkout archive
+on the Intel GPU runner pool. It has no remote actions,
 checkout or package installation: the runner's
 [initialization downloads remote actions before steps execute](https://github.com/actions/runner/blob/v2.338.1/src/Runner.Worker/JobExtension.cs).
 This observes a transfer without depending on checkout. The inline Python
 probe logs the actual libc lookup, returned families or error number, elapsed
 time, resolver configuration, routes and UDP counters, plus native thread wait
 states during the transfer. Logs go directly to the job output; no artifact
-upload is required. Missing tools, failed transfers and the bounded command
-deadline fail the job. It adds no retries or resolver changes and finishes before
-browser measurements begin. The offline tooling tests execute its exact payload
-with injected DNS/transfer failures. This is a separate Python/libc request on
+upload is required. If the server closes the connection before an HTTP response,
+the check logs the failure and makes one new request within the same deadline.
+Other errors, a failed second request, or exceeding the deadline fail the job.
+The probe keeps the native resolver and proxy settings. The tooling tests run
+the same payload with injected DNS and transfer failures. This is a separate Python/libc request on
 the GPU runner pool, not a trace of the earlier .NET runner request or proof of
 a network repair. Successful probes cannot replace GPU/browser acceptance.
 

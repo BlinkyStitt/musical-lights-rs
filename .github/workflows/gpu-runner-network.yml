@@ -11,7 +11,7 @@ jobs:
     steps:
       # No uses steps: the runner downloads ALL remote actions before any step.
       # Keep this probe inline so checkout failures cannot prevent observation.
-      - name: Observe one native action-archive transfer
+      - name: Verify native action-archive transfer
         shell: bash
         run: |
           set -euo pipefail
@@ -25,12 +25,13 @@ jobs:
           import time
           import urllib.request
           from functools import wraps
+          from http.client import RemoteDisconnected
           from pathlib import Path
           from typing import Any
           from urllib.error import HTTPError, URLError
 
           # The exact checkout archive from failed run 41206913591. No credentials,
-          # retries, alternate resolvers, address-family overrides or installations.
+          # alternate resolvers, address-family overrides or installations.
           ARCHIVE = "https://codeload.github.com/actions/checkout/tar.gz/3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
@@ -145,9 +146,23 @@ jobs:
                   emit("request-end", elapsed=time.monotonic() - started, native=native_state())
 
 
-          if __name__ == "__main__":
+          def verify_transfer():
               try:
                   capture()
+              except OSError as error:
+                  reason = error.reason if isinstance(error, URLError) else error
+                  if not isinstance(reason, RemoteDisconnected):
+                      raise
+                  # The proxy closed the connection before any HTTP response.
+                  # Retain the first attempt's evidence and try a new connection once.
+                  emit("request-retry", reason_type=type(reason).__name__)
+                  time.sleep(1)
+                  capture()
+
+
+          if __name__ == "__main__":
+              try:
+                  verify_transfer()
               except (OSError, ValueError):
                   raise SystemExit(1)
           PY
