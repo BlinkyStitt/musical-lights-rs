@@ -122,7 +122,7 @@ jobs:
   required:
     name: Required other-application checks
     needs: [changes, terminal, demos]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1

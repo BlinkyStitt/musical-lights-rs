@@ -145,7 +145,7 @@ jobs:
   required:
     name: Required firmware checks
     needs: [changes, firmware-tools, rust, esp]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ski-kvm-musical-linux
     steps:
       - uses: actions/checkout@v7.0.1
